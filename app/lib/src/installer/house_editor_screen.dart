@@ -433,6 +433,15 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   String? _loadErr;
   ProviderSubscription<AuthState>? _customerAuthSub;
 
+  void _selectFocus(_Focus focus) {
+    setState(() {
+      _sel = focus;
+      if (MediaQuery.sizeOf(context).width < 900) {
+        _mobileShowDetail = true;
+      }
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -707,9 +716,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   void _addGlobalDevice(DeviceTypePick pick) {
     final id = 'dev-${_uuid.v4()}';
     _globalDeviceList().add(_defaultDevice(pick.type, id, bus: pick.bus));
-    setState(() {
-      _sel = _Focus.globalDevice(_globalDeviceList().length - 1);
-    });
+    _selectFocus(_Focus.globalDevice(_globalDeviceList().length - 1));
   }
 
   /// Moves a dragged device from its current location to a new target.
@@ -846,7 +853,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   void _addCamera() {
     final map = _defaultDevice('camera', 'dev-cam-${_uuid.v4()}');
     _cameras().add(map);
-    setState(() => _sel = _Focus.cameraDetail(_cameras().length - 1));
+    _selectFocus(_Focus.cameraDetail(_cameras().length - 1));
   }
 
   Widget _camerasInstallerPanel(BuildContext context) {
@@ -887,8 +894,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               title: Text(list[i]['name'] as String? ?? list[i]['id'] as String),
               subtitle: Text(list[i]['id'] as String? ?? ''),
               trailing: const Icon(Icons.edit_outlined),
-              onTap: () =>
-                  setState(() => _sel = _Focus.cameraDetail(i)),
+              onTap: () => _selectFocus(_Focus.cameraDetail(i)),
             ),
           ),
       ],
@@ -970,7 +976,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     final id = 'dev-${_uuid.v4()}';
     _deviceList(fi, ri).add(_defaultDevice(pick.type, id, bus: pick.bus));
     final di = _deviceList(fi, ri).length - 1;
-    setState(() => _sel = _Focus.device(fi, ri, di));
+    _selectFocus(_Focus.device(fi, ri, di));
   }
 
   Widget _audioInstallerPanel(BuildContext context) {
@@ -1070,7 +1076,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               title: Text(list[i]['name'] as String? ?? list[i]['id'] as String),
               subtitle: Text(list[i]['id'] as String? ?? ''),
               trailing: const Icon(Icons.edit_outlined),
-              onTap: () => setState(() => _sel = _Focus.intercomDetail(i)),
+              onTap: () => _selectFocus(_Focus.intercomDetail(i)),
             ),
           ),
       ],
@@ -1522,7 +1528,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           title: const Text('Project'),
           selected: _sel.kind == _FocusKind.project,
           leading: const Icon(Icons.home_work_outlined),
-          onTap: () => setState(() => _sel = const _Focus.project()),
+          onTap: () => _selectFocus(const _Focus.project()),
         ),
         ListTile(
           title: const Text('KNX-gateway'),
@@ -1531,7 +1537,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           trailing: _IntegrationBadge(
               enabled: (_house?['knx']?['enabled'] as bool?) != false &&
                   _house?['knx'] != null),
-          onTap: () => setState(() => _sel = const _Focus.knx()),
+          onTap: () => _selectFocus(const _Focus.knx()),
         ),
         ListTile(
           title: const Text('Lutron QSX/QS Processor'),
@@ -1540,46 +1546,46 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           trailing: _IntegrationBadge(
               enabled: (_house?['lutron']?['telnet']?['enabled'] as bool?) ==
                   true),
-          onTap: () => setState(() => _sel = const _Focus.lutron()),
+          onTap: () => _selectFocus(const _Focus.lutron()),
         ),
         ListTile(
           title: const Text('Camera\'s'),
           selected: _sel.kind == _FocusKind.cameras ||
               _sel.kind == _FocusKind.cameraDetail,
           leading: const Icon(Icons.videocam_outlined),
-          onTap: () => setState(() => _sel = const _Focus.cameras()),
+          onTap: () => _selectFocus(const _Focus.cameras()),
         ),
         ListTile(
           title: const Text('Audio'),
           selected: _sel.kind == _FocusKind.audio,
           leading: const Icon(Icons.speaker_group_outlined),
-          onTap: () => setState(() => _sel = const _Focus.audio()),
+          onTap: () => _selectFocus(const _Focus.audio()),
         ),
         ListTile(
           title: const Text('Intercom'),
           selected: _sel.kind == _FocusKind.intercoms ||
               _sel.kind == _FocusKind.intercomDetail,
           leading: const Icon(Icons.doorbell_outlined),
-          onTap: () => setState(() => _sel = const _Focus.intercoms()),
+          onTap: () => _selectFocus(const _Focus.intercoms()),
         ),
         ListTile(
           title: const Text('Gebruikers'),
           selected: _sel.kind == _FocusKind.users ||
               (_sel.kind == _FocusKind.user),
           leading: const Icon(Icons.people_outline),
-          onTap: () => setState(() => _sel = const _Focus.users()),
+          onTap: () => _selectFocus(const _Focus.users()),
         ),
         ListTile(
           title: const Text('Logs / grafieken'),
           selected: _sel.kind == _FocusKind.logs,
           leading: const Icon(Icons.show_chart_outlined),
-          onTap: () => setState(() => _sel = const _Focus.logs()),
+          onTap: () => _selectFocus(const _Focus.logs()),
         ),
         ListTile(
           title: const Text('Satel alarm'),
           selected: _sel.kind == _FocusKind.satel,
           leading: const Icon(Icons.security_outlined),
-          onTap: () => setState(() => _sel = const _Focus.satel()),
+          onTap: () => _selectFocus(const _Focus.satel()),
         ),
         const Divider(),
         // ?? Global (room-less) devices ????????????????????????????????????
@@ -1615,8 +1621,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                       fi: -1, ri: -1, di: di,
                       selected: _sel.kind == _FocusKind.globalDevice &&
                           _sel.di == di,
-                      onTap: () =>
-                          setState(() => _sel = _Focus.globalDevice(di)),
+                      onTap: () => _selectFocus(_Focus.globalDevice(di)),
                     ),
                   ListTile(
                     dense: true,
@@ -1666,7 +1671,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                  onPressed: () => setState(() => _sel = _Focus.floor(fi)),
+                  onPressed: () => _selectFocus(_Focus.floor(fi)),
                 ),
               ],
             ),
@@ -1731,9 +1736,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                                     minWidth: 32,
                                     minHeight: 32,
                                   ),
-                                  onPressed: () => setState(
-                                    () => _sel = _Focus.room(fi, ri),
-                                  ),
+                                  onPressed: () => _selectFocus(_Focus.room(fi, ri)),
                                 ),
                             ],
                           ),
@@ -1757,10 +1760,9 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                                         _sel.fi == fi &&
                                         _sel.ri == ri &&
                                         _sel.di == di,
-                                    onTap: () => setState(
-                                      () => _sel =
+                                    onTap: () => _selectFocus(
                                           _Focus.device(fi, ri, di),
-                                    ),
+                                        ),
                                   ),
                                 ListTile(
                                   dense: true,
@@ -1977,7 +1979,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             ),
             selected: _sel.kind == _FocusKind.user && _sel.fi == i,
             trailing: const Icon(Icons.chevron_right),
-            onTap: () => setState(() => _sel = _Focus.user(i)),
+            onTap: () => _selectFocus(_Focus.user(i)),
           ),
       ],
     );

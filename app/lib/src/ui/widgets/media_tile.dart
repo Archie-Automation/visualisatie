@@ -11,7 +11,7 @@ import '../../models.dart';
 import '../../theme.dart';
 import '../responsive.dart';
 import 'device_control_panel.dart';
-import 'glass_card.dart';
+import 'device_tile_shell.dart';
 import 'media_search_sheet.dart';
 
 const _metadataRevealDelay = Duration(milliseconds: 2500);
@@ -116,21 +116,14 @@ class MediaTile extends ConsumerWidget {
                 d.type == device.type)
             .toList();
 
-    final phone = context.isPhone;
-
-    return GlassCard(
-        padding: phone
-            ? DeviceTileLayout.padding(context).copyWith(
-                bottom: context.cardVPad + 10,
-              )
-            : DeviceTileLayout.padding(context),
-        radius: 26,
-        shadows: active ? LuxeShadows.brassGlow : LuxeShadows.soft,
+    return DeviceTileShell(
+        glow: active,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
             DeviceTileLayout.headerRow(
+              context: context,
               leading: GestureDetector(
                 onTap: () => context.push('/media/${device.id}'),
                 behavior: HitTestBehavior.opaque,
@@ -154,6 +147,7 @@ class MediaTile extends ConsumerWidget {
               trailing: (active || state.groupRole.isGrouped) &&
                       sameZones.isNotEmpty
                   ? DeviceTileLayout.statusIconSlot(
+                      context,
                       child: Align(
                         alignment: Alignment.centerRight,
                         child: _GroupButton(
@@ -166,8 +160,9 @@ class MediaTile extends ConsumerWidget {
                     )
                   : null,
             ),
-            SizedBox(height: phone ? 18 : 16),
-            LayoutBuilder(
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+            DeviceCardBody(
+              child: LayoutBuilder(
               builder: (context, constraints) {
                 // Tablet: stapel transport + volume — horizontale rij past niet goed
                 // en veroorzaakt overflow op grotere touch-displays.
@@ -278,6 +273,7 @@ class MediaTile extends ConsumerWidget {
                   ],
                 );
               },
+            ),
             ),
           ],
         ),

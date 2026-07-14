@@ -17,12 +17,15 @@ import '../../theme.dart';
 import '../responsive.dart';
 import 'camera_snapshot.dart';
 import 'confirm_dialog.dart';
+import 'device_card_scale.dart';
 import 'device_control_panel.dart';
+import 'device_tile_shell.dart';
 import 'glass_card.dart';
 import 'media_tile.dart';
 
 /// Factory: pick the correct luxe widget per device type.
-Widget deviceWidget(Device d) => switch (d.type) {
+Widget deviceWidget(Device d) => DeviceCardListItem(
+      child: switch (d.type) {
       DeviceType.lightSwitch => LightSwitchTile(device: d),
       DeviceType.lightDimmer => LightDimmerTile(device: d),
       DeviceType.rgbwWw => RgbwWwTile(device: d),
@@ -41,27 +44,12 @@ Widget deviceWidget(Device d) => switch (d.type) {
       DeviceType.melding => MeldingTile(device: d),
       DeviceType.lutronHomeworks => LutronHomeworksTile(device: d),
       DeviceType.unknown => _Placeholder(name: d.name, hint: 'Onbekend type'),
-    };
-
-/* --------------------------------------------------------------------- */
-/*  Base shell                                                           */
-/* --------------------------------------------------------------------- */
-
-/// Standardised tile shell — glassy surface, generous padding, soft lift.
-class _Tile extends StatelessWidget {
-  const _Tile({required this.child, this.glow = false});
-  final Widget child;
-  final bool glow;
-  @override
-  Widget build(BuildContext context) {
-    return GlassCard(
-      padding: DeviceTileLayout.padding(context),
-      radius: 26,
-      shadows: glow ? LuxeShadows.brassGlow : LuxeShadows.soft,
-      child: child,
+    },
     );
-  }
-}
+
+/* --------------------------------------------------------------------- */
+/*  Base shell — see [DeviceTileShell] in device_tile_shell.dart         */
+/* --------------------------------------------------------------------- */
 
 /* --------------------------------------------------------------------- */
 /*  Light switch / dimmer — gedeelde header                              */
@@ -83,7 +71,8 @@ class _LightTileHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return DeviceTileLayout.headerRow(
-      leading: _IconBadge(
+      context: context,
+      leading: DeviceTileIconBadge(
         icon: on ? Icons.lightbulb : Icons.lightbulb_outline,
         active: on,
         onTap: () => onChanged(!on),
@@ -98,6 +87,7 @@ class _LightTileHeader extends StatelessWidget {
         ],
       ),
       trailing: DeviceTileLayout.trailingSwitch(
+        context: context,
         value: on,
         onChanged: onChanged,
       ),
@@ -116,7 +106,7 @@ class LightSwitchTile extends ConsumerWidget {
     final v = statusGA == null ? null : bus.values[statusGA];
     final on = v == true || v == 1;
 
-    return _Tile(
+    return DeviceTileShell(
       glow: on,
       child: _LightTileHeader(
         name: device.name,
@@ -280,10 +270,10 @@ class _LightDimmerTileState extends ConsumerState<LightDimmerTile> {
         : (on ? 100.0 : 0.0);
     final current = _dragLabel ?? busPct;
 
-    return _Tile(
+    return DeviceTileShell(
       glow: on,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _LightTileHeader(
             name: d.name,
@@ -297,19 +287,23 @@ class _LightDimmerTileState extends ConsumerState<LightDimmerTile> {
               });
             },
           ),
-          const SizedBox(height: 20),
-          _DimmerSlider(
-            value: busPct,
-            onDisplayChanged: (v) => setState(() => _dragLabel = v),
-            onDragEnd: () => setState(() => _dragLabel = null),
-            onDim: (pct) {
-              if (dimGA == null) return;
-              ref.read(busProvider.notifier).sendLightDim(
-                    deviceId: d.id,
-                    dimGa: dimGA,
-                    percent: pct,
-                  );
-            },
+          SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+          DeviceCardBody(
+            child: DeviceCardSliderWrap(
+              child: _DimmerSlider(
+                value: busPct,
+                onDisplayChanged: (v) => setState(() => _dragLabel = v),
+                onDragEnd: () => setState(() => _dragLabel = null),
+                onDim: (pct) {
+                  if (dimGA == null) return;
+                  ref.read(busProvider.notifier).sendLightDim(
+                        deviceId: d.id,
+                        dimGa: dimGA,
+                        percent: pct,
+                      );
+                },
+              ),
+            ),
           ),
         ],
       ),
@@ -465,10 +459,11 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
     required bool on,
     VoidCallback? onTap,
   }) =>
-      _IconBadge(icon: icon, active: on, onTap: onTap);
+      DeviceTileIconBadge(icon: icon, active: on, onTap: onTap);
 
-  Widget _lightOnOffSwitch(Device d, bool on) =>
+  Widget _lightOnOffSwitch(BuildContext context, Device d, bool on) =>
       DeviceTileLayout.trailingSwitch(
+        context: context,
         value: on,
         onChanged: (x) => ref.read(busProvider.notifier).send({
           'kind': 'light.switch',
@@ -555,13 +550,14 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
     final on     = _isOn(bus, d);
     final hasOnGa = d.ga['on'] != null;
 
-    return _Tile(
+    return DeviceTileShell(
       glow: on,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header
           DeviceTileLayout.headerRow(
+            context: context,
             leading: _rgbHeaderIcon(
               icon: on ? Icons.palette : Icons.palette_outlined,
               on: on,
@@ -584,74 +580,82 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
                 ),
               ],
             ),
-            trailing: hasOnGa ? _lightOnOffSwitch(d, on) : null,
+            trailing: hasOnGa ? _lightOnOffSwitch(context, d, on) : null,
           ),
-          const SizedBox(height: 20),
-
-          // Colour wheel (centred)
-          Center(
+          DeviceCardHero(
             child: _HsvWheelPicker(
-              hue:        _hue,
+              hue: _hue,
               saturation: _sat,
-              diameter:   220,
-              onChanged:  (h, s) => setState(() { _hue = h; _sat = s; }),
+              diameter: DeviceCardScale.colorWheelSize(context),
+              onChanged: (h, s) => setState(() {
+                _hue = h;
+                _sat = s;
+              }),
               onChangeEnd: (_, __) => _sendRgbChannels(d),
             ),
           ),
-          const SizedBox(height: 20),
-
-          // Brightness bar
-          _LuxeGradientBar(
-            value:  _val,
-            label:  'Helderheid',
-            colors: [Colors.black, _currentColor],
-            onChanged:  (v) => setState(() => _val = v),
-            onChangeEnd: (v) {
-              setState(() => _val = v);
-              _sendRgbChannels(d);
-            },
+          DeviceCardBody(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                DeviceCardSliderWrap(
+                  child: _LuxeGradientBar(
+                    value: _val,
+                    label: 'Helderheid',
+                    colors: [Colors.black, _currentColor],
+                    onChanged: (v) => setState(() => _val = v),
+                    onChangeEnd: (v) {
+                      setState(() => _val = v);
+                      _sendRgbChannels(d);
+                    },
+                  ),
+                ),
+                if (hasWhite) ...[
+                  const SizedBox(height: 12),
+                  DeviceCardSliderWrap(
+                    child: _LuxeGradientBar(
+                      value: _white / 255,
+                      label: 'Wit (W)',
+                      colors: [Colors.black, Colors.white],
+                      onChanged: (v) => setState(() => _white = v * 255),
+                      onChangeEnd: (v) {
+                        setState(() => _white = v * 255);
+                        _sendChannel(d, 'w', _white);
+                      },
+                    ),
+                  ),
+                ],
+                if (hasCct) ...[
+                  const SizedBox(height: 12),
+                  DeviceCardSliderWrap(
+                    child: _LuxeGradientBar(
+                      value: _ww / 255,
+                      label: 'Warm Wit (WW)',
+                      colors: [Colors.black, const Color(0xFFFFD080)],
+                      onChanged: (v) => setState(() => _ww = v * 255),
+                      onChangeEnd: (v) {
+                        setState(() => _ww = v * 255);
+                        _sendChannel(d, 'ww', _ww);
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DeviceCardSliderWrap(
+                    child: _LuxeGradientBar(
+                      value: _cw / 255,
+                      label: 'Koud Wit (CW)',
+                      colors: [Colors.black, const Color(0xFFCCE8FF)],
+                      onChanged: (v) => setState(() => _cw = v * 255),
+                      onChangeEnd: (v) {
+                        setState(() => _cw = v * 255);
+                        _sendChannel(d, 'cw', _cw);
+                      },
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ),
-
-          // White channel
-          if (hasWhite) ...[
-            const SizedBox(height: 12),
-            _LuxeGradientBar(
-              value:  _white / 255,
-              label:  'Wit (W)',
-              colors: [Colors.black, Colors.white],
-              onChanged:  (v) => setState(() => _white = v * 255),
-              onChangeEnd: (v) {
-                setState(() => _white = v * 255);
-                _sendChannel(d, 'w', _white);
-              },
-            ),
-          ],
-
-          // Warm/cool channels
-          if (hasCct) ...[
-            const SizedBox(height: 12),
-            _LuxeGradientBar(
-              value:  _ww / 255,
-              label:  'Warm Wit (WW)',
-              colors: [Colors.black, const Color(0xFFFFD080)],
-              onChanged:  (v) => setState(() => _ww = v * 255),
-              onChangeEnd: (v) {
-                setState(() => _ww = v * 255);
-                _sendChannel(d, 'ww', _ww);
-              },
-            ),
-            const SizedBox(height: 12),
-            _LuxeGradientBar(
-              value:  _cw / 255,
-              label:  'Koud Wit (CW)',
-              colors: [Colors.black, const Color(0xFFCCE8FF)],
-              onChanged:  (v) => setState(() => _cw = v * 255),
-              onChangeEnd: (v) {
-                setState(() => _cw = v * 255);
-                _sendChannel(d, 'cw', _cw);
-              },
-            ),
-          ],
         ],
       ),
     );
@@ -663,12 +667,13 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
     final bus     = ref.watch(busProvider);
     final on      = _isOn(bus, d);
     final hasOnGa = d.ga['on'] != null;
-    return _Tile(
+    return DeviceTileShell(
       glow: on,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           DeviceTileLayout.headerRow(
+            context: context,
             leading: _rgbHeaderIcon(
               icon: on ? Icons.wb_incandescent : Icons.wb_incandescent_outlined,
               on: on,
@@ -691,7 +696,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
                 ),
               ],
             ),
-            trailing: hasOnGa ? _lightOnOffSwitch(d, on) : null,
+            trailing: hasOnGa ? _lightOnOffSwitch(context, d, on) : null,
           ),
           const SizedBox(height: 20),
 
@@ -732,12 +737,13 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
     final draft   = _compositeDraft ?? List<int>.filled(n, 0);
     final on      = _isOn(bus, d);
     final hasOnGa = d.ga['on'] != null;
-    return _Tile(
+    return DeviceTileShell(
       glow: on,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           DeviceTileLayout.headerRow(
+            context: context,
             leading: _rgbHeaderIcon(
               icon: on ? Icons.gradient : Icons.gradient_outlined,
               on: on,
@@ -762,7 +768,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
                 ),
               ],
             ),
-            trailing: hasOnGa ? _lightOnOffSwitch(d, on) : null,
+            trailing: hasOnGa ? _lightOnOffSwitch(context, d, on) : null,
           ),
           const SizedBox(height: 8),
           Text('Ruwe bytes op één GA.',
@@ -1138,11 +1144,11 @@ class LutronHomeworksTile extends ConsumerWidget {
       if (telEnabled) 'Telnet: aan',
     ].join(' · ');
 
-    return _Tile(
+    return DeviceTileShell(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _IconBadge(
+          DeviceTileIconBadge(
             icon: Icons.home_work_outlined,
             active: telEnabled && hostLine != null,
           ),
@@ -1515,7 +1521,7 @@ class _ShadingTileState extends ConsumerState<ShadingTile> {
       );
     }
 
-    // Pijl met lijn + solid driehoekpunt — oorspronkelijke richtingen.
+    // Gordijn: open/sluit-pijlen; jaloezie/rol: pijl omhoog/omlaag.
     final moveUpArrow = horizontalControls
         ? DeviceArrowDirection.horizontalOpen
         : DeviceArrowDirection.up;
@@ -1527,32 +1533,37 @@ class _ShadingTileState extends ConsumerState<ShadingTile> {
       if (hasUpDown)
         DeviceControlItem(
           arrow: moveUpArrow,
-          label: horizontalControls ? 'Open' : 'Omhoog',
+          label: 'Open',
+          labelMode: DeviceControlLabelMode.iconOnly,
           onTap: () => move('up'),
         ),
       if (hasStopGa)
         DeviceControlItem(
           icon: Icons.stop_circle_outlined,
           label: 'Stop',
+          labelMode: DeviceControlLabelMode.iconOnly,
           onTap: () => move('stop'),
         ),
       if (hasUpDown)
         DeviceControlItem(
           arrow: moveDownArrow,
-          label: horizontalControls ? 'Dicht' : 'Omlaag',
+          label: 'Dicht',
+          labelMode: DeviceControlLabelMode.iconOnly,
           onTap: () => move('down'),
         ),
     ];
 
     final tiltItems = <DeviceControlItem>[
       DeviceControlItem(
-        arrow: DeviceArrowDirection.southWest,
+        icon: Icons.rotate_left,
         label: 'Tuimel open',
+        labelMode: DeviceControlLabelMode.iconOnly,
         onTap: () => nudgeSlat(-5),
       ),
       DeviceControlItem(
-        arrow: DeviceArrowDirection.northEast,
+        icon: Icons.rotate_right,
         label: 'Tuimel dicht',
+        labelMode: DeviceControlLabelMode.iconOnly,
         onTap: () => nudgeSlat(5),
       ),
     ];
@@ -1563,7 +1574,7 @@ class _ShadingTileState extends ConsumerState<ShadingTile> {
         GestureDetector(
           onLongPress: openPopup,
           child: isPositionActuator
-              ? _IconBadge(icon: Icons.vertical_split_outlined)
+              ? DeviceTileIconBadge(icon: Icons.vertical_split_outlined)
               : hasPosition
                   ? _ShadingPositionStateIcon(
                       subtype: subtype,
@@ -1573,7 +1584,7 @@ class _ShadingTileState extends ConsumerState<ShadingTile> {
                           ? _shadingMoveIsClosing(_lastMoveDirection)
                           : null,
                     )
-                  : _IconBadge(
+                  : DeviceTileIconBadge(
                       glyph: ShadingSubtypeGlyph(
                         subtype: subtype,
                         size: DeviceControlBar.tileGlyphSize,
@@ -1587,15 +1598,15 @@ class _ShadingTileState extends ConsumerState<ShadingTile> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(d.name, style: Theme.of(context).textTheme.titleLarge),
-              const SizedBox(height: DeviceTileLayout.titleStatusGap),
-              Text(
-                isPositionActuator
-                    ? (hasPosition
-                        ? 'Positie · ${position.round()}%'
-                        : 'Positie-aansturing')
-                    : subtype.label,
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
+              if (isPositionActuator) ...[
+                const SizedBox(height: DeviceTileLayout.titleStatusGap),
+                Text(
+                  hasPosition
+                      ? 'Positie · ${position.round()}%'
+                      : 'Positie-aansturing',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ],
             ],
           ),
         ),
@@ -1617,26 +1628,37 @@ class _ShadingTileState extends ConsumerState<ShadingTile> {
 
     final hasMoveBar = moveItems.isNotEmpty;
     final hasTiltBar = (isJalousie || isPositionActuator) && hasSlat;
-    final phone = context.isPhone;
 
-    return _Tile(
+    final controlGap = DeviceControlBar.sectionSpacing(context);
+
+    return DeviceTileShell(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           header,
           if (hasMoveBar || hasTiltBar) ...[
-            SizedBox(height: phone ? 14 : 20),
-            if (hasMoveBar && hasTiltBar)
-              DeviceControlBar.moveAndTiltBlock(
-                moveItems: moveItems,
-                tiltItems: tiltItems,
-              )
-            else ...[
-              if (hasMoveBar)
-                DeviceControlBar.singleRow(context, moveItems),
-              if (hasTiltBar)
-                DeviceControlBar.tiltRow(context, tiltItems),
-            ],
+            SizedBox(height: controlGap),
+            DeviceCardBody(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (hasMoveBar && hasTiltBar)
+                    DeviceControlBar.moveAndTiltBlock(
+                      moveItems: moveItems,
+                      tiltItems: tiltItems,
+                      rowGap: controlGap,
+                    )
+                  else ...[
+                    if (hasMoveBar)
+                      DeviceControlBar.singleRow(context, moveItems),
+                    if (hasMoveBar && hasTiltBar)
+                      SizedBox(height: controlGap),
+                    if (hasTiltBar)
+                      DeviceControlBar.tiltRow(context, tiltItems),
+                  ],
+                ],
+              ),
+            ),
           ],
         ],
       ),
@@ -2122,19 +2144,20 @@ class _ClimateTileState extends ConsumerState<ClimateTile> {
     addMode(3, 'economy',   'Economy',   Icons.eco_outlined);
     addMode(4, 'buildingProtection', 'Beveiliging', Icons.shield_outlined);
 
-    return _Tile(
+    return DeviceTileShell(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ── Header ────────────────────────────────────────────────
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               DeviceTileLayout.statusIconSlot(
+                context,
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    _IconBadge(
+                    DeviceTileIconBadge(
                       icon: Icons.thermostat_outlined,
                       onTap: () => context.push(
                         '/log/thermostat-${d.id}'
@@ -2246,9 +2269,8 @@ class _ClimateTileState extends ConsumerState<ClimateTile> {
                           else
                             const Spacer(),
                           if (hvacSwitchLocked)
-                            // Gecentreerd onder de twee modusknoppen rechtsboven.
                             SizedBox(
-                              width: DeviceControlBar.buttonSize * 2 +
+                              width: DeviceControlBar.buttonSizeFor(context) * 2 +
                                   DeviceControlBar.gap,
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
@@ -2290,55 +2312,40 @@ class _ClimateTileState extends ConsumerState<ClimateTile> {
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          SizedBox(height: DeviceControlBar.sectionSpacing(context)),
 
-          // ── Setpoint picker ───────────────────────────────────────
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _RoundCtl(
-                icon: Icons.remove,
-                onTap: () => _adjustSetpoint(-step, minTemp, maxTemp),
-              ),
-              Text(
-                '${setpoint.toStringAsFixed(step < 1 ? 1 : 0)}°',
-                style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                      fontWeight: FontWeight.w200,
-                      fontSize: 56,
-                    ),
-              ),
-              _RoundCtl(
-                icon: Icons.add,
-                onTap: () => _adjustSetpoint(step, minTemp, maxTemp),
-              ),
-            ],
+          DeviceCardBody(
+            child: DeviceControlSetpointRow(
+              value: setpoint,
+              onDecrease: () => _adjustSetpoint(-step, minTemp, maxTemp),
+              onIncrease: () => _adjustSetpoint(step, minTemp, maxTemp),
+              decimals: step < 1 ? 1 : 0,
+            ),
           ),
 
-          // ── Operating modes (Comfort/Standby/Economy/Beveiliging) ─
           if (showModes && opModes.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            DeviceControlBar.grid(
-              context,
-              [
-                for (final m in opModes)
-                  DeviceControlItem(
-                    icon: m.icon,
-                    label: m.label,
-                    active: currentMode == m.value,
-                    onTap: () => sendMode(m.value),
-                  ),
-              ],
-              perRow: opModes.length <= 2
-                  ? 2
-                  : opModes.length <= 3
-                      ? 3
-                      : 4,
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+            DeviceControlSection(
+              title: 'MODUS',
+              child: DeviceControlBar.gridAuto(
+                context,
+                [
+                  for (final m in opModes)
+                    DeviceControlItem(
+                      icon: m.icon,
+                      label: m.label,
+                      labelMode: DeviceControlLabelMode.iconOnly,
+                      active: currentMode == m.value,
+                      onTap: () => sendMode(m.value),
+                    ),
+                ],
+              ),
             ),
           ],
 
           // ── Demand indicators (only shown in matching mode) ────────
           if (showHeatDemand || showCoolDemand) ...[
-            const SizedBox(height: 14),
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
             Row(
               children: [
                 if (showHeatDemand)
@@ -2393,8 +2400,8 @@ class _HvacModeButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const double size = DeviceControlBar.buttonSize;
-    const double radius = DeviceControlBar.buttonRadius;
+    final size = DeviceControlBar.buttonSizeFor(context);
+    const radius = DeviceControlBar.buttonRadius;
     final bool highlight = selected && !locked;
 
     // Bij blokkering tonen we de actieve modus alvast in zijn kleur als
@@ -2405,8 +2412,11 @@ class _HvacModeButton extends StatelessWidget {
             ? color
             : LuxeColors.ink;
 
-    final Widget glyph =
-        Icon(icon, size: DeviceControlIcons.size, color: iconColor);
+    final Widget glyph = Icon(
+      icon,
+      size: DeviceControlBar.glyphSizeFor(context),
+      color: iconColor,
+    );
 
     Widget square;
     if (highlight) {
@@ -2677,21 +2687,22 @@ class _FireplaceFlameBar extends StatelessWidget {
       items = [
         for (var i = 0; i < stepRanges!.length; i++)
           DeviceControlItem(
+            icon: Icons.local_fire_department_outlined,
             label: fireplaceStepLabel(
               ranges: stepRanges,
               step1Based: i + 1,
             ),
+            labelMode: DeviceControlLabelMode.iconOnly,
             active: activeStep == i + 1,
-            onTap: enabled
-                ? () => onStep(i + 1)
-                : null,
+            onTap: enabled ? () => onStep(i + 1) : null,
           ),
       ];
     } else if (legacySteps != null && legacySteps! >= 2) {
       items = [
         for (var i = 1; i <= legacySteps!; i++)
           DeviceControlItem(
-            label: 'Stand $i',
+            label: '$i',
+            labelMode: DeviceControlLabelMode.numeric,
             active: activeStep == i,
             onTap: enabled ? () => onStep(i) : null,
           ),
@@ -2700,7 +2711,8 @@ class _FireplaceFlameBar extends StatelessWidget {
       items = [
         for (var i = 0; i < _kDefaultFlameSteps.length; i++)
           DeviceControlItem(
-            label: 'Stand ${i + 1}',
+            label: '${i + 1}',
+            labelMode: DeviceControlLabelMode.numeric,
             active: activeStep == i + 1,
             onTap: enabled ? () => onStep(_kDefaultFlameSteps[i]) : null,
           ),
@@ -2711,15 +2723,42 @@ class _FireplaceFlameBar extends StatelessWidget {
         ? _fireplaceFlameValueLabel(currentPct, levelDisplay)
         : fireplaceStepLabel(ranges: stepRanges, step1Based: activeStep);
 
+    void bumpStep(int delta) {
+      if (!enabled || items.isEmpty) return;
+      var idx = items.indexWhere((e) => e.active);
+      if (idx < 0) idx = 0;
+      final next = idx + delta;
+      if (next < 0 || next >= items.length) return;
+      items[next].onTap?.call();
+    }
+
+    final stepControls = DeviceControlBar.singleRow(
+      context,
+      [
+        DeviceControlItem(
+          icon: Icons.remove,
+          label: 'Lager',
+          labelMode: DeviceControlLabelMode.iconOnly,
+          onTap: enabled ? () => bumpStep(-1) : null,
+        ),
+        DeviceControlItem(
+          icon: Icons.add,
+          label: 'Hoger',
+          labelMode: DeviceControlLabelMode.iconOnly,
+          onTap: enabled ? () => bumpStep(1) : null,
+        ),
+      ],
+    );
+
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           children: [
             Expanded(
               child: Text(
                 'VLAMSTAND',
-                style: Theme.of(context).textTheme.labelLarge,
+                style: DeviceControlBar.sectionTitleStyle(context),
               ),
             ),
             Text(
@@ -2728,80 +2767,15 @@ class _FireplaceFlameBar extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 10),
-        DeviceControlBar.grid(context, items),
+        SizedBox(height: DeviceControlBar.sectionTitleGap),
+        stepControls,
+        if (!context.isPhone) ...[
+          SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+          DeviceControlBar.gridAuto(context, items),
+        ],
       ],
     );
   }
-}
-
-class _IconBadge extends StatelessWidget {
-  const _IconBadge({
-    this.icon,
-    this.glyph,
-    this.active = false,
-    this.onTap,
-  }) : assert(icon != null || glyph != null);
-  final IconData? icon;
-  final Widget? glyph;
-  final bool active;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final radius = BorderRadius.circular(DeviceControlBar.tileIconRadius);
-    final badge = DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: radius,
-        color: active
-            ? LuxeColors.brass.withValues(alpha: 0.14)
-            : LuxeColors.surfaceDim.withValues(alpha: 0.7),
-        border: Border.all(
-          color: active
-              ? LuxeColors.brass.withValues(alpha: 0.35)
-              : LuxeColors.line,
-        ),
-      ),
-      child: Center(
-        child: glyph ??
-            Icon(
-              icon,
-              color: active ? LuxeColors.brass : LuxeColors.ink,
-              size: DeviceControlBar.tileGlyphSize,
-            ),
-      ),
-    );
-    if (onTap == null) return badge;
-    return Material(
-      color: Colors.transparent,
-      borderRadius: radius,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: radius,
-        child: badge,
-      ),
-    );
-  }
-}
-
-class _RoundCtl extends StatelessWidget {
-  const _RoundCtl({
-    required this.icon,
-    required this.onTap,
-    this.iconRotation = 0.0,
-  });
-  final IconData icon;
-  final VoidCallback onTap;
-  /// Rotation in radians applied to the icon (e.g. pi/4 for 45°).
-  final double iconRotation;
-
-  @override
-  Widget build(BuildContext context) => DeviceControlIconButton(
-        icon: icon,
-        onTap: onTap,
-        iconRotation: iconRotation,
-      );
 }
 
 Widget _placeholderBox(double ar) => AspectRatio(
@@ -2836,7 +2810,7 @@ class _Placeholder extends StatelessWidget {
   final String name;
   final String hint;
   @override
-  Widget build(BuildContext context) => _Tile(
+  Widget build(BuildContext context) => DeviceTileShell(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -2881,6 +2855,74 @@ String _fireplaceFlameValueLabel(int level, String? levelDisplay) {
     default:
       return '$level%';
   }
+}
+
+/// Openhaard uit: vlam met schuine streep.
+class _FireplaceHeaderGlyph extends StatelessWidget {
+  const _FireplaceHeaderGlyph({
+    required this.on,
+    required this.size,
+    required this.color,
+  });
+
+  final bool on;
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = Icon(
+      on ? Icons.local_fire_department : Icons.local_fire_department_outlined,
+      size: size,
+      color: color,
+    );
+    if (on) return icon;
+
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          icon,
+          CustomPaint(
+            size: Size(size, size),
+            painter: _IconSlashPainter(
+              color: color.withValues(alpha: 0.92),
+              strokeWidth: DeviceControlIcons.graphicStrokeFor(size) * 1.15,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IconSlashPainter extends CustomPainter {
+  const _IconSlashPainter({required this.color, required this.strokeWidth});
+
+  final Color color;
+  final double strokeWidth;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = strokeWidth
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+    final pad = size.shortestSide * 0.12;
+    canvas.drawLine(
+      Offset(pad, size.height - pad),
+      Offset(size.width - pad, pad),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _IconSlashPainter oldDelegate) =>
+      oldDelegate.color != color ||
+      oldDelegate.strokeWidth != strokeWidth;
 }
 
 class FireplaceTile extends ConsumerStatefulWidget {
@@ -2987,19 +3029,36 @@ class _FireplaceTileState extends ConsumerState<FireplaceTile> {
       });
     }
 
+    Future<void> toggleOn(bool v) async {
+      if (discreteMode) {
+        if (v) {
+          await sendDiscrete('on');
+        } else {
+          await sendDiscrete('off');
+        }
+      } else {
+        await setOn(v);
+      }
+    }
+
     Widget fireplaceControlBar(List<DeviceControlItem> items) =>
         DeviceControlBar.singleRow(context, items);
 
-    return _Tile(
+    return DeviceTileShell(
       glow: on,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header – no switch here; all controls are in the panel below.
           DeviceTileLayout.headerRow(
-            leading: _IconBadge(
-              icon: Icons.local_fire_department_outlined,
+            context: context,
+            leading: DeviceTileIconBadge(
               active: on,
+              onTap: () => toggleOn(!on),
+              glyph: _FireplaceHeaderGlyph(
+                on: on,
+                size: DeviceCardScale.glyphSize(context),
+                color: on ? LuxeColors.brass : LuxeColors.ink,
+              ),
             ),
             content: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -3008,58 +3067,38 @@ class _FireplaceTileState extends ConsumerState<FireplaceTile> {
                     style: Theme.of(context).textTheme.titleLarge),
                 const SizedBox(height: DeviceTileLayout.titleStatusGap),
                 Text(
-                  discreteMode
-                      ? '${on ? 'Brandt' : 'Uit'} (virtueel)'
-                      : (on ? 'Brandt' : 'Uit'),
+                  on ? 'Aan' : 'Uit',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ],
             ),
+            trailing: DeviceTileLayout.trailingSwitch(
+              context: context,
+              value: on,
+              onChanged: toggleOn,
+            ),
           ),
-          const SizedBox(height: 16),
-          // Segmented control – zelfde witte balk als zonwering/jaloezie.
-          if (discreteMode && discreteLevel != null)
+          if (discreteMode && discreteLevel != null) ...[
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
             fireplaceControlBar([
-                if (_fireplacePulse(discreteLevel, 'up') != null)
-                  DeviceControlItem(
-                    icon: Icons.local_fire_department_outlined,
-                    label: 'Aan',
-                    onTap: () => sendDiscrete('on'),
-                  ),
-                if (_fireplacePulse(discreteLevel, 'off') != null)
-                  DeviceControlItem(
-                    icon: Icons.power_off_outlined,
-                    label: 'Uit',
-                    onTap: () => sendDiscrete('off'),
-                  ),
-                if (_fireplacePulse(discreteLevel, 'up') != null)
-                  DeviceControlItem(
-                    arrow: DeviceArrowDirection.up,
-                    label: 'Hoger',
-                    onTap: () => sendDiscrete('up'),
-                  ),
-                if (_fireplacePulse(discreteLevel, 'down') != null)
-                  DeviceControlItem(
-                    arrow: DeviceArrowDirection.down,
-                    label: 'Lager',
-                    onTap: () => sendDiscrete('down'),
-                  ),
-              ])
-          else if (!discreteMode)
-            fireplaceControlBar([
+              if (_fireplacePulse(discreteLevel, 'up') != null)
                 DeviceControlItem(
-                  icon: Icons.local_fire_department_outlined,
-                  label: 'Aan',
-                  onTap: on ? null : () => setOn(true),
+                  icon: Icons.add,
+                  label: 'Hoger',
+                  labelMode: DeviceControlLabelMode.iconOnly,
+                  onTap: () => sendDiscrete('up'),
                 ),
+              if (_fireplacePulse(discreteLevel, 'down') != null)
                 DeviceControlItem(
-                  icon: Icons.power_off_outlined,
-                  label: 'Uit',
-                  onTap: on ? () => setOn(false) : null,
+                  icon: Icons.remove,
+                  label: 'Lager',
+                  labelMode: DeviceControlLabelMode.iconOnly,
+                  onTap: () => sendDiscrete('down'),
                 ),
-              ]),
+            ]),
+          ],
           if (!discreteMode && flame != null) ...[
-            const SizedBox(height: 16),
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
             Opacity(
               opacity: on ? 1.0 : 0.45,
               child: _FireplaceFlameBar(
@@ -3142,83 +3181,65 @@ class _AcTileState extends ConsumerState<AcTile> {
       setState(() => _pendingSp = null);
     }
 
-    return _Tile(
+    return DeviceTileShell(
       glow: on,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              _IconBadge(icon: Icons.ac_unit, active: on),
-              const SizedBox(width: DeviceTileLayout.iconGap),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(widget.device.name,
-                        style: Theme.of(context).textTheme.titleLarge),
-                    if (actual != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text('Nu ${actual.toStringAsFixed(1)} °C',
-                            style: Theme.of(context).textTheme.bodyMedium),
-                      ),
-                  ],
-                ),
-              ),
-              Switch.adaptive(
-                value: on,
-                activeThumbColor: LuxeColors.brass,
-                activeTrackColor: LuxeColors.brass.withValues(alpha: 0.35),
-                onChanged: (v) {
-                  ref.read(busProvider.notifier).send({
-                    'kind': 'ac.on',
-                    'deviceId': widget.device.id,
-                    'on': v,
-                  });
-                },
-              ),
-            ],
-          ),
-          if (on) ...[
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          DeviceTileLayout.headerRow(
+            context: context,
+            leading: DeviceTileIconBadge(icon: Icons.ac_unit, active: on),
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _RoundCtl(
-                  icon: Icons.remove,
-                  onTap: () {
-                    final v = (setpoint - 0.5).clamp(spMin, spMax).toDouble();
-                    setState(() => _pendingSp = v);
-                    commitSp(v);
-                  },
-                ),
-                Text('${setpoint.toStringAsFixed(1)}°',
-                    style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                          fontWeight: FontWeight.w200,
-                          fontSize: 56,
-                        )),
-                _RoundCtl(
-                  icon: Icons.add,
-                  onTap: () {
-                    final v = (setpoint + 0.5).clamp(spMin, spMax).toDouble();
-                    setState(() => _pendingSp = v);
-                    commitSp(v);
-                  },
-                ),
+                Text(widget.device.name,
+                    style: Theme.of(context).textTheme.titleLarge),
+                if (actual != null) ...[
+                  const SizedBox(height: DeviceTileLayout.titleStatusGap),
+                  Text('Nu ${actual.toStringAsFixed(1)} °C',
+                      style: Theme.of(context).textTheme.bodyMedium),
+                ] else if (!on) ...[
+                  const SizedBox(height: DeviceTileLayout.titleStatusGap),
+                  Text(
+                    'Kies modus en temperatuur, schakel daarna in.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: LuxeColors.inkSoft,
+                        ),
+                  ),
+                ],
               ],
             ),
-            if (mode != null) ...[
-              const SizedBox(height: 20),
-              Text('MODUS',
-                  style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 10),
-              DeviceControlBar.grid(
+            trailing: DeviceTileLayout.trailingSwitch(
+              context: context,
+              value: on,
+              onChanged: (v) {
+                ref.read(busProvider.notifier).send({
+                  'kind': 'ac.on',
+                  'deviceId': widget.device.id,
+                  'on': v,
+                });
+              },
+            ),
+          ),
+          DeviceCardBody(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+          if (mode != null) ...[
+            DeviceControlSection(
+              title: 'MODUS',
+              child: DeviceControlBar.gridAuto(
                 context,
                 [
-                  for (final o in (mode['options'] as List).cast<Map<String, dynamic>>())
+                  for (final o
+                      in (mode['options'] as List).cast<Map<String, dynamic>>())
                     DeviceControlItem(
+                      icon: deviceControlOptionIcon(
+                        iconKey: o['icon'] as String?,
+                        label: o['label'] as String,
+                      ),
                       label: o['label'] as String,
+                      labelMode: DeviceControlLabelMode.iconOnly,
                       active: (o['value'] as num).toInt() == activeMode,
                       onTap: () {
                         ref.read(busProvider.notifier).send({
@@ -3229,38 +3250,60 @@ class _AcTileState extends ConsumerState<AcTile> {
                       },
                     ),
                 ],
-                perRow: (mode['options'] as List).length <= 4
-                    ? (mode['options'] as List).length
-                    : 4,
               ),
-            ],
-            if (fanSpeed != null) ...[
-              const SizedBox(height: 18),
-              Text('VENTILATOR',
-                  style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 10),
-              DeviceControlBar.grid(
+            ),
+          ],
+          SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+          DeviceControlSetpointRow(
+            value: setpoint,
+            onDecrease: () {
+              final v = (setpoint - 0.5).clamp(spMin, spMax).toDouble();
+              setState(() => _pendingSp = v);
+              commitSp(v);
+            },
+            onIncrease: () {
+              final v = (setpoint + 0.5).clamp(spMin, spMax).toDouble();
+              setState(() => _pendingSp = v);
+              commitSp(v);
+            },
+          ),
+          if (fanSpeed != null) ...[
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+            DeviceControlSection(
+              title: 'VENTILATOR',
+              child: DeviceControlBar.gridAuto(
                 context,
                 [
-                  for (final o in (fanSpeed['options'] as List).cast<Map<String, dynamic>>())
-                    DeviceControlItem(
-                      label: o['label'] as String,
-                      active: (o['value'] as num).toInt() == activeFan,
-                      onTap: () {
-                        ref.read(busProvider.notifier).send({
-                          'kind': 'ac.fanSpeed',
-                          'deviceId': widget.device.id,
-                          'value': (o['value'] as num).toInt(),
-                        });
-                      },
-                    ),
+                  for (final o in (fanSpeed['options'] as List)
+                      .cast<Map<String, dynamic>>())
+                    () {
+                      final fanLabel = o['label'] as String;
+                      final numeric = deviceControlNumericLabel(fanLabel);
+                      return DeviceControlItem(
+                        icon: numeric == null
+                            ? deviceControlOptionIcon(label: fanLabel)
+                            : null,
+                        label: numeric ?? fanLabel,
+                        labelMode: numeric != null
+                            ? DeviceControlLabelMode.numeric
+                            : DeviceControlLabelMode.iconOnly,
+                        active: (o['value'] as num).toInt() == activeFan,
+                        onTap: () {
+                          ref.read(busProvider.notifier).send({
+                            'kind': 'ac.fanSpeed',
+                            'deviceId': widget.device.id,
+                            'value': (o['value'] as num).toInt(),
+                          });
+                        },
+                      );
+                    }(),
                 ],
-                perRow: (fanSpeed['options'] as List).length <= 4
-                    ? (fanSpeed['options'] as List).length
-                    : 4,
               ),
-            ],
+            ),
           ],
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -3322,53 +3365,41 @@ class FanTile extends ConsumerWidget {
       });
     }
 
-    return _Tile(
+    return DeviceTileShell(
       glow: on,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              _IconBadge(icon: Icons.air, active: on),
-              const SizedBox(width: DeviceTileLayout.iconGap),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(d.name, style: Theme.of(context).textTheme.titleLarge),
-                    const SizedBox(height: 2),
-                    Text(
-                      on ? 'Aan' : 'Uit',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ],
+          DeviceTileLayout.headerRow(
+            context: context,
+            leading: DeviceTileIconBadge(
+              icon: Icons.air,
+              active: on,
+              onTap: () => sendOn(!on),
+            ),
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(d.name, style: Theme.of(context).textTheme.titleLarge),
+                const SizedBox(height: DeviceTileLayout.titleStatusGap),
+                Text(
+                  on ? 'Aan' : 'Uit',
+                  style: Theme.of(context).textTheme.bodyMedium,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          DeviceControlBar.singleRow(
-            context,
-            [
-              DeviceControlItem(
-                icon: Icons.air,
-                label: 'Aan',
-                onTap: on ? null : () => sendOn(true),
-              ),
-              DeviceControlItem(
-                icon: Icons.power_off_outlined,
-                label: 'Uit',
-                onTap: on ? () => sendOn(false) : null,
-              ),
-            ],
+              ],
+            ),
+            trailing: DeviceTileLayout.trailingSwitch(
+              context: context,
+              value: on,
+              onChanged: sendOn,
+            ),
           ),
 
           if (speedCfg != null) ...[
-            const SizedBox(height: 16),
-            Text('SNELHEID', style: Theme.of(context).textTheme.labelLarge),
-            const SizedBox(height: 10),
-            Opacity(
-              opacity: on ? 1.0 : 0.45,
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+            DeviceControlSection(
+              title: 'SNELHEID',
+              enabled: on,
               child: speedMode == 'steps'
                   ? _FanStepBar(
                       steps: steps,
@@ -3386,52 +3417,54 @@ class FanTile extends ConsumerWidget {
           ],
 
           if (cfg['oscillate'] != null || cfg['direction'] != null) ...[
-            const SizedBox(height: 16),
-            Builder(
-              builder: (context) {
-                final items = <DeviceControlItem>[];
-                if (cfg['oscillate'] != null) {
-                  final ga = (cfg['oscillate'] as Map)['statusGa'] as String? ??
-                      (cfg['oscillate'] as Map)['ga'] as String;
-                  final v = bus.values[ga];
-                  final oscOn = v == true || v == 1;
-                  items.add(
-                    DeviceControlItem(
-                      label: 'Oscilleren',
-                      icon: Icons.swap_horiz,
-                      active: oscOn,
-                      onTap: () => ref.read(busProvider.notifier).send({
-                        'kind': 'fan.oscillate',
-                        'deviceId': d.id,
-                        'on': !oscOn,
-                      }),
-                    ),
-                  );
-                }
-                if (cfg['direction'] != null) {
-                  final ga = (cfg['direction'] as Map)['statusGa'] as String? ??
-                      (cfg['direction'] as Map)['ga'] as String;
-                  final v = bus.values[ga];
-                  final revOn = v == true || v == 1;
-                  items.add(
-                    DeviceControlItem(
-                      label: 'Omgekeerd',
-                      icon: Icons.loop,
-                      active: revOn,
-                      onTap: () => ref.read(busProvider.notifier).send({
-                        'kind': 'fan.direction',
-                        'deviceId': d.id,
-                        'reverse': !revOn,
-                      }),
-                    ),
-                  );
-                }
-                return DeviceControlBar.singleRow(
-                  context,
-                  items,
-                  alignLeftOnDesktop: false,
-                );
-              },
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+            DeviceControlSection(
+              title: 'OPTIES',
+              enabled: on,
+              child: Builder(
+                builder: (context) {
+                  final items = <DeviceControlItem>[];
+                  if (cfg['oscillate'] != null) {
+                    final ga = (cfg['oscillate'] as Map)['statusGa'] as String? ??
+                        (cfg['oscillate'] as Map)['ga'] as String;
+                    final v = bus.values[ga];
+                    final oscOn = v == true || v == 1;
+                    items.add(
+                      DeviceControlItem(
+                        label: 'Oscilleren',
+                        icon: Icons.swap_horiz,
+                        labelMode: DeviceControlLabelMode.iconOnly,
+                        active: oscOn,
+                        onTap: () => ref.read(busProvider.notifier).send({
+                          'kind': 'fan.oscillate',
+                          'deviceId': d.id,
+                          'on': !oscOn,
+                        }),
+                      ),
+                    );
+                  }
+                  if (cfg['direction'] != null) {
+                    final ga = (cfg['direction'] as Map)['statusGa'] as String? ??
+                        (cfg['direction'] as Map)['ga'] as String;
+                    final v = bus.values[ga];
+                    final revOn = v == true || v == 1;
+                    items.add(
+                      DeviceControlItem(
+                        label: 'Omgekeerd',
+                        icon: Icons.loop,
+                        labelMode: DeviceControlLabelMode.iconOnly,
+                        active: revOn,
+                        onTap: () => ref.read(busProvider.notifier).send({
+                          'kind': 'fan.direction',
+                          'deviceId': d.id,
+                          'reverse': !revOn,
+                        }),
+                      ),
+                    );
+                  }
+                  return DeviceControlBar.singleRow(context, items);
+                },
+              ),
             ),
           ],
         ],
@@ -3460,21 +3493,27 @@ class _FanStepBar extends StatelessWidget {
       DeviceControlItem(
         icon: Icons.power_off_outlined,
         label: 'Uit',
+        labelMode: DeviceControlLabelMode.iconOnly,
         onTap: () => onSelect(0),
       ),
       for (int i = 1; i <= steps; i++)
-        DeviceControlItem(
-          label: (labels != null &&
+        () {
+          final stepLabel = (labels != null &&
                   i - 1 < labels!.length &&
                   labels![i - 1].isNotEmpty)
               ? labels![i - 1]
-              : 'Stand $i',
-          active: active == i,
-          onTap: () => onSelect(i.toDouble()),
-        ),
+              : '$i';
+          final numeric = deviceControlNumericLabel(stepLabel) ?? '$i';
+          return DeviceControlItem(
+            label: numeric,
+            labelMode: DeviceControlLabelMode.numeric,
+            active: active == i,
+            onTap: () => onSelect(i.toDouble()),
+          );
+        }(),
     ];
 
-    return DeviceControlBar.grid(context, items);
+    return DeviceControlBar.gridAuto(context, items);
   }
 }
 
@@ -3505,11 +3544,12 @@ class _FanPercentBar extends StatelessWidget {
       for (final lvl in levels)
         DeviceControlItem(
           label: byteMode ? '$lvl' : '$lvl%',
+          labelMode: DeviceControlLabelMode.numeric,
           active: lvl == nearest,
           onTap: () => onSelect(lvl.toDouble()),
         ),
     ];
-    return DeviceControlBar.grid(context, items);
+    return DeviceControlBar.gridAuto(context, items);
   }
 }
 
@@ -3553,10 +3593,11 @@ class UniversalTile extends ConsumerWidget {
       final btnIcon = b['icon'] as String?;
       final leadingIcon =
           btnIcon != null ? universalIconData(btnIcon) : iconData;
-      return _Tile(
+      return DeviceTileShell(
         glow: on,
         child: DeviceTileLayout.headerRow(
-          leading: _IconBadge(
+          context: context,
+          leading: DeviceTileIconBadge(
             icon: leadingIcon,
             active: on,
             onTap: () => press(b, on: !on),
@@ -3573,6 +3614,7 @@ class UniversalTile extends ConsumerWidget {
             ],
           ),
           trailing: DeviceTileLayout.trailingSwitch(
+            context: context,
             value: on,
             onChanged: (want) => press(b, on: want),
           ),
@@ -3588,29 +3630,26 @@ class UniversalTile extends ConsumerWidget {
           label: b['label'] as String? ?? '',
           icon: b['icon'] != null
               ? universalIconData(b['icon'] as String)
-              : null,
+              : deviceControlOptionIcon(label: b['label'] as String?),
+          labelMode: DeviceControlLabelMode.iconOnly,
           active: _isButtonOn(b, bus),
           onTap: () => press(b),
         ),
     ];
 
-    return _Tile(
+    return DeviceTileShell(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              _IconBadge(icon: iconData),
-              const SizedBox(width: DeviceTileLayout.iconGap),
-              Expanded(
-                child: Text(device.name,
-                    style: Theme.of(context).textTheme.titleLarge),
-              ),
-            ],
+          DeviceTileLayout.headerRow(
+            context: context,
+            leading: DeviceTileIconBadge(icon: iconData),
+            content: Text(device.name,
+                style: Theme.of(context).textTheme.titleLarge),
           ),
           if (buttonItems.isNotEmpty) ...[
-            const SizedBox(height: 18),
-            DeviceControlBar.grid(context, buttonItems, perRow: 4),
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+            DeviceControlBar.gridAuto(context, buttonItems),
           ] else
             Padding(
               padding: const EdgeInsets.only(top: 12),
@@ -3859,44 +3898,48 @@ class WtwTile extends ConsumerWidget {
 
     final buttonItems = [
       for (final b in buttons)
-        DeviceControlItem(
-          label: b['label'] as String? ?? '',
-          active: _wtwButtonActive(b, bus),
-          onTap: () {
-            ref.read(busProvider.notifier).send({
-              'kind': 'wtw.press',
-              'deviceId': device.id,
-              'buttonId': b['id'],
-            });
-          },
-        ),
+        () {
+          final lbl = b['label'] as String? ?? '';
+          final numeric = deviceControlNumericLabel(lbl);
+          return DeviceControlItem(
+            icon: numeric == null ? deviceControlOptionIcon(label: lbl) : null,
+            label: numeric ?? lbl,
+            labelMode: numeric != null
+                ? DeviceControlLabelMode.numeric
+                : DeviceControlLabelMode.iconOnly,
+            active: _wtwButtonActive(b, bus),
+            onTap: () {
+              ref.read(busProvider.notifier).send({
+                'kind': 'wtw.press',
+                'deviceId': device.id,
+                'buttonId': b['id'],
+              });
+            },
+          );
+        }(),
     ];
 
-    return _Tile(
+    return DeviceTileShell(
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Header ────────────────────────────────────────────────────
-          Row(
-            children: [
-              _IconBadge(icon: Icons.air_outlined),
-              const SizedBox(width: DeviceTileLayout.iconGap),
-              Expanded(
-                child: Text(device.name,
-                    style: Theme.of(context).textTheme.titleLarge),
-              ),
-            ],
+          DeviceTileLayout.headerRow(
+            context: context,
+            leading: DeviceTileIconBadge(icon: Icons.air_outlined),
+            content: Text(device.name,
+                style: Theme.of(context).textTheme.titleLarge),
           ),
 
-          // ── Mode buttons ──────────────────────────────────────────────
           if (buttonItems.isNotEmpty) ...[
-            const SizedBox(height: 18),
-            DeviceControlBar.grid(context, buttonItems, perRow: 4),
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+            DeviceControlSection(
+              title: 'STAND',
+              child: DeviceControlBar.gridAuto(context, buttonItems),
+            ),
           ],
 
-          // ── Status / fault indicators ─────────────────────────────────
           if (statusItems.isNotEmpty) ...[
-            const SizedBox(height: 16),
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
             const Divider(height: 1),
             const SizedBox(height: 12),
             ...statusItems.map((s) => _WtwStatusRow(item: s, bus: bus)),
@@ -4142,6 +4185,31 @@ class MeldingTile extends ConsumerWidget {
       };
 
   /// Returns true if the KNX bus value means the alert is active.
+  static bool isItemActive(
+    Map<String, dynamic> item,
+    dynamic busVal,
+  ) =>
+      _isActive(
+        item['dpt'] as String? ?? '1.001',
+        busVal,
+        item,
+      );
+
+  static List<Map<String, dynamic>> configuredItems(Device device) {
+    final cfg = device.raw['melding'] as Map<String, dynamic>? ?? {};
+    return (cfg['items'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
+  }
+
+  static int activeItemCount(Device device, Map<String, dynamic> busValues) {
+    var n = 0;
+    for (final item in configuredItems(device)) {
+      final ga = item['ga'] as String? ?? '';
+      if (isItemActive(item, busValues[ga])) n++;
+    }
+    return n;
+  }
+
+  /// Returns true if the KNX bus value means the alert is active.
   static bool _isActive(String dpt, dynamic busVal, Map<String, dynamic> item) {
     if (busVal == null) return false;
     final activeVal = item['activeValue'];
@@ -4168,8 +4236,6 @@ class MeldingTile extends ConsumerWidget {
     final cfg = device.raw['melding'] as Map<String, dynamic>? ?? {};
     final rawItems = (cfg['items'] as List<dynamic>? ?? [])
         .cast<Map<String, dynamic>>();
-
-    // Bucket active alerts per urgency.
     final urgent = <Map<String, dynamic>>[];
     final belangrijk = <Map<String, dynamic>>[];
     final minderBelangrijk = <Map<String, dynamic>>[];
@@ -4211,7 +4277,7 @@ class MeldingTile extends ConsumerWidget {
     // All active alerts in order of severity.
     final activeAll = [...urgent, ...belangrijk, ...minderBelangrijk];
 
-    return _Tile(
+    return DeviceTileShell(
       glow: anyUrgent,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -4304,10 +4370,9 @@ class MeldingTile extends ConsumerWidget {
             for (final item in rawItems)
               _MeldingAlertRow(
                 item: item,
-                active: _isActive(
-                  item['dpt'] as String? ?? '1.001',
-                  bus.values[item['ga'] as String? ?? ''],
+                active: isItemActive(
                   item,
+                  bus.values[item['ga'] as String? ?? ''],
                 ),
               ),
           ],
@@ -4428,8 +4493,9 @@ class _MeldingAlertRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final urgency = item['urgency'] as String? ?? 'minder_belangrijk';
-    final color =
-        active ? MeldingTile._urgencyColor(urgency) : Colors.grey.shade500;
+    final activeColor = MeldingTile._urgencyColor(urgency);
+    final inactiveInk = LuxeColors.ink.withValues(alpha: 0.72);
+    final inactiveMuted = LuxeColors.inkSoft.withValues(alpha: 0.85);
     final iconKey = item['icon'] as String?;
     final label = active
         ? (item['activeLabel'] as String? ??
@@ -4441,44 +4507,51 @@ class _MeldingAlertRow extends StatelessWidget {
             MeldingTile._urgencyIcon(urgency);
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        children: [
-          Icon(iconData, size: 14, color: color),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: color,
-                fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+        decoration: BoxDecoration(
+          color: active
+              ? MeldingTile._urgencyBg(urgency)
+              : LuxeColors.surfaceDim.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: active
+                ? activeColor.withValues(alpha: 0.35)
+                : LuxeColors.line.withValues(alpha: 0.9),
           ),
-          const SizedBox(width: 6),
-          if (active)
-            Text(
-              MeldingTile._urgencyLabel(urgency),
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.4,
-                color: color,
-              ),
-            )
-          else
-            Text(
-              'inactief',
-              style: TextStyle(
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.4,
-                color: Colors.grey.shade400,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              iconData,
+              size: active ? 18 : 17,
+              color: active ? activeColor : inactiveInk,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: active ? 15 : 14,
+                  color: active ? activeColor : inactiveInk,
+                  fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                  height: 1.25,
+                ),
               ),
             ),
-        ],
+            const SizedBox(width: 8),
+            Text(
+              active ? MeldingTile._urgencyLabel(urgency) : 'INACTIEF',
+              style: TextStyle(
+                fontSize: active ? 10 : 11,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.6,
+                color: active ? activeColor : inactiveMuted,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

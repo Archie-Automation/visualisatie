@@ -3,25 +3,43 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../theme.dart';
+import '../../room_control_category.dart';
 import '../responsive.dart';
+import 'device_card_scale.dart';
 import 'glass_card.dart';
 import 'solid_arrow_icon.dart';
 
 export 'solid_arrow_icon.dart';
 
+/// How a control button shows its label inside the 56×56 tile.
+enum DeviceControlLabelMode {
+  /// Icon or arrow only; full name in tooltip/accessibility.
+  iconOnly,
+  /// Large number (fan %, stand 1, byte level).
+  numeric,
+  /// Icon with caption below — legacy, avoid for new controls.
+  caption,
+  /// Pick iconOnly / numeric / caption from content.
+  auto,
+}
+
 /// Eén knop — gebruik voor alle apparaat-tegels.
 class DeviceControlItem {
   const DeviceControlItem({
     this.icon,
+    this.glyph,
     this.iconRotation = 0.0,
     this.arrow,
     required this.label,
     this.sublabel,
     this.active = false,
     this.onTap,
+    this.labelMode = DeviceControlLabelMode.auto,
   });
 
   final IconData? icon;
+  /// Custom icoon — bv. vlam met streep voor openhaard uit.
+  final Widget? glyph;
   final double iconRotation;
   /// Pijl met lijn + solid driehoekpunt (zonwering, haard, …).
   final DeviceArrowDirection? arrow;
@@ -29,8 +47,24 @@ class DeviceControlItem {
   final String? sublabel;
   final bool active;
   final VoidCallback? onTap;
+  final DeviceControlLabelMode labelMode;
 
-  bool get hasGlyph => icon != null || arrow != null;
+  bool get hasGlyph => glyph != null || icon != null || arrow != null;
+
+  DeviceControlLabelMode get resolvedLabelMode {
+    if (labelMode != DeviceControlLabelMode.auto) return labelMode;
+    if (hasGlyph) return DeviceControlLabelMode.iconOnly;
+    if (deviceControlNumericLabel(label) != null) {
+      return DeviceControlLabelMode.numeric;
+    }
+    return DeviceControlLabelMode.caption;
+  }
+
+  String get tooltipText {
+    if (label.isNotEmpty) return label;
+    if (sublabel != null && sublabel!.isNotEmpty) return sublabel!;
+    return 'Bediening';
+  }
 }
 
 /// Vaste maat vierkante knop — één implementatie voor Sonos, haard, zonwering, …
@@ -197,11 +231,9 @@ class DeviceControlPanel extends StatelessWidget {
   const DeviceControlPanel({
     super.key,
     required this.rows,
-    this.compactRows = const {},
   });
 
   final List<List<DeviceControlItem>> rows;
-  final Set<int> compactRows;
 
   @override
   Widget build(BuildContext context) {
@@ -209,21 +241,13 @@ class DeviceControlPanel extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final fullWidth = DeviceControlBar.useFullWidthRows(
-          context,
-          constraints.maxWidth,
-        );
-
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
             for (var i = 0; i < rows.length; i++) ...[
-              if (i > 0) const SizedBox(height: DeviceControlBar.gap),
-              if (compactRows.contains(i))
-                _CompactControlRow(items: rows[i], fullWidth: fullWidth)
-              else
-                _SquareControlRow(items: rows[i], fullWidth: fullWidth),
+              if (i > 0) SizedBox(height: DeviceControlBar.rowGap),
+              _SquareControlRow(items: rows[i], layoutContext: context),
             ],
           ],
         );
@@ -233,87 +257,26 @@ class DeviceControlPanel extends StatelessWidget {
 }
 
 class _SquareControlRow extends StatelessWidget {
-  const _SquareControlRow({required this.items, this.fullWidth = false});
+  const _SquareControlRow({required this.items, required this.layoutContext});
   final List<DeviceControlItem> items;
-  final bool fullWidth;
-
-  @override
-  Widget build(BuildContext context) {
-    if (fullWidth) {
-      return SizedBox(
-        width: double.infinity,
-        child: Row(
-          children: [
-            for (var j = 0; j < items.length; j++) ...[
-              if (j > 0) const SizedBox(width: DeviceControlBar.gap),
-              Expanded(
-                child: _LabeledSquareButton(item: items[j], expand: true),
-              ),
-            ],
-          ],
-        ),
-      );
-    }
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var j = 0; j < items.length; j++) ...[
-          if (j > 0) const SizedBox(width: DeviceControlBar.gap),
-          _LabeledSquareButton(item: items[j]),
-        ],
-      ],
-    );
-  }
-}
-
-/// Omhoog/stop/omlaag: gelijke tussenruimte over een vaste breedte.
-class _JalousieMoveRow extends StatelessWidget {
-  const _JalousieMoveRow({
-    required this.items,
-    required this.width,
-    this.fullWidth = false,
-  });
-
-  final List<DeviceControlItem> items;
-  final double width;
-  final bool fullWidth;
+  final BuildContext layoutContext;
 
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) return const SizedBox.shrink();
-
-    final n = items.length;
-
-    if (fullWidth) {
-      return SizedBox(
-        width: width,
-        child: Row(
-          children: [
-            for (var j = 0; j < n; j++) ...[
-              if (j > 0) const SizedBox(width: DeviceControlBar.gap),
-              Expanded(
-                child: _LabeledSquareButton(item: items[j], expand: true),
-              ),
-            ],
-          ],
-        ),
-      );
-    }
-
-    final buttons = n * DeviceControlBar.buttonSize;
-    final slotCount = n - 1;
-    final slotWidth = slotCount > 0
-        ? math.max(0.0, (width - buttons) / slotCount)
-        : 0.0;
-
     return SizedBox(
-      width: width,
+      width: double.infinity,
       child: Row(
         children: [
-          for (var j = 0; j < n; j++) ...[
-            if (j > 0) SizedBox(width: slotWidth),
-            _LabeledSquareButton(item: items[j]),
+          for (var j = 0; j < items.length; j++) ...[
+            if (j > 0) SizedBox(width: DeviceControlBar.gap),
+            Expanded(
+              child: _LabeledSquareButton(
+                item: items[j],
+                expand: true,
+                layoutContext: layoutContext,
+              ),
+            ),
           ],
         ],
       ),
@@ -321,77 +284,29 @@ class _JalousieMoveRow extends StatelessWidget {
   }
 }
 
-/// Move- + tuimelrij; breedte vast berekend (geen meting → geen verspringen).
+/// Move- + tuimelrij — zelfde volle-breedte rijen als overal.
 class _MoveAndTiltBlock extends StatelessWidget {
   const _MoveAndTiltBlock({
     required this.moveItems,
     required this.tiltItems,
+    this.rowGap,
   });
 
   final List<DeviceControlItem> moveItems;
   final List<DeviceControlItem> tiltItems;
+  final double? rowGap;
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final fullWidth = DeviceControlBar.useFullWidthRows(
-          context,
-          constraints.maxWidth,
-        );
-        final width = fullWidth
-            ? constraints.maxWidth
-            : DeviceControlBar.compactRowWidth(context, tiltItems);
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _JalousieMoveRow(
-              items: moveItems,
-              width: width,
-              fullWidth: fullWidth,
-            ),
-            const SizedBox(height: DeviceControlBar.gap),
-            _CompactControlRow(items: tiltItems, fullWidth: fullWidth),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _CompactControlRow extends StatelessWidget {
-  const _CompactControlRow({super.key, required this.items, this.fullWidth = false});
-  final List<DeviceControlItem> items;
-  final bool fullWidth;
-
-  @override
-  Widget build(BuildContext context) {
-    if (items.isEmpty) return const SizedBox.shrink();
-
-    if (fullWidth) {
-      return SizedBox(
-        width: double.infinity,
-        child: Row(
-          children: [
-            for (var j = 0; j < items.length; j++) ...[
-              if (j > 0) const SizedBox(width: DeviceControlBar.gap),
-              Expanded(
-                child: _CompactLabeledButton(item: items[j], expand: true),
-              ),
-            ],
-          ],
-        ),
-      );
-    }
-
-    return Row(
+    final gap = rowGap ?? DeviceControlBar.sectionSpacing(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        for (var j = 0; j < items.length; j++) ...[
-          if (j > 0) const SizedBox(width: DeviceControlBar.gap),
-          _CompactLabeledButton(item: items[j]),
+        _SquareControlRow(items: moveItems, layoutContext: context),
+        if (tiltItems.isNotEmpty) ...[
+          SizedBox(height: gap),
+          _SquareControlRow(items: tiltItems, layoutContext: context),
         ],
       ],
     );
@@ -399,141 +314,134 @@ class _CompactControlRow extends StatelessWidget {
 }
 
 class _LabeledSquareButton extends StatelessWidget {
-  const _LabeledSquareButton({required this.item, this.expand = false});
+  const _LabeledSquareButton({
+    required this.item,
+    this.expand = false,
+    required this.layoutContext,
+  });
   final DeviceControlItem item;
   final bool expand;
+  final BuildContext layoutContext;
 
   @override
   Widget build(BuildContext context) {
-    final hasIcon = item.hasGlyph;
-    final disabled = item.onTap == null;
-
-    return DeviceControlSquare(
-      onTap: item.onTap,
-      active: item.active,
-      expand: expand,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 3),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (hasIcon) ...[
-              _DeviceControlGlyph(
-                item: item,
-                active: item.active,
-                disabled: disabled,
-              ),
-              if (item.label.isNotEmpty) const SizedBox(height: 3),
-            ],
-            if (item.label.isNotEmpty)
-              Text(
-                item.label,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: hasIcon
-                      ? DeviceControlBar.labeledFontSize
-                      : DeviceControlBar.labelOnlyFontSize,
-                  height: 1.05,
-                  fontWeight:
-                      item.active ? FontWeight.w600 : FontWeight.w400,
-                  color: DeviceControlIcons.color(
-                    active: item.active,
-                    disabled: disabled,
-                  ),
-                  letterSpacing: hasIcon ? 0.3 : 0.15,
-                ),
-              ),
-            if (item.sublabel != null)
-              Text(
-                item.sublabel!,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 8,
-                  color: DeviceControlIcons.color(
-                    active: item.active,
-                    disabled: disabled,
-                  ).withValues(alpha: 0.7),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CompactLabeledButton extends StatefulWidget {
-  const _CompactLabeledButton({required this.item, this.expand = false});
-
-  final DeviceControlItem item;
-  final bool expand;
-
-  @override
-  State<_CompactLabeledButton> createState() => _CompactLabeledButtonState();
-}
-
-class _CompactLabeledButtonState extends State<_CompactLabeledButton> {
-  bool _pressed = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final item = widget.item;
+    final mode = item.resolvedLabelMode;
     final disabled = item.onTap == null;
     final hasIcon = item.hasGlyph;
+    final numeric = deviceControlNumericLabel(item.label);
+    final btnSize = DeviceControlBar.buttonSizeFor(layoutContext);
+    final glyphSize = DeviceControlBar.glyphSizeFor(layoutContext);
 
-    var surface = DeviceControlButtonSurface(
-      active: item.active,
-      pressed: _pressed,
-      height: DeviceControlBar.buttonSize,
-      width: widget.expand ? double.infinity : null,
-      constraints: widget.expand
-          ? const BoxConstraints(minHeight: DeviceControlBar.buttonSize)
-          : const BoxConstraints(
-              minWidth: DeviceControlBar.tiltButtonMinWidth,
+    Widget inner;
+    switch (mode) {
+      case DeviceControlLabelMode.iconOnly:
+        inner = _DeviceControlGlyph(
+          item: item.icon != null || item.arrow != null
+              ? item
+              : DeviceControlItem(
+                  icon: deviceControlOptionIcon(label: item.label),
+                  label: item.label,
+                  active: item.active,
+                  onTap: item.onTap,
+                ),
+          active: item.active,
+          disabled: disabled,
+          glyphSize: glyphSize,
+        );
+      case DeviceControlLabelMode.numeric:
+        inner = Text(
+          numeric ?? item.label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: DeviceControlBar.numericFontSizeFor(
+              layoutContext,
+              numeric ?? item.label,
             ),
-      padding: const EdgeInsets.symmetric(
-        horizontal: DeviceControlBar.tiltButtonHPadding,
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          if (hasIcon) ...[
-            _DeviceControlGlyph(
-              item: item,
+            height: 1,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.3,
+            color: DeviceControlIcons.color(
               active: item.active,
               disabled: disabled,
             ),
-            if (item.label.isNotEmpty) const SizedBox(width: 6),
-          ],
-          Text(
-            item.label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: DeviceControlBar.labelOnlyFontSize,
-              fontWeight: item.active ? FontWeight.w600 : FontWeight.w400,
-              color: DeviceControlIcons.color(
-                active: item.active,
-                disabled: disabled,
-              ),
-            ),
           ),
-        ],
-      ),
+        );
+      case DeviceControlLabelMode.caption:
+      case DeviceControlLabelMode.auto:
+        inner = Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (hasIcon) ...[
+                _DeviceControlGlyph(
+                  item: item.icon != null || item.arrow != null
+                      ? item
+                      : DeviceControlItem(
+                          icon: deviceControlOptionIcon(label: item.label),
+                          label: item.label,
+                        ),
+                  active: item.active,
+                  disabled: disabled,
+                  glyphSize: glyphSize,
+                ),
+                if (item.label.isNotEmpty) const SizedBox(height: 3),
+              ],
+              if (item.label.isNotEmpty)
+                Text(
+                  item.label,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: hasIcon
+                        ? DeviceControlBar.labeledFontSize
+                        : DeviceControlBar.labelOnlyFontSize,
+                    height: 1.05,
+                    fontWeight:
+                        item.active ? FontWeight.w600 : FontWeight.w400,
+                    color: DeviceControlIcons.color(
+                      active: item.active,
+                      disabled: disabled,
+                    ),
+                    letterSpacing: hasIcon ? 0.3 : 0.15,
+                  ),
+                ),
+              if (item.sublabel != null)
+                Text(
+                  item.sublabel!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 8,
+                    color: DeviceControlIcons.color(
+                      active: item.active,
+                      disabled: disabled,
+                    ).withValues(alpha: 0.7),
+                  ),
+                ),
+            ],
+          ),
+        );
+    }
+
+    final button = _SizedControlSquare(
+      onTap: item.onTap,
+      active: item.active,
+      expand: expand,
+      size: btnSize,
+      child: Center(child: inner),
     );
 
-    if (disabled) return surface;
-
-    return PressScale(
-      onTap: item.onTap!,
-      radius: DeviceControlBar.buttonRadius,
-      onPressedChanged: (pressed) => setState(() => _pressed = pressed),
-      child: surface,
+    return Tooltip(
+      message: item.tooltipText,
+      child: Semantics(
+        label: item.tooltipText,
+        button: true,
+        enabled: !disabled,
+        child: button,
+      ),
     );
   }
 }
@@ -543,25 +451,83 @@ class _DeviceControlGlyph extends StatelessWidget {
     required this.item,
     required this.active,
     required this.disabled,
+    this.glyphSize = DeviceControlIcons.size,
   });
 
   final DeviceControlItem item;
   final bool active;
   final bool disabled;
+  final double glyphSize;
 
   @override
   Widget build(BuildContext context) {
     final color = DeviceControlIcons.color(active: active, disabled: disabled);
+    if (item.glyph != null) {
+      return Opacity(
+        opacity: disabled ? 0.35 : 1,
+        child: item.glyph!,
+      );
+    }
     if (item.arrow != null) {
-      return SolidArrowIcon(direction: item.arrow!, color: color);
+      return SolidArrowIcon(direction: item.arrow!, color: color, size: glyphSize);
     }
     return Transform.rotate(
       angle: item.iconRotation,
       child: Icon(
         item.icon,
-        size: DeviceControlIcons.size,
+        size: glyphSize,
         color: color,
       ),
+    );
+  }
+}
+
+/// Square control with explicit size (responsive).
+class _SizedControlSquare extends StatefulWidget {
+  const _SizedControlSquare({
+    required this.onTap,
+    required this.active,
+    required this.expand,
+    required this.size,
+    required this.child,
+  });
+
+  final VoidCallback? onTap;
+  final bool active;
+  final bool expand;
+  final double size;
+  final Widget child;
+
+  @override
+  State<_SizedControlSquare> createState() => _SizedControlSquareState();
+}
+
+class _SizedControlSquareState extends State<_SizedControlSquare> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final disabled = widget.onTap == null;
+    final surface = DeviceControlButtonSurface(
+      active: widget.active,
+      pressed: _pressed,
+      width: widget.expand ? double.infinity : widget.size,
+      height: widget.size,
+      child: widget.child,
+    );
+
+    return SizedBox(
+      width: widget.expand ? double.infinity : widget.size,
+      height: widget.size,
+      child: disabled
+          ? surface
+          : PressScale(
+              onTap: widget.onTap!,
+              radius: DeviceControlBar.buttonRadius,
+              onPressedChanged: (pressed) =>
+                  setState(() => _pressed = pressed),
+              child: surface,
+            ),
     );
   }
 }
@@ -593,14 +559,116 @@ class DeviceControlIconButton extends StatelessWidget {
       );
 }
 
+/// Sectie-label + bediening — zelfde spacing op alle apparaat-tegels.
+class DeviceControlSection extends StatelessWidget {
+  const DeviceControlSection({
+    super.key,
+    required this.title,
+    required this.child,
+    this.enabled = true,
+  });
+
+  final String title;
+  final Widget child;
+  final bool enabled;
+
+  @override
+  Widget build(BuildContext context) {
+    return Opacity(
+      opacity: enabled ? 1 : 0.45,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(title, style: DeviceControlBar.sectionTitleStyle(context)),
+          SizedBox(height: DeviceControlBar.sectionTitleGap),
+          child,
+        ],
+      ),
+    );
+  }
+}
+
+/// Gedeelde temperatuur-regelaar (klimaat + airco).
+class DeviceControlSetpointRow extends StatelessWidget {
+  const DeviceControlSetpointRow({
+    super.key,
+    required this.value,
+    required this.onDecrease,
+    required this.onIncrease,
+    this.enabled = true,
+    this.decimals = 1,
+  });
+
+  final double value;
+  final VoidCallback onDecrease;
+  final VoidCallback onIncrease;
+  final bool enabled;
+  final int decimals;
+
+  @override
+  Widget build(BuildContext context) {
+    final btn = DeviceControlBar.buttonSizeFor(context);
+    final displaySize = DeviceCardScale.setpointFontSize(context);
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        _SetpointStepButton(
+          icon: Icons.remove,
+          size: btn,
+          onTap: enabled ? onDecrease : null,
+        ),
+        Text(
+          '${value.toStringAsFixed(decimals)}°',
+          style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                fontWeight: FontWeight.w200,
+                fontSize: displaySize,
+                height: 1,
+              ),
+        ),
+        _SetpointStepButton(
+          icon: Icons.add,
+          size: btn,
+          onTap: enabled ? onIncrease : null,
+        ),
+      ],
+    );
+  }
+}
+
+class _SetpointStepButton extends StatelessWidget {
+  const _SetpointStepButton({
+    required this.icon,
+    required this.size,
+    this.onTap,
+  });
+
+  final IconData icon;
+  final double size;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return _SizedControlSquare(
+      onTap: onTap,
+      active: false,
+      expand: false,
+      size: size,
+      child: Center(
+        child: Icon(
+          icon,
+          size: DeviceControlBar.glyphSizeFor(context),
+          color: DeviceControlIcons.color(disabled: onTap == null),
+        ),
+      ),
+    );
+  }
+}
+
 /// Uniforme padding en tussenruimte voor apparaat-tegels in kamers.
 abstract final class DeviceTileLayout {
-  static EdgeInsets padding(BuildContext context) => EdgeInsets.fromLTRB(
-        context.cardHPad,
-        context.cardVPad,
-        context.cardHPad,
-        context.cardVPad,
-      );
+  static EdgeInsets padding(BuildContext context) =>
+      DeviceCardScale.cardPadding(context);
 
   /// Ruimte tussen 56×56 header-icoon en titelkolom.
   static const double iconGap = 14.0;
@@ -611,15 +679,20 @@ abstract final class DeviceTileLayout {
   /// Iconen linksboven uitlijnen op alle apparaat-tegels.
   static const CrossAxisAlignment iconRowAlignment = CrossAxisAlignment.start;
 
-  /// Vaste 56×56 schijf links — onderkanten lopen gelijk op alle tegels.
-  static Widget statusIconSlot({required Widget child}) => SizedBox(
-        width: DeviceControlBar.tileIconSize,
-        height: DeviceControlBar.tileIconSize,
+  /// Responsive icoon-slot links — onderkanten lopen gelijk op alle tegels.
+  static Widget statusIconSlot(
+    BuildContext context, {
+    required Widget child,
+  }) =>
+      SizedBox(
+        width: DeviceCardScale.iconBadgeSize(context),
+        height: DeviceCardScale.iconBadgeSize(context),
         child: child,
       );
 
   /// Standaard header: icoon · tekst · optionele actie rechts.
   static Widget headerRow({
+    required BuildContext context,
     required Widget leading,
     required Widget content,
     Widget? trailing,
@@ -627,7 +700,7 @@ abstract final class DeviceTileLayout {
       Row(
         crossAxisAlignment: iconRowAlignment,
         children: [
-          statusIconSlot(child: leading),
+          statusIconSlot(context, child: leading),
           const SizedBox(width: iconGap),
           Expanded(child: content),
           if (trailing != null) trailing,
@@ -636,10 +709,12 @@ abstract final class DeviceTileLayout {
 
   /// Switch rechts, verticaal binnen de icon-hoogte (zelfde onderlijn).
   static Widget trailingSwitch({
+    required BuildContext context,
     required bool value,
     required ValueChanged<bool> onChanged,
   }) =>
       statusIconSlot(
+        context,
         child: Align(
           alignment: Alignment.centerRight,
           child: adaptiveOnOffSwitch(value: value, onChanged: onChanged),
@@ -667,7 +742,29 @@ class DeviceControlBar {
   static const double tileIconRadius = 14.0;
   static const double tileGlyphSize = 22.0;
   static const double buttonRadius = tileIconRadius;
-  static const double gap = 6.0;
+  static const double gap = 8.0;
+  static const double rowGap = 8.0;
+  static const double sectionGap = 18.0;
+  static const double sectionTitleGap = 10.0;
+
+  /// Knopmaat — overal 56×56, gelijk aan audio.
+  static double buttonSizeFor(BuildContext context) => buttonSize;
+
+  static double glyphSizeFor(BuildContext context) =>
+      DeviceCardScale.glyphSize(context);
+
+  static double numericFontSizeFor(BuildContext context, String text) =>
+      DeviceCardScale.numericFontSize(context, text);
+
+  static double sectionSpacing(BuildContext context) =>
+      DeviceCardScale.sectionSpacing(context);
+
+  static TextStyle sectionTitleStyle(BuildContext context) =>
+      Theme.of(context).textTheme.labelLarge!.copyWith(
+            letterSpacing: 1.2,
+            fontWeight: FontWeight.w600,
+            color: LuxeColors.inkSoft,
+          );
 
   /// Tuimel-knoppen: iets breder dan vierkant, zelfde hoogte.
   static const double tiltButtonMinWidth = 80.0;
@@ -758,67 +855,75 @@ class DeviceControlBar {
     return out;
   }
 
+  /// 2 → 2 cols, 3 → 3, else max 4 per row — begrensd per form factor.
+  static int autoPerRow(BuildContext context, int itemCount) {
+    final cap = DeviceCardScale.maxGridColumns(context);
+    int cols;
+    if (itemCount <= 1) {
+      cols = 1;
+    } else if (itemCount == 2) {
+      cols = 2;
+    } else if (itemCount == 3) {
+      cols = 3;
+    } else if (itemCount == 5 || itemCount == 6) {
+      cols = 3;
+    } else {
+      cols = 4;
+    }
+    return cols > cap ? cap : cols;
+  }
+
   static Widget build(
     BuildContext context, {
     required List<List<DeviceControlItem>> rows,
-    Set<int> compactRows = const {},
-    bool alignLeftOnDesktop = false,
   }) {
     if (rows.isEmpty) return const SizedBox.shrink();
-    final panel = DeviceControlPanel(
-      rows: rows,
-      compactRows: compactRows,
+    return SizedBox(
+      width: double.infinity,
+      child: DeviceControlPanel(rows: rows),
     );
-    if (alignLeftOnDesktop && !context.isPhone) {
-      return Align(alignment: Alignment.centerLeft, child: panel);
-    }
-    return SizedBox(width: double.infinity, child: panel);
   }
 
   static Widget singleRow(
     BuildContext context,
-    List<DeviceControlItem> items, {
-    bool alignLeftOnDesktop = false,
-  }) =>
-      build(
-        context,
-        rows: [items],
-        alignLeftOnDesktop: alignLeftOnDesktop,
-      );
+    List<DeviceControlItem> items,
+  ) =>
+      build(context, rows: [items]);
 
   static Widget tiltRow(
     BuildContext context,
-    List<DeviceControlItem> items, {
-    bool alignLeftOnDesktop = false,
-  }) =>
-      build(
-        context,
-        rows: [items],
-        compactRows: const {0},
-        alignLeftOnDesktop: alignLeftOnDesktop,
-      );
+    List<DeviceControlItem> items,
+  ) =>
+      build(context, rows: [items]);
 
   static Widget moveAndTiltBlock({
     required List<DeviceControlItem> moveItems,
     required List<DeviceControlItem> tiltItems,
+    double? rowGap,
   }) =>
       SizedBox(
         width: double.infinity,
         child: _MoveAndTiltBlock(
           moveItems: moveItems,
           tiltItems: tiltItems,
+          rowGap: rowGap,
         ),
+      );
+
+  static Widget gridAuto(
+    BuildContext context,
+    List<DeviceControlItem> items,
+  ) =>
+      grid(
+        context,
+        items,
+        perRow: autoPerRow(context, items.length),
       );
 
   static Widget grid(
     BuildContext context,
     List<DeviceControlItem> items, {
     int perRow = 4,
-    bool alignLeftOnDesktop = false,
   }) =>
-      build(
-        context,
-        rows: chunk(items, perRow: perRow),
-        alignLeftOnDesktop: alignLeftOnDesktop,
-      );
+      build(context, rows: chunk(items, perRow: perRow));
 }

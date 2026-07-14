@@ -213,6 +213,57 @@ const Map<String, IconData> kUniversalIconMap = {
 IconData universalIconData(String? name) =>
     kUniversalIconMap[name] ?? Icons.grid_view_rounded;
 
+/// Icon for a device control button — config key, then label heuristics.
+IconData deviceControlOptionIcon({
+  String? iconKey,
+  String? label,
+}) {
+  if (iconKey != null && iconKey.isNotEmpty) {
+    final mapped = kUniversalIconMap[iconKey];
+    if (mapped != null) return mapped;
+    final short = switch (iconKey) {
+      'auto' => Icons.auto_mode_outlined,
+      'snow' => Icons.ac_unit,
+      'flame' => Icons.local_fire_department_outlined,
+      'fan' => Icons.air,
+      'drop' => Icons.water_drop_outlined,
+      _ => null,
+    };
+    if (short != null) return short;
+  }
+  final l = (label ?? '').trim().toLowerCase();
+  if (l.isEmpty) return Icons.tune_outlined;
+  if (l.contains('stop')) return Icons.stop_circle_outlined;
+  if (l.contains('sluit')) return Icons.arrow_downward_rounded;
+  if (l.contains('koel')) return Icons.ac_unit;
+  if (l.contains('verwarm') || l.contains('warm')) {
+    return Icons.local_fire_department_outlined;
+  }
+  if (l.contains('ventil') || l.contains('fan')) return Icons.air;
+  if (l.contains('auto')) return Icons.auto_mode_outlined;
+  if (l.contains('droog') || l.contains('dry')) return Icons.water_drop_outlined;
+  if (l.contains('open') || l.contains('omhoog')) return Icons.arrow_upward_rounded;
+  if (l.contains('dicht') || l.contains('omlaag')) return Icons.arrow_downward_rounded;
+  if (l.contains('oscill')) return Icons.swap_horiz;
+  if (l.contains('omgekeerd') || l.contains('reverse')) return Icons.loop;
+  if (l.startsWith('stand')) return Icons.speed_outlined;
+  // Alleen los 'uit' — niet 'sluiten' (bevat ook "uit").
+  if (l == 'uit' || (l.contains('uit') && !l.contains('sluit'))) {
+    return Icons.power_off_outlined;
+  }
+  if (l == 'aan' || l.contains(' aan')) return Icons.power_settings_new_outlined;
+  return Icons.tune_outlined;
+}
+
+/// Extract a compact numeric label ("1", "25", "255") when possible.
+String? deviceControlNumericLabel(String label) {
+  final t = label.trim();
+  final stand = RegExp(r'^stand\s*(\d+)$', caseSensitive: false).firstMatch(t);
+  if (stand != null) return stand.group(1);
+  if (RegExp(r'^\d{1,3}%?$').hasMatch(t)) return t.replaceAll('%', '');
+  return null;
+}
+
 /// Vaste volgorde op het dashboard: verlichting → klimaat → zonwering → audio → lutron → openhaard.
 enum RoomControlCategory {
   lighting,

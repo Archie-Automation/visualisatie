@@ -13,6 +13,7 @@ import '../api.dart';
 import '../satel_api.dart';
 import '../theme.dart';
 import 'responsive.dart';
+import 'widgets/back_pill.dart';
 import 'widgets/luxe_backdrop.dart';
 
 class AlarmScreen extends ConsumerWidget {
@@ -273,11 +274,7 @@ class _AlarmHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-            color: LuxeColors.ink,
-            onPressed: onBack,
-          ),
+          BackPill(onTap: onBack),
           const Expanded(
             child: Text(
               'Alarm',
