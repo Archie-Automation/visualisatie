@@ -1,0 +1,15 @@
+{
+  "name": "knx-smart-home",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Monorepo root: scripts delegating to backend/. Use `cd backend && npm run dev` if you prefer.",
+  "scripts": {
+    "dev": "npm run dev --prefix backend",
+    "build": "npm run build --prefix backend",
+    "start": "npm run start --prefix backend",
+    "lint": "npm run lint --prefix backend",
+    "build:web": "node scripts/build-web.js",
+    "build:web:phone": "node scripts/build-web.js --phone",
+    "refresh:phone": "npm run build:web:phone"
+  }
+}

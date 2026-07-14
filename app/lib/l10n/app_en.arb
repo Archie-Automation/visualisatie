@@ -1,0 +1,13 @@
+{
+  "@@locale": "en",
+  "loginWelcomeTitle": "Welcome home.",
+  "loginSubtitle": "Sign in to take control of the ambience.",
+  "loginUserLabel": "Username",
+  "loginPasswordLabel": "Password",
+  "loginAction": "Log in",
+  "loginErrorBadCredentials": "Incorrect username or password",
+  "loginErrorNetwork": "Cannot reach the server. Start the backend (port 4000) and try again.",
+  "installerLoginTitle": "Installer configuration",
+  "installerLoginDescription": "Sign in with an administrator account to edit the house, devices, and KNX.",
+  "installerLoginAdminOnlyError": "Only administrator accounts can sign in to the installer app."
+}

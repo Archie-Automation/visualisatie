@@ -1,0 +1,13 @@
+{
+  "@@locale": "nl",
+  "loginWelcomeTitle": "Welkom thuis.",
+  "loginSubtitle": "Meld u aan om de sfeer over te nemen.",
+  "loginUserLabel": "Gebruiker",
+  "loginPasswordLabel": "Wachtwoord",
+  "loginAction": "Inloggen",
+  "loginErrorBadCredentials": "Onjuiste combinatie",
+  "loginErrorNetwork": "Geen verbinding met de server. Start de backend (poort 4000) en probeer opnieuw.",
+  "installerLoginTitle": "Installateursconfiguratie",
+  "installerLoginDescription": "Log in met een beheerdersaccount om het huis, apparaten en KNX te bewerken.",
+  "installerLoginAdminOnlyError": "Alleen beheerdersaccounts kunnen inloggen in de installateur-app."
+}

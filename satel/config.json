@@ -1,0 +1,20 @@
+{
+  "host": "192.168.1.100",
+  "port": 7094,
+  "password": "",
+  "partition": 1,
+  "zone_mapping": [
+    {
+      "zone_number": 1,
+      "name": "Voordeur",
+      "room": "Hal",
+      "device_type": "magneetcontact"
+    },
+    {
+      "zone_number": 2,
+      "name": "Woonkamer beweging",
+      "room": "Woonkamer",
+      "device_type": "pir_beweging"
+    }
+  ]
+}
