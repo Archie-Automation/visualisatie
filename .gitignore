@@ -26,6 +26,8 @@ docker/.env
 
 # Python venv (satel bridge)
 satel/.venv/
+**/__pycache__/
+*.pyc
 
 # Local go2rtc binary (see backend/.env.example GO2RTC_BIN)
 tools/go2rtc.exe
