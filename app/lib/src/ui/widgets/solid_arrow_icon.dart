@@ -10,9 +10,9 @@ enum DeviceArrowDirection {
   down,
   southWest,
   northEast,
-  /// Gordijn open: ← → van elkaar af.
+  /// Gordijn open: ← → (pijlen naar buiten, lange schacht).
   horizontalOpen,
-  /// Gordijn dicht: → ← naar elkaar toe.
+  /// Gordijn dicht: → ← (pijlen naar binnen, lange schacht).
   horizontalClose,
 }
 
@@ -30,10 +30,16 @@ class SolidArrowIcon extends StatelessWidget {
   final double size;
   final Color color;
 
+  bool get _isHorizontalPair =>
+      direction == DeviceArrowDirection.horizontalOpen ||
+      direction == DeviceArrowDirection.horizontalClose;
+
   @override
   Widget build(BuildContext context) {
+    // Gordijn: twee pijlen naast elkaar — breder canvas voor zichtbare punten.
+    final width = _isHorizontalPair ? size * 1.65 : size;
     return SizedBox(
-      width: size,
+      width: width,
       height: size,
       child: CustomPaint(
         painter: _SolidArrowPainter(direction: direction, color: color),
@@ -48,32 +54,109 @@ class _SolidArrowPainter extends CustomPainter {
   final DeviceArrowDirection direction;
   final Color color;
 
+  bool get _isVertical =>
+      direction == DeviceArrowDirection.up ||
+      direction == DeviceArrowDirection.down;
+
   @override
   void paint(Canvas canvas, Size size) {
     switch (direction) {
       case DeviceArrowDirection.horizontalOpen:
-        _drawArrow(canvas, size, tip: Offset(2.5, size.height / 2), tail: Offset(size.width * 0.42, size.height / 2));
-        _drawArrow(canvas, size, tip: Offset(size.width - 2.5, size.height / 2), tail: Offset(size.width * 0.58, size.height / 2));
+        _drawHorizontalPair(canvas, size, outward: true);
       case DeviceArrowDirection.horizontalClose:
-        _drawArrow(canvas, size, tip: Offset(size.width * 0.42, size.height / 2), tail: Offset(2.5, size.height / 2));
-        _drawArrow(canvas, size, tip: Offset(size.width * 0.58, size.height / 2), tail: Offset(size.width - 2.5, size.height / 2));
+        _drawHorizontalPair(canvas, size, outward: false);
       default:
         final (Offset tip, Offset tail) = _tipAndTail(size);
-        _drawArrow(canvas, size, tip: tip, tail: tail);
+        _drawArrow(
+          canvas,
+          size,
+          tip: tip,
+          tail: tail,
+          headFraction: 0.42,
+          headCap: size.shortestSide * 0.44,
+          headWidth: 0.62,
+        );
     }
   }
 
-  void _drawArrow(Canvas canvas, Size size, {required Offset tip, required Offset tail}) {
-    final shaft = _unit(tail - tip);
-    // Gelijkzijdige driehoek: hoogte = headLen, half basis = hoogte / √3.
-    final headLen = size.shortestSide * 0.32;
-    final halfBase = headLen / math.sqrt(3);
+  /// Gordijn: ← → of → ← met duidelijke driehoekpunten aan de buiten-/binnenkant.
+  void _drawHorizontalPair(Canvas canvas, Size size, {required bool outward}) {
+    final cy = size.height / 2;
+    final w = size.width;
+    final tipPad = 1.5;
+    final centerGap = w * 0.06;
+    final mid = w / 2;
+    final leftInner = mid - centerGap;
+    final rightInner = mid + centerGap;
+    final headCap = size.height * 0.46;
+
+    if (outward) {
+      _drawArrow(
+        canvas,
+        size,
+        tip: Offset(tipPad, cy),
+        tail: Offset(leftInner, cy),
+        headFraction: 0.48,
+        headCap: headCap,
+        headWidth: 0.58,
+      );
+      _drawArrow(
+        canvas,
+        size,
+        tip: Offset(w - tipPad, cy),
+        tail: Offset(rightInner, cy),
+        headFraction: 0.48,
+        headCap: headCap,
+        headWidth: 0.58,
+      );
+    } else {
+      _drawArrow(
+        canvas,
+        size,
+        tip: Offset(leftInner, cy),
+        tail: Offset(tipPad, cy),
+        headFraction: 0.48,
+        headCap: headCap,
+        headWidth: 0.58,
+      );
+      _drawArrow(
+        canvas,
+        size,
+        tip: Offset(rightInner, cy),
+        tail: Offset(w - tipPad, cy),
+        headFraction: 0.48,
+        headCap: headCap,
+        headWidth: 0.58,
+      );
+    }
+  }
+
+  void _drawArrow(
+    Canvas canvas,
+    Size size, {
+    required Offset tip,
+    required Offset tail,
+    double headFraction = 0.38,
+    double headCap = 0,
+    double headWidth = 0.55,
+  }) {
+    final vec = tail - tip;
+    final shaftLen = vec.distance;
+    if (shaftLen < 0.5) return;
+
+    final shaft = Offset(vec.dx / shaftLen, vec.dy / shaftLen);
+    final maxHead = headCap > 0 ? headCap : size.shortestSide * 0.38;
+    final headLen = math.min(maxHead, shaftLen * headFraction);
+    if (headLen < 1.2) return;
+
+    final halfBase = headLen * headWidth;
     final baseCenter = tip + shaft * headLen;
     final normal = Offset(-shaft.dy, shaft.dx);
 
+    final strokeW = DeviceControlIcons.graphicStrokeFor(size.shortestSide);
     final stroke = Paint()
       ..color = color
-      ..strokeWidth = DeviceControlIcons.graphicStroke
+      ..strokeWidth = _isVertical ? strokeW * 1.15 : strokeW
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
 
@@ -81,7 +164,9 @@ class _SolidArrowPainter extends CustomPainter {
       ..color = color
       ..style = PaintingStyle.fill;
 
-    canvas.drawLine(tail, baseCenter, stroke);
+    if (shaftLen > headLen + 0.5) {
+      canvas.drawLine(tail, baseCenter, stroke);
+    }
 
     final path = Path()
       ..moveTo(tip.dx, tip.dy)
@@ -96,22 +181,29 @@ class _SolidArrowPainter extends CustomPainter {
   (Offset, Offset) _tipAndTail(Size size) {
     final w = size.width;
     final h = size.height;
-    const p = 3.0;
+    final tipPad = size.shortestSide * 0.1;
+    final tailPad = size.shortestSide * 0.14;
     return switch (direction) {
-      DeviceArrowDirection.up => (Offset(w / 2, p), Offset(w / 2, h - p)),
-      DeviceArrowDirection.down => (Offset(w / 2, h - p), Offset(w / 2, p)),
-      DeviceArrowDirection.southWest => (Offset(p, h - p), Offset(w - p, p)),
-      DeviceArrowDirection.northEast => (Offset(w - p, p), Offset(p, h - p)),
+      DeviceArrowDirection.up => (
+          Offset(w / 2, tipPad),
+          Offset(w / 2, h - tailPad),
+        ),
+      DeviceArrowDirection.down => (
+          Offset(w / 2, h - tipPad),
+          Offset(w / 2, tailPad),
+        ),
+      DeviceArrowDirection.southWest => (
+          Offset(tipPad, h - tipPad),
+          Offset(w - tailPad, tailPad),
+        ),
+      DeviceArrowDirection.northEast => (
+          Offset(w - tipPad, tipPad),
+          Offset(tailPad, h - tailPad),
+        ),
       DeviceArrowDirection.horizontalOpen ||
       DeviceArrowDirection.horizontalClose =>
         (Offset.zero, Offset.zero),
     };
-  }
-
-  Offset _unit(Offset v) {
-    final len = v.distance;
-    if (len == 0) return Offset.zero;
-    return Offset(v.dx / len, v.dy / len);
   }
 
   @override

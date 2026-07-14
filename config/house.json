@@ -411,7 +411,7 @@
             {
               "id": "dev-living-curtains",
               "type": "shading",
-              "name": "Screen",
+              "name": "Gordijn",
               "subtype": "sheers",
               "slider": true,
               "ga": {

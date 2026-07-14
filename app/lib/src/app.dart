@@ -16,6 +16,7 @@ import 'ui/login_screen.dart';
 import 'ui/splash_screen.dart';
 import 'ui/room_category_screen.dart';
 import 'ui/room_screen.dart';
+import 'ui/system_screen.dart';
 import 'ui/settings_screen.dart';
 import 'installer/house_editor_screen.dart';
 import 'intercom/intercom_sip_providers.dart';
@@ -120,6 +121,22 @@ class _LuxeKnxAppState extends ConsumerState<LuxeKnxApp>
             ),
             transitionDuration: const Duration(milliseconds: 320),
             reverseTransitionDuration: const Duration(milliseconds: 260),
+            transitionsBuilder: (_, anim, __, child) {
+              final curved = CurvedAnimation(
+                parent: anim,
+                curve: Curves.easeOutCubic,
+                reverseCurve: Curves.easeInCubic,
+              );
+              return FadeTransition(opacity: curved, child: child);
+            },
+          ),
+        ),
+        GoRoute(
+          path: '/system/:slug',
+          pageBuilder: (_, s) => CustomTransitionPage(
+            child: SystemScreen(slug: s.pathParameters['slug']!),
+            transitionDuration: const Duration(milliseconds: 300),
+            reverseTransitionDuration: const Duration(milliseconds: 240),
             transitionsBuilder: (_, anim, __, child) {
               final curved = CurvedAnimation(
                 parent: anim,

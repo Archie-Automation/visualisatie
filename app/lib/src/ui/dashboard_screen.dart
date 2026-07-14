@@ -1,4 +1,4 @@
-import 'dart:math';
+﻿import 'dart:math';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -22,8 +22,8 @@ import '../floor_order.dart';
 import '../room_order.dart';
 import '../scene_order.dart';
 import '../system_order.dart';
+import '../system_category.dart';
 import 'installer_nav.dart';
-import 'widgets/device_widgets.dart';
 
 /// Combined alarm state used for auto-navigation and chip display.
 /// Null when the Satel integration is disabled.
@@ -590,14 +590,14 @@ class _RoomDashboardRow extends ConsumerWidget {
       child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ── Room header row ──────────────────────────────────────────
+        // â”€â”€ Room header row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         // Only the name text + chevron are tappable for room navigation.
         // Activity badges have their own tap targets for system sheets.
         Padding(
           padding: EdgeInsets.fromLTRB(hp, 16, hp, segments.isEmpty ? 16 : 10),
           child: Row(
             children: [
-              // Drag handle for reordering — direct slepen vanaf de handgreep.
+              // Drag handle for reordering â€” direct slepen vanaf de handgreep.
               ReorderableDragStartListener(
                 index: index,
                 child: MouseRegion(
@@ -647,7 +647,7 @@ class _RoomDashboardRow extends ConsumerWidget {
             ],
           ),
         ),
-        // ── Category chips (edge-to-edge, scrollable) ────────────────
+        // â”€â”€ Category chips (edge-to-edge, scrollable) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (segments.isNotEmpty)
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
@@ -668,7 +668,7 @@ class _RoomDashboardRow extends ConsumerWidget {
                   ?.copyWith(color: LuxeColors.inkSoft),
             ),
           ),
-        // ── Row divider ──────────────────────────────────────────────
+        // â”€â”€ Row divider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         if (showDivider)
           Divider(
             height: 1,
@@ -812,46 +812,6 @@ Widget _scenes(
 }
 
 // ---------------------------------------------------------------------------
-//  Systemen-definitie
-// ---------------------------------------------------------------------------
-
-class _SystemDef {
-  const _SystemDef(this.name, this.icon, this.types);
-  final String name;
-  final IconData icon;
-  final List<DeviceType> types;
-}
-
-const _kSystems = [
-  _SystemDef('Verlichting', Icons.lightbulb_outline, [
-    DeviceType.lightSwitch,
-    DeviceType.lightDimmer,
-    DeviceType.rgbwWw,
-    DeviceType.lutronHomeworks,
-  ]),
-  _SystemDef('Klimaat', Icons.thermostat_outlined, [
-    DeviceType.climate,
-    DeviceType.ac,
-  ]),
-  _SystemDef('Zonwering', Icons.blinds_outlined, [DeviceType.shading]),
-  _SystemDef('Ventilatie', Icons.air_outlined, [DeviceType.fan, DeviceType.wtw]),
-  _SystemDef('Openhaard', Icons.local_fire_department_outlined, [
-    DeviceType.fireplace,
-  ]),
-  _SystemDef('Camera\'s', Icons.videocam_outlined, [DeviceType.camera]),
-  _SystemDef('Intercom', Icons.doorbell_outlined, [DeviceType.intercom]),
-  _SystemDef('Audio', Icons.music_note_outlined, [
-    DeviceType.mediaSonos,
-    DeviceType.mediaBluesound,
-  ]),
-  _SystemDef('Meldingen', Icons.notifications_outlined, [DeviceType.melding]),
-  _SystemDef('Diverse', Icons.tune_outlined, [
-    DeviceType.universal,
-    DeviceType.positionActuator,
-  ]),
-];
-
-// ---------------------------------------------------------------------------
 //  _Systemen widget
 // ---------------------------------------------------------------------------
 
@@ -891,7 +851,7 @@ class _Systemen extends ConsumerWidget {
     // Bouw lijst van zichtbare systemen (alleen als er devices zijn).
     final chips = <_SystemChipData>[];
 
-    // Favorieten chip — alleen als er favoriete devices of shortcuts zijn.
+    // Favorieten chip â€” alleen als er favoriete devices of shortcuts zijn.
     final seenFavIds = <String>{};
     final favDevices = <Device>[];
     for (final d in [...allDevices, ...allCameras]) {
@@ -925,7 +885,7 @@ class _Systemen extends ConsumerWidget {
     }
 
     // Overige systemen.
-    for (final sys in _kSystems) {
+    for (final sys in kHouseSystems) {
       final devices = allDevices
           .where((d) => sys.types.contains(d.type))
           .toList();
@@ -941,7 +901,7 @@ class _Systemen extends ConsumerWidget {
       ));
     }
 
-    // Alarm chip — tonen zodra de Satel-koppeling is ingeschakeld.
+    // Alarm chip â€” tonen zodra de Satel-koppeling is ingeschakeld.
     final satelEnabled = ref.watch(satelEnabledProvider).value ?? false;
     if (satelEnabled) {
       chips.add(_SystemChipData(
@@ -1112,7 +1072,7 @@ class _SystemManageSheetState extends ConsumerState<_SystemManageSheet> {
             Padding(
               padding: const EdgeInsets.fromLTRB(22, 2, 22, 12),
               child: Text(
-                'Sleep om te rangschikken · Vinkje om te tonen of verbergen.',
+                'Sleep om te rangschikken Â· Vinkje om te tonen of verbergen.',
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
@@ -1318,35 +1278,16 @@ class _SystemChipState extends ConsumerState<_SystemChip>
   void _open(BuildContext context) {
     final data = widget.data;
     if (data.name == 'Favorieten') {
-      showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        backgroundColor: Colors.transparent,
-        builder: (_) => _FavorietenSheet(
-          devices: data.devices,
-          shortcuts: data.shortcuts,
-          cfg: widget.cfg,
-        ),
-      );
-    } else if (data.name == 'Camera\'s') {
-      context.push('/cameras');
-    } else if (data.name == 'Alarm') {
-      context.push('/alarm');
-    } else {
-      showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
-        backgroundColor: Colors.transparent,
-        builder: (_) => _SystemSheet(
-          title: data.name,
-          icon: data.icon,
-          devices: data.devices,
-          cfg: widget.cfg,
-        ),
-      );
+      context.push('/system/$kFavorietenSlug');
+      return;
     }
+    if (data.name == 'Alarm') {
+      context.push('/alarm');
+      return;
+    }
+    final sys = houseSystemByName(data.name);
+    final route = sys?.routePath;
+    if (route != null) context.push(route);
   }
 
   /// Returns the count + worst urgency for active melding alerts.
@@ -1412,7 +1353,7 @@ class _SystemChipState extends ConsumerState<_SystemChip>
     final hasAlert = alertCount > 0;
 
     // Watch the live alarm state directly so the chip rebuilds the moment
-    // the status changes — no prop-passing needed.
+    // the status changes â€” no prop-passing needed.
     final SatelPartitionState? alarmState =
         isAlarm ? ref.watch(_alarmStateProvider) : null;
 
@@ -1420,7 +1361,7 @@ class _SystemChipState extends ConsumerState<_SystemChip>
 
     final alarmIsActive = alarmState != null &&
         alarmState != SatelPartitionState.disarmed;
-    // Only colour the chip when armed / in delay — disarmed = brass (normal).
+    // Only colour the chip when armed / in delay â€” disarmed = brass (normal).
     final alarmAccent = switch (alarmState) {
       SatelPartitionState.armed      => const Color(0xFFD64545),
       SatelPartitionState.entryDelay => const Color(0xFFD64545),
@@ -1608,433 +1549,6 @@ class _SystemChipState extends ConsumerState<_SystemChip>
   }
 }
 
-// ---------------------------------------------------------------------------
-//  _SystemSheet — bottom sheet met alle devices van één systeem
-// ---------------------------------------------------------------------------
-
-class _SystemSheet extends ConsumerWidget {
-  const _SystemSheet({
-    required this.title,
-    required this.icon,
-    required this.devices,
-    required this.cfg,
-  });
-  final String title;
-  final IconData icon;
-  final List<Device> devices;
-  final HouseConfig cfg;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final mediaStates = ref.watch(mediaStateProvider);
-    // Bouw hiërarchie: verdieping → kamer → devices (op volgorde).
-    final floorGroups = <({Floor floor, List<({Room room, List<Device> devices})> rooms})>[];
-
-    for (final floor in cfg.floors) {
-      final roomEntries = <({Room room, List<Device> devices})>[];
-      for (final room in floor.rooms) {
-        final roomDevs = devices
-            .where((d) => room.devices.any((rd) => rd.id == d.id))
-            .toList();
-        if (roomDevs.isNotEmpty) {
-          roomEntries.add((room: room, devices: roomDevs));
-        }
-      }
-      if (roomEntries.isNotEmpty) {
-        floorGroups.add((floor: floor, rooms: roomEntries));
-      }
-    }
-
-    // Devices zonder kamer (bijv. camera's die niet in een kamer staan).
-    final placedIds = {
-      for (final fg in floorGroups)
-        for (final re in fg.rooms)
-          for (final d in re.devices) d.id,
-    };
-    final unplaced = devices.where((d) => !placedIds.contains(d.id)).toList();
-
-    return DraggableScrollableSheet(
-      initialChildSize: 0.72,
-      minChildSize: 0.4,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (ctx, scrollCtrl) => ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        child: Container(
-          color: LuxeColors.cream,
-          child: CustomScrollView(
-            controller: scrollCtrl,
-            slivers: [
-              // Header
-              SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 12, bottom: 4),
-                        child: Container(
-                          width: 36, height: 4,
-                          decoration: BoxDecoration(
-                            color: LuxeColors.ink.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(22, 10, 22, 4),
-                      child: Row(
-                        children: [
-                          Icon(icon, size: 20, color: LuxeColors.brass),
-                          const SizedBox(width: 10),
-                          Text(title,
-                              style: Theme.of(context).textTheme.titleLarge),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(22, 2, 22, 12),
-                      child: Text(
-                        '${devices.length} apparaten',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: LuxeColors.inkSoft,
-                            ),
-                      ),
-                    ),
-                    // Groeps-overzicht voor audio zones.
-                    _buildGroupSummary(context, mediaStates),
-                  ],
-                ),
-              ),
-
-              // Per verdieping → per kamer → devices
-              for (final fg in floorGroups) ...[
-                // Verdieping-label
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(22, 12, 22, 0),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.layers_outlined,
-                            size: 13, color: LuxeColors.brass),
-                        const SizedBox(width: 6),
-                        Text(
-                          fg.floor.name.toUpperCase(),
-                          style: Theme.of(context)
-                              .textTheme
-                              .labelSmall
-                              ?.copyWith(
-                                color: LuxeColors.brass,
-                                letterSpacing: 1.3,
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                for (final re in fg.rooms) ...[
-                  // Kamer-label
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(22, 10, 22, 6),
-                      child: Text(
-                        re.room.name.toUpperCase(),
-                        style: Theme.of(context)
-                            .textTheme
-                            .labelSmall
-                            ?.copyWith(
-                              color: LuxeColors.inkSoft,
-                              letterSpacing: 1.1,
-                            ),
-                      ),
-                    ),
-                  ),
-                  // Devices
-                  SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
-                    sliver: SliverList.separated(
-                      itemCount: re.devices.length,
-                      separatorBuilder: (_, __) =>
-                          const SizedBox(height: 14),
-                      itemBuilder: (_, i) => deviceWidget(re.devices[i]),
-                    ),
-                  ),
-                ],
-              ],
-
-              // Devices zonder kamer
-              if (unplaced.isNotEmpty) ...[
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(22, 14, 22, 6),
-                    child: Text(
-                      'OVERIGE',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: LuxeColors.inkSoft,
-                            letterSpacing: 1.1,
-                          ),
-                    ),
-                  ),
-                ),
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 4),
-                  sliver: SliverList.separated(
-                    itemCount: unplaced.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 14),
-                    itemBuilder: (_, i) => deviceWidget(unplaced[i]),
-                  ),
-                ),
-              ],
-
-              const SliverToBoxAdapter(child: SizedBox(height: 40)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  /// Toont een compact groeps-overzicht boven de devicelijst als audio-zones
-  /// aan elkaar zijn gekoppeld.
-  Widget _buildGroupSummary(
-      BuildContext context, Map<String, MediaState> mediaStates) {
-    // Verzamel alle coordinator-states die ook daadwerkelijk leden hebben.
-    final audioDeviceIds = devices
-        .where((d) =>
-            d.type == DeviceType.mediaSonos ||
-            d.type == DeviceType.mediaBluesound)
-        .map((d) => d.id)
-        .toSet();
-
-    if (audioDeviceIds.length < 2) return const SizedBox.shrink();
-
-    // Groepen: coordinator-id → lijst van member-ids (alleen devices in deze sheet).
-    final Map<String, List<String>> groups = {};
-    for (final id in audioDeviceIds) {
-      final s = mediaStates[id];
-      if (s == null) continue;
-      if (s.groupRole == MediaGroupRole.coordinator &&
-          s.groupMemberIds.isNotEmpty) {
-        groups[id] = s.groupMemberIds
-            .where((m) => audioDeviceIds.contains(m))
-            .toList();
-      }
-    }
-
-    if (groups.isEmpty) return const SizedBox.shrink();
-
-    String _name(String id) {
-      for (final d in devices) {
-        if (d.id == id) return d.name;
-      }
-      return id;
-    }
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-      child: Column(
-        children: groups.entries.map((entry) {
-          final coordId = entry.key;
-          final memberIds = entry.value;
-          final allIds = [coordId, ...memberIds];
-          return Container(
-            margin: const EdgeInsets.only(bottom: 8),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: LuxeColors.brass.withValues(alpha: 0.07),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                  color: LuxeColors.brass.withValues(alpha: 0.25)),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.link_rounded,
-                    size: 15, color: LuxeColors.brass),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: allIds.map((id) {
-                      final isCoord = id == coordId;
-                      return Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: isCoord
-                              ? LuxeColors.brass.withValues(alpha: 0.15)
-                              : LuxeColors.ink.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isCoord
-                                ? LuxeColors.brass.withValues(alpha: 0.4)
-                                : LuxeColors.ink.withValues(alpha: 0.1),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (isCoord) ...[
-                              Icon(Icons.stars_rounded,
-                                  size: 11, color: LuxeColors.brass),
-                              const SizedBox(width: 3),
-                            ],
-                            Text(
-                              _name(id),
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,
-                                color: isCoord
-                                    ? LuxeColors.brass
-                                    : LuxeColors.ink
-                                        .withValues(alpha: 0.7),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-//  _FavorietenSheet — bottom sheet met alle favoriet-devices + shortcuts
-// ---------------------------------------------------------------------------
-
-class _FavorietenSheet extends ConsumerWidget {
-  const _FavorietenSheet({
-    required this.devices,
-    required this.shortcuts,
-    required this.cfg,
-  });
-  final List<Device> devices;
-  final List<FavoriteShortcut> shortcuts;
-  final HouseConfig cfg;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.75,
-      minChildSize: 0.4,
-      maxChildSize: 0.95,
-      expand: false,
-      builder: (ctx, scrollCtrl) => ClipRRect(
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        child: Container(
-          color: LuxeColors.cream,
-          child: CustomScrollView(
-            controller: scrollCtrl,
-            slivers: [
-              SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: 12, bottom: 4),
-                        child: Container(
-                          width: 36, height: 4,
-                          decoration: BoxDecoration(
-                            color: LuxeColors.ink.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(22, 10, 22, 16),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.star_rounded,
-                              size: 20, color: LuxeColors.brass),
-                          const SizedBox(width: 10),
-                          Text('Favorieten',
-                              style: Theme.of(context).textTheme.titleLarge),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (shortcuts.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(22, 0, 22, 6),
-                    child: Text('SNELKOPPELINGEN',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: LuxeColors.inkSoft,
-                              letterSpacing: 1.2,
-                            )),
-                  ),
-                ),
-              if (shortcuts.isNotEmpty)
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 16),
-                  sliver: SliverList.separated(
-                    itemCount: shortcuts.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (_, i) {
-                      final s = shortcuts[i];
-                      final floor = cfg.floors.firstWhere((f) => f.id == s.floorId);
-                      final room = floor.rooms.firstWhere((r) => r.id == s.roomId);
-                      final cat = s.isRoomOnly
-                          ? null
-                          : RoomControlCategory.tryParseSlug(s.categorySlug!);
-                      return _FavShortcutTile(
-                        floor: floor,
-                        room: room,
-                        category: cat,
-                        width: double.infinity,
-                      );
-                    },
-                  ),
-                ),
-              if (devices.isNotEmpty)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(22, 4, 22, 6),
-                    child: Text('APPARATEN',
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: LuxeColors.inkSoft,
-                              letterSpacing: 1.2,
-                            )),
-                  ),
-                ),
-              if (devices.isNotEmpty)
-                SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 32),
-                  sliver: SliverList.separated(
-                    itemCount: devices.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 14),
-                    itemBuilder: (_, i) {
-                      final d = devices[i];
-                      return _FavTile(
-                        device: d,
-                        width: double.infinity,
-                        roomName: cfg.roomForDevice(d.id)?.name,
-                      );
-                    },
-                  ),
-                ),
-              const SliverToBoxAdapter(child: SizedBox(height: 32)),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// A small circular glass affordance used in the top-right of the header.
 class _GlassIconButton extends StatelessWidget {
   const _GlassIconButton({
@@ -2080,337 +1594,6 @@ class _GlassIconButton extends StatelessWidget {
   }
 }
 
-class _FavTile extends ConsumerWidget {
-  const _FavTile({required this.device, this.width = 190, this.roomName});
-  final Device device;
-  final double width;
-  final String? roomName;
-
-  void _openSheet(BuildContext context) {
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _DeviceSheet(device: device),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // Camera en intercom navigeren naar eigen volledig scherm.
-    if (device.type == DeviceType.intercom) {
-      return _FavShell(
-        width: width,
-        onTap: () => context.push('/intercom/${device.id}'),
-        tint: LuxeColors.ink,
-        glow: true,
-        foreground: Colors.white,
-        icon: Icons.doorbell_outlined,
-        iconColor: LuxeColors.brassGlow,
-        title: device.name,
-        roomName: roomName,
-        subtitle: 'TIKKEN OM TE ZIEN',
-        subtitleColor: LuxeColors.brassSoft,
-      );
-    }
-
-    if (device.type == DeviceType.camera) {
-      return _FavShell(
-        width: width,
-        onTap: () => context.push('/camera/${device.id}'),
-        glass: true,
-        icon: Icons.videocam_outlined,
-        iconColor: LuxeColors.inkSoft,
-        title: device.name,
-        roomName: roomName,
-        subtitle: 'LIVE',
-        subtitleColor: LuxeColors.inkSoft,
-      );
-    }
-
-    // Alle overige device-types openen een bottom sheet met de volledige
-    // bediening.
-    final bus = ref.watch(busProvider);
-    final IconData icon;
-    final String subtitle;
-    bool on = false;
-
-    switch (device.type) {
-      case DeviceType.lightSwitch:
-      case DeviceType.lightDimmer:
-        final swGa = device.ga['switch_status'] ?? device.ga['switch'];
-        final v = swGa == null ? null : bus.values[swGa];
-        on = v == true || v == 1;
-        icon = Icons.lightbulb_outline;
-        subtitle = on ? 'AAN' : 'UIT';
-      case DeviceType.rgbwWw:
-        final swGa = device.ga['on'] ??
-            device.ga['switch_status'] ??
-            device.ga['switch'];
-        final v = swGa == null ? null : bus.values[swGa];
-        on = v == true || v == 1;
-        icon = Icons.lightbulb_outline;
-        subtitle = on ? 'AAN' : 'UIT';
-      case DeviceType.shading:
-        icon = Icons.blinds_outlined;
-        subtitle = 'ZONWERING';
-      case DeviceType.positionActuator:
-        icon = Icons.vertical_split_outlined;
-        subtitle = 'POSITIE';
-      case DeviceType.climate:
-        icon = Icons.thermostat_outlined;
-        subtitle = 'KLIMAAT';
-      case DeviceType.fan:
-        icon = Icons.air_outlined;
-        subtitle = 'VENTILATIE';
-      case DeviceType.fireplace:
-        final v = bus.values[device.ga['switch_status']];
-        on = v == true || v == 1;
-        icon = Icons.local_fire_department_outlined;
-        subtitle = on ? 'AAN' : 'UIT';
-      case DeviceType.ac:
-        icon = Icons.ac_unit_outlined;
-        subtitle = 'AIRCO';
-      case DeviceType.universal:
-        icon = Icons.tune_outlined;
-        subtitle = 'BEDIENING';
-      case DeviceType.mediaSonos:
-      case DeviceType.mediaBluesound:
-        icon = Icons.music_note_outlined;
-        subtitle = 'AUDIO';
-      case DeviceType.lutronHomeworks:
-        icon = Icons.lightbulb_outline;
-        subtitle = 'VERLICHTING';
-      default:
-        icon = Icons.devices_outlined;
-        subtitle = 'APPARAAT';
-    }
-
-    return _FavShell(
-      width: width,
-      onTap: () => _openSheet(context),
-      tint: on ? LuxeColors.ink : null,
-      glass: !on,
-      glow: on,
-      foreground: on ? Colors.white : LuxeColors.ink,
-      icon: icon,
-      iconColor: on ? LuxeColors.brassGlow : LuxeColors.inkSoft,
-      title: device.name,
-      roomName: roomName,
-      subtitle: subtitle,
-      subtitleColor: on ? LuxeColors.brassSoft : LuxeColors.inkSoft,
-    );
-  }
-}
-
-/// Bottom sheet met de volledige device-bediening, identiek aan in de kamer.
-class _DeviceSheet extends StatelessWidget {
-  const _DeviceSheet({required this.device});
-  final Device device;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-        child: Container(
-          decoration: const BoxDecoration(
-            color: LuxeColors.cream,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-          ),
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Trekker
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 12, bottom: 4),
-                    child: Container(
-                      width: 36,
-                      height: 4,
-                      decoration: BoxDecoration(
-                        color: LuxeColors.ink.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ),
-                  ),
-                ),
-                // Naam + kamer
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 10, 24, 0),
-                  child: Text(
-                    device.name,
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                ),
-                // Device-widget
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
-                  child: deviceWidget(device),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _FavShortcutTile extends StatelessWidget {
-  const _FavShortcutTile({
-    required this.floor,
-    required this.room,
-    required this.category,
-    this.width = 190,
-  });
-
-  final Floor floor;
-  final Room room;
-  final RoomControlCategory? category;
-  final double width;
-
-  @override
-  Widget build(BuildContext context) {
-    final path = category == null
-        ? '/floor/${floor.id}/room/${room.id}'
-        : '/floor/${floor.id}/room/${room.id}/category/${category!.name}';
-    return _FavShell(
-      width: width,
-      onTap: () => context.push(path),
-      glass: true,
-      icon: category == null ? Icons.meeting_room_outlined : category!.icon,
-      iconColor: LuxeColors.inkSoft,
-      title: category == null ? room.name : category!.labelTitle,
-      subtitle: category == null ? 'KAMER' : 'FUNCTIEGROEP',
-      subtitleColor: LuxeColors.inkSoft,
-      // Show room (and floor) context so the user knows where this group lives.
-      roomName: category == null ? floor.name : '${room.name} · ${floor.name}',
-    );
-  }
-}
-
-/// Shared visual shell for every favourite tile so spacing, typography and
-/// elevation stay identical across variants.
-class _FavShell extends StatelessWidget {
-  const _FavShell({
-    required this.width,
-    required this.onTap,
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    required this.subtitle,
-    required this.subtitleColor,
-    this.roomName,
-    this.tint,
-    this.glass = false,
-    this.glow = false,
-    this.foreground = LuxeColors.ink,
-  });
-
-  final double width;
-  final VoidCallback onTap;
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String subtitle;
-  final Color subtitleColor;
-  /// Optional room name shown subtly at the top.
-  final String? roomName;
-  final Color? tint;
-  final bool glass;
-  final bool glow;
-  final Color foreground;
-
-  @override
-  Widget build(BuildContext context) {
-    final roomLabel = roomName;
-    final body = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        // Top: icon + optional room label
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: iconColor, size: 24),
-            if (roomLabel != null) ...[
-              const SizedBox(width: 6),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 3),
-                  child: Text(
-                    roomLabel.toUpperCase(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 8.5,
-                      letterSpacing: 1.2,
-                      fontWeight: FontWeight.w500,
-                      color: foreground.withValues(alpha: 0.45),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-        // Bottom: device name + status
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: foreground,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 15,
-                )),
-            const SizedBox(height: 4),
-            Text(subtitle,
-                style: TextStyle(
-                  fontSize: 10,
-                  letterSpacing: 2.2,
-                  fontWeight: FontWeight.w500,
-                  color: subtitleColor,
-                )),
-          ],
-        ),
-      ],
-    );
-
-    if (glass) {
-      return SizedBox(
-        width: width,
-        child: GlassCard(
-          padding: const EdgeInsets.all(20),
-          radius: 24,
-          onTap: onTap,
-          child: body,
-        ),
-      );
-    }
-
-    return SizedBox(
-      width: width,
-      child: SolidGlassCard(
-        padding: const EdgeInsets.all(20),
-        radius: 24,
-        color: tint ?? LuxeColors.surface,
-        onTap: onTap,
-        shadows: glow ? LuxeShadows.brassGlow : LuxeShadows.soft,
-        child: body,
-      ),
-    );
-  }
-}
-
 /* ------------------------------------------------------------------ */
 /*  Room activity badges                                                */
 /* ------------------------------------------------------------------ */
@@ -2419,7 +1602,7 @@ class _RoomActivityBadges extends ConsumerWidget {
   const _RoomActivityBadges({required this.room});
   final Room room;
 
-  /// Vaste hoogte zodat iconen (vlam, equalizer, …) de kamerbalk niet laten verspringen.
+  /// Vaste hoogte zodat iconen (vlam, equalizer, â€¦) de kamerbalk niet laten verspringen.
   static const _badgeSize = 22.0;
   static const _glyphSize = 18.0;
   static const _slotHeight = 36.0;
@@ -2499,24 +1682,9 @@ class _RoomActivityBadges extends ConsumerWidget {
   }
 
   void _openSystem(BuildContext context, HouseConfig cfg, String sysName) {
-    final sys = _kSystems.firstWhere(
-      (s) => s.name == sysName,
-      orElse: () => _kSystems.first,
-    );
-    final devices =
-        cfg.allDevices.where((d) => sys.types.contains(d.type)).toList();
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _SystemSheet(
-        title: sys.name,
-        icon: sys.icon,
-        devices: devices,
-        cfg: cfg,
-      ),
-    );
+    final sys = houseSystemByName(sysName);
+    final route = sys?.routePath;
+    if (route != null) context.push(route);
   }
 
   @override
