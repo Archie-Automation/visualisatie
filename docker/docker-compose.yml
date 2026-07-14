@@ -1,0 +1,28 @@
+# Eén stack: Luxe KNX API + camera-streaming (go2rtc) in één container.
+# Start op de server:  ./up.sh   of   docker compose up -d --build
+#
+# Vereist: ../config/house.json en (aanbevolen) een .env naast dit bestand
+# (kopieer .env.example, zet JWT_SECRET en voor telefoons MEDIA_BASE_URL).
+
+services:
+  knx-stack:
+    build:
+      context: ../backend
+    image: luxe-knx-stack:latest
+    container_name: luxe-knx-stack
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      - PORT=4000
+      - CONFIG_PATH=/config/house.json
+      - JWT_SECRET=${JWT_SECRET:-change-me-to-a-long-random-string}
+      - LOG_LEVEL=info
+      - KNX_SIMULATE=0
+      # LAN-IP van deze server + poort 1984, voor apps op telefoon/tablet
+      - MEDIA_BASE_URL=${MEDIA_BASE_URL:-http://127.0.0.1:1984}
+      - PUBLIC_API_BASE=${PUBLIC_API_BASE:-}
+      - GO2RTC_CONFIG_PATH=/media/go2rtc.yaml
+      - GO2RTC_AUTO_START=1
+    volumes:
+      - ../config:/config:ro
+      - ./go2rtc:/media

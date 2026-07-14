@@ -1,0 +1,1158 @@
+{
+  "project": {
+    "id": "prj-villa-luxe",
+    "name": "Archie",
+    "timezone": "Europe/Amsterdam",
+    "location": {
+      "lat": 52.3676,
+      "lon": 4.9041
+    }
+  },
+  "knx": {
+    "gateway": {
+      "host": "192.168.1.200",
+      "port": 3671,
+      "mode": "tunneling"
+    },
+    "physicalAddress": "1.1.250"
+  },
+  "cameras": [
+    {
+      "id": "dev-cam-8a6df19c-3f2a-43db-bcc5-89dc81feb8ff",
+      "name": "Achtertuin",
+      "type": "camera",
+      "camera": {
+        "rtsp": "rtsp://syno:7d94102c4229e02de0f0eed1d0c8b000@192.168.1.22:554/Sms=7.unicast",
+        "go2rtcVideoOnly": true
+      }
+    },
+    {
+      "id": "dev-cam-7fc29cd4-e3a5-4c94-8649-ecef4c276eaa",
+      "name": "Voordeur",
+      "type": "camera",
+      "camera": {
+        "rtsp": "rtsp://syno:32b0bf8d109c37c5794cfe97ead6852c@192.168.1.22:554/Sms=8.unicast",
+        "go2rtcVideoOnly": true
+      }
+    },
+    {
+      "id": "dev-cam-45807ed4-db24-4d74-8e75-615deef79490",
+      "name": "Garage",
+      "type": "camera",
+      "camera": {
+        "rtsp": "rtsp://syno:bccbd6a3ad0576e3c7ea50defd5b83af@192.168.1.22:554/Sms=10.unicast",
+        "go2rtcVideoOnly": true
+      }
+    }
+  ],
+  "scenes": [
+    {
+      "id": "scn-welcome",
+      "name": "Welkom Thuis",
+      "icon": "door",
+      "actions": [
+        {
+          "ga": "6/1/4",
+          "role": "pulse",
+          "value": true
+        },
+        {
+          "ga": "1/1/10",
+          "role": "switch",
+          "value": false
+        },
+        {
+          "ga": "1/1/1",
+          "role": "switch",
+          "value": true
+        },
+        {
+          "ga": "1/2/1",
+          "role": "percent",
+          "value": 40,
+          "delayMs": 200
+        }
+      ]
+    },
+    {
+      "id": "scn-evening",
+      "name": "Rustige Avond",
+      "icon": "moon",
+      "actions": [
+        {
+          "ga": "2/1/1",
+          "role": "switch",
+          "value": true
+        },
+        {
+          "ga": "2/3/1",
+          "role": "dim_value",
+          "value": 17,
+          "delayMs": 150
+        },
+        {
+          "ga": "3/1/1",
+          "role": "switch",
+          "value": true
+        },
+        {
+          "ga": "4/3/1",
+          "role": "position",
+          "value": 60
+        },
+        {
+          "ga": "4/5/1",
+          "role": "position",
+          "value": 50,
+          "delayMs": 200
+        },
+        {
+          "ga": "5/2/1",
+          "role": "setpoint",
+          "value": 20.5
+        },
+        {
+          "ga": "6/1/3",
+          "role": "pulse",
+          "value": true
+        },
+        {
+          "ga": "1/1/10",
+          "role": "switch",
+          "value": true
+        },
+        {
+          "ga": "1/2/10",
+          "role": "dim_value",
+          "value": 30,
+          "delayMs": 150
+        },
+        {
+          "ga": "1/1/11",
+          "role": "switch",
+          "value": false
+        },
+        {
+          "ga": "1/1/1",
+          "role": "switch",
+          "value": true
+        },
+        {
+          "ga": "1/2/1",
+          "role": "percent",
+          "value": 40,
+          "delayMs": 200
+        }
+      ],
+      "mediaActions": [
+        {
+          "deviceId": "dev-living-sonos",
+          "kind": "volume",
+          "value": 7
+        },
+        {
+          "deviceId": "dev-living-sonos",
+          "kind": "mute",
+          "muted": false
+        },
+        {
+          "deviceId": "dev-living-sonos",
+          "kind": "transport",
+          "action": "play"
+        }
+      ]
+    },
+    {
+      "id": "scn-goodnight",
+      "name": "Goede Nacht",
+      "icon": "bed",
+      "actions": [
+        {
+          "ga": "2/1/1",
+          "role": "switch",
+          "value": false
+        },
+        {
+          "ga": "3/1/1",
+          "role": "switch",
+          "value": false
+        },
+        {
+          "ga": "6/1/4",
+          "role": "pulse",
+          "value": true
+        },
+        {
+          "ga": "1/1/10",
+          "role": "switch",
+          "value": false
+        },
+        {
+          "ga": "1/1/11",
+          "role": "switch",
+          "value": false
+        },
+        {
+          "ga": "1/1/1",
+          "role": "switch",
+          "value": false
+        },
+        {
+          "ga": "1/3/1",
+          "role": "byte",
+          "value": 0
+        },
+        {
+          "ga": "1/3/2",
+          "role": "byte",
+          "value": 0
+        },
+        {
+          "ga": "1/3/3",
+          "role": "byte",
+          "value": 0
+        },
+        {
+          "ga": "1/3/4",
+          "role": "byte",
+          "value": 0
+        },
+        {
+          "ga": "8/1/1",
+          "role": "switch",
+          "value": false
+        },
+        {
+          "ga": "1/1/20",
+          "role": "switch",
+          "value": false
+        },
+        {
+          "ga": "1/1/21",
+          "role": "switch",
+          "value": false
+        },
+        {
+          "ga": "1/1/20",
+          "role": "switch",
+          "value": false
+        },
+        {
+          "ga": "1/1/21",
+          "role": "switch",
+          "value": false
+        }
+      ],
+      "mediaActions": [
+        {
+          "deviceId": "dev-living-sonos",
+          "kind": "mute",
+          "muted": false
+        },
+        {
+          "deviceId": "dev-living-sonos",
+          "kind": "transport",
+          "action": "stop"
+        },
+        {
+          "deviceId": "dev-4b797c10-5a6b-4d19-b64f-99bbdf756c5a",
+          "kind": "mute",
+          "muted": false
+        },
+        {
+          "deviceId": "dev-4b797c10-5a6b-4d19-b64f-99bbdf756c5a",
+          "kind": "transport",
+          "action": "stop"
+        }
+      ]
+    },
+    {
+      "id": "scn-party",
+      "name": "Feest",
+      "icon": "star",
+      "actions": [
+        {
+          "ga": "1/1/10",
+          "role": "switch",
+          "value": true
+        },
+        {
+          "ga": "1/2/10",
+          "role": "dim_value",
+          "value": 100,
+          "delayMs": 150
+        },
+        {
+          "ga": "1/1/11",
+          "role": "switch",
+          "value": true
+        },
+        {
+          "ga": "1/1/1",
+          "role": "switch",
+          "value": true
+        },
+        {
+          "ga": "1/2/1",
+          "role": "percent",
+          "value": 90,
+          "delayMs": 200
+        }
+      ]
+    }
+  ],
+  "floors": [
+    {
+      "id": "floor-ground",
+      "name": "Begane Grond",
+      "order": 0,
+      "icon": "home",
+      "rooms": [
+        {
+          "id": "room-living",
+          "name": "Woonkamer",
+          "icon": "sofa",
+          "cover": "assets/rooms/living.jpg",
+          "scenes": [
+            {
+              "id": "scn-living-film",
+              "name": "Film",
+              "icon": "movie",
+              "actions": [
+                {
+                  "ga": "1/2/1",
+                  "role": "dim_value",
+                  "value": 10
+                },
+                {
+                  "ga": "1/1/2",
+                  "role": "switch",
+                  "value": false
+                }
+              ]
+            },
+            {
+              "id": "scn-living-read",
+              "name": "Lezen",
+              "icon": "book",
+              "actions": [
+                {
+                  "ga": "1/2/1",
+                  "role": "dim_value",
+                  "value": 70
+                },
+                {
+                  "ga": "1/1/2",
+                  "role": "switch",
+                  "value": true
+                }
+              ]
+            },
+            {
+              "id": "scn-living-family",
+              "name": "Familie",
+              "icon": "home",
+              "actions": [
+                {
+                  "ga": "1/2/1",
+                  "role": "dim_value",
+                  "value": 90
+                },
+                {
+                  "ga": "1/1/2",
+                  "role": "switch",
+                  "value": true
+                }
+              ]
+            }
+          ],
+          "devices": [
+            {
+              "id": "dev-living-ceiling",
+              "type": "light_dimmer",
+              "name": "Plafond",
+              "favorite": true,
+              "ga": {
+                "switch": "2/1/1",
+                "switch_status": "2/1/1",
+                "dim_value": "2/3/1",
+                "dim_status": "2/3/1"
+              }
+            },
+            {
+              "id": "dev-living-spots",
+              "type": "light_switch",
+              "name": "Spots",
+              "ga": {
+                "switch": "3/1/1",
+                "switch_status": "3/1/1"
+              }
+            },
+            {
+              "id": "dev-living-blinds",
+              "type": "shading",
+              "name": "Jaloezie",
+              "subtype": "jalousie",
+              "slider": true,
+              "ga": {
+                "up_down": "4/1/1",
+                "stop_step": "4/2/1",
+                "position": "4/3/1",
+                "position_status": "4/3/1",
+                "slat": "4/5/1",
+                "slat_status": "4/5/1",
+                "moving": "4/1/0"
+              },
+              "shadingUi": {
+                "showSlatSlider": false,
+                "showPositionSlider": false
+              }
+            },
+            {
+              "id": "dev-living-curtains",
+              "type": "shading",
+              "name": "Screen",
+              "subtype": "sheers",
+              "slider": true,
+              "ga": {
+                "up_down": "5/1/2",
+                "stop_step": "5/2/2",
+                "position": "5/3/2",
+                "position_status": "5/3/2",
+                "moving": "5/1/0"
+              }
+            },
+            {
+              "id": "dev-living-thermostat",
+              "type": "climate",
+              "name": "Thermostaat",
+              "ga": {
+                "actual_temp": "5/1/1",
+                "setpoint": "5/2/1",
+                "setpoint_status": "5/2/1",
+                "mode": "5/4/1",
+                "mode_status": "5/5/1",
+                "hvac_mode": "5/3/12",
+                "hvac_mode_status": "5/3/12",
+                "heat_demand": "5/3/14",
+                "cool_demand": "5/3/15"
+              },
+              "climate": {
+                "modes": {
+                  "comfort": false,
+                  "standby": false,
+                  "economy": false,
+                  "buildingProtection": false
+                },
+                "tempStep": 0.5,
+                "canCool": true,
+                "userCanSwitchMode": true,
+                "hvacSwitchLockDuration": "0:02",
+                "minTemp": 17,
+                "maxTemp": 24
+              }
+            },
+            {
+              "id": "dev-living-fireplace",
+              "type": "fireplace",
+              "name": "Openhaard",
+              "confirm": {
+                "on": {
+                  "title": "Weet u zeker dat u de haard aan wilt zetten?",
+                  "message": "Let op: volg bij het gebruik van de haard altijd de veiligheids- en bedieningsvoorschriften van de fabrikant."
+                }
+              },
+              "fireplace": {
+                "onOff": {
+                  "ga": "6/1/1",
+                  "statusGa": "6/1/2"
+                },
+                "safetyLockout": {
+                  "ga": "6/3/1"
+                },
+                "controlMode": "discrete",
+                "discreteLevel": {
+                  "on": {
+                    "ga": "6/1/3"
+                  },
+                  "off": {
+                    "ga": "6/1/4"
+                  },
+                  "up": {
+                    "ga": "6/1/6"
+                  },
+                  "down": {
+                    "ga": "6/1/7"
+                  }
+                }
+              }
+            },
+            {
+              "id": "dev-living-sonos",
+              "type": "media_sonos",
+              "name": "Sonos Woonkamer",
+              "favorite": true,
+              "sonos": {
+                "host": "192.168.1.84",
+                "room": "Kantoor"
+              }
+            }
+          ]
+        },
+        {
+          "id": "room-kitchen",
+          "name": "Keuken",
+          "icon": "kitchen",
+          "devices": [
+            {
+              "id": "dev-kitchen-main",
+              "type": "light_dimmer",
+              "name": "Spots eiland",
+              "favorite": true,
+              "ga": {
+                "switch": "1/1/10",
+                "switch_status": "1/1/10",
+                "dim_value": "1/2/10",
+                "dim_status": "1/2/10"
+              }
+            },
+            {
+              "id": "dev-kitchen-counter",
+              "type": "light_switch",
+              "name": "Werkblad",
+              "ga": {
+                "switch": "1/1/11",
+                "switch_status": "1/1/11"
+              }
+            },
+            {
+              "id": "dev-kitchen-hood",
+              "type": "fan",
+              "name": "Afzuigkap",
+              "fan": {
+                "onOff": {
+                  "ga": "7/1/1",
+                  "statusGa": "7/1/1"
+                },
+                "speed": {
+                  "ga": "7/2/1",
+                  "statusGa": "7/2/1",
+                  "steps": 4,
+                  "stepLabels": [
+                    "Stand 1",
+                    "",
+                    "",
+                    ""
+                  ]
+                }
+              }
+            },
+            {
+              "id": "dev-910dff68-e07f-4b95-8fbc-4db5e83b1744",
+              "name": "Haard",
+              "type": "fireplace",
+              "confirm": {
+                "on": {
+                  "title": "Weet u zeker dat u de haard aan wilt zetten?",
+                  "message": "Let op: volg bij het gebruik van de haard altijd de veiligheids- en bedieningsvoorschriften van de fabrikant."
+                }
+              },
+              "fireplace": {
+                "controlMode": "analog",
+                "onOff": {
+                  "ga": "1/1/1",
+                  "statusGa": "1/1/1"
+                },
+                "flame": {
+                  "ga": "1/2/1",
+                  "statusGa": "1/2/1",
+                  "levelDisplay": "percent",
+                  "stepRanges": [
+                    {
+                      "min": 8,
+                      "max": 25,
+                      "write": 20
+                    },
+                    {
+                      "min": 26,
+                      "max": 50,
+                      "write": 40
+                    },
+                    {
+                      "min": 51,
+                      "max": 75,
+                      "write": 60
+                    },
+                    {
+                      "min": 76,
+                      "max": 100,
+                      "write": 90
+                    }
+                  ],
+                  "steps": 4
+                },
+                "safetyLockout": {}
+              }
+            },
+            {
+              "id": "dev-c87d41de-a1ed-4d3b-aab0-e33ed7034e9c",
+              "name": "Thermostaat",
+              "type": "climate",
+              "ga": {
+                "actual_temp": "3/1/1",
+                "setpoint": "3/1/2",
+                "setpoint_status": "3/1/2",
+                "hvac_mode_status": "5/3/12",
+                "heat_demand": "3/1/13",
+                "cool_demand": "3/1/14",
+                "mode": "3/1/15",
+                "mode_status": "3/1/15"
+              },
+              "climate": {
+                "canHeat": true,
+                "canCool": true,
+                "userCanSwitchMode": false,
+                "modes": {
+                  "buildingProtection": false,
+                  "economy": false,
+                  "standby": false,
+                  "comfort": false
+                },
+                "minTemp": 17,
+                "maxTemp": 24
+              }
+            },
+            {
+              "id": "dev-4b797c10-5a6b-4d19-b64f-99bbdf756c5a",
+              "name": "Sonos Keuken",
+              "type": "media_sonos",
+              "sonos": {
+                "host": "192.168.1.85",
+                "port": 1400,
+                "room": "Keuken"
+              }
+            }
+          ]
+        },
+        {
+          "id": "room-hall",
+          "name": "Hal",
+          "icon": "door",
+          "devices": [
+            {
+              "id": "dev-7a29fa07-d1be-4460-aedd-883bd4bf0a5d",
+              "name": "Garagedeur",
+              "type": "universal",
+              "universal": {
+                "columns": 4,
+                "buttons": [
+                  {
+                    "id": "btn-18613b51-e005-45cf-bc41-787490d4bedc",
+                    "label": "Open",
+                    "style": "neutral",
+                    "action": {
+                      "ga": "1/1/1",
+                      "role": "bit",
+                      "value": true
+                    },
+                    "confirm": {
+                      "title": "PIN-bevestiging",
+                      "pin": "1234"
+                    }
+                  },
+                  {
+                    "id": "btn-ce5e39fa-35dd-49a1-b529-9b5816fec8cc",
+                    "label": "Stop",
+                    "style": "neutral",
+                    "action": {
+                      "ga": "1/1/1",
+                      "role": "bit",
+                      "value": true
+                    }
+                  },
+                  {
+                    "id": "btn-d335cf0c-b7d1-4469-bde4-167996be997b",
+                    "label": "Sluiten",
+                    "style": "neutral",
+                    "action": {
+                      "ga": "1/1/1",
+                      "role": "bit",
+                      "value": true
+                    }
+                  }
+                ],
+                "icon": "lock"
+              }
+            },
+            {
+              "id": "dev-369348f6-5f00-4421-bba6-92747c4d5595",
+              "name": "Ventilator",
+              "type": "fan",
+              "fan": {
+                "onOff": {
+                  "ga": "1/1/1",
+                  "statusGa": "1/1/1"
+                }
+              }
+            },
+            {
+              "id": "dev-18bbffe9-8e37-45c2-b395-cddc0b52a7c5",
+              "name": "Ledstrip",
+              "type": "rgbw_ww",
+              "rgbwWw": {
+                "mode": "channels"
+              },
+              "ga": {
+                "r": "1/3/1",
+                "g": "1/3/2",
+                "b": "1/3/3",
+                "w": "1/3/4",
+                "on": "1/3/0"
+              }
+            },
+            {
+              "id": "dev-b9147f04-e463-42fb-8f34-36b4560f4133",
+              "name": "Heater",
+              "type": "universal",
+              "universal": {
+                "icon": "skylight",
+                "buttons": [
+                  {
+                    "id": "btn-776358b9-b990-4d37-8315-e0e741312d18",
+                    "label": "Knop 1",
+                    "style": "neutral",
+                    "action": {
+                      "ga": "1/1/1",
+                      "role": "bit",
+                      "value": true
+                    },
+                    "actionOff": {
+                      "ga": "1/1/1",
+                      "role": "bit",
+                      "value": false
+                    },
+                    "statusGa": "1/1/1"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "floor-first",
+      "name": "1e Verdieping",
+      "order": 1,
+      "icon": "stairs",
+      "rooms": [
+        {
+          "id": "room-master",
+          "name": "Master Bedroom",
+          "icon": "bed",
+          "cover": "assets/rooms/master.jpg",
+          "scenes": [
+            {
+              "id": "scn-master-sleep",
+              "name": "Slapen",
+              "icon": "moon",
+              "actions": [
+                {
+                  "ga": "1/1/20",
+                  "role": "switch",
+                  "value": false
+                },
+                {
+                  "ga": "1/1/21",
+                  "role": "switch",
+                  "value": false
+                },
+                {
+                  "ga": "3/3/10",
+                  "role": "position",
+                  "value": 100
+                }
+              ]
+            },
+            {
+              "id": "scn-master-wake",
+              "name": "Wakker",
+              "icon": "sun",
+              "actions": [
+                {
+                  "ga": "1/2/20",
+                  "role": "dim_value",
+                  "value": 40
+                },
+                {
+                  "ga": "3/3/10",
+                  "role": "position",
+                  "value": 0
+                }
+              ]
+            }
+          ],
+          "devices": [
+            {
+              "id": "dev-master-ceiling",
+              "type": "light_dimmer",
+              "name": "Plafond",
+              "ga": {
+                "switch": "1/1/20",
+                "switch_status": "1/3/20",
+                "dim_value": "1/2/20",
+                "dim_status": "1/4/20"
+              }
+            },
+            {
+              "id": "dev-master-bedside-l",
+              "type": "light_dimmer",
+              "name": "Nachtkast Links",
+              "ga": {
+                "switch": "1/1/21",
+                "switch_status": "1/3/21",
+                "dim_value": "1/2/21",
+                "dim_status": "1/4/21"
+              }
+            },
+            {
+              "id": "dev-master-blinds",
+              "type": "shading",
+              "name": "Jaloezie",
+              "subtype": "jalousie",
+              "slider": true,
+              "ga": {
+                "up_down": "3/1/10",
+                "stop_step": "3/2/10",
+                "position": "3/3/10",
+                "position_status": "3/4/10",
+                "slat": "3/5/10",
+                "slat_status": "3/6/10"
+              }
+            },
+            {
+              "id": "dev-master-climate",
+              "type": "climate",
+              "name": "Klimaat",
+              "ga": {
+                "actual_temp": "4/1/10",
+                "setpoint": "4/2/10",
+                "setpoint_status": "4/3/10"
+              }
+            },
+            {
+              "id": "dev-master-ac",
+              "type": "ac",
+              "name": "Airco",
+              "ac": {
+                "onOff": {
+                  "ga": "8/1/1",
+                  "statusGa": "8/1/2"
+                },
+                "setpoint": {
+                  "ga": "8/2/1",
+                  "statusGa": "8/2/2",
+                  "min": 16,
+                  "max": 30
+                },
+                "actualTemp": {
+                  "ga": "8/3/1"
+                },
+                "mode": {
+                  "ga": "8/4/1",
+                  "statusGa": "8/4/2",
+                  "options": [
+                    {
+                      "label": "Auto",
+                      "value": 0,
+                      "icon": "auto"
+                    },
+                    {
+                      "label": "Koelen",
+                      "value": 1,
+                      "icon": "snow"
+                    },
+                    {
+                      "label": "Verwarmen",
+                      "value": 2,
+                      "icon": "flame"
+                    },
+                    {
+                      "label": "Ventileren",
+                      "value": 3,
+                      "icon": "fan"
+                    },
+                    {
+                      "label": "Drogen",
+                      "value": 4,
+                      "icon": "drop"
+                    }
+                  ]
+                },
+                "fanSpeed": {
+                  "ga": "8/5/1",
+                  "statusGa": "8/5/2",
+                  "options": [
+                    {
+                      "label": "Auto",
+                      "value": 0
+                    },
+                    {
+                      "label": "1",
+                      "value": 1
+                    },
+                    {
+                      "label": "2",
+                      "value": 2
+                    },
+                    {
+                      "label": "3",
+                      "value": 3
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "fl-d25350ee-c21d-495e-8fd2-bc8f9de26422",
+      "name": "2e Verdieping",
+      "order": 2,
+      "rooms": [
+        {
+          "id": "rm-14102114-516a-40cc-9446-c12eb823327b",
+          "name": "Slaapkamer voor",
+          "devices": []
+        },
+        {
+          "id": "rm-268e7d26-b37c-422f-9f68-2e02fbcff842",
+          "name": "Slaapkamer achter",
+          "devices": []
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "id": "usr-admin",
+      "username": "admin",
+      "displayName": "Admin",
+      "role": "admin",
+      "passwordHash": "$2b$10$REPLACE_ME_WITH_BCRYPT_HASH",
+      "access": {
+        "floors": "*",
+        "rooms": "*",
+        "canRelease": "*",
+        "editScenes": true
+      }
+    },
+    {
+      "id": "usr-owner",
+      "username": "user",
+      "displayName": "user",
+      "role": "user",
+      "passwordHash": "$2a$10$2FFvyjKci3hqclq86xSUMOR85rjm1wGzFI81oPaudajNqoH0RSn7e",
+      "access": {
+        "floors": "*",
+        "rooms": "*",
+        "canRelease": [
+          "dev-hall-intercom"
+        ],
+        "editScenes": true
+      }
+    },
+    {
+      "id": "usr-guest",
+      "username": "gast",
+      "displayName": "Gast",
+      "role": "user",
+      "passwordHash": "$2b$10$REPLACE_ME_WITH_BCRYPT_HASH",
+      "access": {
+        "floors": [
+          "floor-ground"
+        ],
+        "rooms": [
+          "room-living",
+          "room-kitchen",
+          "room-hall"
+        ],
+        "canRelease": [],
+        "editScenes": false
+      }
+    }
+  ],
+  "schedules": [
+    {
+      "id": "sch-welcome-home",
+      "name": "Welkom bij zonsondergang",
+      "enabled": false,
+      "trigger": {
+        "kind": "astro",
+        "event": "sunset",
+        "offsetMin": -15,
+        "days": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          true,
+          true
+        ],
+        "notBefore": {
+          "kind": "time",
+          "time": "17:00"
+        },
+        "notAfter": {
+          "kind": "time",
+          "time": "21:30"
+        }
+      },
+      "action": {
+        "kind": "scene",
+        "sceneId": "scn-welcome"
+      }
+    },
+    {
+      "id": "sch-goodnight",
+      "name": "Alles uit",
+      "enabled": false,
+      "trigger": {
+        "kind": "time",
+        "time": "23:30",
+        "days": [
+          true,
+          true,
+          true,
+          true,
+          true,
+          false,
+          false
+        ]
+      },
+      "action": {
+        "kind": "scene",
+        "sceneId": "scn-goodnight"
+      }
+    }
+  ],
+  "intercoms": [
+    {
+      "id": "dev-ic-7b826c57-04f2-482a-9e47-402fbc122d06",
+      "name": "Intercom",
+      "type": "intercom",
+      "intercom": {
+        "kind": "doorbird",
+        "rtsp": "rtsp://192.168.1.102/live",
+        "releaseMode": "knx"
+      },
+      "favorite": false
+    }
+  ],
+  "devices": [
+    {
+      "id": "dev-c63af577-aeae-49c3-80e8-f1a871afa2ee",
+      "name": "WTW",
+      "type": "wtw",
+      "wtw": {
+        "buttons": [
+          {
+            "id": "0fbc8687",
+            "label": "Stand 1",
+            "ga": "5/6/7",
+            "dpt": "5.010",
+            "value": 1
+          },
+          {
+            "id": "b5f4a0aa",
+            "label": "Stand 2",
+            "ga": "5/7/8",
+            "dpt": "5.010",
+            "value": 2
+          },
+          {
+            "id": "803348b9",
+            "label": "Stand 3",
+            "ga": "5/9/0",
+            "dpt": "5.010",
+            "value": 3
+          }
+        ],
+        "status": [
+          {
+            "id": "88074445",
+            "label": "Storing",
+            "ga": "6/7/8",
+            "dpt": "1.001",
+            "unit": "",
+            "icon0": "check",
+            "icon1": "warning"
+          },
+          {
+            "id": "15440c8b",
+            "label": "Filter vervangen",
+            "ga": "7/8/9",
+            "dpt": "1.001",
+            "unit": "",
+            "icon0": "filter",
+            "icon1": "filter_full"
+          },
+          {
+            "id": "e0e222a5",
+            "label": "Filter vervangen over",
+            "ga": "5/9/0",
+            "dpt": "7.001",
+            "unit": "dagen"
+          }
+        ]
+      }
+    },
+    {
+      "id": "dev-8f19ed45-a701-4e5e-bd22-f18368742366",
+      "name": "Meldingen",
+      "type": "melding",
+      "melding": {
+        "items": [
+          {
+            "id": "melding_1779731639833",
+            "label": "Brandmelding woning",
+            "ga": "9/0/1",
+            "dpt": "1.001",
+            "urgency": "urgent",
+            "activeLabel": "Brandmelding woning",
+            "inactiveLabel": "Geen Melding"
+          },
+          {
+            "id": "melding_1779731882724",
+            "label": "Brandmelding schuur",
+            "ga": "9/0/2",
+            "dpt": "1.001",
+            "urgency": "urgent",
+            "activeLabel": "Brandmelding schuur",
+            "inactiveLabel": "Geen Melding"
+          }
+        ]
+      }
+    }
+  ],
+  "lutron": {
+    "bridgeHost": "",
+    "telnet": {
+      "enabled": false,
+      "host": "",
+      "port": 23,
+      "username": "",
+      "password": "",
+      "postLoginCommands": [
+        "#MONITORING,3,1"
+      ]
+    },
+    "buttonToKnx": []
+  },
+  "satel": {
+    "enabled": true
+  }
+}

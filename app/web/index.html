@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+
+  <!-- Responsive viewport — CRITICAL for smartphones -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+  <meta name="description" content="Luxe KNX Smart Home">
+
+  <!-- PWA / iOS standalone -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Luxe KNX">
+
+  <!-- Status bar color (Android Chrome) -->
+  <meta name="theme-color" content="#B59144">
+
+  <!-- Icons -->
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Luxe KNX</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    html, body {
+      margin: 0; padding: 0;
+      width: 100%; height: 100%;
+      background: #F5F0E8;
+    }
+    #flutter-loading {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #F5F0E8;
+      z-index: 9999;
+      transition: opacity 0.35s ease;
+    }
+    #flutter-loading.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+    @keyframes logoFlip {
+      from { transform: perspective(400px) rotateY(0deg); }
+      to   { transform: perspective(400px) rotateY(360deg); }
+    }
+    .splash-logo {
+      width: 120px;
+      height: 120px;
+      animation: logoFlip 3s linear infinite;
+    }
+    .splash-logo img {
+      width: 120px;
+      height: 120px;
+      object-fit: contain;
+    }
+  </style>
+</head>
+<body>
+  <!-- HTML-niveau splash: zichtbaar vóórdat Flutter start -->
+  <div id="flutter-loading">
+    <div class="splash-logo">
+      <img src="assets/images/logo.png" alt="Logo">
+    </div>
+  </div>
+
+  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    // Verberg de HTML-splash zodra Flutter het overneemt
+    window.addEventListener('flutter-first-frame', function () {
+      var el = document.getElementById('flutter-loading');
+      if (el) {
+        el.classList.add('hidden');
+        setTimeout(function () { el.remove(); }, 400);
+      }
+    });
+  </script>
+</body>
+</html>

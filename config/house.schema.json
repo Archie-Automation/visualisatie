@@ -1,0 +1,1199 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Luxe KNX House Configuration",
+  "type": "object",
+  "required": ["project", "floors"],
+  "properties": {
+    "project": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "timezone": { "type": "string" },
+        "location": {
+          "type": "object",
+          "properties": {
+            "lat": { "type": "number" },
+            "lon": { "type": "number" }
+          }
+        }
+      }
+    },
+    "knx": {
+      "type": "object",
+      "description": "KNX-integratie. Weglaten of enabled:false = KNX uitgeschakeld.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Zet op false om KNX volledig uit te schakelen (geen connectiepogingen bij opstarten)."
+        },
+        "gateway": {
+          "type": "object",
+          "required": ["host"],
+          "properties": {
+            "host": { "type": "string" },
+            "port": { "type": "integer", "default": 3671 },
+            "mode": { "type": "string", "enum": ["tunneling", "routing"] }
+          }
+        },
+        "physicalAddress": { "type": "string" }
+      }
+    },
+    "lutron": {
+      "type": "object",
+      "description": "Lutron Homeworks telnet (technische configuratie) + optionele knop→KNX mappings.",
+      "properties": {
+        "bridgeHost": { "type": "string" },
+        "telnet": {
+          "type": "object",
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "host": { "type": "string" },
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "username": { "type": "string" },
+            "password": { "type": "string" },
+            "postLoginCommands": {
+              "type": "array",
+              "items": { "type": "string" },
+              "maxItems": 32
+            }
+          }
+        },
+        "buttonToKnx": {
+          "type": "array",
+          "maxItems": 128,
+          "items": { "$ref": "#/definitions/lutronButtonToKnxMapping" }
+        }
+      }
+    },
+    "floors": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/floor" }
+    },
+    "devices": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/device" },
+      "description": "KNX/Lutron devices NOT placed in a specific room. Appear in Systemen chips and can be favourited."
+    },
+    "cameras": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/cameraDevice" },
+      "description": "Surveillance cameras at project level; not listed under rooms."
+    },
+    "intercoms": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/intercomDevice" },
+      "description": "Doorbell / intercom at project level; not listed under rooms."
+    },
+    "users": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/user" }
+    },
+    "scenes": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/scene" }
+    },
+    "schedules": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/schedule" },
+      "description": "Time / astro automations executed by the backend scheduler."
+    },
+    "logs": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/logDef" },
+      "description": "Custom logs (graphs) of arbitrary group addresses, recorded server-side."
+    }
+  },
+  "definitions": {
+    "gaPattern": {
+      "type": "string",
+      "pattern": "^([0-9]{1,2})/([0-9]{1,2})/([0-9]{1,3})$"
+    },
+    "logDef": {
+      "type": "object",
+      "required": ["id", "name", "entries"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "entries": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["ga", "label"],
+            "properties": {
+              "ga": { "$ref": "#/definitions/gaPattern" },
+              "label": { "type": "string" },
+              "unit": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "knxPulseChannel": {
+      "type": "object",
+      "required": ["ga"],
+      "properties": {
+        "ga": { "$ref": "#/definitions/gaPattern" },
+        "pulseMs": { "type": "integer", "minimum": 50, "maximum": 3000 }
+      }
+    },
+    "lutronButtonToKnxMapping": {
+      "type": "object",
+      "required": ["id", "label", "integrationId", "componentNumber", "knx"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "integrationId": { "type": "integer", "minimum": 0, "maximum": 999999 },
+        "componentNumber": { "type": "integer", "minimum": 0, "maximum": 999999 },
+        "actionNumber": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "knx": {
+          "type": "object",
+          "required": ["ga", "role", "value"],
+          "properties": {
+            "ga": { "$ref": "#/definitions/gaPattern" },
+            "role": { "type": "string" },
+            "value": {
+              "oneOf": [
+                { "type": "boolean" },
+                { "type": "number" },
+                {
+                  "type": "array",
+                  "items": { "type": "integer", "minimum": 0, "maximum": 255 },
+                  "minItems": 1,
+                  "maxItems": 14
+                },
+                {
+                  "type": "object",
+                  "required": ["red", "green", "blue"],
+                  "properties": {
+                    "red": { "type": "number" },
+                    "green": { "type": "number" },
+                    "blue": { "type": "number" }
+                  }
+                }
+              ]
+            },
+            "pulseMs": { "type": "integer", "minimum": 50, "maximum": 3000 }
+          }
+        }
+      }
+    },
+    "floor": {
+      "type": "object",
+      "required": ["id", "name", "rooms"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "order": { "type": "integer" },
+        "icon": { "type": "string" },
+        "rooms": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/room" }
+        }
+      }
+    },
+    "room": {
+      "type": "object",
+      "required": ["id", "name", "devices"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "icon": { "type": "string" },
+        "cover": { "type": "string" },
+        "devices": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/roomDevice" }
+        },
+        "scenes": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/scene" }
+        }
+      }
+    },
+    "device": {
+      "type": "object",
+      "required": ["id", "type", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": [
+            "light_switch",
+            "light_dimmer",
+            "shading",
+            "position_actuator",
+            "climate",
+            "media_sonos",
+            "media_bluesound",
+            "camera",
+            "intercom",
+            "fireplace",
+            "ac",
+            "fan",
+            "universal",
+            "rgbw_ww",
+            "wtw",
+            "melding",
+            "lutron_homeworks"
+          ]
+        },
+        "name": { "type": "string" },
+        "favorite": { "type": "boolean" },
+        "subtype": {
+          "type": "string",
+          "description": "Visual variant for shading devices.",
+          "enum": [
+            "blind",
+            "roller",
+            "curtain",
+            "jalousie",
+            "screen",
+            "sheers",
+            "awning"
+          ]
+        },
+        "slider": {
+          "type": "boolean",
+          "description": "Prefer a continuous slider UI over up/down/stop buttons."
+        },
+        "shadingUi": {
+          "type": "object",
+          "description": "Welke bediening de klant-app toont (standaard: alles wat de GA-set ondersteunt).",
+          "properties": {
+            "showPositionSlider": { "type": "boolean" },
+            "showMoveUp": { "type": "boolean" },
+            "showMoveStop": { "type": "boolean" },
+            "showMoveDown": { "type": "boolean" },
+            "showMoveButtonsUnderSlider": { "type": "boolean" },
+            "showSlatSlider": { "type": "boolean" },
+            "showSlatStepButtons": { "type": "boolean" }
+          }
+        },
+        "rgbwWw": {
+          "type": "object",
+          "description": "RGB / W / WW driver — zie type rgbw_ww.",
+          "required": ["mode"],
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["channels", "composite", "rgb232", "tunable_white"],
+              "description": "channels: aparte GA per kanaal (r/g/b/w/ww/cw). composite: ruwe bytes. rgb232: DPT 232.600. tunable_white: CCT via ww+cw of kelvin+bright."
+            },
+            "payloadBytes": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 14,
+              "description": "Alleen composite: aantal bytes op één GA (standaard 14)."
+            },
+            "kelvinMin": {
+              "type": "integer",
+              "description": "tunable_white: minimale kleurtemperatuur in Kelvin (standaard 2700)."
+            },
+            "kelvinMax": {
+              "type": "integer",
+              "description": "tunable_white: maximale kleurtemperatuur in Kelvin (standaard 6500)."
+            }
+          }
+        },
+        "lutronHomeworks": {
+          "type": "object",
+          "description": "Lutron Homeworks: telnet + knop→KNX mappings (~DEVICE).",
+          "properties": {
+            "zoneAddress": { "type": "string" },
+            "bridgeHost": { "type": "string" },
+            "telnet": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "host": { "type": "string" },
+                "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                "username": { "type": "string" },
+                "password": { "type": "string" },
+                "postLoginCommands": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "maxItems": 32
+                }
+              }
+            },
+            "buttonToKnx": {
+              "type": "array",
+              "maxItems": 128,
+              "items": {
+                "type": "object",
+                "required": ["id", "label", "integrationId", "componentNumber", "knx"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "label": { "type": "string" },
+                  "integrationId": { "type": "integer", "minimum": 0, "maximum": 999999 },
+                  "componentNumber": { "type": "integer", "minimum": 0, "maximum": 999999 },
+                  "actionNumber": { "type": "integer", "minimum": 0, "maximum": 255 },
+                  "knx": {
+                    "type": "object",
+                    "required": ["ga", "role", "value"],
+                    "properties": {
+                      "ga": { "$ref": "#/definitions/gaPattern" },
+                      "role": { "type": "string" },
+                      "value": {
+                        "oneOf": [
+                          { "type": "boolean" },
+                          { "type": "number" },
+                          {
+                            "type": "array",
+                            "items": { "type": "integer", "minimum": 0, "maximum": 255 },
+                            "minItems": 1,
+                            "maxItems": 14
+                          },
+                          {
+                            "type": "object",
+                            "required": ["red", "green", "blue"],
+                            "properties": {
+                              "red": { "type": "number" },
+                              "green": { "type": "number" },
+                              "blue": { "type": "number" }
+                            }
+                          }
+                        ]
+                      },
+                      "pulseMs": { "type": "integer", "minimum": 50, "maximum": 3000 }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "ga": { "type": "object" },
+        "control": {
+          "type": "string",
+          "description": "knx (standaard) of lutron: lamp/zonwering via Lutron #OUTPUT (zie project → Lutron).",
+          "enum": ["knx", "lutron"]
+        },
+        "lutronIntegrationId": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 99999,
+          "description": "Lutron output integration ID (bij control=lutron)."
+        },
+        "lutronSlatIntegrationId": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 99999,
+          "description": "Lutron output integration ID voor lamelhoek (tilt), alleen bij jalousie/blind met control=lutron."
+        },
+        "lutronOutput": {
+          "type": "object",
+          "description": "Legacy; gebruik lutronIntegrationId + project.lutron.",
+          "properties": {
+            "homeworksDeviceId": { "type": "string" },
+            "integrationId": { "type": "integer", "minimum": 1, "maximum": 99999 },
+            "loadType": {
+              "type": "string",
+              "enum": ["dimmer", "switch", "shade"]
+            },
+            "fadeSeconds": { "type": "integer", "minimum": 0, "maximum": 14400 }
+          }
+        },
+        "sonos": {
+          "type": "object",
+          "description": "Sonos zone configuration. `host` is preferred; `room` alone triggers SSDP discovery at boot.",
+          "properties": {
+            "host": { "type": "string" },
+            "port": { "type": "integer", "default": 1400 },
+            "room": { "type": "string" },
+            "spotifyDeviceName": {
+              "type": "string",
+              "description": "Spotify Connect device name for this zone, if it differs from the device name/room. Used to target playback via Spotify Connect."
+            }
+          }
+        },
+        "bluesound": {
+          "type": "object",
+          "description": "Bluesound / BluOS player configuration (HTTP polling).",
+          "required": ["host"],
+          "properties": {
+            "host": { "type": "string" },
+            "port": { "type": "integer", "default": 11000 },
+            "spotifyDeviceName": {
+              "type": "string",
+              "description": "Spotify Connect device name for this player, if it differs from the device name. Used to target playback via Spotify Connect."
+            }
+          }
+        },
+        "camera": {
+          "type": "object",
+          "required": ["rtsp"],
+          "properties": {
+            "rtsp": {
+              "type": "string",
+              "description": "Volledige RTSP-URL van de camera/NVR (zoals in VLC), incl. login in de url indien nodig."
+            },
+        "path": {
+          "type": "string",
+          "description": "Optioneel: korte streamnaam voor go2rtc. Laat het veld weg of vul minstens 1 teken; een lege string \"\" wordt genegeerd (dan wordt het apparaat-id gebruikt)."
+        },
+            "aspect": {
+              "type": "string",
+              "description": "Optioneel: beeldverhouding in de app, bijv. 16:9 of 4:3. Standaard 16:9."
+            },
+            "codec": { "type": "string", "enum": ["h264", "h265"] },
+            "republish": { "type": "boolean" },
+            "directHls": {
+              "type": "string",
+              "description": "Optioneel: directe HLS .m3u8-url; dan sla je go2rtc over voor deze camera."
+            },
+            "previewRtsp": {
+              "type": "string",
+              "description": "Optioneel: substream/preview RTSP voor snelle thumbnails. Live gebruikt `rtsp` (hoofdstream)."
+            },
+            "sources": { "type": "array", "items": { "type": "string" } },
+            "go2rtcVideoOnly": {
+              "type": "boolean",
+              "description": "go2rtc: `#media=video` op native RTSP (geen audio; helpt WebRTC/HLS bij Synology e.d.)."
+            },
+            "go2rtcBackchannel0": {
+              "type": "boolean",
+              "description": "go2rtc: `#backchannel=0` op RTSP als de bron glitchy reageert op two-way-audio."
+            },
+            "go2rtcFfmpeg": {
+              "type": "boolean",
+              "description": "Handmatig: forceer FFmpeg voor live (auto voor Synology/NVR). Transcodeert naar H.264 met korte GOP."
+            },
+            "go2rtcRtspTcp": {
+              "type": "boolean",
+              "description": "Legacy vlag; go2rtc gebruikt RTSP/TCP standaard (geen extra fragment)."
+            }
+          }
+        },
+        "intercom": {
+          "type": "object",
+          "required": ["rtsp"],
+          "properties": {
+            "rtsp": { "type": "string" },
+            "path": { "type": "string" },
+            "aspect": { "type": "string" },
+            "codec": { "type": "string", "enum": ["h264", "h265"] },
+            "sources": { "type": "array", "items": { "type": "string" } },
+            "doorbell": {
+              "type": "object",
+              "properties": {
+                "ga": { "$ref": "#/definitions/gaPattern" }
+              }
+            },
+            "release": {
+              "type": "object",
+              "properties": {
+                "ga": { "$ref": "#/definitions/gaPattern" },
+                "pulseMs": { "type": "integer", "minimum": 100, "maximum": 10000 }
+              }
+            },
+            "releaseMode": {
+              "type": "string",
+              "enum": ["knx", "doorbird"],
+              "description": "Alleen deur/poort: KNX-puls of DoorBird HTTP."
+            },
+            "kind": {
+              "type": "string",
+              "enum": ["doorbird", "twoN", "sip"],
+              "description": "Intercom-gesprek (geen KNX)."
+            },
+            "sip": {
+              "type": "object",
+              "properties": {
+                "webSocketUrl": { "type": "string" },
+                "uri": { "type": "string" },
+                "authorizationUser": { "type": "string" },
+                "password": { "type": "string" },
+                "displayName": { "type": "string" }
+              }
+            },
+            "doorbird": {
+              "type": "object",
+              "properties": {
+                "host": { "type": "string" },
+                "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                "useTls": { "type": "boolean" },
+                "insecureTls": { "type": "boolean" },
+                "username": { "type": "string" },
+                "password": { "type": "string" },
+                "relay": {
+                  "type": "string",
+                  "description": "DoorBird-parameter r (standaard 1)."
+                }
+              }
+            },
+            "webhookPasscode": {
+              "type": "string",
+              "description": "Optionele passcode voor ring-webhook (POST /api/webhooks/ring/:id?passcode=...). Configureer dezelfde waarde in DoorBird/2N."
+            }
+          }
+        },
+        "fireplace": {
+          "type": "object",
+          "required": ["onOff"],
+          "properties": {
+            "controlMode": {
+              "type": "string",
+              "enum": ["analog", "discrete"],
+              "description": "analog = schakel + slider (DPT5 % of stappen); discrete = puls-DPT1 op aparte GA’s voor aan/uit/hoger/lager."
+            },
+            "onOff": { "$ref": "#/definitions/gaWithStatus" },
+            "flame": {
+              "type": "object",
+              "required": ["ga"],
+              "properties": {
+                "ga": { "$ref": "#/definitions/gaPattern" },
+                "statusGa": { "$ref": "#/definitions/gaPattern" },
+                "steps": { "type": "integer", "minimum": 2, "maximum": 10 },
+                "levelDisplay": {
+                  "type": "string",
+                  "enum": ["percent", "volt_10", "volt_3"],
+                  "description": "Alleen UI: bus blijft 0..100 (DPT5.001) tenzij steps is gezet; schaal naar V voor label."
+                },
+                "hideStepPercent": {
+                  "type": "boolean",
+                  "description": "Verberg het percentage-sublabel op de vlamstand-knoppen in de app."
+                },
+                "stepRanges": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 10,
+                  "description": "Vaste percent-banden per vlamstand (stap 1..N). Bus blijft DPT5.001 %; geen overlap tussen banden.",
+                  "items": {
+                    "type": "object",
+                    "required": ["min", "max"],
+                    "properties": {
+                      "min": { "type": "integer", "minimum": 0, "maximum": 100 },
+                      "max": { "type": "integer", "minimum": 0, "maximum": 100 },
+                      "write": { "type": "integer", "minimum": 0, "maximum": 100 },
+                      "label": { "type": "string", "description": "Naam van de stand op de knop (bijv. 'Laag', 'Middel', 'Hoog')." }
+                    }
+                  }
+                }
+              }
+            },
+            "discreteLevel": {
+              "type": "object",
+              "description": "Voor controlMode discrete: pulscontacten (true, wacht pulseMs, false).",
+              "properties": {
+                "on": { "$ref": "#/definitions/knxPulseChannel" },
+                "off": { "$ref": "#/definitions/knxPulseChannel" },
+                "up": { "$ref": "#/definitions/knxPulseChannel" },
+                "down": { "$ref": "#/definitions/knxPulseChannel" }
+              }
+            },
+            "safetyLockout": {
+              "type": "object",
+              "properties": {
+                "ga": { "$ref": "#/definitions/gaPattern" }
+              }
+            }
+          }
+        },
+        "ac": {
+          "type": "object",
+          "required": ["onOff", "setpoint"],
+          "properties": {
+            "onOff": { "$ref": "#/definitions/gaWithStatus" },
+            "setpoint": {
+              "type": "object",
+              "required": ["ga"],
+              "properties": {
+                "ga": { "$ref": "#/definitions/gaPattern" },
+                "statusGa": { "$ref": "#/definitions/gaPattern" },
+                "min": { "type": "number" },
+                "max": { "type": "number" }
+              }
+            },
+            "actualTemp": {
+              "type": "object",
+              "properties": {
+                "ga": { "$ref": "#/definitions/gaPattern" }
+              }
+            },
+            "mode": {
+              "type": "object",
+              "required": ["ga", "options"],
+              "properties": {
+                "ga": { "$ref": "#/definitions/gaPattern" },
+                "statusGa": { "$ref": "#/definitions/gaPattern" },
+                "options": {
+                  "type": "array",
+                  "items": { "$ref": "#/definitions/acOption" }
+                }
+              }
+            },
+            "fanSpeed": {
+              "type": "object",
+              "required": ["ga", "options"],
+              "properties": {
+                "ga": { "$ref": "#/definitions/gaPattern" },
+                "statusGa": { "$ref": "#/definitions/gaPattern" },
+                "options": {
+                  "type": "array",
+                  "items": { "$ref": "#/definitions/acOption" }
+                }
+              }
+            }
+          }
+        },
+        "fan": {
+          "type": "object",
+          "required": ["onOff"],
+          "properties": {
+            "onOff": { "$ref": "#/definitions/gaWithStatus" },
+            "speed": {
+              "type": "object",
+              "required": ["ga"],
+              "properties": {
+                "ga": { "$ref": "#/definitions/gaPattern" },
+                "statusGa": { "$ref": "#/definitions/gaPattern" },
+                "speedMode": {
+                  "type": "string",
+                  "enum": ["steps", "byte", "percent"],
+                  "description": "steps: discrete standen; byte: 0-255 slider; percent: 0-100 slider."
+                },
+                "steps": {
+                  "type": "integer",
+                  "minimum": 2,
+                  "maximum": 10,
+                  "description": "Aantal discrete standen (alleen bij speedMode: steps)."
+                },
+                "stepLabels": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "maxItems": 10,
+                  "description": "Optionele label per stand."
+                }
+              }
+            },
+            "oscillate": { "$ref": "#/definitions/gaWithStatus" },
+            "direction": { "$ref": "#/definitions/gaWithStatus" }
+          }
+        },
+        "universal": {
+          "type": "object",
+          "required": ["buttons"],
+          "properties": {
+            "icon": { "type": "string", "description": "Icoon-naam voor de groepchip en de tile-header (bijv. bolt, home, settings)." },
+            "columns": { "type": "integer", "minimum": 1, "maximum": 4 },
+            "buttons": {
+              "type": "array",
+              "items": { "$ref": "#/definitions/universalButton" },
+              "maxItems": 8
+            }
+          }
+        },
+        "wtw": {
+          "type": "object",
+          "description": "WTW / HRV ventilatie — instelbare knoppen en statusmeldingen.",
+          "properties": {
+            "buttons": {
+              "type": "array",
+              "description": "Standen/modi-knoppen (bijv. Stand 1, Stand 2, Boost).",
+              "items": { "$ref": "#/definitions/wtwButton" },
+              "maxItems": 8
+            },
+            "status": {
+              "type": "array",
+              "description": "Status- en storingsmeldingen (bijv. filter vuil, dagenteller, storingscode).",
+              "items": { "$ref": "#/definitions/wtwStatusItem" },
+              "maxItems": 12
+            }
+          }
+        },
+        "melding": {
+          "type": "object",
+          "description": "KNX meldingenmonitor — categoriseerde alarm- en statusmeldingen.",
+          "properties": {
+            "items": {
+              "type": "array",
+              "description": "Geconfigureerde meldingen/alarmen.",
+              "items": { "$ref": "#/definitions/meldingItem" },
+              "maxItems": 24
+            }
+          }
+        }
+      }
+    },
+    "roomDevice": {
+      "allOf": [
+        { "$ref": "#/definitions/device" },
+        {
+          "properties": {
+            "type": {
+              "enum": [
+                "light_switch",
+                "light_dimmer",
+                "shading",
+                "position_actuator",
+                "climate",
+                "media_sonos",
+                "media_bluesound",
+                "intercom",
+                "fireplace",
+                "ac",
+                "fan",
+                "universal",
+                "rgbw_ww",
+                "wtw",
+                "melding",
+                "lutron_homeworks"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "cameraDevice": {
+      "allOf": [
+        { "$ref": "#/definitions/device" },
+        {
+          "properties": {
+            "type": { "const": "camera" }
+          },
+          "required": ["camera"]
+        }
+      ]
+    },
+    "intercomDevice": {
+      "allOf": [
+        { "$ref": "#/definitions/device" },
+        {
+          "properties": {
+            "type": { "const": "intercom" }
+          },
+          "required": ["intercom"]
+        }
+      ]
+    },
+    "confirmPrompt": {
+      "oneOf": [
+        { "type": "boolean" },
+        { "type": "string" },
+        {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string" },
+            "message": { "type": "string" },
+            "pin": {
+              "type": "string",
+              "pattern": "^[0-9]{4}$",
+              "description": "4-digit PIN the user must enter to confirm the action."
+            }
+          }
+        }
+      ]
+    },
+    "deviceConfirm": {
+      "type": "object",
+      "description": "Ask the user to confirm disruptive commands before they fire.",
+      "properties": {
+        "on": { "$ref": "#/definitions/confirmPrompt" },
+        "off": { "$ref": "#/definitions/confirmPrompt" },
+        "actions": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/definitions/confirmPrompt" }
+        }
+      }
+    },
+    "gaWithStatus": {
+      "type": "object",
+      "required": ["ga"],
+      "properties": {
+        "ga": { "$ref": "#/definitions/gaPattern" },
+        "statusGa": { "$ref": "#/definitions/gaPattern" }
+      }
+    },
+    "acOption": {
+      "type": "object",
+      "required": ["label", "value"],
+      "properties": {
+        "label": { "type": "string" },
+        "value": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "icon": { "type": "string" }
+      }
+    },
+    "universalButton": {
+      "type": "object",
+      "required": ["id", "label", "action"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "icon": { "type": "string" },
+        "style": {
+          "type": "string",
+          "enum": ["primary", "neutral", "brass", "danger"]
+        },
+        "statusGa": { "$ref": "#/definitions/gaPattern" },
+        "statusOnValue": {
+          "oneOf": [{ "type": "boolean" }, { "type": "number" }]
+        },
+        "action": { "$ref": "#/definitions/universalAction" },
+        "actionOff": { "$ref": "#/definitions/universalAction" },
+        "confirm": { "$ref": "#/definitions/confirmPrompt" }
+      }
+    },
+    "wtwButton": {
+      "type": "object",
+      "required": ["id", "label", "ga", "dpt", "value"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "ga": { "$ref": "#/definitions/gaPattern" },
+        "dpt": {
+          "type": "string",
+          "enum": [
+            "1.001","1.002","1.008","1.009","1.011",
+            "5.001","5.010",
+            "6.001",
+            "7.001","8.001",
+            "9.001","9.002","9.004","9.005","9.006","9.007","9.008","9.009","9.020","9.021",
+            "12.001","13.001",
+            "14.019","14.068"
+          ],
+          "description": "KNX DPT-type van het te versturen telegram."
+        },
+        "value": {
+          "oneOf": [{ "type": "boolean" }, { "type": "number" }],
+          "description": "Te versturen waarde (0/1 voor bit, 0-255 voor byte, enz.)."
+        },
+        "statusGa": { "$ref": "#/definitions/gaPattern" },
+        "statusOnValue": {
+          "oneOf": [{ "type": "boolean" }, { "type": "number" }]
+        }
+      }
+    },
+    "wtwStatusItem": {
+      "type": "object",
+      "required": ["id", "label", "ga", "dpt"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string", "description": "Weergavenaam, bijv. 'Filter vuil'." },
+        "ga": { "$ref": "#/definitions/gaPattern" },
+        "dpt": {
+          "type": "string",
+          "enum": [
+            "1.001","1.002","1.008","1.009","1.011",
+            "5.001","5.010",
+            "6.001",
+            "7.001","8.001",
+            "9.001","9.002","9.004","9.005","9.006","9.007","9.008","9.009","9.020","9.021",
+            "12.001","13.001",
+            "14.019","14.068",
+            "hex"
+          ],
+          "description": "Bepaalt de opmaak: bit → ja/nee, 5.010 → getal, hex → hex-string."
+        },
+        "unit": {
+          "type": "string",
+          "description": "Optioneel eenheids-achtervoegsel, bijv. 'dagen' of '°C'."
+        },
+        "icon": {
+          "type": "string",
+          "description": "Icoon-sleutel (uit de icon-library) die altijd links naast het label staat."
+        },
+        "icon0": {
+          "type": "string",
+          "description": "Icoon-sleutel die wordt getoond bij waarde 0/false. Vervangt de tekst-badge."
+        },
+        "icon1": {
+          "type": "string",
+          "description": "Icoon-sleutel die wordt getoond bij waarde 1/true. Vervangt de tekst-badge."
+        }
+      }
+    },
+    "meldingItem": {
+      "type": "object",
+      "required": ["id", "label", "ga", "dpt", "urgency"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string", "description": "Onderwerp / omschrijving, bijv. 'Filter vuil'." },
+        "ga": { "$ref": "#/definitions/gaPattern" },
+        "dpt": {
+          "type": "string",
+          "enum": [
+            "1.001","1.002","1.008","1.009","1.011",
+            "5.001","5.010","6.001",
+            "7.001","8.001",
+            "9.001","9.002","9.004","9.005","9.006","9.007","9.008","9.009","9.020","9.021",
+            "12.001","13.001","14.019","14.068","hex"
+          ]
+        },
+        "urgency": {
+          "type": "string",
+          "enum": ["urgent", "belangrijk", "minder_belangrijk"],
+          "description": "Categorie: urgent = kritiek/rood, belangrijk = oranje, minder_belangrijk = info/goud."
+        },
+        "activeValue": {
+          "oneOf": [{ "type": "boolean" }, { "type": "number" }],
+          "description": "Waarde die 'melding actief' betekent. Default: 1/true voor bit-DPTs, elke ≠0 voor de rest."
+        },
+        "icon": { "type": "string", "description": "Icoon-sleutel uit de icon-library." },
+        "activeLabel": { "type": "string", "description": "Weergave-tekst als melding actief is." },
+        "inactiveLabel": { "type": "string", "description": "Weergave-tekst als melding inactief is." }
+      }
+    },
+    "universalAction": {
+      "type": "object",
+      "required": ["ga", "role", "value"],
+      "properties": {
+        "ga": { "$ref": "#/definitions/gaPattern" },
+        "role": {
+          "type": "string",
+          "enum": ["bit", "byte", "percent", "temperature", "raw_int"]
+        },
+        "value": {
+          "oneOf": [{ "type": "boolean" }, { "type": "number" }]
+        }
+      }
+    },
+    "scene": {
+      "type": "object",
+      "required": ["id", "name", "actions"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "icon": { "type": "string" },
+        "color": { "type": "string" },
+        "actions": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/sceneAction" },
+          "maxItems": 64
+        },
+        "mediaActions": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/sceneMediaAction" },
+          "maxItems": 16
+        }
+      }
+    },
+    "sceneMediaAction": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["deviceId", "kind", "action"],
+          "properties": {
+            "deviceId": { "type": "string" },
+            "kind": { "const": "transport" },
+            "action": {
+              "type": "string",
+              "enum": ["play", "pause", "stop", "next", "previous"]
+            },
+            "delayMs": { "type": "integer", "minimum": 0, "maximum": 30000 }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["deviceId", "kind", "value"],
+          "properties": {
+            "deviceId": { "type": "string" },
+            "kind": { "const": "volume" },
+            "value": { "type": "number", "minimum": 0, "maximum": 100 },
+            "delayMs": { "type": "integer", "minimum": 0, "maximum": 30000 }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["deviceId", "kind", "muted"],
+          "properties": {
+            "deviceId": { "type": "string" },
+            "kind": { "const": "mute" },
+            "muted": { "type": "boolean" },
+            "delayMs": { "type": "integer", "minimum": 0, "maximum": 30000 }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["deviceId", "kind", "presetId"],
+          "properties": {
+            "deviceId": { "type": "string" },
+            "kind": { "const": "preset" },
+            "presetId": { "type": "string" },
+            "presetName": { "type": "string" },
+            "uri": { "type": "string" },
+            "delayMs": { "type": "integer", "minimum": 0, "maximum": 30000 }
+          }
+        }
+      ]
+    },
+    "sceneAction": {
+      "type": "object",
+      "required": ["ga", "role", "value"],
+      "properties": {
+        "ga": { "$ref": "#/definitions/gaPattern" },
+        "role": {
+          "type": "string",
+          "enum": [
+            "switch",
+            "dim_value",
+            "setpoint",
+            "position",
+            "scene_number",
+            "bit",
+            "byte",
+            "percent",
+            "temperature",
+            "raw_bytes",
+            "rgb232",
+            "pulse"
+          ]
+        },
+        "value": {
+          "oneOf": [
+            { "type": "boolean" },
+            { "type": "number" },
+            {
+              "type": "array",
+              "items": { "type": "integer", "minimum": 0, "maximum": 255 },
+              "minItems": 1,
+              "maxItems": 14
+            },
+            {
+              "type": "object",
+              "required": ["red", "green", "blue"],
+              "properties": {
+                "red": { "type": "number" },
+                "green": { "type": "number" },
+                "blue": { "type": "number" }
+              }
+            }
+          ]
+        },
+        "delayMs": { "type": "integer", "minimum": 0, "maximum": 30000 },
+        "pulseMs": { "type": "integer", "minimum": 50, "maximum": 3000 }
+      }
+    },
+    "user": {
+      "type": "object",
+      "required": ["id", "username", "role", "passwordHash"],
+      "properties": {
+        "id": { "type": "string" },
+        "username": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "user"] },
+        "passwordHash": { "type": "string" },
+        "access": {
+          "type": "object",
+          "properties": {
+            "floors": {
+              "oneOf": [
+                { "type": "string", "enum": ["*"] },
+                { "type": "array", "items": { "type": "string" } }
+              ]
+            },
+            "rooms": {
+              "oneOf": [
+                { "type": "string", "enum": ["*"] },
+                { "type": "array", "items": { "type": "string" } }
+              ]
+            },
+            "canRelease": {
+              "oneOf": [
+                { "type": "string", "enum": ["*"] },
+                { "type": "array", "items": { "type": "string" } }
+              ]
+            },
+            "talkIntercoms": {
+              "oneOf": [
+                { "type": "string", "enum": ["*"] },
+                { "type": "array", "items": { "type": "string" } }
+              ]
+            },
+            "editScenes": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "weekdayMask": {
+      "type": "array",
+      "description": "Seven booleans, Monday-first (ISO). `[true, true, true, true, true, false, false]` = doordeweeks.",
+      "minItems": 7,
+      "maxItems": 7,
+      "items": { "type": "boolean" }
+    },
+    "scheduleGuard": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["kind", "time"],
+          "properties": {
+            "kind": { "const": "time" },
+            "time": { "type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$" }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "event"],
+          "properties": {
+            "kind": { "const": "astro" },
+            "event": { "type": "string", "enum": ["sunrise", "sunset"] },
+            "offsetMin": { "type": "integer", "minimum": -720, "maximum": 720 }
+          }
+        }
+      ]
+    },
+    "schedule": {
+      "type": "object",
+      "required": ["id", "name", "enabled", "trigger", "action"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "lastRun": { "type": "string" },
+        "trigger": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["kind", "time", "days"],
+              "properties": {
+                "kind": { "const": "time" },
+                "time": { "type": "string", "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$" },
+                "days": { "$ref": "#/definitions/weekdayMask" }
+              }
+            },
+            {
+              "type": "object",
+              "required": ["kind", "event", "days"],
+              "properties": {
+                "kind": { "const": "astro" },
+                "event": { "type": "string", "enum": ["sunrise", "sunset"] },
+                "offsetMin": { "type": "integer", "minimum": -720, "maximum": 720 },
+                "days": { "$ref": "#/definitions/weekdayMask" },
+                "notBefore": { "$ref": "#/definitions/scheduleGuard" },
+                "notAfter": { "$ref": "#/definitions/scheduleGuard" }
+              }
+            }
+          ]
+        },
+        "action": {
+          "oneOf": [
+            {
+              "type": "object",
+              "required": ["kind", "sceneId"],
+              "properties": {
+                "kind": { "const": "scene" },
+                "sceneId": { "type": "string" }
+              }
+            },
+            {
+              "type": "object",
+              "required": ["kind", "actions"],
+              "properties": {
+                "kind": { "const": "actions" },
+                "actions": {
+                  "type": "array",
+                  "items": { "$ref": "#/definitions/sceneAction" },
+                  "minItems": 1,
+                  "maxItems": 64
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

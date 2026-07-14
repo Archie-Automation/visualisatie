@@ -1,0 +1,34 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Backend
+backend/node_modules/
+backend/dist/
+backend/.env
+backend/*.log
+
+# Flutter
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/.packages
+app/build/
+app/ios/Pods/
+app/android/.gradle/
+app/pubspec.lock
+
+# Secrets
+*.pem
+*.key
+backend/.env
+docker/.env
+
+# Python venv (satel bridge)
+satel/.venv/
+
+# Local go2rtc binary (see backend/.env.example GO2RTC_BIN)
+tools/go2rtc.exe
+tools/go2rtc_win64.zip
+tools/ffmpeg.exe
+tools/ffmpeg-release-essentials.zip

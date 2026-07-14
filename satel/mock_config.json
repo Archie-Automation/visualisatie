@@ -1,0 +1,30 @@
+{
+  "partitions": [
+    {
+      "number": 1,
+      "name": "Geheel huis",
+      "arm_modes": [
+        {
+          "mode": 0,
+          "name": "Volledig"
+        },
+        {
+          "mode": 1,
+          "name": "Nacht"
+        }
+      ]
+    },
+    {
+      "number": 2,
+      "name": "Garage",
+      "arm_modes": [
+        {
+          "mode": 0,
+          "name": "Volledig"
+        }
+      ]
+    }
+  ],
+  "zone_mapping": [],
+  "integration_key": ""
+}

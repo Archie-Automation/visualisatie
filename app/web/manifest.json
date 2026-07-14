@@ -1,0 +1,36 @@
+{
+    "name": "Luxe KNX",
+    "short_name": "Luxe KNX",
+    "description": "Smart Home bediening",
+    "start_url": ".",
+    "display": "standalone",
+    "background_color": "#0D0D0D",
+    "theme_color": "#0D0D0D",
+    "orientation": "portrait-primary",
+    "prefer_related_applications": false,
+    "categories": ["utilities", "lifestyle"],
+    "icons": [
+        {
+            "src": "icons/Icon-192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        },
+        {
+            "src": "icons/Icon-maskable-192.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "maskable"
+        },
+        {
+            "src": "icons/Icon-maskable-512.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "maskable"
+        }
+    ]
+}
