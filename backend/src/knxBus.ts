@@ -77,9 +77,27 @@ export declare interface KnxBus {
  * exact same interface but never touch the network – round-trips become
  * immediate echoes, so the UI is fully testable on a laptop.
  */
+/** Status GAs we read first after connect so the UI is populated quickly. */
+const READ_PRIORITY_ROLES = new Set([
+  "actual_temp",
+  "setpoint_status",
+  "setpoint",
+  "switch_status",
+  "dim_status",
+  "position_status",
+  "slat_status",
+  "mode_status",
+  "hvac_mode_status",
+  "heat_demand",
+  "cool_demand",
+  "flame_status",
+  "temperature"
+]);
+
 export class KnxBus extends EventEmitter {
   private readonly cache = new Map<GA, GAState>();
   private readonly gaToDpt = new Map<GA, string>();
+  private gaRoles = new Map<GA, GARole[]>();
   private connection: unknown;
   private readonly simulate: boolean;
   /** When true the bus is administratively disabled; connect() is a no-op. */
@@ -193,6 +211,7 @@ export class KnxBus extends EventEmitter {
           connected: () => {
             logger.info({ host: this.host, port: this.port }, "KNX gateway connected");
             this.bindDatapoints(knx, conn, groupAddresses);
+            this.scheduleGroupReads(groupAddresses);
             this.busConnected = true;
             const emitter = conn as { on?: (e: string, fn: () => void) => void };
             emitter.on?.("disconnected", () => {
@@ -254,24 +273,27 @@ export class KnxBus extends EventEmitter {
       }
     }
 
+    const added: GA[] = [];
     for (const ga of wanted) {
       if (this.datapoints.has(ga)) continue;
       const dpt = this.gaToDpt.get(ga) ?? "DPT1.001";
       try {
         const dp = new knx.Datapoint({ ga, dpt }, this.connection as never);
         this.datapoints.set(ga, dp);
+        added.push(ga);
       } catch (err) {
         logger.warn({ err, ga }, "Failed to bind datapoint on refresh");
       }
     }
 
+    if (added.length > 0) this.scheduleGroupReads(added);
     logger.info({ count: this.datapoints.size }, "KNX group addresses refreshed");
   }
 
   private rebuildGaDptMap(): void {
     this.gaToDpt.clear();
-    const idx = buildGAIndex(getConfig());
-    for (const [ga, roles] of idx) {
+    this.gaRoles = buildGAIndex(getConfig());
+    for (const [ga, roles] of this.gaRoles) {
       this.gaToDpt.set(ga, this.pickDptForGa(roles));
     }
   }
@@ -306,26 +328,104 @@ export class KnxBus extends EventEmitter {
     return String(raw);
   }
 
-  private onBusTelegram(dest: GA, value: unknown): void {
-    const dptId = this.gaToDpt.get(dest) ?? "DPT1.001";
-    let decoded: number | boolean | string | Rgb232Triplet;
-    if (Buffer.isBuffer(value)) {
+  /**
+   * When one GA serves multiple roles (e.g. switch + actual_temp), pick the
+   * DPT that matches the telegram payload size instead of always using the
+   * first role from config.
+   */
+  private resolveDptForTelegram(ga: GA, buf: Buffer): string {
+    const roles = this.gaRoles.get(ga) ?? [];
+    const dpts = [
+      ...new Set(roles.map((r) => ROLE_DPT[r.role]).filter(Boolean))
+    ] as string[];
+    if (dpts.length <= 1) return dpts[0] ?? this.gaToDpt.get(ga) ?? "DPT1.001";
+
+    if (buf.length >= 2) {
+      const temp = dpts.find((d) => d.startsWith("DPT9") || d === "DPT14.019");
+      if (temp) return temp;
+      const numeric = dpts.find((d) =>
+        ["DPT5.001", "DPT5.010", "DPT7.001", "DPT8.001", "DPT20.102"].includes(d)
+      );
+      if (numeric) return numeric;
+    }
+    if (buf.length <= 1) {
+      const bit = dpts.find((d) => d.startsWith("DPT1"));
+      if (bit) return bit;
+    }
+    return dpts[0];
+  }
+
+  private decodeBuffer(
+    dest: GA,
+    buf: Buffer
+  ): { decoded: number | boolean | string | Rgb232Triplet; dptId: string } {
+    const primary = this.resolveDptForTelegram(dest, buf);
+    const fallback = this.gaToDpt.get(dest);
+    const candidates = [
+      primary,
+      ...(fallback && fallback !== primary ? [fallback] : [])
+    ];
+    const DPTLib = loadDptLib();
+    for (const dptId of candidates) {
       try {
-        const DPTLib = loadDptLib();
-        const dpt = DPTLib.resolve(dptId);
-        const raw = DPTLib.fromBuffer(value, dpt);
-        decoded = this.normalizeDecoded(raw);
-      } catch (err) {
-        logger.warn({ err, dest, dptId }, "KNX telegram decode failed");
-        const buf = value as Buffer;
-        decoded = buf.length > 0 ? Boolean(buf[0] & 0x01) : false;
+        const raw = DPTLib.fromBuffer(buf, DPTLib.resolve(dptId));
+        return { decoded: this.normalizeDecoded(raw), dptId };
+      } catch {
+        /* try next candidate */
       }
+    }
+    logger.warn(
+      { dest, bufLen: buf.length, candidates },
+      "KNX telegram decode failed for all DPT candidates"
+    );
+    return {
+      decoded: buf.length > 0 ? Boolean(buf[0] & 0x01) : false,
+      dptId: primary
+    };
+  }
+
+  private onBusTelegram(dest: GA, value: unknown): void {
+    let decoded: number | boolean | string | Rgb232Triplet;
+    let dptId = this.gaToDpt.get(dest) ?? "DPT1.001";
+    if (Buffer.isBuffer(value)) {
+      const result = this.decodeBuffer(dest, value);
+      decoded = result.decoded;
+      dptId = result.dptId;
     } else if (typeof value === "number" || typeof value === "boolean") {
       decoded = value;
     } else {
       decoded = String(value ?? "");
     }
     this.updateCache(dest, decoded, dptId);
+  }
+
+  /** Request current bus values (GroupValue_Read) after connect or GA refresh. */
+  private scheduleGroupReads(groupAddresses: Iterable<GA>): void {
+    const idx = this.gaRoles;
+    const gas = [...groupAddresses].sort((a, b) => {
+      const pri = (ga: GA) =>
+        (idx.get(ga) ?? []).some((r) => READ_PRIORITY_ROLES.has(r.role)) ? 0 : 1;
+      return pri(a) - pri(b);
+    });
+
+    let delay = 400;
+    let scheduled = 0;
+    for (const ga of gas) {
+      const dp = this.datapoints.get(ga) as { read?: () => void } | undefined;
+      if (!dp?.read) continue;
+      scheduled++;
+      setTimeout(() => {
+        try {
+          dp.read!();
+        } catch (err) {
+          logger.warn({ err, ga }, "KNX group read failed");
+        }
+      }, delay);
+      delay += 35;
+    }
+    if (scheduled > 0) {
+      logger.info({ scheduled }, "KNX group reads scheduled");
+    }
   }
 
   private bindDatapoints(

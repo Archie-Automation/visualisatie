@@ -557,6 +557,15 @@ export interface AcConfig {
     statusGa?: GA;
     options: AcModeOption[];
   };
+  /** Gebruiker mag zelf omschakelen tussen verwarmen/koelen. */
+  userCanSwitchMode?: boolean;
+  /** Vergrendelduur na omschakelen (`u:mm`, bijv. `0:02`). */
+  hvacSwitchLockDuration?: string;
+  /**
+   * Per modus zichtbaar in app (sleutel = icon, bijv. `snow`, `flame`, `auto`).
+   * Ontbreekt een sleutel: standaard alleen koelen/verwarmen zichtbaar.
+   */
+  modeVisibility?: Record<string, boolean>;
 }
 
 export interface AcDevice extends DeviceBase {
@@ -1025,6 +1034,19 @@ export interface HouseConfig {
   satel?: {
     enabled?: boolean;
     partitions?: Array<{ number: number; name: string }>;
+  };
+  /** Wandtablet idle timeout + screensaver (Android client). */
+  displayPanel?: {
+    enabled?: boolean;
+    idleHomeMinutes?: number;
+    /** 0 = screensaver uit. */
+    screensaverMinutes?: number;
+    panelRoomId?: string;
+    panelRoomName?: string;
+    suppressScreensaverWhenMusicPlaying?: boolean;
+    temperatureGa?: string;
+    temperatureRoomId?: string;
+    temperatureRoomName?: string;
   };
 }
 

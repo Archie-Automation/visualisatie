@@ -8,6 +8,13 @@
       "lon": 4.9041
     }
   },
+  "displayPanel": {
+    "idleHomeMinutes": 1,
+    "screensaverMinutes": 5,
+    "panelRoomId": "room-master",
+    "suppressScreensaverWhenMusicPlaying": true,
+    "temperatureRoomId": "room-master"
+  },
   "knx": {
     "gateway": {
       "host": "192.168.1.200",
@@ -599,9 +606,9 @@
               "name": "Thermostaat",
               "type": "climate",
               "ga": {
-                "actual_temp": "3/1/1",
-                "setpoint": "3/1/2",
-                "setpoint_status": "3/1/2",
+                "actual_temp": "5/1/1",
+                "setpoint": "5/2/1",
+                "setpoint_status": "5/3/1",
                 "hvac_mode_status": "5/3/12",
                 "heat_demand": "3/1/13",
                 "cool_demand": "3/1/14",
@@ -715,7 +722,7 @@
               "name": "Heater",
               "type": "universal",
               "universal": {
-                "icon": "skylight",
+                "icon": "heater",
                 "buttons": [
                   {
                     "id": "btn-776358b9-b990-4d37-8315-e0e741312d18",
@@ -847,20 +854,27 @@
               "ac": {
                 "onOff": {
                   "ga": "8/1/1",
-                  "statusGa": "8/1/2"
+                  "statusGa": "8/1/1"
                 },
                 "setpoint": {
                   "ga": "8/2/1",
-                  "statusGa": "8/2/2",
+                  "statusGa": "8/2/1",
                   "min": 16,
                   "max": 30
                 },
                 "actualTemp": {
                   "ga": "8/3/1"
                 },
+                "modeVisibility": {
+                  "auto": false,
+                  "snow": true,
+                  "flame": true,
+                  "fan": true,
+                  "drop": true
+                },
                 "mode": {
                   "ga": "8/4/1",
-                  "statusGa": "8/4/2",
+                  "statusGa": "8/4/1",
                   "options": [
                     {
                       "label": "Auto",
@@ -891,7 +905,7 @@
                 },
                 "fanSpeed": {
                   "ga": "8/5/1",
-                  "statusGa": "8/5/2",
+                  "statusGa": "8/5/1",
                   "options": [
                     {
                       "label": "Auto",

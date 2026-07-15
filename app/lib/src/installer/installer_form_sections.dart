@@ -1,8 +1,11 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
+import '../ac_mode_config.dart';
 import '../hvac_switch_lock.dart';
 import '../room_control_category.dart';
+import '../theme.dart';
+import '../ui/widgets/heater_icon.dart';
 
 const _uuid = Uuid();
 
@@ -1191,6 +1194,396 @@ class _ClimateInstallerSectionState extends State<ClimateInstallerSection> {
   }
 }
 
+// ── AC installer section ─────────────────────────────────────────────────────
+
+class AcInstallerSection extends StatefulWidget {
+  const AcInstallerSection({
+    super.key,
+    required this.device,
+    required this.onChanged,
+  });
+
+  final Map<String, dynamic> device;
+  final VoidCallback onChanged;
+
+  @override
+  State<AcInstallerSection> createState() => _AcInstallerSectionState();
+}
+
+class _AcInstallerSectionState extends State<AcInstallerSection> {
+  void _notify() {
+    widget.onChanged();
+    setState(() {});
+  }
+
+  void _addModeOption(Map<String, dynamic> ac, List<Map<String, dynamic>> options) {
+    final used = options
+        .map((o) => (o['value'] as num?)?.toInt() ?? 0)
+        .toSet();
+    var v = 0;
+    while (used.contains(v)) v++;
+    options.add({'label': 'Modus $v', 'value': v, 'icon': 'auto'});
+    syncAcModeVisibility(ac, options);
+    _notify();
+  }
+
+  void _removeModeOption(
+    Map<String, dynamic> ac,
+    List<Map<String, dynamic>> options,
+    int index,
+  ) {
+    options.removeAt(index);
+    syncAcModeVisibility(ac, options);
+    _notify();
+  }
+
+  void _addFanOption(List<Map<String, dynamic>> options) {
+    final used = options
+        .map((o) => (o['value'] as num?)?.toInt() ?? 0)
+        .toSet();
+    var v = 0;
+    while (used.contains(v)) v++;
+    options.add({'label': 'Stand $v', 'value': v});
+    _notify();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ac = _ensureMap(widget.device, 'ac');
+    final onOff = _ensureMap(ac, 'onOff');
+    final setpoint = _ensureMap(ac, 'setpoint');
+    final hasMode = ac.containsKey('mode');
+    final hasFan = ac.containsKey('fanSpeed');
+    final hasActual = ac.containsKey('actualTemp');
+
+    if (hasMode) {
+      final mode = _ensureMap(ac, 'mode');
+      final options = _ensureList(mode, 'options');
+      if (options.isEmpty) {
+        options.addAll(defaultAcModeOptions.map(Map<String, dynamic>.from));
+      }
+      syncAcModeVisibility(ac, options);
+    }
+
+    final mode = hasMode ? _ensureMap(ac, 'mode') : null;
+    final modeOptions = mode != null
+        ? _ensureList(mode, 'options')
+        : const <Map<String, dynamic>>[];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('Airco', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 6),
+        Text(
+          'Stel groepsadressen en zichtbare modi in. '
+          'Standaard zijn alleen Koelen en Verwarmen zichtbaar in de app.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 16),
+
+        Text('Aan / Uit', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 6),
+        _InstallerStrField(
+          key: ValueKey('ac-${widget.device['id']}-on-ga'),
+          label: 'GA aan/uit (DPT 1.001) *',
+          value: onOff['ga'] as String? ?? '',
+          onChanged: (v) { onOff['ga'] = v; _notify(); },
+        ),
+        _InstallerStrField(
+          key: ValueKey('ac-${widget.device['id']}-on-st'),
+          label: 'Status GA (optioneel)',
+          value: onOff['statusGa'] as String? ?? '',
+          onChanged: (v) {
+            if (v.trim().isEmpty) {
+              onOff.remove('statusGa');
+            } else {
+              onOff['statusGa'] = v;
+            }
+            _notify();
+          },
+        ),
+        const SizedBox(height: 12),
+
+        Text('Setpoint', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 6),
+        _InstallerStrField(
+          key: ValueKey('ac-${widget.device['id']}-sp-ga'),
+          label: 'GA setpoint (DPT 9.001) *',
+          value: setpoint['ga'] as String? ?? '',
+          onChanged: (v) { setpoint['ga'] = v; _notify(); },
+        ),
+        _InstallerStrField(
+          key: ValueKey('ac-${widget.device['id']}-sp-st'),
+          label: 'Status GA setpoint (optioneel)',
+          value: setpoint['statusGa'] as String? ?? '',
+          onChanged: (v) {
+            if (v.trim().isEmpty) {
+              setpoint.remove('statusGa');
+            } else {
+              setpoint['statusGa'] = v;
+            }
+            _notify();
+          },
+        ),
+        Row(
+          children: [
+            Expanded(
+              child: _InstallerStrField(
+                key: ValueKey('ac-${widget.device['id']}-sp-min'),
+                label: 'Min °C (standaard 16)',
+                value: (setpoint['min'] as num?)?.toString() ?? '',
+                onChanged: (v) {
+                  final n = double.tryParse(v);
+                  if (n != null) {
+                    setpoint['min'] = n;
+                  } else {
+                    setpoint.remove('min');
+                  }
+                  _notify();
+                },
+                number: true,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _InstallerStrField(
+                key: ValueKey('ac-${widget.device['id']}-sp-max'),
+                label: 'Max °C (standaard 30)',
+                value: (setpoint['max'] as num?)?.toString() ?? '',
+                onChanged: (v) {
+                  final n = double.tryParse(v);
+                  if (n != null) {
+                    setpoint['max'] = n;
+                  } else {
+                    setpoint.remove('max');
+                  }
+                  _notify();
+                },
+                number: true,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        _SectionToggle(
+          label: 'Gemeten temperatuur toevoegen',
+          value: hasActual,
+          onChanged: (v) {
+            if (v) {
+              ac['actualTemp'] = {'ga': '1/1/3'};
+            } else {
+              ac.remove('actualTemp');
+            }
+            _notify();
+          },
+        ),
+        if (hasActual)
+          _InstallerStrField(
+            key: ValueKey('ac-${widget.device['id']}-act'),
+            label: 'GA gemeten temperatuur (DPT 9.001)',
+            value: (_ensureMap(ac, 'actualTemp'))['ga'] as String? ?? '',
+            onChanged: (v) {
+              _ensureMap(ac, 'actualTemp')['ga'] = v;
+              _notify();
+            },
+          ),
+        const SizedBox(height: 12),
+
+        _SectionToggle(
+          label: 'Modusbesturing toevoegen',
+          value: hasMode,
+          onChanged: (v) {
+            if (v) {
+              ac['mode'] = {
+                'ga': '1/1/4',
+                'options': defaultAcModeOptions
+                    .map((e) => Map<String, dynamic>.from(e))
+                    .toList(),
+              };
+              ac['modeVisibility'] = Map<String, dynamic>.from(
+                defaultAcModeVisibility,
+              );
+            } else {
+              ac.remove('mode');
+              ac.remove('modeVisibility');
+            }
+            _notify();
+          },
+        ),
+        if (hasMode) ...[
+          _InstallerStrField(
+            key: ValueKey('ac-${widget.device['id']}-mode-ga'),
+            label: 'GA modus (schrijven)',
+            value: mode!['ga'] as String? ?? '',
+            onChanged: (v) { mode['ga'] = v; _notify(); },
+          ),
+          _InstallerStrField(
+            key: ValueKey('ac-${widget.device['id']}-mode-st'),
+            label: 'Status GA modus (optioneel)',
+            value: mode['statusGa'] as String? ?? '',
+            onChanged: (v) {
+              if (v.trim().isEmpty) {
+                mode.remove('statusGa');
+              } else {
+                mode['statusGa'] = v;
+              }
+              _notify();
+            },
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text('Modusopties', style: Theme.of(context).textTheme.titleSmall),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: modeOptions.length < 12
+                    ? () => _addModeOption(ac, modeOptions)
+                    : null,
+                icon: const Icon(Icons.add, size: 16),
+                label: const Text('Toevoegen'),
+              ),
+            ],
+          ),
+          Text(
+            'Label, KNX-waarde en icoon per modus. '
+            'Koelen en Verwarmen zijn standaard zichtbaar in de app.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          for (var i = 0; i < modeOptions.length; i++)
+            _AcModeOptionEditor(
+              key: ValueKey(
+                'ac-${widget.device['id']}-mode-$i-${modeOptions[i]['value']}',
+              ),
+              option: modeOptions[i],
+              index: i,
+              visible: acModeVisible(
+                _ensureMap(ac, 'modeVisibility'),
+                modeOptions[i],
+              ),
+              onChanged: () {
+                syncAcModeVisibility(ac, modeOptions);
+                _notify();
+              },
+              onVisibilityChanged: (v) {
+                _ensureMap(ac, 'modeVisibility')[
+                    acModeVisibilityKey(modeOptions[i])] = v;
+                _notify();
+              },
+              onDelete: modeOptions.length > 1
+                  ? () => _removeModeOption(ac, modeOptions, i)
+                  : null,
+            ),
+          const SizedBox(height: 12),
+        ],
+        const SizedBox(height: 12),
+
+        _SectionToggle(
+          label: 'Ventilatorsnelheid toevoegen',
+          value: hasFan,
+          onChanged: (v) {
+            if (v) {
+              ac['fanSpeed'] = {
+                'ga': '1/1/5',
+                'options': [
+                  {'label': 'Auto', 'value': 0},
+                  {'label': '1', 'value': 1},
+                  {'label': '2', 'value': 2},
+                  {'label': '3', 'value': 3},
+                ],
+              };
+            } else {
+              ac.remove('fanSpeed');
+            }
+            _notify();
+          },
+        ),
+        if (hasFan) ...[
+          _InstallerStrField(
+            key: ValueKey('ac-${widget.device['id']}-fan-ga'),
+            label: 'GA ventilator (schrijven)',
+            value: (_ensureMap(ac, 'fanSpeed'))['ga'] as String? ?? '',
+            onChanged: (v) {
+              _ensureMap(ac, 'fanSpeed')['ga'] = v;
+              _notify();
+            },
+          ),
+          _InstallerStrField(
+            key: ValueKey('ac-${widget.device['id']}-fan-st'),
+            label: 'Status GA ventilator (optioneel)',
+            value: (_ensureMap(ac, 'fanSpeed'))['statusGa'] as String? ?? '',
+            onChanged: (v) {
+              final fan = _ensureMap(ac, 'fanSpeed');
+              if (v.trim().isEmpty) {
+                fan.remove('statusGa');
+              } else {
+                fan['statusGa'] = v;
+              }
+              _notify();
+            },
+          ),
+          const SizedBox(height: 8),
+          Builder(
+            builder: (context) {
+              final fanOptions =
+                  _ensureList(_ensureMap(ac, 'fanSpeed'), 'options');
+              if (fanOptions.isEmpty) {
+                fanOptions.addAll([
+                  {'label': 'Auto', 'value': 0},
+                  {'label': '1', 'value': 1},
+                  {'label': '2', 'value': 2},
+                  {'label': '3', 'value': 3},
+                ]);
+              }
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Text('Ventilatorstanden',
+                          style: Theme.of(context).textTheme.titleSmall),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: fanOptions.length < 10
+                            ? () => _addFanOption(fanOptions)
+                            : null,
+                        icon: const Icon(Icons.add, size: 16),
+                        label: const Text('Toevoegen'),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    'Label en KNX-waarde per stand (bijv. Auto=0, laag=1, hoog=3).',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 8),
+                  for (var i = 0; i < fanOptions.length; i++)
+                    _AcFanOptionEditor(
+                      key: ValueKey(
+                        'ac-${widget.device['id']}-fan-$i-${fanOptions[i]['value']}',
+                      ),
+                      option: fanOptions[i],
+                      index: i,
+                      onChanged: _notify,
+                      onDelete: fanOptions.length > 1
+                          ? () {
+                              fanOptions.removeAt(i);
+                              _notify();
+                            }
+                          : null,
+                    ),
+                ],
+              );
+            },
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 // ── Fan installer section ────────────────────────────────────────────────────
 
 class FanInstallerSection extends StatefulWidget {
@@ -2284,7 +2677,12 @@ class _IconPickerField extends StatelessWidget {
               value: key,
               child: Row(
                 children: [
-                  Icon(kUniversalIconMap[key], size: 18),
+                  iconWidgetForData(
+                        kUniversalIconMap[key],
+                        size: 18,
+                        color: LuxeColors.ink,
+                      ) ??
+                      Icon(kUniversalIconMap[key], size: 18),
                   const SizedBox(width: 8),
                   Text(key, overflow: TextOverflow.ellipsis),
                 ],
@@ -2292,6 +2690,208 @@ class _IconPickerField extends StatelessWidget {
             ),
         ],
         onChanged: (v) => onChanged(v == _none ? null : v),
+      ),
+    );
+  }
+}
+
+class _AcIconPickerField extends StatelessWidget {
+  const _AcIconPickerField({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  static const _none = '(geen)';
+
+  @override
+  Widget build(BuildContext context) {
+    final current = (value != null && value!.isNotEmpty) ? value! : _none;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: DropdownButtonFormField<String>(
+        value: current,
+        decoration: InputDecoration(labelText: label, isDense: true),
+        items: [
+          const DropdownMenuItem(
+            value: _none,
+            child: Text('(geen)', style: TextStyle(color: Colors.grey)),
+          ),
+          for (final key in kAcModeIconKeys)
+            DropdownMenuItem(
+              value: key,
+              child: Row(
+                children: [
+                  Icon(deviceControlOptionIcon(iconKey: key), size: 18),
+                  const SizedBox(width: 8),
+                  Text(key),
+                ],
+              ),
+            ),
+        ],
+        onChanged: (v) => onChanged(v == _none ? null : v),
+      ),
+    );
+  }
+}
+
+class _AcModeOptionEditor extends StatelessWidget {
+  const _AcModeOptionEditor({
+    super.key,
+    required this.option,
+    required this.index,
+    required this.visible,
+    required this.onChanged,
+    required this.onVisibilityChanged,
+    this.onDelete,
+  });
+
+  final Map<String, dynamic> option;
+  final int index;
+  final bool visible;
+  final VoidCallback onChanged;
+  final ValueChanged<bool> onVisibilityChanged;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = option['label'] as String? ?? 'Modus';
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${index + 1}. $label',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (onDelete != null)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    color: Colors.red[400],
+                    tooltip: 'Modus verwijderen',
+                    onPressed: onDelete,
+                  ),
+              ],
+            ),
+            _InstallerStrField(
+              key: ValueKey('ac-mode-$index-label'),
+              label: 'Label',
+              value: label,
+              onChanged: (v) {
+                option['label'] = v.isEmpty ? 'Modus' : v;
+                onChanged();
+              },
+            ),
+            _InstallerStrField(
+              key: ValueKey('ac-mode-$index-value'),
+              label: 'KNX-waarde (geheel getal)',
+              value: (option['value'] as num?)?.toString() ?? '0',
+              onChanged: (v) {
+                final n = int.tryParse(v.trim());
+                if (n != null) option['value'] = n;
+                onChanged();
+              },
+              number: true,
+            ),
+            _AcIconPickerField(
+              label: 'Icoon',
+              value: option['icon'] as String?,
+              onChanged: (v) {
+                if (v == null) {
+                  option.remove('icon');
+                } else {
+                  option['icon'] = v;
+                }
+                onChanged();
+              },
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Zichtbaar in app'),
+              value: visible,
+              onChanged: onVisibilityChanged,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AcFanOptionEditor extends StatelessWidget {
+  const _AcFanOptionEditor({
+    super.key,
+    required this.option,
+    required this.index,
+    required this.onChanged,
+    this.onDelete,
+  });
+
+  final Map<String, dynamic> option;
+  final int index;
+  final VoidCallback onChanged;
+  final VoidCallback? onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Stand ${index + 1}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                if (onDelete != null)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    color: Colors.red[400],
+                    tooltip: 'Stand verwijderen',
+                    onPressed: onDelete,
+                  ),
+              ],
+            ),
+            _InstallerStrField(
+              key: ValueKey('ac-fan-$index-label'),
+              label: 'Label',
+              value: option['label'] as String? ?? '',
+              onChanged: (v) {
+                option['label'] = v;
+                onChanged();
+              },
+            ),
+            _InstallerStrField(
+              key: ValueKey('ac-fan-$index-value'),
+              label: 'KNX-waarde (geheel getal)',
+              value: (option['value'] as num?)?.toString() ?? '0',
+              onChanged: (v) {
+                final n = int.tryParse(v.trim());
+                if (n != null) option['value'] = n;
+                onChanged();
+              },
+              number: true,
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'models.dart';
+import 'ui/widgets/heater_icon.dart';
 
 /// Curated icon set for universal device groups.
 /// Key = stored string in `universal.icon`, value = Flutter IconData.
@@ -93,6 +94,8 @@ const Map<String, IconData> kUniversalIconMap = {
   /// Raam dicht (pijlen naar binnen = gesloten)
   'window_closed': Icons.close_fullscreen,
   'skylight': Icons.wb_iridescent_outlined,
+  /// Terrasverwarmer / heater — custom tekening (skylight-variant, stralen omlaag).
+  'heater': heaterIconData,
 
   // ── Beveiliging & Detectie ────────────────────────────────────────────────
   'security': Icons.security_outlined,

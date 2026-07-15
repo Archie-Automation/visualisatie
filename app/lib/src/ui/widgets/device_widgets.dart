@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../ac_mode_config.dart';
 import '../../api.dart';
 import '../../camera_api.dart';
 import '../../fireplace_step_ranges.dart';
@@ -20,6 +21,7 @@ import 'confirm_dialog.dart';
 import 'device_card_scale.dart';
 import 'device_control_panel.dart';
 import 'device_tile_shell.dart';
+import 'heater_icon.dart';
 import 'glass_card.dart';
 import 'media_tile.dart';
 
@@ -1951,6 +1953,36 @@ class _MiniBtn extends StatelessWidget {
 /*  Climate                                                              */
 /* --------------------------------------------------------------------- */
 
+bool _climateDemandActive(dynamic value) {
+  if (value == null) return false;
+  if (value is bool) return value;
+  if (value is num) return value > 0;
+  return false;
+}
+
+/// DPT 1.100: 1 = verwarmen, 0 = koelen.
+bool _climateIsHeating(dynamic hvacRaw, {required bool defaultHeat}) {
+  if (hvacRaw == null) return defaultHeat;
+  if (hvacRaw is bool) return hvacRaw;
+  if (hvacRaw is num) return hvacRaw != 0;
+  if (hvacRaw is String) {
+    final s = hvacRaw.trim().toLowerCase();
+    if (s == '1' || s == 'true' || s == 'heat') return true;
+    if (s == '0' || s == 'false' || s == 'cool') return false;
+  }
+  return defaultHeat;
+}
+
+String _hvacSwitchNotice(HvacSwitchLockDuration lockDuration) {
+  final lockText = lockDuration.formatForDialog();
+  return lockDuration.hasLock
+      ? 'Let op: omschakelen kan niet direct ongedaan worden gemaakt. '
+          'Na omschakeling wordt de functie voor $lockText vergrendeld '
+          'om het systeem te beschermen.'
+      : 'Let op: omschakelen kan niet direct ongedaan worden gemaakt. '
+          'Het is niet efficiënt om meerdere keren per etmaal om te schakelen.';
+}
+
 class ClimateTile extends ConsumerStatefulWidget {
   const ClimateTile({super.key, required this.device});
   final Device device;
@@ -1997,42 +2029,10 @@ class _ClimateTileState extends ConsumerState<ClimateTile> {
     if (toHeat == currentlyHeating || hvacSwitchLocked) return;
 
     final target = toHeat ? 'Verwarmen' : 'Koelen';
-    final lockText = lockDuration.formatForDialog();
-    final notice = lockDuration.hasLock
-        ? 'Let op: omschakelen kan niet direct ongedaan worden gemaakt. '
-            'Na omschakeling wordt de functie voor $lockText vergrendeld '
-            'om het systeem te beschermen.'
-        : 'Let op: omschakelen kan niet direct ongedaan worden gemaakt. '
-            'Het is niet efficiënt om meerdere keren per etmaal om te schakelen.';
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            const Icon(Icons.warning_amber_rounded,
-                color: Colors.orange, size: 22),
-            const SizedBox(width: 8),
-            Expanded(child: Text('Omschakelen naar $target')),
-          ],
-        ),
-        content: Text(
-          'Weet u zeker dat u wilt omschakelen naar $target?\n\n$notice',
-          style: const TextStyle(fontSize: 14),
-        ),
-        actionsAlignment: MainAxisAlignment.end,
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Annuleren'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Omschakelen'),
-          ),
-        ],
-      ),
+    final confirmed = await showHvacSwitchConfirmDialog(
+      context,
+      target: target,
+      notice: _hvacSwitchNotice(lockDuration),
     );
     if (confirmed != true || !mounted) return;
 
@@ -2106,20 +2106,15 @@ class _ClimateTileState extends ConsumerState<ClimateTile> {
     // HVAC mode status — 1/true = heating, 0/false = cooling
     final hvacStatusGa = d.ga['hvac_mode_status'] ?? d.ga['hvac_mode'];
     final hvacRaw      = hvacStatusGa != null ? bus.values[hvacStatusGa] : null;
-    final isHeating    = hvacRaw == null
-        ? canHeat
-        : (hvacRaw == true || hvacRaw == 1);
+    final isHeating = _climateIsHeating(hvacRaw, defaultHeat: canHeat);
 
-    // Demand GAs — only show when in the matching mode
+    // Warmte-/koudevraag — bit 1 of byte > 0, icoon volgt hvac-modus.
     final heatDemandGa = d.ga['heat_demand'];
     final coolDemandGa = d.ga['cool_demand'];
-    final heatActive   = heatDemandGa != null &&
-        (bus.values[heatDemandGa] == true || bus.values[heatDemandGa] == 1);
-    final coolActive   = coolDemandGa != null &&
-        (bus.values[coolDemandGa] == true || bus.values[coolDemandGa] == 1);
-    // Show heat demand only when heating mode, cool demand only when cooling mode
-    final showHeatDemand = heatDemandGa != null && isHeating;
-    final showCoolDemand = coolDemandGa != null && !isHeating;
+    final demandGa = isHeating ? heatDemandGa : coolDemandGa;
+    final demandActive =
+        _climateDemandActive(demandGa != null ? bus.values[demandGa] : null);
+    final showDemandIcon = demandGa != null;
 
     final hvacLockUntil = _hvacLockUntil(hvacLocks);
     final hvacLockRemaining = _hvacLockRemaining(hvacLockUntil);
@@ -2144,183 +2139,135 @@ class _ClimateTileState extends ConsumerState<ClimateTile> {
     addMode(3, 'economy',   'Economy',   Icons.eco_outlined);
     addMode(4, 'buildingProtection', 'Beveiliging', Icons.shield_outlined);
 
+    Widget? hvacTrailing;
+    if (hasHvacControl && userCanSwitch) {
+      hvacTrailing = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _HvacModeButton(
+            icon: Icons.local_fire_department_outlined,
+            color: _HvacColors.heat,
+            selected: isHeating,
+            locked: hvacSwitchLocked,
+            onTap: hvacSwitchLocked || isHeating
+                ? null
+                : () => _confirmAndSwitchHvac(
+                      toHeat: true,
+                      currentlyHeating: isHeating,
+                      lockDuration: hvacLockDuration,
+                      hvacSwitchLocked: hvacSwitchLocked,
+                    ),
+          ),
+          const SizedBox(width: DeviceControlBar.gap),
+          _HvacModeButton(
+            icon: Icons.ac_unit_outlined,
+            color: _HvacColors.cool,
+            selected: !isHeating,
+            locked: hvacSwitchLocked,
+            onTap: hvacSwitchLocked || !isHeating
+                ? null
+                : () => _confirmAndSwitchHvac(
+                      toHeat: false,
+                      currentlyHeating: isHeating,
+                      lockDuration: hvacLockDuration,
+                      hvacSwitchLocked: hvacSwitchLocked,
+                    ),
+          ),
+        ],
+      );
+    } else if (canHeat || canCool) {
+      hvacTrailing = _HvacModeButton(
+        icon: isHeating
+            ? Icons.local_fire_department_outlined
+            : Icons.ac_unit_outlined,
+        color: isHeating ? _HvacColors.heat : _HvacColors.cool,
+        selected: true,
+      );
+    }
+
     return DeviceTileShell(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Header ────────────────────────────────────────────────
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              DeviceTileLayout.statusIconSlot(
-                context,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    DeviceTileIconBadge(
-                      icon: Icons.thermostat_outlined,
-                      onTap: () => context.push(
-                        '/log/thermostat-${d.id}'
-                        '?title=${Uri.encodeComponent(d.name)}'
-                        '&mode=${isHeating ? 'heat' : 'cool'}',
-                      ),
-                    ),
-                    Positioned(
-                      right: -3,
-                      bottom: -3,
-                      child: Container(
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          color: LuxeColors.brass,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: LuxeColors.surface,
-                            width: 1.5,
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.show_chart_rounded,
-                          size: 10,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ],
+          DeviceTileLayout.headerRow(
+            context: context,
+            leading: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                DeviceTileIconBadge(
+                  icon: Icons.thermostat_outlined,
+                  onTap: () => context.push(
+                    '/log/thermostat-${d.id}'
+                    '?title=${Uri.encodeComponent(d.name)}'
+                    '&mode=${isHeating ? 'heat' : 'cool'}',
+                  ),
                 ),
-              ),
-              const SizedBox(width: DeviceTileLayout.iconGap),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            d.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleLarge,
-                          ),
-                        ),
-                        if (hasHvacControl && userCanSwitch) ...[
-                          const SizedBox(width: 8),
-                          _HvacModeButton(
-                            icon: Icons.local_fire_department_outlined,
-                            color: _HvacColors.heat,
-                            selected: isHeating,
-                            locked: hvacSwitchLocked,
-                            onTap: hvacSwitchLocked
-                                ? null
-                                : () => _confirmAndSwitchHvac(
-                                      toHeat: true,
-                                      currentlyHeating: isHeating,
-                                      lockDuration: hvacLockDuration,
-                                      hvacSwitchLocked: hvacSwitchLocked,
-                                    ),
-                          ),
-                          const SizedBox(width: DeviceControlBar.gap),
-                          _HvacModeButton(
-                            icon: Icons.ac_unit_outlined,
-                            color: _HvacColors.cool,
-                            selected: !isHeating,
-                            locked: hvacSwitchLocked,
-                            onTap: hvacSwitchLocked
-                                ? null
-                                : () => _confirmAndSwitchHvac(
-                                      toHeat: false,
-                                      currentlyHeating: isHeating,
-                                      lockDuration: hvacLockDuration,
-                                      hvacSwitchLocked: hvacSwitchLocked,
-                                    ),
-                          ),
-                        ] else if (canHeat || canCool) ...[
-                          const SizedBox(width: 8),
-                          _HvacModeButton(
-                            icon: isHeating
-                                ? Icons.local_fire_department_outlined
-                                : Icons.ac_unit_outlined,
-                            color:
-                                isHeating ? _HvacColors.heat : _HvacColors.cool,
-                            selected: true,
-                          ),
-                        ],
-                      ],
-                    ),
-                    if (actual != null || hvacSwitchLocked) ...[
-                      SizedBox(height: context.isPhone ? 4 : 2),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          if (actual != null)
-                            Expanded(
-                              child: Text(
-                                'Nu ${actual.toStringAsFixed(1)} °C',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(
-                                      height: 1.1,
-                                      fontSize: context.isPhone ? 15 : 14,
-                                    ),
-                              ),
-                            )
-                          else
-                            const Spacer(),
-                          if (hvacSwitchLocked)
-                            SizedBox(
-                              width: DeviceControlBar.buttonSizeFor(context) * 2 +
-                                  DeviceControlBar.gap,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.lock_outline,
-                                    size: context.isPhone ? 13 : 12,
-                                    color: LuxeColors.inkSoft,
-                                  ),
-                                  SizedBox(width: context.isPhone ? 4 : 3),
-                                  Flexible(
-                                    child: Text(
-                                      HvacLockStore.formatRemaining(
-                                          hvacLockRemaining!),
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodySmall
-                                          ?.copyWith(
-                                            color: LuxeColors.inkSoft,
-                                            height: 1.1,
-                                            fontSize:
-                                                context.isPhone ? 12 : 11,
-                                          ),
-                                      textAlign: TextAlign.center,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                        ],
+                Positioned(
+                  right: -3,
+                  bottom: -3,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      color: LuxeColors.brass,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: LuxeColors.surface,
+                        width: 1.5,
                       ),
-                    ],
-                  ],
+                    ),
+                    child: const Icon(
+                      Icons.show_chart_rounded,
+                      size: 10,
+                      color: Colors.white,
+                    ),
+                  ),
                 ),
-              ),
-            ],
-          ),
-          SizedBox(height: DeviceControlBar.sectionSpacing(context)),
-
-          DeviceCardBody(
-            child: DeviceControlSetpointRow(
-              value: setpoint,
-              onDecrease: () => _adjustSetpoint(-step, minTemp, maxTemp),
-              onIncrease: () => _adjustSetpoint(step, minTemp, maxTemp),
-              decimals: step < 1 ? 1 : 0,
+              ],
             ),
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  d.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                if (hvacSwitchLocked) ...[
+                  const SizedBox(height: DeviceTileLayout.titleStatusGap),
+                  Text(
+                    'Vergrendeld · ${HvacLockStore.formatRemaining(hvacLockRemaining!)}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: LuxeColors.inkSoft,
+                        ),
+                  ),
+                ],
+              ],
+            ),
+            trailing: hvacTrailing == null
+                ? null
+                : Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: hvacTrailing,
+                  ),
+          ),
+
+          if (actual != null || showDemandIcon) ...[
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+            _ClimateMeasuredStatusRow(
+              actual: actual,
+              isHeating: isHeating,
+              showDemandIcon: showDemandIcon,
+              demandActive: demandActive,
+            ),
+          ],
+
+          SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+          DeviceControlSetpointRow(
+            value: setpoint,
+            onDecrease: () => _adjustSetpoint(-step, minTemp, maxTemp),
+            onIncrease: () => _adjustSetpoint(step, minTemp, maxTemp),
+            decimals: step < 1 ? 1 : 0,
           ),
 
           if (showModes && opModes.isNotEmpty) ...[
@@ -2342,33 +2289,6 @@ class _ClimateTileState extends ConsumerState<ClimateTile> {
               ),
             ),
           ],
-
-          // ── Demand indicators (only shown in matching mode) ────────
-          if (showHeatDemand || showCoolDemand) ...[
-            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
-            Row(
-              children: [
-                if (showHeatDemand)
-                  Expanded(
-                    child: _DemandBadge(
-                      icon: Icons.local_fire_department_outlined,
-                      label: 'Warmtevraag',
-                      active: heatActive,
-                      activeColor: _HvacColors.heat,
-                    ),
-                  ),
-                if (showCoolDemand)
-                  Expanded(
-                    child: _DemandBadge(
-                      icon: Icons.ac_unit_outlined,
-                      label: 'Koudevraag',
-                      active: coolActive,
-                      activeColor: _HvacColors.cool,
-                    ),
-                  ),
-              ],
-            ),
-          ],
         ],
       ),
     );
@@ -2383,7 +2303,7 @@ class _ClimateTileState extends ConsumerState<ClimateTile> {
 /// • Niet tikbaar (onTap == null): status-weergave wanneer de gebruiker niet
 ///   zelf mag omschakelen — toont alleen de huidige stand met de moduskleur.
 /// • Vergrendeld (locked): grijs, niet bedienbaar.
-class _HvacModeButton extends StatelessWidget {
+class _HvacModeButton extends StatefulWidget {
   const _HvacModeButton({
     required this.icon,
     required this.color,
@@ -2399,24 +2319,28 @@ class _HvacModeButton extends StatelessWidget {
   final bool locked;
 
   @override
+  State<_HvacModeButton> createState() => _HvacModeButtonState();
+}
+
+class _HvacModeButtonState extends State<_HvacModeButton> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
     final size = DeviceControlBar.buttonSizeFor(context);
     const radius = DeviceControlBar.buttonRadius;
-    final bool highlight = selected && !locked;
+    final bool highlight = widget.selected && !widget.locked;
+    final glyphSize = DeviceControlBar.glyphSizeFor(context);
 
-    // Bij blokkering tonen we de actieve modus alvast in zijn kleur als
-    // status; de niet-actieve modus blijft gedempt.
-    final Color iconColor = locked
-        ? (selected ? color : LuxeColors.inkSoft.withValues(alpha: 0.35))
-        : selected
-            ? color
+    final Color iconColor = widget.locked
+        ? (widget.selected
+            ? widget.color
+            : LuxeColors.inkSoft.withValues(alpha: 0.35))
+        : widget.selected
+            ? widget.color
             : LuxeColors.ink;
 
-    final Widget glyph = Icon(
-      icon,
-      size: DeviceControlBar.glyphSizeFor(context),
-      color: iconColor,
-    );
+    final Widget glyph = Icon(widget.icon, size: glyphSize, color: iconColor);
 
     Widget square;
     if (highlight) {
@@ -2432,8 +2356,8 @@ class _HvacModeButton extends StatelessWidget {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(radius),
-            color: color.withValues(alpha: 0.12),
-            border: Border.all(color: color.withValues(alpha: 0.45)),
+            color: widget.color.withValues(alpha: 0.12),
+            border: Border.all(color: widget.color.withValues(alpha: 0.45)),
           ),
           child: glyph,
         ),
@@ -2441,18 +2365,26 @@ class _HvacModeButton extends StatelessWidget {
     } else {
       // Inactief of vergrendeld: standaard witte knop-chrome.
       square = DeviceControlButtonSurface(
-        locked: locked,
+        locked: widget.locked,
+        pressed: _pressed,
         width: size,
         height: size,
         child: Center(child: glyph),
       );
     }
 
-    if (onTap == null) return square;
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: onTap,
-      child: square,
+    if (widget.onTap == null) {
+      return SizedBox(width: size, height: size, child: square);
+    }
+    return SizedBox(
+      width: size,
+      height: size,
+      child: PressScale(
+        onTap: widget.onTap!,
+        radius: radius,
+        onPressedChanged: (pressed) => setState(() => _pressed = pressed),
+        child: square,
+      ),
     );
   }
 }
@@ -2466,66 +2398,122 @@ abstract final class _HvacColors {
   static const Color cool = Color(0xFF5BA7E0);
 }
 
-/// Small demand indicator pill (warmtevraag / koudevraag).
-class _DemandBadge extends StatelessWidget {
-  const _DemandBadge({
-    required this.icon,
-    required this.label,
-    required this.active,
-    required this.activeColor,
+/// Tussenregel: gemeten temperatuur + warmte-/koudevraag.
+class _ClimateMeasuredStatusRow extends StatelessWidget {
+  const _ClimateMeasuredStatusRow({
+    required this.actual,
+    required this.isHeating,
+    required this.showDemandIcon,
+    required this.demandActive,
+    this.showMeasuredSlot = false,
+    this.accessoryIcon,
+    this.accessoryTooltip,
   });
-  final IconData icon;
-  final String   label;
-  final bool     active;
-  final Color    activeColor;
+
+  final double? actual;
+  final bool isHeating;
+  final bool showDemandIcon;
+  final bool demandActive;
+  /// Toon thermometer + waarde (of `--°` bij ontbrekende meting).
+  final bool showMeasuredSlot;
+  /// Icoon achter de meting (bijv. airco-modus).
+  final IconData? accessoryIcon;
+  final String? accessoryTooltip;
 
   @override
   Widget build(BuildContext context) {
-    final fg = active ? activeColor : LuxeColors.ink;
-    final bg = active
-        ? activeColor.withValues(alpha: 0.12)
-        : LuxeColors.surfaceDim.withValues(alpha: 0.4);
-    final border = active
-        ? activeColor.withValues(alpha: 0.4)
-        : LuxeColors.line;
+    final btn = DeviceControlBar.buttonSizeFor(context);
+    final glyph = DeviceControlBar.glyphSizeFor(context);
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: border),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: DeviceControlIcons.size, color: fg),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: fg,
-              fontWeight: active ? FontWeight.w600 : FontWeight.w400,
-            ),
-          ),
-          if (active) ...[
-            const SizedBox(width: 5),
-            Container(
-              width: 6,
-              height: 6,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: activeColor,
+    return Center(
+      child: DeviceControlButtonSurface(
+        width: DeviceCardScale.climateChipWidth(context),
+        height: btn,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.max,
+          children: [
+            if (showMeasuredSlot || actual != null) ...[
+              Icon(
+                Icons.device_thermostat_outlined,
+                size: glyph + 2,
+                color: LuxeColors.inkSoft,
               ),
-            ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  actual != null
+                      ? '${actual!.toStringAsFixed(1)}°'
+                      : '--°',
+                  maxLines: 1,
+                  overflow: TextOverflow.clip,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontSize: DeviceCardScale.measuredTempFontSize(context),
+                        fontWeight: FontWeight.w600,
+                        height: 1,
+                      ),
+                ),
+              ),
+            ],
+            if (showDemandIcon) ...[
+              if (showMeasuredSlot || actual != null) const SizedBox(width: 8),
+              Tooltip(
+                message: demandActive
+                    ? (isHeating
+                        ? 'Warmtevraag actief'
+                        : 'Koudevraag actief')
+                    : (isHeating
+                        ? 'Geen warmtevraag'
+                        : 'Geen koudevraag'),
+                child: _HvacDemandGlyph(
+                  heating: isHeating,
+                  active: demandActive,
+                ),
+              ),
+            ] else if (accessoryIcon != null) ...[
+              if (showMeasuredSlot || actual != null) const SizedBox(width: 8),
+              Tooltip(
+                message: accessoryTooltip ?? '',
+                child: Icon(
+                  accessoryIcon,
+                  size: glyph,
+                  color: LuxeColors.inkSoft,
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
 }
+
+/// Warmte-/koudevraag — alleen icoonkleur, geen apart vakje.
+class _HvacDemandGlyph extends StatelessWidget {
+  const _HvacDemandGlyph({
+    required this.heating,
+    required this.active,
+  });
+
+  final bool heating;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = heating ? _HvacColors.heat : _HvacColors.cool;
+    final icon = heating
+        ? Icons.local_fire_department_outlined
+        : Icons.ac_unit_outlined;
+
+    return Icon(
+      icon,
+      size: DeviceControlBar.glyphSizeFor(context),
+      color: active ? color : LuxeColors.inkSoft.withValues(alpha: 0.35),
+    );
+  }
+}
+
 class CameraTile extends ConsumerWidget {
   const CameraTile({super.key, required this.device});
   final Device device;
@@ -3144,6 +3132,7 @@ class _AcTileState extends ConsumerState<AcTile> {
       return _Placeholder(name: widget.device.name, hint: 'AC-config ontbreekt');
     }
     final bus = ref.watch(busProvider);
+
     final onOff = (cfg['onOff'] as Map).cast<String, dynamic>();
     final onStatusGa = onOff['statusGa'] as String? ?? onOff['ga'] as String;
     final on = bus.values[onStatusGa] == true || bus.values[onStatusGa] == 1;
@@ -3161,10 +3150,23 @@ class _AcTileState extends ConsumerState<AcTile> {
     final actual = actualV is num ? actualV.toDouble() : null;
 
     final mode = cfg['mode'] as Map<String, dynamic>?;
+    final modeOptions = (mode?['options'] as List?)
+            ?.cast<Map<String, dynamic>>() ??
+        const <Map<String, dynamic>>[];
+    final modeVisibility =
+        (cfg['modeVisibility'] as Map?)?.cast<String, dynamic>();
+    final visibleModeOptions =
+        acVisibleModeOptions(modeOptions, modeVisibility);
     final modeStatusGa =
         mode?['statusGa'] as String? ?? mode?['ga'] as String?;
     final modeVal = modeStatusGa == null ? null : bus.values[modeStatusGa];
     final activeMode = modeVal is num ? modeVal.toInt() : null;
+
+    final heatModeValue = acHvacModeValue(visibleModeOptions, heat: true);
+    final coolModeValue = acHvacModeValue(visibleModeOptions, heat: false);
+    final isHeating = activeMode != null && activeMode == heatModeValue;
+    final isCooling = activeMode != null && activeMode == coolModeValue;
+    final inHvacMode = isHeating || isCooling;
 
     final fanSpeed = cfg['fanSpeed'] as Map<String, dynamic>?;
     final fanStatusGa =
@@ -3181,6 +3183,26 @@ class _AcTileState extends ConsumerState<AcTile> {
       setState(() => _pendingSp = null);
     }
 
+    final showDemandIcon = on && inHvacMode;
+    final demandActive = showDemandIcon;
+
+    IconData acHeaderIcon = Icons.ac_unit_outlined;
+    String? acActiveModeLabel;
+    if (activeMode != null) {
+      for (final o in modeOptions) {
+        if ((o['value'] as num).toInt() == activeMode) {
+          acActiveModeLabel = o['label'] as String?;
+          acHeaderIcon = deviceControlOptionIcon(
+            iconKey: o['icon'] as String?,
+            label: o['label'] as String,
+          );
+          break;
+        }
+      }
+    }
+
+    final hasMeasuredTempConfig = actualGa != null;
+
     return DeviceTileShell(
       glow: on,
       child: Column(
@@ -3188,71 +3210,54 @@ class _AcTileState extends ConsumerState<AcTile> {
         children: [
           DeviceTileLayout.headerRow(
             context: context,
-            leading: DeviceTileIconBadge(icon: Icons.ac_unit, active: on),
+            leading: DeviceTileIconBadge(
+              icon: acHeaderIcon,
+              active: on,
+            ),
             content: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(widget.device.name,
-                    style: Theme.of(context).textTheme.titleLarge),
-                if (actual != null) ...[
-                  const SizedBox(height: DeviceTileLayout.titleStatusGap),
-                  Text('Nu ${actual.toStringAsFixed(1)} °C',
-                      style: Theme.of(context).textTheme.bodyMedium),
-                ] else if (!on) ...[
-                  const SizedBox(height: DeviceTileLayout.titleStatusGap),
-                  Text(
-                    'Kies modus en temperatuur, schakel daarna in.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: LuxeColors.inkSoft,
-                        ),
-                  ),
-                ],
+                Text(
+                  widget.device.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                const SizedBox(height: DeviceTileLayout.titleStatusGap),
+                Text(
+                  on ? 'Aan' : 'Uit',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
               ],
             ),
-            trailing: DeviceTileLayout.trailingSwitch(
-              context: context,
-              value: on,
-              onChanged: (v) {
-                ref.read(busProvider.notifier).send({
-                  'kind': 'ac.on',
-                  'deviceId': widget.device.id,
-                  'on': v,
-                });
-              },
-            ),
-          ),
-          DeviceCardBody(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-          if (mode != null) ...[
-            DeviceControlSection(
-              title: 'MODUS',
-              child: DeviceControlBar.gridAuto(
-                context,
-                [
-                  for (final o
-                      in (mode['options'] as List).cast<Map<String, dynamic>>())
-                    DeviceControlItem(
-                      icon: deviceControlOptionIcon(
-                        iconKey: o['icon'] as String?,
-                        label: o['label'] as String,
-                      ),
-                      label: o['label'] as String,
-                      labelMode: DeviceControlLabelMode.iconOnly,
-                      active: (o['value'] as num).toInt() == activeMode,
-                      onTap: () {
-                        ref.read(busProvider.notifier).send({
-                          'kind': 'ac.mode',
-                          'deviceId': widget.device.id,
-                          'value': (o['value'] as num).toInt(),
-                        });
-                      },
-                    ),
-                ],
+            trailing: Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: DeviceTileLayout.trailingSwitch(
+                context: context,
+                value: on,
+                onChanged: (v) {
+                  ref.read(busProvider.notifier).send({
+                    'kind': 'ac.on',
+                    'deviceId': widget.device.id,
+                    'on': v,
+                  });
+                },
               ),
             ),
-          ],
+          ),
+          SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+          _ClimateMeasuredStatusRow(
+            actual: hasMeasuredTempConfig ? actual : null,
+            showMeasuredSlot: true,
+            isHeating: isHeating,
+            showDemandIcon: showDemandIcon,
+            demandActive: demandActive,
+            accessoryIcon:
+                !showDemandIcon && activeMode != null && !inHvacMode
+                    ? acHeaderIcon
+                    : null,
+            accessoryTooltip: acActiveModeLabel,
+          ),
           SizedBox(height: DeviceControlBar.sectionSpacing(context)),
           DeviceControlSetpointRow(
             value: setpoint,
@@ -3267,43 +3272,76 @@ class _AcTileState extends ConsumerState<AcTile> {
               commitSp(v);
             },
           ),
-          if (fanSpeed != null) ...[
+          if (visibleModeOptions.isNotEmpty || fanSpeed != null) ...[
             SizedBox(height: DeviceControlBar.sectionSpacing(context)),
-            DeviceControlSection(
-              title: 'VENTILATOR',
-              child: DeviceControlBar.gridAuto(
-                context,
-                [
-                  for (final o in (fanSpeed['options'] as List)
-                      .cast<Map<String, dynamic>>())
-                    () {
-                      final fanLabel = o['label'] as String;
-                      final numeric = deviceControlNumericLabel(fanLabel);
-                      return DeviceControlItem(
-                        icon: numeric == null
-                            ? deviceControlOptionIcon(label: fanLabel)
-                            : null,
-                        label: numeric ?? fanLabel,
-                        labelMode: numeric != null
-                            ? DeviceControlLabelMode.numeric
-                            : DeviceControlLabelMode.iconOnly,
-                        active: (o['value'] as num).toInt() == activeFan,
-                        onTap: () {
-                          ref.read(busProvider.notifier).send({
-                            'kind': 'ac.fanSpeed',
-                            'deviceId': widget.device.id,
-                            'value': (o['value'] as num).toInt(),
-                          });
-                        },
-                      );
-                    }(),
+            DeviceCardBody(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (visibleModeOptions.isNotEmpty)
+                    DeviceControlSection(
+                      title: 'MODUS',
+                      child: DeviceControlBar.gridAuto(
+                        context,
+                        [
+                          for (final o in visibleModeOptions)
+                            DeviceControlItem(
+                              icon: deviceControlOptionIcon(
+                                iconKey: o['icon'] as String?,
+                                label: o['label'] as String,
+                              ),
+                              label: o['label'] as String,
+                              labelMode: DeviceControlLabelMode.iconOnly,
+                              active: (o['value'] as num).toInt() == activeMode,
+                              onTap: () {
+                                ref.read(busProvider.notifier).send({
+                                  'kind': 'ac.mode',
+                                  'deviceId': widget.device.id,
+                                  'value': (o['value'] as num).toInt(),
+                                });
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                  if (visibleModeOptions.isNotEmpty && fanSpeed != null)
+                    SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+                  if (fanSpeed != null)
+                    DeviceControlSection(
+                      title: 'VENTILATOR',
+                      child: DeviceControlBar.gridAuto(
+                        context,
+                        [
+                          for (final o in (fanSpeed['options'] as List)
+                              .cast<Map<String, dynamic>>())
+                            () {
+                              final fanLabel = o['label'] as String;
+                              final numeric = deviceControlNumericLabel(fanLabel);
+                              return DeviceControlItem(
+                                icon: numeric == null
+                                    ? deviceControlOptionIcon(label: fanLabel)
+                                    : null,
+                                label: numeric ?? fanLabel,
+                                labelMode: numeric != null
+                                    ? DeviceControlLabelMode.numeric
+                                    : DeviceControlLabelMode.iconOnly,
+                                active: (o['value'] as num).toInt() == activeFan,
+                                onTap: () {
+                                  ref.read(busProvider.notifier).send({
+                                    'kind': 'ac.fanSpeed',
+                                    'deviceId': widget.device.id,
+                                    'value': (o['value'] as num).toInt(),
+                                  });
+                                },
+                              );
+                            }(),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),
           ],
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -3568,6 +3606,16 @@ class UniversalTile extends ConsumerWidget {
         (cfg['buttons'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final iconName = cfg['icon'] as String?;
     final iconData = universalIconData(iconName);
+    final headerGlyph = universalIconGlyph(
+          iconName,
+          size: DeviceCardScale.glyphSize(context),
+          color: LuxeColors.ink,
+        ) ??
+        iconWidgetForData(
+          iconData,
+          size: DeviceCardScale.glyphSize(context),
+          color: LuxeColors.ink,
+        );
     final bus = ref.watch(busProvider);
 
     Future<void> press(Map<String, dynamic> b, {bool? on}) async {
@@ -3593,12 +3641,23 @@ class UniversalTile extends ConsumerWidget {
       final btnIcon = b['icon'] as String?;
       final leadingIcon =
           btnIcon != null ? universalIconData(btnIcon) : iconData;
+      final leadingGlyph = universalIconGlyph(
+            btnIcon ?? iconName,
+            size: DeviceCardScale.glyphSize(context),
+            color: on ? LuxeColors.brass : LuxeColors.ink,
+          ) ??
+          iconWidgetForData(
+            leadingIcon,
+            size: DeviceCardScale.glyphSize(context),
+            color: on ? LuxeColors.brass : LuxeColors.ink,
+          );
       return DeviceTileShell(
         glow: on,
         child: DeviceTileLayout.headerRow(
           context: context,
           leading: DeviceTileIconBadge(
-            icon: leadingIcon,
+            icon: leadingGlyph == null ? leadingIcon : null,
+            glyph: leadingGlyph,
             active: on,
             onTap: () => press(b, on: !on),
           ),
@@ -3643,7 +3702,10 @@ class UniversalTile extends ConsumerWidget {
         children: [
           DeviceTileLayout.headerRow(
             context: context,
-            leading: DeviceTileIconBadge(icon: iconData),
+            leading: DeviceTileIconBadge(
+              icon: headerGlyph == null ? iconData : null,
+              glyph: headerGlyph,
+            ),
             content: Text(device.name,
                 style: Theme.of(context).textTheme.titleLarge),
           ),
@@ -4280,52 +4342,44 @@ class MeldingTile extends ConsumerWidget {
     return DeviceTileShell(
       glow: anyUrgent,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ── Header ──────────────────────────────────────────────────
-          Row(
-            children: [
-              Container(
-                width: DeviceControlBar.tileIconSize,
-                height: DeviceControlBar.tileIconSize,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: accentColor.withValues(alpha: 0.12),
-                  border: Border.all(
-                      color: accentColor.withValues(alpha: 0.38)),
-                ),
-                child: Icon(
-                  worstUrgency != null
-                      ? _urgencyIcon(worstUrgency)
-                      : Icons.notifications_outlined,
-                  size: DeviceControlBar.tileGlyphSize,
-                  color: accentColor,
-                ),
+          DeviceTileLayout.headerRow(
+            context: context,
+            leading: _MeldingIconBadge(
+              urgency: worstUrgency,
+              accentColor: accentColor,
+            ),
+            content: Text(
+              device.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            trailing: DeviceTileLayout.statusIconSlot(
+              context,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: anyActive
+                    ? _MeldingActiveButton(
+                        urgency: worstUrgency!,
+                        count: activeAll.length,
+                      )
+                    : const _MeldingOkButton(),
               ),
-              const SizedBox(width: DeviceTileLayout.iconGap),
-              Expanded(
-                child: Text(device.name,
-                    style: Theme.of(context).textTheme.titleLarge),
-              ),
-              if (anyActive)
-                _MeldingBadge(
-                  urgency: worstUrgency!,
-                  count: activeAll.length,
-                )
-              else
-                const _OkBadge(),
-            ],
+            ),
           ),
-          const SizedBox(height: 14),
-          // ── Alert body ──────────────────────────────────────────────
-          if (rawItems.isEmpty)
+          if (rawItems.isEmpty) ...[
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
             Text(
               'Geen meldingen geconfigureerd.',
-              style: TextStyle(color: Colors.grey[500], fontSize: 12),
-            )
-          else ...[
-            // Status: active severity chips, or a green "all clear" bar.
-            if (anyActive)
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: LuxeColors.inkSoft,
+                  ),
+            ),
+          ] else ...[
+            if (anyActive) ...[
+              SizedBox(height: DeviceControlBar.sectionSpacing(context)),
               Wrap(
                 spacing: 6,
                 runSpacing: 4,
@@ -4340,33 +4394,9 @@ class MeldingTile extends ConsumerWidget {
                         urgency: 'minder_belangrijk',
                         count: minderBelangrijk.length),
                 ],
-              )
-            else
-              const Padding(
-                padding: EdgeInsets.only(bottom: 4),
-                child: Row(
-                  children: [
-                    Icon(Icons.check_circle_outline_rounded,
-                        size: 14, color: Color(0xFF2E7D32)),
-                    SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        'Geen actieve meldingen',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Color(0xFF2E7D32),
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
               ),
-            const SizedBox(height: 10),
-            // Full overview: every configured notification, so the user knows
-            // which alerts to expect. Active ones are coloured, inactive ones
-            // are muted.
+            ],
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
             for (final item in rawItems)
               _MeldingAlertRow(
                 item: item,
@@ -4382,69 +4412,141 @@ class MeldingTile extends ConsumerWidget {
   }
 }
 
-class _MeldingBadge extends StatelessWidget {
-  const _MeldingBadge({required this.urgency, required this.count});
-  final String urgency;
-  final int count;
+/// Vierkant meldingen-icoon — zelfde maat als andere apparaatbadges.
+class _MeldingIconBadge extends StatelessWidget {
+  const _MeldingIconBadge({
+    required this.urgency,
+    required this.accentColor,
+  });
+
+  final String? urgency;
+  final Color accentColor;
 
   @override
   Widget build(BuildContext context) {
-    final color = MeldingTile._urgencyColor(urgency);
-    final bg = MeldingTile._urgencyBg(urgency);
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.5)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(MeldingTile._urgencyIcon(urgency), size: 14, color: color),
-          const SizedBox(width: 4),
-          Text(
-            '$count',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: color,
-            ),
+    final size = DeviceCardScale.iconBadgeSize(context);
+    final radius = BorderRadius.circular(DeviceCardScale.iconRadius(context));
+    final glyph = DeviceCardScale.glyphSize(context);
+    final active = urgency != null;
+
+    return SizedBox(
+      width: size,
+      height: size,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: radius,
+          color: active
+              ? accentColor.withValues(alpha: 0.14)
+              : LuxeColors.surfaceDim.withValues(alpha: 0.7),
+          border: Border.all(
+            color: active
+                ? accentColor.withValues(alpha: 0.38)
+                : LuxeColors.line,
           ),
-        ],
+        ),
+        child: Center(
+          child: Icon(
+            urgency != null
+                ? MeldingTile._urgencyIcon(urgency!)
+                : Icons.notifications_outlined,
+            size: glyph,
+            color: active ? accentColor : LuxeColors.ink,
+          ),
+        ),
       ),
     );
   }
 }
 
-class _OkBadge extends StatelessWidget {
-  const _OkBadge();
+/// Groene OK-indicator — zelfde 56×56 als aan/uit-knop.
+class _MeldingOkButton extends StatelessWidget {
+  const _MeldingOkButton();
+
+  static const _ok = Color(0xFF2E7D32);
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFE8F5E9),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-            color: const Color(0xFF2E7D32).withValues(alpha: 0.4)),
-      ),
-      child: const Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.check_circle_outline_rounded,
-              size: 14, color: Color(0xFF2E7D32)),
-          SizedBox(width: 4),
-          Text(
-            'OK',
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF2E7D32),
+    final size = DeviceControlBar.buttonSizeFor(context);
+    final glyph = DeviceControlBar.glyphSizeFor(context);
+
+    return SizedBox(
+      width: size,
+      height: size,
+      child: DeviceControlButtonSurface(
+        width: size,
+        height: size,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_rounded, size: glyph, color: _ok),
+            const SizedBox(height: 2),
+            Text(
+              'OK',
+              style: TextStyle(
+                fontSize: glyph * 0.45,
+                fontWeight: FontWeight.w700,
+                color: _ok,
+                height: 1,
+                letterSpacing: 0.4,
+              ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Actieve meldingen — zelfde 56×56 als aan/uit-knop.
+class _MeldingActiveButton extends StatelessWidget {
+  const _MeldingActiveButton({
+    required this.urgency,
+    required this.count,
+  });
+
+  final String urgency;
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = DeviceControlBar.buttonSizeFor(context);
+    final glyph = DeviceControlBar.glyphSizeFor(context);
+    final color = MeldingTile._urgencyColor(urgency);
+
+    return SizedBox(
+      width: size,
+      height: size,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(DeviceControlBar.buttonRadius),
+          boxShadow: DeviceControlBar.buttonShadows(active: true),
+        ),
+        child: Container(
+          width: size,
+          height: size,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(DeviceControlBar.buttonRadius),
+            color: color.withValues(alpha: 0.12),
+            border: Border.all(color: color.withValues(alpha: 0.45)),
           ),
-        ],
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(MeldingTile._urgencyIcon(urgency), size: glyph, color: color),
+              const SizedBox(height: 2),
+              Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: glyph * 0.5,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                  height: 1,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -4495,7 +4597,6 @@ class _MeldingAlertRow extends StatelessWidget {
     final urgency = item['urgency'] as String? ?? 'minder_belangrijk';
     final activeColor = MeldingTile._urgencyColor(urgency);
     final inactiveInk = LuxeColors.ink.withValues(alpha: 0.72);
-    final inactiveMuted = LuxeColors.inkSoft.withValues(alpha: 0.85);
     final iconKey = item['icon'] as String?;
     final label = active
         ? (item['activeLabel'] as String? ??
@@ -4505,53 +4606,86 @@ class _MeldingAlertRow extends StatelessWidget {
     final iconData =
         (iconKey != null ? kUniversalIconMap[iconKey] : null) ??
             MeldingTile._urgencyIcon(urgency);
+    final btn = DeviceControlBar.buttonSizeFor(context);
+    final glyph = DeviceControlBar.glyphSizeFor(context);
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-        decoration: BoxDecoration(
-          color: active
-              ? MeldingTile._urgencyBg(urgency)
-              : LuxeColors.surfaceDim.withValues(alpha: 0.55),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: active
-                ? activeColor.withValues(alpha: 0.35)
-                : LuxeColors.line.withValues(alpha: 0.9),
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(
-              iconData,
-              size: active ? 18 : 17,
-              color: active ? activeColor : inactiveInk,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: active ? 15 : 14,
-                  color: active ? activeColor : inactiveInk,
-                  fontWeight: active ? FontWeight.w600 : FontWeight.w500,
-                  height: 1.25,
+      padding: const EdgeInsets.only(bottom: DeviceControlBar.gap),
+      child: SizedBox(
+        height: btn,
+        width: double.infinity,
+        child: active
+            ? DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius:
+                      BorderRadius.circular(DeviceControlBar.buttonRadius),
+                  boxShadow: DeviceControlBar.buttonShadows(active: true),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    borderRadius:
+                        BorderRadius.circular(DeviceControlBar.buttonRadius),
+                    color: MeldingTile._urgencyBg(urgency),
+                    border: Border.all(
+                      color: activeColor.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(iconData, size: glyph, color: activeColor),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontSize: 14,
+                                color: activeColor,
+                                fontWeight: FontWeight.w600,
+                                height: 1.2,
+                              ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        MeldingTile._urgencyLabel(urgency),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.6,
+                          color: activeColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : DeviceControlButtonSurface(
+                width: double.infinity,
+                height: btn,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    Icon(iconData, size: glyph, color: inactiveInk),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontSize: 14,
+                              color: inactiveInk,
+                              fontWeight: FontWeight.w500,
+                              height: 1.2,
+                            ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
-            Text(
-              active ? MeldingTile._urgencyLabel(urgency) : 'INACTIEF',
-              style: TextStyle(
-                fontSize: active ? 10 : 11,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.6,
-                color: active ? activeColor : inactiveMuted,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

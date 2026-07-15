@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:go_router/go_router.dart';
 
 import '../api.dart';
+import '../display_panel_config.dart';
 import '../media_api.dart';
 import '../models.dart';
 import '../schedule_api.dart';
@@ -57,6 +58,7 @@ class SettingsScreen extends ConsumerWidget {
                       canEditSchedules: canEditSchedules,
                     ),
                   ),
+                  const SliverToBoxAdapter(child: _DisplayPanelSection()),
                   const SliverToBoxAdapter(child: _SpotifySection()),
                   const SliverToBoxAdapter(child: _VersionFooter()),
                   const SliverToBoxAdapter(child: SizedBox(height: 48)),
@@ -345,6 +347,370 @@ class SettingsScreen extends ConsumerWidget {
 
 /// Lets the customer connect their own Spotify account (one-time OAuth).
 /// Search/play then works inside the player popups via Spotify Connect.
+class _DisplayPanelSection extends ConsumerStatefulWidget {
+  const _DisplayPanelSection();
+
+  @override
+  ConsumerState<_DisplayPanelSection> createState() =>
+      _DisplayPanelSectionState();
+}
+
+class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
+  bool _saving = false;
+
+  Future<void> _save(DisplayPanelSettings next) async {
+    setState(() => _saving = true);
+    try {
+      await ref.read(displayPanelSettingsProvider.notifier).save(next);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  List<({String id, String label})> _roomOptions(HouseConfig cfg) {
+    final out = <({String id, String label})>[];
+    for (final f in cfg.floors) {
+      for (final r in f.rooms) {
+        out.add((id: r.id, label: '${f.name} · ${r.name}'));
+      }
+    }
+    return out;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final settingsAsync = ref.watch(displayPanelSettingsProvider);
+    final cfg = ref.watch(configProvider).maybeWhen(
+          data: (c) => c,
+          orElse: () => null,
+        );
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(28, 8, 28, 20),
+      child: GlassCard(
+        padding: const EdgeInsets.fromLTRB(24, 22, 16, 22),
+        radius: 28,
+        child: settingsAsync.when(
+          loading: () => const Padding(
+            padding: EdgeInsets.all(8),
+            child: SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+          error: (e, _) => Text('Wandtablet-instellingen: $e'),
+          data: (settings) {
+            final rooms = cfg != null ? _roomOptions(cfg) : const [];
+            final useGa = settings.temperatureGa != null &&
+                settings.temperatureGa!.trim().isNotEmpty;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.tablet_android_outlined,
+                        color: LuxeColors.ink, size: 22),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'WANDTABLET',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                    ),
+                    if (_saving)
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Android wandtablet: na inactiviteit terug naar home, '
+                  'daarna screensaver met klok en optionele ruimtetemperatuur.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: LuxeColors.inkSoft,
+                      ),
+                ),
+                const SizedBox(height: 16),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Inactiviteit & screensaver'),
+                  subtitle: const Text('Alleen actief op Android-app'),
+                  value: settings.enabled,
+                  onChanged: _saving
+                      ? null
+                      : (v) => _save(settings.copyWith(enabled: v)),
+                ),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: settings.panelRoomId != null &&
+                          rooms.any((r) => r.id == settings.panelRoomId)
+                      ? settings.panelRoomId
+                      : null,
+                  decoration: const InputDecoration(
+                    labelText: 'Ruimte van dit scherm',
+                    helperText:
+                        'Koppel het wandtablet aan de ruimte waar het hangt',
+                    border: OutlineInputBorder(),
+                  ),
+                  items: [
+                    const DropdownMenuItem(
+                      value: null,
+                      child: Text('Niet gekoppeld'),
+                    ),
+                    ...rooms.map(
+                      (r) => DropdownMenuItem(
+                        value: r.id,
+                        child: Text(r.label),
+                      ),
+                    ),
+                  ],
+                  onChanged: settings.enabled && !_saving
+                      ? (id) {
+                          if (id == null) {
+                            _save(settings.copyWith(clearPanelRoom: true));
+                          } else {
+                            final label =
+                                rooms.firstWhere((r) => r.id == id).label;
+                            _save(settings.copyWith(
+                              panelRoomId: id,
+                              panelRoomName: label,
+                            ));
+                          }
+                        }
+                      : null,
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Geen screensaver bij muziek'),
+                  subtitle: Text(
+                    settings.panelRoomId != null
+                        ? 'Screensaver uit zolang er muziek speelt in '
+                            '${settings.panelRoomName ?? 'de gekoppelde ruimte'}'
+                        : 'Kies eerst een ruimte om dit te activeren',
+                  ),
+                  value: settings.suppressScreensaverWhenMusicPlaying &&
+                      settings.panelRoomId != null,
+                  onChanged: settings.enabled &&
+                          !_saving &&
+                          settings.panelRoomId != null
+                      ? (v) => _save(settings.copyWith(
+                            suppressScreensaverWhenMusicPlaying: v,
+                          ))
+                      : null,
+                ),
+                const SizedBox(height: 8),
+                _MinutesDropdown(
+                  label: 'Terug naar beginscherm',
+                  value: settings.idleHomeMinutes,
+                  enabled: settings.enabled && !_saving,
+                  onChanged: (v) =>
+                      _save(settings.copyWith(idleHomeMinutes: v)),
+                ),
+                const SizedBox(height: 12),
+                _MinutesDropdown(
+                  label: 'Screensaver',
+                  value: settings.screensaverMinutes,
+                  enabled: settings.enabled && !_saving,
+                  allowOff: true,
+                  onChanged: (v) =>
+                      _save(settings.copyWith(screensaverMinutes: v)),
+                ),
+                const SizedBox(height: 16),
+                Text('Temperatuur op screensaver',
+                    style: Theme.of(context).textTheme.labelMedium),
+                const SizedBox(height: 8),
+                SegmentedButton<bool>(
+                  segments: const [
+                    ButtonSegment(value: false, label: Text('Ruimte')),
+                    ButtonSegment(value: true, label: Text('KNX GA')),
+                  ],
+                  selected: {useGa},
+                  onSelectionChanged: settings.enabled && !_saving
+                      ? (sel) {
+                          if (sel.first) {
+                            _save(settings.copyWith(
+                              clearTemperatureRoom: true,
+                              temperatureGa: settings.temperatureGa ?? '',
+                            ));
+                          } else {
+                            _save(settings.copyWith(
+                              clearTemperatureGa: true,
+                              temperatureRoomId: settings.temperatureRoomId ??
+                                  (rooms.isNotEmpty ? rooms.first.id : null),
+                            ));
+                          }
+                        }
+                      : null,
+                ),
+                const SizedBox(height: 12),
+                if (useGa)
+                  _TemperatureGaField(
+                    enabled: settings.enabled && !_saving,
+                    initialGa: settings.temperatureGa ?? '',
+                    onSave: (v) => _save(settings.copyWith(
+                      temperatureGa: v.trim(),
+                      clearTemperatureRoom: true,
+                    )),
+                  )
+                else
+                  DropdownButtonFormField<String>(
+                    value: settings.temperatureRoomId != null &&
+                            rooms.any((r) => r.id == settings.temperatureRoomId)
+                        ? settings.temperatureRoomId
+                        : null,
+                    decoration: const InputDecoration(
+                      labelText: 'Ruimte',
+                      border: OutlineInputBorder(),
+                    ),
+                    items: [
+                      const DropdownMenuItem(
+                        value: null,
+                        child: Text('Geen temperatuur'),
+                      ),
+                      ...rooms.map(
+                        (r) => DropdownMenuItem(
+                          value: r.id,
+                          child: Text(r.label),
+                        ),
+                      ),
+                    ],
+                    onChanged: settings.enabled && !_saving
+                        ? (id) {
+                            if (id == null) {
+                              _save(settings.copyWith(clearTemperatureRoom: true));
+                            } else {
+                              final label =
+                                  rooms.firstWhere((r) => r.id == id).label;
+                              _save(settings.copyWith(
+                                temperatureRoomId: id,
+                                temperatureRoomName: label,
+                                clearTemperatureGa: true,
+                              ));
+                            }
+                          }
+                        : null,
+                  ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: _saving
+                        ? null
+                        : () => ref
+                            .read(displayPanelSettingsProvider.notifier)
+                            .resetToHouseDefaults(),
+                    child: const Text('Herstel house.json defaults'),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _TemperatureGaField extends StatefulWidget {
+  const _TemperatureGaField({
+    required this.enabled,
+    required this.initialGa,
+    required this.onSave,
+  });
+
+  final bool enabled;
+  final String initialGa;
+  final ValueChanged<String> onSave;
+
+  @override
+  State<_TemperatureGaField> createState() => _TemperatureGaFieldState();
+}
+
+class _TemperatureGaFieldState extends State<_TemperatureGaField> {
+  late final TextEditingController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = TextEditingController(text: widget.initialGa);
+  }
+
+  @override
+  void didUpdateWidget(covariant _TemperatureGaField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialGa != widget.initialGa &&
+        _ctrl.text != widget.initialGa) {
+      _ctrl.text = widget.initialGa;
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      enabled: widget.enabled,
+      controller: _ctrl,
+      decoration: const InputDecoration(
+        labelText: 'Groepadres temperatuur',
+        hintText: 'bijv. 4/1/10',
+        border: OutlineInputBorder(),
+      ),
+      onSubmitted: widget.enabled ? widget.onSave : null,
+    );
+  }
+}
+
+class _MinutesDropdown extends StatelessWidget {
+  const _MinutesDropdown({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.enabled = true,
+    this.allowOff = false,
+  });
+
+  final String label;
+  final int value;
+  final bool enabled;
+  final bool allowOff;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final options = allowOff
+        ? [0, 1, 2, 3, 5, 10, 15, 30, 60]
+        : [1, 2, 3, 5, 10, 15, 30, 60];
+    return DropdownButtonFormField<int>(
+      value: options.contains(value) ? value : options.first,
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
+      items: options
+          .map(
+            (m) => DropdownMenuItem(
+              value: m,
+              child: Text(
+                allowOff && m == 0 ? 'Uit' : '$m min',
+              ),
+            ),
+          )
+          .toList(),
+      onChanged: enabled ? (v) => v != null ? onChanged(v) : null : null,
+    );
+  }
+}
+
 class _SpotifySection extends ConsumerWidget {
   const _SpotifySection();
 

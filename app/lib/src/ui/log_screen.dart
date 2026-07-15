@@ -1,11 +1,14 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../log_api.dart';
 import '../theme.dart';
 import 'responsive.dart';
+import 'widgets/back_pill.dart';
+import 'widgets/function_screen_header.dart';
 import 'widgets/luxe_backdrop.dart';
 
 /// Time-series graph for a single log (thermostat or custom). Users can pick a
@@ -131,75 +134,71 @@ class _LogScreenState extends ConsumerState<LogScreen> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        foregroundColor: LuxeColors.ink,
-        title: Text(
-          title,
-          style: const TextStyle(
-            color: LuxeColors.ink,
-            fontWeight: FontWeight.w500,
-            letterSpacing: 0.4,
-          ),
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Vernieuwen',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _refresh,
-          ),
-        ],
-      ),
       body: LuxeBackdrop(
-        child: SafeArea(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-              context.hPad,
-              kToolbarHeight + 8,
-              context.hPad,
-              16,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            FunctionScreenHeader(
+              onBack: () => context.pop(),
+              title: title,
+              trailing: HeaderIconButton(
+                icon: Icons.refresh_rounded,
+                tooltip: 'Vernieuwen',
+                onTap: _refresh,
+              ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _RangeBar(
-                  selectedMs: _rangeMs,
-                  onSelect: _setRange,
-                ),
-                const SizedBox(height: 12),
-                _PanBar(
-                  rangeMs: _rangeMs,
-                  atNow: atNow,
-                  onEarlier: () => _pan(-_rangeMs ~/ 2),
-                  onLater: () => _pan(_rangeMs ~/ 2),
-                  onNow: _jumpToNow,
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: async.when(
-                    loading: () => const Center(
-                      child:
-                          CircularProgressIndicator(color: LuxeColors.brass),
-                    ),
-                    error: (e, _) => Center(
-                      child: Text(
-                        'Kan log niet laden:\n$e',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(color: LuxeColors.inkSoft),
+            Expanded(
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    context.hPad,
+                    8,
+                    context.hPad,
+                    16,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _RangeBar(
+                        selectedMs: _rangeMs,
+                        onSelect: _setRange,
                       ),
-                    ),
-                    data: (d) => _LogChartCard(
-                      data: d,
-                      rangeMs: _rangeMs,
-                      mode: widget.mode,
-                    ),
+                      const SizedBox(height: 12),
+                      _PanBar(
+                        rangeMs: _rangeMs,
+                        atNow: atNow,
+                        onEarlier: () => _pan(-_rangeMs ~/ 2),
+                        onLater: () => _pan(_rangeMs ~/ 2),
+                        onNow: _jumpToNow,
+                      ),
+                      const SizedBox(height: 16),
+                      Expanded(
+                        child: async.when(
+                          loading: () => const Center(
+                            child: CircularProgressIndicator(
+                                color: LuxeColors.brass),
+                          ),
+                          error: (e, _) => Center(
+                            child: Text(
+                              'Kan log niet laden:\n$e',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: LuxeColors.inkSoft),
+                            ),
+                          ),
+                          data: (d) => _LogChartCard(
+                            data: d,
+                            rangeMs: _rangeMs,
+                            mode: widget.mode,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

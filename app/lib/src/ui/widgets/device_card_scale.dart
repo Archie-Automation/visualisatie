@@ -33,9 +33,27 @@ abstract final class DeviceCardScale {
       context.isPhone ? 14 : 18;
 
   static double setpointFontSize(BuildContext context) {
-    if (context.isPhone) return 40;
+    if (context.isPhone) return 34;
     if (context.isTablet) return 56;
     return 48;
+  }
+
+  /// Gemeten temperatuur op climate-tegels — tussen titel en setpoint in.
+  static double measuredTempFontSize(BuildContext context) {
+    if (context.isPhone) return 20;
+    if (context.isTablet) return 24;
+    return 22;
+  }
+
+  /// ± knoppen — vierkant, niet de brede climate-chip.
+  static double setpointStepButtonSize(BuildContext context) =>
+      buttonSize(context);
+
+  /// Breedte van het gemeten-temp-vakje.
+  static double climateChipWidth(BuildContext context) {
+    if (context.isPhone) return 148;
+    if (context.isTablet) return 164;
+    return 156;
   }
 
   static double heroValueFontSize(BuildContext context) {
@@ -45,7 +63,7 @@ abstract final class DeviceCardScale {
   }
 
   static int maxGridColumns(BuildContext context) {
-    if (context.isPhone) return 3;
+    if (context.isPhone) return 5;
     return 4;
   }
 

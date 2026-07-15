@@ -647,6 +647,8 @@ class HouseConfig {
   final List<Device> intercoms;
   final List<Scene> scenes;
   final CurrentUser? me;
+  /// Wandtablet idle / screensaver defaults uit house.json (`displayPanel`).
+  final Map<String, dynamic>? displayPanelJson;
 
   const HouseConfig({
     required this.projectId,
@@ -657,6 +659,7 @@ class HouseConfig {
     required this.intercoms,
     required this.scenes,
     this.me,
+    this.displayPanelJson,
   });
 
   factory HouseConfig.fromJson(Map<String, dynamic> j) {
@@ -685,6 +688,7 @@ class HouseConfig {
           .map((s) => Scene.fromJson(s as Map<String, dynamic>))
           .toList(),
       me: me,
+      displayPanelJson: j['displayPanel'] as Map<String, dynamic>?,
     );
   }
 
