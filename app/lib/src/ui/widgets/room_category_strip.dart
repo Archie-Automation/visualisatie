@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../room_control_category.dart';
 import '../../theme.dart';
 import '../responsive.dart';
+import 'heater_icon.dart';
 
 /// Horizontale chips (scene-stijl) per bedieningssegment; navigeert naar
 /// `/floor/:floorId/room/:roomId/category/:slug`.
@@ -105,7 +106,14 @@ class _SegmentChipState extends State<_SegmentChip> {
                   color: accent.withValues(alpha: 0.15),
                   border: Border.all(color: accent.withValues(alpha: 0.45)),
                 ),
-                child: Icon(widget.segment.icon, size: 18, color: accent),
+                child: Center(
+                  child: iconWidgetForData(
+                        widget.segment.icon,
+                        size: 18,
+                        color: accent,
+                      ) ??
+                      Icon(widget.segment.icon, size: 18, color: accent),
+                ),
               ),
               SizedBox(
                 width: 118 - 24,

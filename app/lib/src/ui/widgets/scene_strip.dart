@@ -21,6 +21,7 @@ class SceneStrip extends ConsumerWidget {
     required this.onEdited,
     this.roomId,
     this.dark = false,
+    this.scrollController,
   });
 
   /// Current scenes to display.
@@ -39,6 +40,8 @@ class SceneStrip extends ConsumerWidget {
   /// Use light foreground on dark ambient backgrounds (intercom etc.).
   final bool dark;
 
+  final ScrollController? scrollController;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final count = scenes.length + (canEdit ? 1 : 0);
@@ -49,6 +52,7 @@ class SceneStrip extends ConsumerWidget {
     return SizedBox(
       height: 124 + vPad * 2,
       child: ListView.separated(
+        controller: scrollController,
         scrollDirection: Axis.horizontal,
         primary: false,
         clipBehavior: Clip.none,

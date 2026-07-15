@@ -22,6 +22,7 @@ import 'installer/house_editor_screen.dart';
 import 'intercom/intercom_sip_providers.dart';
 import 'ui/alarm_screen.dart';
 import 'ui/widgets/incoming_call_overlay.dart';
+import 'ui/widgets/inactivity_layer.dart';
 import 'ui/widgets/media_tile.dart';
 import 'ui/widgets/satel_entry_delay_layer.dart';
 
@@ -259,7 +260,10 @@ class _LuxeKnxAppState extends ConsumerState<LuxeKnxApp>
       builder: (context, child) => SatelEntryDelayLayer(
         child: SipIncomingCallLayer(
           child: IncomingCallOverlay(
-            child: child ?? const SizedBox.shrink(),
+            child: InactivityLayer(
+              router: _router,
+              child: child ?? const SizedBox.shrink(),
+            ),
           ),
         ),
       ),

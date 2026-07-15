@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 
 import '../api.dart';
 import '../fireplace_virtual.dart';
+import '../idle_reset.dart';
 import '../media_api.dart';
 import '../models.dart';
 import '../room_control_category.dart';
@@ -15,6 +16,7 @@ import '../theme.dart';
 import '../user_favorite_shortcuts.dart';
 import 'responsive.dart';
 import 'widgets/glass_card.dart';
+import 'widgets/heater_icon.dart';
 import 'widgets/room_category_strip.dart';
 import 'widgets/luxe_backdrop.dart';
 import 'widgets/scene_strip.dart';
@@ -70,6 +72,36 @@ class _DashboardBody extends ConsumerStatefulWidget {
 
 class _DashboardBodyState extends ConsumerState<_DashboardBody> {
   int _floorIndex = 0;
+  late final ScrollController _mainScroll;
+  late final ScrollController _floorScroll;
+  late final ScrollController _systemScroll;
+  late final ScrollController _sceneScroll;
+
+  @override
+  void initState() {
+    super.initState();
+    _mainScroll = ScrollController();
+    _floorScroll = ScrollController();
+    _systemScroll = ScrollController();
+    _sceneScroll = ScrollController();
+  }
+
+  @override
+  void dispose() {
+    _mainScroll.dispose();
+    _floorScroll.dispose();
+    _systemScroll.dispose();
+    _sceneScroll.dispose();
+    super.dispose();
+  }
+
+  void _resetIdleScrollState() {
+    if (_mainScroll.hasClients) _mainScroll.jumpTo(0);
+    if (_floorScroll.hasClients) _floorScroll.jumpTo(0);
+    if (_systemScroll.hasClients) _systemScroll.jumpTo(0);
+    if (_sceneScroll.hasClients) _sceneScroll.jumpTo(0);
+    if (_floorIndex != 0) setState(() => _floorIndex = 0);
+  }
 
   @override
   void didUpdateWidget(covariant _DashboardBody oldWidget) {
@@ -82,6 +114,14 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<int>(idleResetSignalProvider, (prev, next) {
+      if (prev != next) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _resetIdleScrollState();
+        });
+      }
+    });
+
     // Auto-open alarm screen when entry delay starts (on any device).
     ref.listen<SatelPartitionState?>(
       _alarmStateProvider,
@@ -108,12 +148,17 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
     final selectedFloor = floors.isEmpty ? null : floors[safeIndex];
 
     return CustomScrollView(
+      controller: _mainScroll,
       physics: const ClampingScrollPhysics(
           parent: AlwaysScrollableScrollPhysics()),
       slivers: [
-        SliverToBoxAdapter(child: _header(context, cfg, auth, ref)),
-        SliverToBoxAdapter(child: _scenes(context, cfg, canEdit, ref)),
-        SliverToBoxAdapter(child: _Systemen(cfg: cfg)),
+        SliverToBoxAdapter(
+            child: _header(context, cfg, auth, ref)),
+        SliverToBoxAdapter(
+            child: _scenes(context, cfg, canEdit, ref,
+                scrollController: _sceneScroll)),
+        SliverToBoxAdapter(
+            child: _Systemen(cfg: cfg, scrollController: _systemScroll)),
         if (floors.isNotEmpty)
           SliverToBoxAdapter(
             child: Padding(
@@ -132,6 +177,7 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
             child: _FloorTabBar(
               floors: floors,
               selectedIndex: safeIndex,
+              scrollController: _floorScroll,
               onSelect: (i) => setState(() => _floorIndex = i),
             ),
           ),
@@ -155,11 +201,13 @@ class _FloorTabBar extends ConsumerWidget {
     required this.floors,
     required this.selectedIndex,
     required this.onSelect,
+    this.scrollController,
   });
 
   final List<Floor> floors;
   final int selectedIndex;
   final ValueChanged<int> onSelect;
+  final ScrollController? scrollController;
 
   void _openReorderSheet(BuildContext context, WidgetRef ref) {
     showModalBottomSheet<void>(
@@ -179,6 +227,7 @@ class _FloorTabBar extends ConsumerWidget {
       child: SizedBox(
         height: 48 + vPad * 2,
         child: ListView.separated(
+          controller: scrollController,
           scrollDirection: Axis.horizontal,
           primary: false,
           clipBehavior: Clip.none,
@@ -753,8 +802,9 @@ Widget _scenes(
   BuildContext context,
   HouseConfig cfg,
   bool canEdit,
-  WidgetRef ref,
-) {
+  WidgetRef ref, {
+  ScrollController? scrollController,
+}) {
   if (cfg.scenes.isEmpty && !canEdit) return const SizedBox.shrink();
   final hp = context.hPad;
   final order = ref.watch(sceneOrderProvider);
@@ -804,6 +854,7 @@ Widget _scenes(
       SceneStrip(
         scenes: ordered,
         canEdit: canEdit,
+        scrollController: scrollController,
         onEdited: (_) => ref.invalidate(configProvider),
       ),
       const SizedBox(height: 24),
@@ -816,8 +867,9 @@ Widget _scenes(
 // ---------------------------------------------------------------------------
 
 class _Systemen extends ConsumerWidget {
-  const _Systemen({required this.cfg});
+  const _Systemen({required this.cfg, this.scrollController});
   final HouseConfig cfg;
+  final ScrollController? scrollController;
 
   void _openManageSheet(
     BuildContext context,
@@ -966,6 +1018,7 @@ class _Systemen extends ConsumerWidget {
           SizedBox(
             height: chipH + vPad * 2,
             child: ReorderableListView.builder(
+              scrollController: scrollController,
               scrollDirection: Axis.horizontal,
               primary: false,
               buildDefaultDragHandles: false,
@@ -1625,6 +1678,22 @@ class _RoomActivityBadges extends ConsumerWidget {
     }
   }
 
+  static bool _isHeaterActive(Device d, BusState bus) {
+    if (d.type != DeviceType.universal) return false;
+    final cfg = d.raw['universal'] as Map<String, dynamic>?;
+    if (cfg == null) return false;
+    if ((cfg['icon'] as String?) != 'heater') return false;
+    final buttons =
+        (cfg['buttons'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    for (final b in buttons) {
+      final ga = b['statusGa'] as String?;
+      if (ga == null) continue;
+      final v = bus.values[ga];
+      if (v == true || v == 1) return true;
+    }
+    return false;
+  }
+
   static bool _isFireplaceOn(
     Device d,
     BusState bus,
@@ -1697,6 +1766,7 @@ class _RoomActivityBadges extends ConsumerWidget {
     bool lightsOn = false;
     bool mediaPlaying = false;
     bool fireplaceOn = false;
+    bool heaterOn = false;
     bool windowOpen = false;
     bool doorOpen = false;
     bool garageDoorOpen = false;
@@ -1706,6 +1776,7 @@ class _RoomActivityBadges extends ConsumerWidget {
       if (!fireplaceOn && _isFireplaceOn(d, bus, fireplaceVirtual)) {
         fireplaceOn = true;
       }
+      if (!heaterOn && _isHeaterActive(d, bus)) heaterOn = true;
       if (!mediaPlaying && d.type.isMedia) {
         final ms = mediaStates[d.id];
         if (ms != null && ms.transport.isActive) mediaPlaying = true;
@@ -1718,7 +1789,7 @@ class _RoomActivityBadges extends ConsumerWidget {
       }
     }
 
-    final any = lightsOn || mediaPlaying || fireplaceOn ||
+    final any = lightsOn || mediaPlaying || fireplaceOn || heaterOn ||
         windowOpen || doorOpen || garageDoorOpen;
 
     // Wrap an icon so its tap opens a system sheet without propagating to the
@@ -1753,6 +1824,16 @@ class _RoomActivityBadges extends ConsumerWidget {
                   ),
                 if (fireplaceOn)
                   tap(const _FireBadge(), 'Openhaard'),
+                if (heaterOn)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 3, vertical: 8),
+                    child: SizedBox(
+                      width: _badgeSize,
+                      height: _badgeSize,
+                      child: const Center(child: _HeaterBadge()),
+                    ),
+                  ),
                 if (windowOpen)
                   tap(
                     Icon(Icons.sensor_window_outlined,
@@ -1831,6 +1912,55 @@ class _FireBadgeState extends State<_FireBadge>
           );
         },
       ),
+    );
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/*  Animated heater badge                                               */
+/* ------------------------------------------------------------------ */
+
+class _HeaterBadge extends StatefulWidget {
+  const _HeaterBadge();
+
+  @override
+  State<_HeaterBadge> createState() => _HeaterBadgeState();
+}
+
+class _HeaterBadgeState extends State<_HeaterBadge>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (_, __) {
+        final t = _ctrl.value * 2 * pi;
+        final pulse = 0.88 + 0.12 * ((sin(t * 1.5) + 1) / 2);
+        return Transform.scale(
+          scale: pulse,
+          child: HeaterIcon(
+            size: _RoomActivityBadges._glyphSize + 1,
+            color: LuxeColors.brass.withValues(alpha: 0.85),
+          ),
+        );
+      },
     );
   }
 }

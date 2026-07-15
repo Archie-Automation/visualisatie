@@ -104,6 +104,51 @@
       "type": "array",
       "items": { "$ref": "#/definitions/logDef" },
       "description": "Custom logs (graphs) of arbitrary group addresses, recorded server-side."
+    },
+    "displayPanel": {
+      "type": "object",
+      "description": "Android wandtablet: idle terug naar home + screensaver met klok/temperatuur.",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "idleHomeMinutes": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 1,
+          "description": "Minuten zonder aanraking voordat het beginscherm opent."
+        },
+        "screensaverMinutes": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 5,
+          "description": "Minuten zonder aanraking voordat de screensaver verschijnt (0 = uit)."
+        },
+        "panelRoomId": {
+          "type": "string",
+          "description": "Ruimte waar het wandtablet hangt (muziek-blokkade screensaver)."
+        },
+        "panelRoomName": {
+          "type": "string",
+          "description": "Optioneel label voor panelRoomId."
+        },
+        "suppressScreensaverWhenMusicPlaying": {
+          "type": "boolean",
+          "default": true,
+          "description": "Geen screensaver zolang Sonos/Bluesound speelt in panelRoomId."
+        },
+        "temperatureGa": {
+          "type": "string",
+          "pattern": "^([0-9]{1,2})/([0-9]{1,2})/([0-9]{1,3})$",
+          "description": "Optionele KNX GA voor temperatuur op de screensaver."
+        },
+        "temperatureRoomId": {
+          "type": "string",
+          "description": "Ruimte-id; temperatuur uit eerste climate/ac device in die ruimte."
+        },
+        "temperatureRoomName": {
+          "type": "string",
+          "description": "Optioneel label onder de temperatuur (anders ruimtenaam)."
+        }
+      }
     }
   },
   "definitions": {

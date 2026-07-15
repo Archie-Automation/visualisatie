@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
+import '../ac_mode_config.dart';
 import '../api.dart';
 import '../fireplace_step_ranges.dart';
 import '../models.dart';
@@ -261,6 +262,46 @@ bool _deviceHasKnxGa(Map<String, dynamic> device) {
   return false;
 }
 
+/// Diepe kopie van apparaat-JSON met nieuwe id(s) voor plakken in config.
+Map<String, dynamic> _cloneDeviceJson(Map<String, dynamic> source, Uuid uuid) {
+  final clone = Map<String, dynamic>.from(
+    jsonDecode(jsonEncode(source)) as Map<String, dynamic>,
+  );
+
+  String freshNestedId(String old) {
+    if (RegExp(r'^\d+/\d+/\d+').hasMatch(old)) return old;
+    final dash = old.indexOf('-');
+    if (dash > 0) return '${old.substring(0, dash + 1)}${uuid.v4()}';
+    return 'dev-${uuid.v4()}';
+  }
+
+  void walk(dynamic node, {required bool root}) {
+    if (node is Map) {
+      final map = node.cast<String, dynamic>();
+      final id = map['id'];
+      if (id is String && id.isNotEmpty) {
+        map['id'] = root ? 'dev-${uuid.v4()}' : freshNestedId(id);
+      }
+      if (root) {
+        final name = map['name'];
+        if (name is String && name.isNotEmpty && !name.contains('(kopie)')) {
+          map['name'] = '$name (kopie)';
+        }
+      }
+      for (final v in map.values) {
+        walk(v, root: false);
+      }
+    } else if (node is List) {
+      for (final v in node) {
+        walk(v, root: false);
+      }
+    }
+  }
+
+  walk(clone, root: true);
+  return clone;
+}
+
 Map<String, dynamic> _ensureChildMap(Map<String, dynamic> parent, String key) {
   final x = parent[key];
   if (x is Map<String, dynamic>) return x;
@@ -426,6 +467,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   /// `${fi}-${ri}` when that room [ExpansionTile] is expanded (edit icon in title).
   final Set<String> _expandedRoomKeys = {};
   _Focus _sel = const _Focus.project();
+  Map<String, dynamic>? _copiedDevice;
   /// Whether the mobile detail panel is in view (vs. the menu list).
   bool _mobileShowDetail = false;
   bool _loading = true;
@@ -1268,6 +1310,16 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           'type': 'ac',
           'ac': {
             'onOff': {'ga': '1/1/1'},
+            'setpoint': {'ga': '1/1/2', 'min': 16, 'max': 30},
+            'mode': {
+              'ga': '1/1/4',
+              'options': defaultAcModeOptions
+                  .map((e) => Map<String, dynamic>.from(e))
+                  .toList(),
+            },
+            'modeVisibility': Map<String, dynamic>.from(
+              defaultAcModeVisibility,
+            ),
           },
         };
       case 'fan':
@@ -1335,6 +1387,128 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     });
   }
 
+  Future<void> _copyDevice(Map<String, dynamic> device) async {
+    _copiedDevice = Map<String, dynamic>.from(
+      jsonDecode(jsonEncode(device)) as Map<String, dynamic>,
+    );
+    await Clipboard.setData(ClipboardData(
+      text: const JsonEncoder.withIndent('  ').convert(_copiedDevice),
+    ));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '${device['name'] ?? device['id']} gekopieerd',
+        ),
+      ),
+    );
+    setState(() {});
+  }
+
+  Future<bool> _loadPasteClipboard() async {
+    if (_copiedDevice != null) return true;
+    final data = await Clipboard.getData('text/plain');
+    final text = data?.text?.trim();
+    if (text == null || text.isEmpty) return false;
+    try {
+      final decoded = jsonDecode(text);
+      if (decoded is Map<String, dynamic>) {
+        _copiedDevice = decoded;
+        return true;
+      }
+      if (decoded is Map) {
+        _copiedDevice = Map<String, dynamic>.from(decoded);
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+
+  Future<void> _pasteDeviceIntoList(
+    List<Map<String, dynamic>> list, {
+    int? afterIndex,
+    void Function(int newIndex)? onPasted,
+  }) async {
+    if (!await _loadPasteClipboard()) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Niets om te plakken — kopieer eerst een apparaat'),
+        ),
+      );
+      return;
+    }
+    final clone = _cloneDeviceJson(_copiedDevice!, _uuid);
+    final insertAt =
+        afterIndex == null ? list.length : (afterIndex + 1).clamp(0, list.length);
+    list.insert(insertAt, clone);
+    if (!mounted) return;
+    if (onPasted != null) {
+      onPasted(insertAt);
+    } else {
+      setState(() {});
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${clone['name'] ?? clone['id']} geplakt')),
+    );
+  }
+
+  void _tryCopyFocusedDevice() {
+    switch (_sel.kind) {
+      case _FocusKind.device:
+        _copyDevice(_deviceList(_sel.fi, _sel.ri)[_sel.di]);
+      case _FocusKind.globalDevice:
+        _copyDevice(_globalDeviceList()[_sel.di]);
+      case _FocusKind.cameraDetail:
+        _copyDevice(_cameras()[_sel.ci!]);
+      case _FocusKind.intercomDetail:
+        _copyDevice(_intercoms()[_sel.ci!]);
+      default:
+        break;
+    }
+  }
+
+  Future<void> _tryPasteFocusedDevice() async {
+    switch (_sel.kind) {
+      case _FocusKind.device:
+        await _pasteDeviceIntoList(
+          _deviceList(_sel.fi, _sel.ri),
+          afterIndex: _sel.di,
+          onPasted: (i) => _selectFocus(_Focus.device(_sel.fi, _sel.ri, i)),
+        );
+      case _FocusKind.globalDevice:
+        await _pasteDeviceIntoList(
+          _globalDeviceList(),
+          afterIndex: _sel.di,
+          onPasted: (i) => _selectFocus(_Focus.globalDevice(i)),
+        );
+      case _FocusKind.room:
+        await _pasteDeviceIntoList(
+          _deviceList(_sel.fi, _sel.ri),
+          onPasted: (i) => _selectFocus(_Focus.device(_sel.fi, _sel.ri, i)),
+        );
+      case _FocusKind.cameraDetail:
+        await _pasteDeviceIntoList(
+          _cameras(),
+          afterIndex: _sel.ci,
+          onPasted: (i) => _selectFocus(_Focus.cameraDetail(i)),
+        );
+      case _FocusKind.intercomDetail:
+        await _pasteDeviceIntoList(
+          _intercoms(),
+          afterIndex: _sel.ci,
+          onPasted: (i) => _selectFocus(_Focus.intercomDetail(i)),
+        );
+      default:
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Selecteer een apparaat of kamer om te plakken'),
+          ),
+        );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -1361,7 +1535,17 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     }
 
     final wide = MediaQuery.of(context).size.width >= 900;
-    return PopScope(
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyC, control: true):
+            _tryCopyFocusedDevice,
+        const SingleActivator(LogicalKeyboardKey.keyV, control: true): () {
+          _tryPasteFocusedDevice();
+        },
+      },
+      child: Focus(
+        autofocus: true,
+        child: PopScope(
       // On mobile, intercepting the back gesture while detail is visible
       // navigates back to the menu instead of popping the route.
       canPop: wide || !_mobileShowDetail,
@@ -1440,6 +1624,8 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           },
         ),
       ),
+        ),
+      ),
     );
   }
 
@@ -1458,7 +1644,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     final tile = ListTile(
       dense: true,
       visualDensity: VisualDensity.compact,
-      contentPadding: const EdgeInsets.only(left: 4, right: 4),
+      contentPadding: const EdgeInsets.only(left: 4, right: 0),
       leading: Icon(Icons.drag_handle, size: 18,
           color: selected
               ? Theme.of(context).colorScheme.primary
@@ -1467,6 +1653,34 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       subtitle: Text(type, style: const TextStyle(fontSize: 11)),
       selected: selected,
       onTap: onTap,
+      trailing: PopupMenuButton<String>(
+        icon: Icon(Icons.more_horiz, size: 18, color: Colors.grey.shade500),
+        padding: EdgeInsets.zero,
+        tooltip: 'Kopiëren / plakken',
+        onSelected: (action) {
+          if (action == 'copy') {
+            _copyDevice(device);
+          } else if (action == 'paste') {
+            if (fi < 0) {
+              _pasteDeviceIntoList(
+                _globalDeviceList(),
+                afterIndex: di,
+                onPasted: (i) => _selectFocus(_Focus.globalDevice(i)),
+              );
+            } else {
+              _pasteDeviceIntoList(
+                _deviceList(fi, ri),
+                afterIndex: di,
+                onPasted: (i) => _selectFocus(_Focus.device(fi, ri, i)),
+              );
+            }
+          }
+        },
+        itemBuilder: (ctx) => const [
+          PopupMenuItem(value: 'copy', child: Text('Kopiëren')),
+          PopupMenuItem(value: 'paste', child: Text('Plakken eronder')),
+        ],
+      ),
     );
     return LongPressDraggable<_DeviceDragData>(
       data: _DeviceDragData(device: device, fi: fi, ri: ri, di: di),
@@ -1840,6 +2054,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         return _DeviceForm(
           device: _cameras()[_sel.ci!],
           onChanged: () => setState(() {}),
+          onCopy: () => _copyDevice(_cameras()[_sel.ci!]),
+          onPaste: () => _pasteDeviceIntoList(
+            _cameras(),
+            afterIndex: _sel.ci,
+            onPasted: (i) => _selectFocus(_Focus.cameraDetail(i)),
+          ),
           onDelete: () {
             _cameras().removeAt(_sel.ci!);
             setState(() => _sel = const _Focus.cameras());
@@ -1859,6 +2079,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         return _DeviceForm(
           device: _intercoms()[_sel.ci!],
           onChanged: () => setState(() {}),
+          onCopy: () => _copyDevice(_intercoms()[_sel.ci!]),
+          onPaste: () => _pasteDeviceIntoList(
+            _intercoms(),
+            afterIndex: _sel.ci,
+            onPasted: (i) => _selectFocus(_Focus.intercomDetail(i)),
+          ),
           onDelete: () {
             _intercoms().removeAt(_sel.ci!);
             setState(() => _sel = const _Focus.intercoms());
@@ -1899,6 +2125,18 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           title: 'Kamer',
           values: _roomList(_sel.fi)[_sel.ri],
           keys: const ['id', 'name', 'icon', 'cover'],
+          headerActions: Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: () => _pasteDeviceIntoList(
+                _deviceList(_sel.fi, _sel.ri),
+                onPasted: (i) =>
+                    _selectFocus(_Focus.device(_sel.fi, _sel.ri, i)),
+              ),
+              icon: const Icon(Icons.content_paste_outlined),
+              label: const Text('Apparaat plakken'),
+            ),
+          ),
           onChanged: () => setState(() {}),
           onDelete: () {
             _roomList(_sel.fi).removeAt(_sel.ri);
@@ -1909,6 +2147,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         return _DeviceForm(
           device: _deviceList(_sel.fi, _sel.ri)[_sel.di],
           onChanged: () => setState(() {}),
+          onCopy: () => _copyDevice(_deviceList(_sel.fi, _sel.ri)[_sel.di]),
+          onPaste: () => _pasteDeviceIntoList(
+            _deviceList(_sel.fi, _sel.ri),
+            afterIndex: _sel.di,
+            onPasted: (i) => _selectFocus(_Focus.device(_sel.fi, _sel.ri, i)),
+          ),
           onDelete: () {
             _deviceList(_sel.fi, _sel.ri).removeAt(_sel.di);
             setState(() => _sel = _Focus.room(_sel.fi, _sel.ri));
@@ -1924,6 +2168,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         return _DeviceForm(
           device: _globalDeviceList()[_sel.di],
           onChanged: () => setState(() {}),
+          onCopy: () => _copyDevice(_globalDeviceList()[_sel.di]),
+          onPaste: () => _pasteDeviceIntoList(
+            _globalDeviceList(),
+            afterIndex: _sel.di,
+            onPasted: (i) => _selectFocus(_Focus.globalDevice(i)),
+          ),
           onDelete: () {
             _globalDeviceList().removeAt(_sel.di);
             setState(() {
@@ -2670,6 +2920,7 @@ class _MapStringForm extends StatelessWidget {
     required this.onChanged,
     this.numericKeys = const {},
     this.onDelete,
+    this.headerActions,
   });
   final String title;
   final Map<String, dynamic> values;
@@ -2677,12 +2928,17 @@ class _MapStringForm extends StatelessWidget {
   final Set<String> numericKeys;
   final VoidCallback onChanged;
   final VoidCallback? onDelete;
+  final Widget? headerActions;
 
   @override
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
+        if (headerActions != null) ...[
+          headerActions!,
+          const SizedBox(height: 8),
+        ],
         Text(title, style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 16),
         for (final k in keys)
@@ -3883,11 +4139,15 @@ class _DeviceForm extends StatelessWidget {
     required this.device,
     required this.onChanged,
     required this.onDelete,
+    this.onCopy,
+    this.onPaste,
     this.getInstallerToken,
   });
   final Map<String, dynamic> device;
   final VoidCallback onChanged;
   final VoidCallback onDelete;
+  final VoidCallback? onCopy;
+  final VoidCallback? onPaste;
   final Future<String?> Function()? getInstallerToken;
 
   @override
@@ -3896,8 +4156,25 @@ class _DeviceForm extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Text('Apparaat ($type)',
-            style: Theme.of(context).textTheme.titleLarge),
+        Row(
+          children: [
+            Expanded(
+              child: Text('Apparaat ($type)',
+                  style: Theme.of(context).textTheme.titleLarge),
+            ),
+            if (onCopy != null)
+              IconButton(
+                tooltip: 'Kopiëren (Ctrl+C)',
+                icon: const Icon(Icons.copy_outlined),
+                onPressed: onCopy,
+              ),
+            IconButton(
+              tooltip: 'Plakken eronder (Ctrl+V)',
+              icon: const Icon(Icons.content_paste_outlined),
+              onPressed: onPaste,
+            ),
+          ],
+        ),
         const SizedBox(height: 16),
         _BoundStrField('id', device, onChanged),
         _BoundStrField('name', device, onChanged),
@@ -4003,12 +4280,8 @@ class _DeviceForm extends StatelessWidget {
             onChanged: onChanged,
           ),
         if (type == 'ac')
-          _SubtreeJsonEditor(
+          AcInstallerSection(
             key: ValueKey('${device['id']}-ac'),
-            label: 'Airco ? volledige JSON',
-            hint:
-                'Vereist onOff en setpoint. Optioneel mode, fanSpeed, actualTemp.',
-            jsonKey: 'ac',
             device: device,
             onChanged: onChanged,
           ),
@@ -4058,112 +4331,6 @@ class _DeviceForm extends StatelessWidget {
           style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
         ),
       ],
-    );
-  }
-}
-
-class _SubtreeJsonEditor extends StatefulWidget {
-  const _SubtreeJsonEditor({
-    super.key,
-    required this.label,
-    required this.hint,
-    required this.jsonKey,
-    required this.device,
-    required this.onChanged,
-  });
-
-  final String label;
-  final String hint;
-  final String jsonKey;
-  final Map<String, dynamic> device;
-  final VoidCallback onChanged;
-
-  @override
-  State<_SubtreeJsonEditor> createState() => _SubtreeJsonEditorState();
-}
-
-class _SubtreeJsonEditorState extends State<_SubtreeJsonEditor> {
-  late final TextEditingController _c;
-  String? _err;
-
-  @override
-  void initState() {
-    super.initState();
-    _c = TextEditingController(text: _pretty());
-  }
-
-  String _pretty() {
-    final v = widget.device[widget.jsonKey];
-    if (v == null) return '{}';
-    try {
-      return const JsonEncoder.withIndent('  ').convert(v);
-    } catch (_) {
-      return '{}';
-    }
-  }
-
-  @override
-  void dispose() {
-    _c.dispose();
-    super.dispose();
-  }
-
-  void _apply() {
-    dynamic decoded;
-    try {
-      decoded = jsonDecode(_c.text);
-    } catch (e) {
-      setState(() => _err = '$e');
-      return;
-    }
-    if (decoded is! Map<String, dynamic>) {
-      setState(() => _err = 'De inhoud moet een object { } zijn.');
-      return;
-    }
-    setState(() => _err = null);
-    widget.device[widget.jsonKey] = decoded;
-    widget.onChanged();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(widget.label, style: Theme.of(context).textTheme.titleSmall),
-          if (widget.hint.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(top: 4, bottom: 8),
-              child:
-                  Text(widget.hint, style: Theme.of(context).textTheme.bodySmall),
-            ),
-          TextField(
-            controller: _c,
-            maxLines: 14,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              alignLabelWithHint: true,
-            ),
-            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-            onChanged: (_) {
-              if (_err != null) setState(() => _err = null);
-            },
-          ),
-          if (_err != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(_err!, style: TextStyle(color: Colors.red.shade800)),
-            ),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
-            onPressed: _apply,
-            icon: const Icon(Icons.check_circle_outline, size: 18),
-            label: const Text('JSON controleren en toepassen'),
-          ),
-        ],
-      ),
     );
   }
 }

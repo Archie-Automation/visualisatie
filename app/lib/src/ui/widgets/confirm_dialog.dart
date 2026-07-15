@@ -17,6 +17,62 @@ Future<bool> maybeConfirm(BuildContext context, ConfirmPrompt? prompt) async {
   return await _showSimpleDialog(context, prompt) ?? false;
 }
 
+/// Bevestiging voor omschakelen verwarmen ↔ koelen op thermostaten.
+Future<bool?> showHvacSwitchConfirmDialog(
+  BuildContext context, {
+  required String target,
+  required String notice,
+}) {
+  return showDialog<bool>(
+    context: context,
+    useRootNavigator: true,
+    barrierColor: Colors.black.withValues(alpha: 0.45),
+    builder: (ctx) => _LuxeDialog(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _DialogHeader(
+            icon: Icons.warning_amber_rounded,
+            title: 'Omschakelen naar $target',
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Weet u zeker dat u wilt omschakelen naar $target?\n\n$notice',
+            style: Theme.of(ctx).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: 22),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              _CancelButton(onTap: () => Navigator.of(ctx).pop(false)),
+              const SizedBox(width: 6),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: LuxeColors.ink,
+                  foregroundColor: Colors.white,
+                  shape: const StadiumBorder(),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 22,
+                    vertical: 12,
+                  ),
+                  textStyle: const TextStyle(
+                    fontSize: 12,
+                    letterSpacing: 1.8,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                child: const Text('OMSCHAKELEN'),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 // ── Simple confirm ───────────────────────────────────────────────────────────
 
 Future<bool?> _showSimpleDialog(

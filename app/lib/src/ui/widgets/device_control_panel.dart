@@ -7,6 +7,7 @@ import '../../room_control_category.dart';
 import '../responsive.dart';
 import 'device_card_scale.dart';
 import 'glass_card.dart';
+import 'heater_icon.dart';
 import 'solid_arrow_icon.dart';
 
 export 'solid_arrow_icon.dart';
@@ -231,9 +232,11 @@ class DeviceControlPanel extends StatelessWidget {
   const DeviceControlPanel({
     super.key,
     required this.rows,
+    this.columnsPerRow = 4,
   });
 
   final List<List<DeviceControlItem>> rows;
+  final int columnsPerRow;
 
   @override
   Widget build(BuildContext context) {
@@ -247,7 +250,11 @@ class DeviceControlPanel extends StatelessWidget {
           children: [
             for (var i = 0; i < rows.length; i++) ...[
               if (i > 0) SizedBox(height: DeviceControlBar.rowGap),
-              _SquareControlRow(items: rows[i], layoutContext: context),
+              _SquareControlRow(
+                items: rows[i],
+                columnCount: columnsPerRow,
+                layoutContext: context,
+              ),
             ],
           ],
         );
@@ -257,25 +264,33 @@ class DeviceControlPanel extends StatelessWidget {
 }
 
 class _SquareControlRow extends StatelessWidget {
-  const _SquareControlRow({required this.items, required this.layoutContext});
+  const _SquareControlRow({
+    required this.items,
+    required this.columnCount,
+    required this.layoutContext,
+  });
   final List<DeviceControlItem> items;
+  final int columnCount;
   final BuildContext layoutContext;
 
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) return const SizedBox.shrink();
+    final cols = columnCount < 1 ? items.length : columnCount;
     return SizedBox(
       width: double.infinity,
       child: Row(
         children: [
-          for (var j = 0; j < items.length; j++) ...[
+          for (var j = 0; j < cols; j++) ...[
             if (j > 0) SizedBox(width: DeviceControlBar.gap),
             Expanded(
-              child: _LabeledSquareButton(
-                item: items[j],
-                expand: true,
-                layoutContext: layoutContext,
-              ),
+              child: j < items.length
+                  ? _LabeledSquareButton(
+                      item: items[j],
+                      expand: true,
+                      layoutContext: layoutContext,
+                    )
+                  : const SizedBox.shrink(),
             ),
           ],
         ],
@@ -303,10 +318,18 @@ class _MoveAndTiltBlock extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _SquareControlRow(items: moveItems, layoutContext: context),
+        _SquareControlRow(
+          items: moveItems,
+          columnCount: moveItems.length,
+          layoutContext: context,
+        ),
         if (tiltItems.isNotEmpty) ...[
           SizedBox(height: gap),
-          _SquareControlRow(items: tiltItems, layoutContext: context),
+          _SquareControlRow(
+            items: tiltItems,
+            columnCount: tiltItems.length,
+            layoutContext: context,
+          ),
         ],
       ],
     );
@@ -430,7 +453,7 @@ class _LabeledSquareButton extends StatelessWidget {
       onTap: item.onTap,
       active: item.active,
       expand: expand,
-      size: btnSize,
+      height: btnSize,
       child: Center(child: inner),
     );
 
@@ -462,6 +485,9 @@ class _DeviceControlGlyph extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = DeviceControlIcons.color(active: active, disabled: disabled);
+    if (item.icon == heaterIconData) {
+      return HeaterIcon(size: glyphSize, color: color);
+    }
     if (item.glyph != null) {
       return Opacity(
         opacity: disabled ? 0.35 : 1,
@@ -488,15 +514,19 @@ class _SizedControlSquare extends StatefulWidget {
     required this.onTap,
     required this.active,
     required this.expand,
-    required this.size,
+    required this.height,
     required this.child,
+    this.width,
   });
 
   final VoidCallback? onTap;
   final bool active;
   final bool expand;
-  final double size;
+  final double height;
+  final double? width;
   final Widget child;
+
+  double get _width => width ?? height;
 
   @override
   State<_SizedControlSquare> createState() => _SizedControlSquareState();
@@ -508,17 +538,18 @@ class _SizedControlSquareState extends State<_SizedControlSquare> {
   @override
   Widget build(BuildContext context) {
     final disabled = widget.onTap == null;
+    final w = widget.expand ? double.infinity : widget._width;
     final surface = DeviceControlButtonSurface(
       active: widget.active,
       pressed: _pressed,
-      width: widget.expand ? double.infinity : widget.size,
-      height: widget.size,
+      width: w,
+      height: widget.height,
       child: widget.child,
     );
 
     return SizedBox(
-      width: widget.expand ? double.infinity : widget.size,
-      height: widget.size,
+      width: w,
+      height: widget.height,
       child: disabled
           ? surface
           : PressScale(
@@ -609,29 +640,40 @@ class DeviceControlSetpointRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final btn = DeviceControlBar.buttonSizeFor(context);
     final displaySize = DeviceCardScale.setpointFontSize(context);
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        _SetpointStepButton(
-          icon: Icons.remove,
-          size: btn,
-          onTap: enabled ? onDecrease : null,
-        ),
-        Text(
-          '${value.toStringAsFixed(decimals)}°',
-          style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                fontWeight: FontWeight.w200,
-                fontSize: displaySize,
-                height: 1,
+
+    return SizedBox(
+      width: double.infinity,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _SetpointStepButton(
+            icon: Icons.remove,
+            width: DeviceCardScale.setpointStepButtonSize(context),
+            height: btn,
+            onTap: enabled ? onDecrease : null,
+          ),
+          Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                '${value.toStringAsFixed(decimals)}°',
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                      fontWeight: FontWeight.w200,
+                      fontSize: displaySize,
+                      height: 1,
+                    ),
               ),
-        ),
-        _SetpointStepButton(
-          icon: Icons.add,
-          size: btn,
-          onTap: enabled ? onIncrease : null,
-        ),
-      ],
+            ),
+          ),
+          _SetpointStepButton(
+            icon: Icons.add,
+            width: DeviceCardScale.setpointStepButtonSize(context),
+            height: btn,
+            onTap: enabled ? onIncrease : null,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -639,12 +681,14 @@ class DeviceControlSetpointRow extends StatelessWidget {
 class _SetpointStepButton extends StatelessWidget {
   const _SetpointStepButton({
     required this.icon,
-    required this.size,
+    required this.width,
+    required this.height,
     this.onTap,
   });
 
   final IconData icon;
-  final double size;
+  final double width;
+  final double height;
   final VoidCallback? onTap;
 
   @override
@@ -653,7 +697,8 @@ class _SetpointStepButton extends StatelessWidget {
       onTap: onTap,
       active: false,
       expand: false,
-      size: size,
+      width: width,
+      height: height,
       child: Center(
         child: Icon(
           icon,
@@ -855,32 +900,33 @@ class DeviceControlBar {
     return out;
   }
 
-  /// 2 → 2 cols, 3 → 3, else max 4 per row — begrensd per form factor.
+  /// 2 → 2 cols, 3 → 3, 4 → 4, 5 → 5 op telefoon — begrensd per form factor.
   static int autoPerRow(BuildContext context, int itemCount) {
     final cap = DeviceCardScale.maxGridColumns(context);
-    int cols;
-    if (itemCount <= 1) {
-      cols = 1;
-    } else if (itemCount == 2) {
-      cols = 2;
-    } else if (itemCount == 3) {
-      cols = 3;
-    } else if (itemCount == 5 || itemCount == 6) {
-      cols = 3;
-    } else {
-      cols = 4;
-    }
+    final cols = switch (itemCount) {
+      <= 1 => 1,
+      2 => 2,
+      3 => 3,
+      4 => 4,
+      5 => 5,
+      6 => 3,
+      _ => 4,
+    };
     return cols > cap ? cap : cols;
   }
 
   static Widget build(
     BuildContext context, {
     required List<List<DeviceControlItem>> rows,
+    int columnsPerRow = 4,
   }) {
     if (rows.isEmpty) return const SizedBox.shrink();
     return SizedBox(
       width: double.infinity,
-      child: DeviceControlPanel(rows: rows),
+      child: DeviceControlPanel(
+        rows: rows,
+        columnsPerRow: columnsPerRow,
+      ),
     );
   }
 
@@ -913,17 +959,19 @@ class DeviceControlBar {
   static Widget gridAuto(
     BuildContext context,
     List<DeviceControlItem> items,
-  ) =>
-      grid(
-        context,
-        items,
-        perRow: autoPerRow(context, items.length),
-      );
+  ) {
+    final perRow = autoPerRow(context, items.length);
+    return grid(context, items, perRow: perRow);
+  }
 
   static Widget grid(
     BuildContext context,
     List<DeviceControlItem> items, {
     int perRow = 4,
   }) =>
-      build(context, rows: chunk(items, perRow: perRow));
+      build(
+        context,
+        rows: chunk(items, perRow: perRow),
+        columnsPerRow: perRow,
+      );
 }
