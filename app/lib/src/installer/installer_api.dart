@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../api.dart' show apiBase;
+import 'knx_ga_catalog.dart';
 
 Future<Map<String, dynamic>> fetchInstallerHouse(String token) async {
   final res = await http.get(
@@ -50,6 +51,48 @@ Future<int> putInstallerHouse(String token, Map<String, dynamic> house) async {
   }
   final out = jsonDecode(res.body) as Map<String, dynamic>;
   return (out['version'] as num?)?.toInt() ?? 0;
+}
+
+/// Parse a KNX Group Address XML (ETS or Archie Groepsadressentool) on the
+/// backend. Returns the raw preview map (floors proposal + catalog + warnings).
+/// The backend also persists the GA catalog as a side effect.
+Future<Map<String, dynamic>> importKnxXml(String token, String xml) async {
+  final res = await http.post(
+    Uri.parse('$apiBase/api/installer/import-knx'),
+    headers: {
+      'content-type': 'application/json',
+      'authorization': 'Bearer $token',
+    },
+    body: jsonEncode({'xml': xml}),
+  );
+  if (res.statusCode != 200) {
+    final body =
+        res.body.isNotEmpty ? jsonDecode(res.body) as Map<String, dynamic> : {};
+    throw StateError(body['error'] as String? ?? 'Import mislukt (${res.statusCode})');
+  }
+  return jsonDecode(res.body) as Map<String, dynamic>;
+}
+
+/// Fetch the persisted GA catalog and load it into [KnxGaCatalog]. Silently
+/// no-ops when nothing has been imported yet.
+Future<void> loadKnxGaCatalog(String token) async {
+  try {
+    final res = await http.get(
+      Uri.parse('$apiBase/api/installer/knx-ga'),
+      headers: {'authorization': 'Bearer $token'},
+    );
+    if (res.statusCode != 200) return;
+    final body = jsonDecode(res.body) as Map<String, dynamic>;
+    final raw = (body['catalog'] as List?) ?? const [];
+    KnxGaCatalog.instance.setEntries(
+      raw
+          .whereType<Map>()
+          .map((m) => KnxGaEntry.fromJson(Map<String, dynamic>.from(m)))
+          .toList(),
+    );
+  } catch (_) {
+    // Non-fatal: GA search just stays empty.
+  }
 }
 
 /// Live KNX tunnel state from the backend (installer only).

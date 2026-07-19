@@ -45,8 +45,12 @@ export const ROLE_DPT: Record<string, string> = {
   scene_number: "DPT17.001", // 0..63 scene number
   flame: "DPT5.010",
   flame_status: "DPT5.010",
-  ac_mode: "DPT5.010",
-  fan_speed: "DPT5.010",
+  // Airco (type "ac") only. mode = 1-byte HVAC control-mode enum (DPT 20.105),
+  // fanSpeed = percentage (DPT 5.001, raw 0..255 <-> 0..100 %). These roles are
+  // NOT shared with `climate` (which keeps mode = DPT 20.102) or other devices.
+  ac_mode: "DPT20.105",
+  ac_mode_status: "DPT20.105",
+  fan_speed: "DPT5.001",
 
   // RGBW/WW per-kanaal (zelfde DPT als universeel byte).
   r: "DPT5.010",
@@ -87,6 +91,8 @@ const READ_PRIORITY_ROLES = new Set([
   "position_status",
   "slat_status",
   "mode_status",
+  "ac_mode_status",
+  "fan_speed",
   "hvac_mode_status",
   "heat_demand",
   "cool_demand",

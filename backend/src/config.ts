@@ -252,8 +252,11 @@ export function buildGAIndex(cfg: HouseConfig): Map<GA, GARole[]> {
       pushGA(index, ac.setpoint.ga, "setpoint", d.id, d.type);
       pushGA(index, ac.setpoint.statusGa, "setpoint_status", d.id, d.type);
       pushGA(index, ac.actualTemp?.ga, "actual_temp", d.id, d.type);
-      pushGA(index, ac.mode?.ga, "mode", d.id, d.type);
-      pushGA(index, ac.mode?.statusGa, "mode_status", d.id, d.type);
+      // AC mode is a 1-byte HVAC control-mode enum (DPT 20.105), decoded via the
+      // ac-specific roles so it doesn't inherit climate's DPT 20.102.
+      pushGA(index, ac.mode?.ga, "ac_mode", d.id, d.type);
+      pushGA(index, ac.mode?.statusGa, "ac_mode_status", d.id, d.type);
+      // AC fan speed is a percentage (DPT 5.001, scaled 0..100 % <-> 0..255).
       pushGA(index, ac.fanSpeed?.ga, "fan_speed", d.id, d.type);
       pushGA(index, ac.fanSpeed?.statusGa, "fan_speed", d.id, d.type);
     }
