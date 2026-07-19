@@ -24,6 +24,11 @@ app/pubspec.lock
 backend/.env
 docker/.env
 
+# KNX project exports (contain real customer group addresses / PII)
+*-group-addresses.xml
+duits.xml
+engels.xml
+
 # Python venv (satel bridge)
 satel/.venv/
 **/__pycache__/

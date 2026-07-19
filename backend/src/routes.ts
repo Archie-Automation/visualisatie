@@ -51,6 +51,7 @@ import {
 } from "./cameraSnapshot";
 import { syncGo2rtcProcessAfterConfigWritten } from "./go2rtcSpawn";
 import { probeCameraStreams } from "./cameraProbe";
+import { parseKnxExport, persistGaCatalog, loadGaCatalog } from "./knxImport";
 import { scheduleAdminProcessRestart } from "./processRestart";
 import { releaseDoor } from "./intercoms";
 import type { MediaManager } from "./media/manager";
@@ -404,6 +405,54 @@ export function buildRouter(
 
   r.get("/installer/knx-status", requireAuth, requireAdmin, (_req, res) => {
     res.json(bus.getStatus());
+  });
+
+  /**
+   * Parse a KNX Group Address XML (ETS export or Archie Groepsadressentool).
+   * Returns a preview: a proposal of hoofdfunctie-devices per floor/room plus
+   * the full searchable GA catalog. Persists the catalog immediately (harmless
+   * reference data) but does NOT touch house.json — the installer confirms the
+   * device proposal in the UI, which then merges + saves via PUT /installer/house.
+   */
+  r.post("/installer/import-knx", requireAuth, requireAdmin, (req, res) => {
+    const xml =
+      typeof req.body === "string"
+        ? req.body
+        : typeof req.body?.xml === "string"
+          ? (req.body.xml as string)
+          : "";
+    if (!xml.trim()) {
+      return res.status(400).json({ error: "geen XML ontvangen" });
+    }
+    try {
+      const result = parseKnxExport(xml);
+      if (result.catalog.length === 0) {
+        return res
+          .status(400)
+          .json({ error: "geen groepsadressen gevonden in dit bestand" });
+      }
+      persistGaCatalog(result.catalog);
+      logger.info(
+        {
+          addresses: result.stats.addresses,
+          devices: result.stats.devices,
+          floors: result.stats.floors,
+          rooms: result.stats.rooms,
+        },
+        "KNX XML import parsed"
+      );
+      res.json(result);
+    } catch (err) {
+      logger.warn({ err }, "KNX XML import failed");
+      res.status(400).json({
+        error: err instanceof Error ? err.message : "import mislukt",
+      });
+    }
+  });
+
+  /** Searchable GA catalog for the installer GA fields (name + address + DPT). */
+  r.get("/installer/knx-ga", requireAuth, requireAdmin, (_req, res) => {
+    res.json({ catalog: loadGaCatalog() });
   });
 
   r.get("/installer/lutron-status", requireAuth, requireAdmin, (_req, res) => {

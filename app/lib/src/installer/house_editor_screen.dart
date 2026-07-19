@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -36,6 +37,7 @@ import '../ui/widgets/admin_full_restart_card.dart';
 import 'installer_api.dart';
 import 'installer_auth.dart';
 import 'installer_form_sections.dart';
+import 'knx_ga_catalog.dart';
 
 const _deviceTypesKnx = [
   'light_switch',
@@ -472,6 +474,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   bool _mobileShowDetail = false;
   bool _loading = true;
   bool _saving = false;
+  bool _knxSyncExisting = false;
   String? _loadErr;
   ProviderSubscription<AuthState>? _customerAuthSub;
 
@@ -551,6 +554,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     });
     try {
       final h = await fetchInstallerHouse(token);
+      await loadKnxGaCatalog(token);
       if (!mounted) return;
       setState(() {
         _house = h;
@@ -725,6 +729,388 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       'devices': <Map<String, dynamic>>[],
     });
     setState(() {});
+  }
+
+  String? _currentToken() {
+    if (widget.useCustomerSession) {
+      final auth = ref.read(authProvider);
+      if (!auth.isAdmin) return null;
+      return auth.token;
+    }
+    return ref.read(installerAuthProvider).token;
+  }
+
+  static const _knxImportInfo =
+      'Importeer een KNX Group Address XML (ETS-export of de Archie '
+      'Groepsadressentool). De hoofdfuncties (verlichting, dimmers, zonwering, '
+      'klimaat) worden automatisch per verdieping en ruimte aangemaakt. Alle '
+      'groepsadressen komen ook in de zoekfunctie bij de GA-velden.\n\n'
+      'Gebruikt u de Archie Groepsadressentool? Zorg er dan voor dat u de XML '
+      'exporteert MET volledige groepsadresnamen (verdieping.ruimte, ruimtenaam, '
+      'devicenaam en objectnaam). Zonder volledige namen kunnen ruimtes en '
+      'apparaten niet betrouwbaar worden herkend.';
+
+  Future<void> _showKnxImportInfo() async {
+    if (!mounted) return;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('KNX-import'),
+        content: const SingleChildScrollView(child: Text(_knxImportInfo)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Sluiten'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _importKnx() async {
+    final token = _currentToken();
+    if (token == null) return;
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['xml'],
+      withData: true,
+    );
+    if (picked == null || picked.files.isEmpty) return;
+    final bytes = picked.files.first.bytes;
+    if (bytes == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kon het bestand niet lezen.')),
+      );
+      return;
+    }
+    String xml;
+    try {
+      xml = utf8.decode(bytes);
+    } catch (_) {
+      xml = String.fromCharCodes(bytes);
+    }
+    setState(() => _saving = true);
+    Map<String, dynamic> result;
+    try {
+      result = await importKnxXml(token, xml);
+      // Refresh the searchable catalog with the freshly imported addresses.
+      await loadKnxGaCatalog(token);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: Colors.red.shade800),
+      );
+      return;
+    }
+    if (!mounted) return;
+    setState(() => _saving = false);
+    _knxSyncExisting = false;
+    final confirmed = await _showKnxPreview(result);
+    if (confirmed != true) return;
+    final merged = _mergeKnxProposal(result, sync: _knxSyncExisting);
+    setState(() {});
+    if (merged.added > 0 || merged.updated > 0) {
+      await _save();
+      if (mounted) {
+        final parts = <String>[
+          if (merged.added > 0) '${merged.added} toegevoegd',
+          if (merged.updated > 0) '${merged.updated} bijgewerkt',
+        ];
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('KNX-import: ${parts.join(' · ')}.')),
+        );
+      }
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Niets toegevoegd (alles bestond al).'),
+        ),
+      );
+    }
+  }
+
+  Future<bool?> _showKnxPreview(Map<String, dynamic> result) {
+    final floors = (result['floors'] as List?) ?? const [];
+    final stats = (result['stats'] as Map?) ?? const {};
+    final warnings = (result['warnings'] as List?) ?? const [];
+    final skipped = (result['skipped'] as List?) ?? const [];
+    final review = (result['review'] as Map?) ?? const {};
+    final manualDevices = (review['manualDevices'] as List?) ?? const [];
+    final duplicateNames = (review['duplicateNames'] as List?) ?? const [];
+    final singleDeviceRooms = (review['singleDeviceRooms'] as List?) ?? const [];
+    final unclassified = (review['unclassified'] as List?) ?? const [];
+    final rgbwGroups = (review['rgbwGroups'] as List?) ?? const [];
+    final groupChannelDevices =
+        (review['groupChannelDevices'] as List?) ?? const [];
+    final acDevices = (review['acDevices'] as List?) ?? const [];
+
+    List<Widget> reviewBlock(String title, List<dynamic> items, Color color) {
+      if (items.isEmpty) return const [];
+      return [
+        const SizedBox(height: 8),
+        Text('$title (${items.length})',
+            style: TextStyle(fontWeight: FontWeight.bold, color: color)),
+        for (final it in items.take(12))
+          Text(
+            '• ${(it as Map)['name'] ?? it['address'] ?? ''}'
+            '${it['reason'] != null ? '  —  ${it['reason']}' : ''}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        if (items.length > 12)
+          Text('  … en ${items.length - 12} meer',
+              style: Theme.of(context).textTheme.bodySmall),
+      ];
+    }
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+        title: const Text('KNX-import voorbeeld'),
+        content: SizedBox(
+          width: 560,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '${stats['addresses'] ?? 0} groepsadressen · '
+                  '${stats['devices'] ?? 0} apparaten · '
+                  '${stats['floors'] ?? 0} verdiepingen · '
+                  '${stats['rooms'] ?? 0} ruimtes',
+                  style: Theme.of(ctx).textTheme.titleSmall,
+                ),
+                const SizedBox(height: 12),
+                for (final f in floors.cast<Map>()) ...[
+                  Text(
+                    f['name']?.toString() ?? '',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  for (final r in ((f['rooms'] as List?) ?? const []).cast<Map>())
+                    Padding(
+                      padding: const EdgeInsets.only(left: 12, top: 2, bottom: 6),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('${r['name']} (${r['code']})',
+                              style: const TextStyle(
+                                  fontStyle: FontStyle.italic)),
+                          for (final d
+                              in ((r['devices'] as List?) ?? const []).cast<Map>())
+                            Padding(
+                              padding: const EdgeInsets.only(left: 12),
+                              child: Text(
+                                '• ${d['name']}  —  ${d['type']}',
+                                style: Theme.of(ctx).textTheme.bodySmall,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                ],
+                if (warnings.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text('Waarschuwingen (${warnings.length})',
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange.shade800)),
+                  for (final w in warnings.take(10))
+                    Text('• $w',
+                        style: Theme.of(ctx).textTheme.bodySmall),
+                ],
+                const Divider(height: 20),
+                Text('Nakijken',
+                    style: Theme.of(ctx)
+                        .textTheme
+                        .titleSmall
+                        ?.copyWith(fontWeight: FontWeight.bold)),
+                ...reviewBlock('Handmatig toevoegen (geen hoofdfunctie)',
+                    manualDevices, Colors.blue.shade700),
+                ...reviewBlock('Dubbele namen (automatisch onderscheiden)',
+                    duplicateNames, Colors.purple.shade700),
+                ...reviewBlock(
+                    'RGB(W) samengevoegd', rgbwGroups, Colors.teal.shade700),
+                ...reviewBlock('Groeps-GA (stuurt meerdere contacten)',
+                    groupChannelDevices, Colors.indigo.shade700),
+                ...reviewBlock('Airco — instellingen controleren', acDevices,
+                    Colors.cyan.shade700),
+                ...reviewBlock('Ruimtenaam uit één device',
+                    singleDeviceRooms, Colors.orange.shade700),
+                ...reviewBlock('Rol niet herkend', unclassified,
+                    Colors.red.shade700),
+                if (skipped.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '${skipped.length} adressen niet als apparaat herkend '
+                    '(wel doorzoekbaar bij de GA-velden).',
+                    style: Theme.of(ctx).textTheme.bodySmall,
+                  ),
+                ],
+                const Divider(height: 20),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: _knxSyncExisting,
+                  onChanged: (v) =>
+                      setLocal(() => _knxSyncExisting = v ?? false),
+                  title: const Text('Bestaande apparaten bijwerken (sync)'),
+                  subtitle: const Text(
+                    'Werk de groepsadressen bij van apparaten die op een GA '
+                    'matchen. Type en zelf aangepaste namen blijven behouden. '
+                    'Zonder dit vinkje worden bestaande apparaten overgeslagen.',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuleren'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(_knxSyncExisting ? 'Toevoegen + bijwerken' : 'Toevoegen'),
+          ),
+        ],
+      ),
+      ),
+    );
+  }
+
+  /// Merge a parsed KNX proposal into `_house`, keeping floors/rooms unique on
+  /// their KNX floor number / room code. Returns the number of devices added.
+  ({int added, int updated}) _mergeKnxProposal(
+    Map<String, dynamic> result, {
+    bool sync = false,
+  }) {
+    final floors = (result['floors'] as List?)?.cast<Map>() ?? const [];
+    var addedDevices = 0;
+    var updatedDevices = 0;
+    for (final pf in floors) {
+      final floorNr = (pf['floor'] as num?)?.toInt();
+      final floorName = pf['name']?.toString() ?? 'Verdieping';
+      final floor = _findOrCreateFloor(floorNr, floorName);
+      final rooms = (pf['rooms'] as List?)?.cast<Map>() ?? const [];
+      for (final pr in rooms) {
+        final code = pr['code']?.toString() ?? '';
+        final roomName = pr['name']?.toString() ?? 'Ruimte';
+        final room = _findOrCreateRoom(floor, code, roomName);
+        final devices =
+            (room['devices'] as List).cast<Map<String, dynamic>>();
+        final proposed = (pr['devices'] as List?)?.cast<Map>() ?? const [];
+        for (final pd in proposed) {
+          final device = Map<String, dynamic>.from(pd);
+          final existing = _findMatchingDevice(devices, device);
+          if (existing != null) {
+            // Sync only rewrites the group addresses of a matched device;
+            // its id, type and any manual rename/options stay intact.
+            if (sync && _syncDeviceGa(existing, device)) updatedDevices++;
+            continue;
+          }
+          device['id'] = 'dev-${_uuid.v4()}';
+          devices.add(device);
+          addedDevices++;
+        }
+      }
+    }
+    return (added: addedDevices, updated: updatedDevices);
+  }
+
+  /// Overwrites the `ga` map of [existing] with the freshly imported addresses.
+  /// Returns true when something actually changed.
+  bool _syncDeviceGa(
+    Map<String, dynamic> existing,
+    Map<String, dynamic> proposed,
+  ) {
+    final newGa = proposed['ga'];
+    if (newGa is! Map) return false;
+    final oldGa = existing['ga'];
+    if (oldGa is Map &&
+        oldGa.length == newGa.length &&
+        oldGa.entries.every((e) => '${newGa[e.key]}' == '${e.value}')) {
+      return false;
+    }
+    existing['ga'] = Map<String, dynamic>.from(newGa);
+    return true;
+  }
+
+  Map<String, dynamic> _findOrCreateFloor(int? floorNr, String name) {
+    final floors = _floors();
+    for (final f in floors) {
+      if (floorNr != null && (f['knxFloor'] as num?)?.toInt() == floorNr) {
+        return f;
+      }
+    }
+    for (final f in floors) {
+      if ((f['name'] as String?)?.toLowerCase() == name.toLowerCase()) {
+        if (floorNr != null) f['knxFloor'] = floorNr;
+        return f;
+      }
+    }
+    final created = <String, dynamic>{
+      'id': 'fl-${_uuid.v4()}',
+      'name': name,
+      'order': floors.length,
+      if (floorNr != null) 'knxFloor': floorNr,
+      'rooms': <Map<String, dynamic>>[],
+    };
+    floors.add(created);
+    return created;
+  }
+
+  Map<String, dynamic> _findOrCreateRoom(
+    Map<String, dynamic> floor,
+    String code,
+    String name,
+  ) {
+    final rooms = (floor['rooms'] as List).cast<Map<String, dynamic>>();
+    for (final r in rooms) {
+      if (code.isNotEmpty && r['knxRoom'] == code) return r;
+    }
+    for (final r in rooms) {
+      // Don't hijack a room already claimed by a different KNX room code:
+      // e.g. "1.01 Overloop" and "1.01p Overloop" share a name but are
+      // physically distinct rooms (the ".p" wing) and must stay separate.
+      final claimed = r['knxRoom'];
+      if (claimed != null && claimed != code) continue;
+      if ((r['name'] as String?)?.toLowerCase() == name.toLowerCase()) {
+        if (code.isNotEmpty) r['knxRoom'] = code;
+        return r;
+      }
+    }
+    final created = <String, dynamic>{
+      'id': 'rm-${_uuid.v4()}',
+      'name': name,
+      if (code.isNotEmpty) 'knxRoom': code,
+      'devices': <Map<String, dynamic>>[],
+    };
+    rooms.add(created);
+    return created;
+  }
+
+  /// Idempotency guard: returns the existing device in the room that shares at
+  /// least one group address with [device], or null when it is new.
+  Map<String, dynamic>? _findMatchingDevice(
+    List<Map<String, dynamic>> existing,
+    Map<String, dynamic> device,
+  ) {
+    final ga = device['ga'];
+    if (ga is! Map || ga.isEmpty) return null;
+    final addrs = ga.values.map((v) => '$v').toSet();
+    for (final d in existing) {
+      final dga = d['ga'];
+      if (dga is Map) {
+        for (final v in dga.values) {
+          if (addrs.contains('$v')) return d;
+        }
+      }
+    }
+    return null;
   }
 
   List<Map<String, dynamic>> _roomList(int fi) {
@@ -1860,6 +2246,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         const Divider(),
         ListTile(
           leading: const Icon(Icons.add),
+          title: const Text('Verdieping toevoegen'),
           onTap: _addFloor,
         ),
         for (var fi = 0; fi < floors.length; fi++)
@@ -2030,6 +2417,8 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         return _KnxInstallerSection(
           knx: _ensureKnx(),
           onChanged: () => setState(() {}),
+          onImport: _importKnx,
+          onImportInfo: _showKnxImportInfo,
           getToken: () async {
             if (widget.useCustomerSession) {
               return ref.read(authProvider).token;
@@ -2419,11 +2808,15 @@ class _KnxInstallerSection extends StatefulWidget {
     required this.knx,
     required this.onChanged,
     required this.getToken,
+    required this.onImport,
+    required this.onImportInfo,
   });
 
   final Map<String, dynamic> knx;
   final VoidCallback onChanged;
   final Future<String?> Function() getToken;
+  final VoidCallback onImport;
+  final VoidCallback onImportInfo;
 
   @override
   State<_KnxInstallerSection> createState() => _KnxInstallerSectionState();
@@ -2582,7 +2975,12 @@ class _KnxInstallerSectionState extends State<_KnxInstallerSection> {
           ),
         ),
         Expanded(
-          child: _KnxForm(knx: widget.knx, onChanged: widget.onChanged),
+          child: _KnxForm(
+            knx: widget.knx,
+            onChanged: widget.onChanged,
+            onImport: widget.onImport,
+            onImportInfo: widget.onImportInfo,
+          ),
         ),
       ],
     );
@@ -2840,9 +3238,16 @@ class _LutronForm extends StatelessWidget {
 }
 
 class _KnxForm extends StatelessWidget {
-  const _KnxForm({required this.knx, required this.onChanged});
+  const _KnxForm({
+    required this.knx,
+    required this.onChanged,
+    required this.onImport,
+    required this.onImportInfo,
+  });
   final Map<String, dynamic> knx;
   final VoidCallback onChanged;
+  final VoidCallback onImport;
+  final VoidCallback onImportInfo;
 
   @override
   Widget build(BuildContext context) {
@@ -2890,6 +3295,25 @@ class _KnxForm extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _BoundStrField('physicalAddress', knx, onChanged),
+          const Divider(height: 32),
+          Text('Import', style: Theme.of(context).textTheme.titleSmall),
+          Card(
+            margin: const EdgeInsets.only(top: 8),
+            child: ListTile(
+              leading: const Icon(Icons.file_download_outlined),
+              title: const Text('Importeer uit KNX (.xml)'),
+              subtitle: const Text(
+                'Maak verdiepingen, ruimtes en apparaten aan uit een '
+                'Group Address XML (ETS-export of Archie Groepsadressentool).',
+              ),
+              trailing: IconButton(
+                icon: const Icon(Icons.info_outline),
+                tooltip: 'Uitleg KNX-import',
+                onPressed: onImportInfo,
+              ),
+              onTap: onImport,
+            ),
+          ),
         ] else
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
@@ -2974,6 +3398,8 @@ class _BoundStrField extends StatefulWidget {
     this.maxLines = 1,
     this.hintText,
     this.emptyMeansRemove = false,
+    this.gaSearch = false,
+    this.gaDptHint,
   });
   final String keyName;
   final Map<String, dynamic> map;
@@ -2984,6 +3410,11 @@ class _BoundStrField extends StatefulWidget {
   final String? hintText;
   /// Voor optionele tekstvelden: leeg wissen verwijdert de sleutel uit JSON.
   final bool emptyMeansRemove;
+  /// Toont een zoekknop die het geïmporteerde GA-adres opzoekt op naam/adres,
+  /// en toont de bijbehorende groepsadresnaam onder het veld.
+  final bool gaSearch;
+  /// DPT-hint (bv. "DPT1.001") waarmee passende adressen bovenaan komen.
+  final String? gaDptHint;
 
   @override
   State<_BoundStrField> createState() => _BoundStrFieldState();
@@ -3019,8 +3450,30 @@ class _BoundStrFieldState extends State<_BoundStrField> {
     super.dispose();
   }
 
+  /// Auto-detect GA fields (keyName `ga` or a "Groepsadres" label) so every
+  /// device GA input gets the search picker, in addition to explicit gaSearch.
+  bool get _gaSearchEnabled {
+    if (widget.gaSearch) return true;
+    if (widget.keyName == 'ga') return true;
+    final l = widget.labelOverride?.toLowerCase() ?? '';
+    return l.startsWith('groepsadres') || l.startsWith('groepadres');
+  }
+
+  Future<void> _pickGa() async {
+    final addr = await showGaSearchDialog(context, dptHint: widget.gaDptHint);
+    if (addr == null || !mounted) return;
+    _c.text = addr;
+    widget.map[widget.keyName] = addr;
+    widget.onNotify();
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
+    final gaSearch = _gaSearchEnabled;
+    final resolvedName = gaSearch && _c.text.trim().isNotEmpty
+        ? KnxGaCatalog.instance.nameFor(_c.text)
+        : null;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextField(
@@ -3028,8 +3481,17 @@ class _BoundStrFieldState extends State<_BoundStrField> {
         decoration: InputDecoration(
           labelText: widget.labelOverride ?? widget.keyName,
           hintText: widget.hintText,
+          helperText: resolvedName,
+          helperMaxLines: 2,
           border: const OutlineInputBorder(),
           alignLabelWithHint: widget.maxLines > 1,
+          suffixIcon: gaSearch
+              ? IconButton(
+                  icon: const Icon(Icons.search),
+                  tooltip: 'Groepsadres zoeken',
+                  onPressed: _pickGa,
+                )
+              : null,
         ),
         keyboardType: widget.number
             ? const TextInputType.numberWithOptions(decimal: true)
@@ -3062,6 +3524,7 @@ class _BoundStrFieldState extends State<_BoundStrField> {
             }
           }
           widget.onNotify();
+          if (gaSearch) setState(() {});
         },
       ),
     );
@@ -5123,6 +5586,27 @@ class _ShadingLikeGaSection extends StatelessWidget {
   }
 }
 
+/// Expected DPT per ga role, used to float matching addresses to the top of
+/// the GA search picker.
+String? _gaDptHint(String role) {
+  const m = {
+    'switch': 'DPT1.001',
+    'switch_status': 'DPT1.001',
+    'dim_value': 'DPT5.001',
+    'dim_status': 'DPT5.001',
+    'up_down': 'DPT1.008',
+    'stop_step': 'DPT1.007',
+    'position': 'DPT5.001',
+    'position_status': 'DPT5.001',
+    'slat': 'DPT5.001',
+    'slat_status': 'DPT5.001',
+    'setpoint': 'DPT9.001',
+    'setpoint_status': 'DPT9.001',
+    'actual_temp': 'DPT9.001',
+  };
+  return m[role];
+}
+
 class _GaSection extends StatelessWidget {
   const _GaSection({required this.device, required this.onChanged});
   final Map<String, dynamic> device;
@@ -5149,6 +5633,8 @@ class _GaSection extends StatelessWidget {
             gam,
             onChanged,
             key: ValueKey('ga-${device['id']}-$k'),
+            gaSearch: true,
+            gaDptHint: _gaDptHint(k),
           ),
         TextButton.icon(
           onPressed: () async {
