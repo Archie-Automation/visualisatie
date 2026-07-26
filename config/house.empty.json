@@ -1,0 +1,26 @@
+{
+  "project": {
+    "id": "prj-new",
+    "name": "Nieuw huis",
+    "timezone": "Europe/Amsterdam"
+  },
+  "knx": {
+    "enabled": false
+  },
+  "floors": [],
+  "users": [
+    {
+      "id": "usr-admin",
+      "username": "admin",
+      "displayName": "Admin",
+      "role": "admin",
+      "passwordHash": "$2b$10$REPLACE_ME_WITH_BCRYPT_HASH",
+      "access": {
+        "floors": "*",
+        "rooms": "*",
+        "canRelease": "*",
+        "editScenes": true
+      }
+    }
+  ]
+}

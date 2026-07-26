@@ -1,0 +1,4 @@
+# Keep shell scripts LF on Windows checkouts (Proxmox/Linux install).
+*.sh text eol=lf
+installeer.sh text eol=lf
+docker/docker-entrypoint.sh text eol=lf

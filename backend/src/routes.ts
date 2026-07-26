@@ -34,6 +34,11 @@ import { logger } from "./logger";
 import { runScene } from "./scenes";
 import type { SchedulerHandle } from "./scheduler";
 import type { Floor, HouseConfig, Scene, Schedule, User } from "./types";
+import { appVersionInfo } from "./version";
+import {
+  getGithubLatest,
+  isUpdateAvailableOnGithub
+} from "./githubLatest";
 import {
   cameraPath,
   collectCameras,
@@ -228,6 +233,30 @@ export function buildRouter(
   const r = Router();
 
   /** Publiek: laat zien of KNX/media bereikbaar zijn (geen auth). */
+  /** Public: running version + optional newer GitHub release/tag. */
+  r.get("/version", async (_req, res) => {
+    const latest = await getGithubLatest();
+    const updateAvailable = isUpdateAvailableOnGithub(latest);
+    res.json({
+      version: appVersionInfo.version,
+      semver: appVersionInfo.semver,
+      build: appVersionInfo.build,
+      githubRepo: process.env.GITHUB_REPO?.trim() || "Archie-Automation/visualisatie",
+      latest: latest
+        ? {
+            version: latest.version,
+            semver: latest.semver,
+            build: latest.build,
+            tag: latest.tag,
+            htmlUrl: latest.htmlUrl,
+            source: latest.source,
+            checkedAt: latest.checkedAt
+          }
+        : null,
+      updateAvailable
+    });
+  });
+
   r.get("/health", (_req, res) => {
     const connectivity = getConnectivitySnapshot(bus, media, lutron);
     const warnings: string[] = [];

@@ -25,6 +25,8 @@ import 'ui/widgets/incoming_call_overlay.dart';
 import 'ui/widgets/inactivity_layer.dart';
 import 'ui/widgets/media_tile.dart';
 import 'ui/widgets/satel_entry_delay_layer.dart';
+import 'ui/widgets/software_update_banner.dart';
+import 'software_version.dart';
 
 class LuxeKnxApp extends ConsumerStatefulWidget {
   const LuxeKnxApp({super.key});
@@ -257,16 +259,26 @@ class _LuxeKnxAppState extends ConsumerState<LuxeKnxApp>
         return const Locale('nl');
       },
       routerConfig: _router,
-      builder: (context, child) => SatelEntryDelayLayer(
-        child: SipIncomingCallLayer(
-          child: IncomingCallOverlay(
-            child: InactivityLayer(
-              router: _router,
-              child: child ?? const SizedBox.shrink(),
+      builder: (context, child) {
+        // Warm the version check (server + GitHub latest) early.
+        ref.watch(softwareVersionStatusProvider);
+        final layered = SatelEntryDelayLayer(
+          child: SipIncomingCallLayer(
+            child: IncomingCallOverlay(
+              child: InactivityLayer(
+                router: _router,
+                child: child ?? const SizedBox.shrink(),
+              ),
             ),
           ),
-        ),
-      ),
+        );
+        return Column(
+          children: [
+            const SoftwareUpdateBanner(),
+            Expanded(child: layered),
+          ],
+        );
+      },
     );
   }
 }
