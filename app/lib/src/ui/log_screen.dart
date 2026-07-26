@@ -87,7 +87,7 @@ class _LogScreenState extends ConsumerState<LogScreen> {
   @override
   void initState() {
     super.initState();
-    _endMs = DateTime.now().millisecondsSinceEpoch;
+    _endMs = _floorTo15Min(DateTime.now().millisecondsSinceEpoch);
   }
 
   LogQuery get _query => (
@@ -100,20 +100,22 @@ class _LogScreenState extends ConsumerState<LogScreen> {
   void _setRange(int ms) {
     setState(() {
       _rangeMs = ms;
-      // Keep the right edge anchored to "now" when changing zoom.
-      _endMs = DateTime.now().millisecondsSinceEpoch;
+      // Keep the right edge anchored to "now" (floored to 15 min) when zooming.
+      _endMs = _floorTo15Min(DateTime.now().millisecondsSinceEpoch);
     });
   }
 
   void _pan(int deltaMs) {
-    final now = DateTime.now().millisecondsSinceEpoch;
+    final nowFloor = _floorTo15Min(DateTime.now().millisecondsSinceEpoch);
     setState(() {
-      _endMs = (_endMs + deltaMs).clamp(_rangeMs, now);
+      _endMs = _floorTo15Min((_endMs + deltaMs).clamp(_rangeMs, nowFloor));
     });
   }
 
   void _jumpToNow() {
-    setState(() => _endMs = DateTime.now().millisecondsSinceEpoch);
+    setState(
+      () => _endMs = _floorTo15Min(DateTime.now().millisecondsSinceEpoch),
+    );
   }
 
   void _refresh() {
@@ -124,8 +126,8 @@ class _LogScreenState extends ConsumerState<LogScreen> {
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(logHistoryProvider(_query));
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final atNow = _endMs >= now - 1000;
+    final nowFloor = _floorTo15Min(DateTime.now().millisecondsSinceEpoch);
+    final atNow = _endMs >= nowFloor;
 
     final title = async.maybeWhen(
       data: (d) => d.name,
@@ -424,6 +426,10 @@ class _LogChartCard extends StatelessWidget {
   }
 }
 
+/// Width reserved for the left (temperature) axis labels. Shared by the
+/// layout calculation and the axis config so the two can't drift apart.
+const double _leftAxisWidth = 42.0;
+
 class _Chart extends StatelessWidget {
   const _Chart({
     required this.data,
@@ -438,14 +444,26 @@ class _Chart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Pick a clock-aligned time step (e.g. 15 min) and snap the axis to it so
-    // ticks land on round times. Fewer labels on narrow screens.
-    final chartWidth = MediaQuery.of(context).size.width;
-    final labelCount = (chartWidth / 95).floor().clamp(3, 5);
-    final xStep = _niceTimeStep(data.toMs - data.fromMs, labelCount);
-    final minX = _floorToStep(data.fromMs.toDouble(), xStep);
-    final maxX = _ceilToStep(data.toMs.toDouble(), xStep);
-    final xInterval = xStep.toDouble();
+    return LayoutBuilder(
+      builder: (context, constraints) => _build(context, constraints),
+    );
+  }
+
+  Widget _build(BuildContext context, BoxConstraints constraints) {
+    // Window is always snapped to 15-minute clock marks (e.g. 14:58 → 14:45).
+    // Right edge = floored "to"; left edge = exactly [rangeMs] earlier so the
+    // 24h view reads "now" on the right and "24h ago" on the left.
+    final maxX = _floorTo15Min(data.toMs).toDouble();
+    final minX = maxX - rangeMs;
+
+    // 24h: always 4 labels (left, 2 middle, right). Other ranges: as many as
+    // fit without colliding, still equally spaced across the window.
+    final plotWidth = (constraints.maxWidth - _leftAxisWidth)
+        .clamp(0.0, double.infinity);
+    final labelCount =
+        rangeMs == _day ? 4 : (plotWidth / 110).floor().clamp(3, 5);
+    final xStep = rangeMs / (labelCount - 1);
+    final xInterval = xStep;
 
     // Plotted lines exclude the mode series (drawn as a colour band instead).
     final plotted = data.series
@@ -546,6 +564,10 @@ class _Chart extends StatelessWidget {
         maxX: maxX,
         minY: minY,
         maxY: maxY,
+        // Align interval ticks to our local-clock minX. Without this, fl_chart
+        // steps from Unix epoch (UTC), which drifts vs local midnight and
+        // packs neighbouring labels like 12:00 + 14:00 on top of each other.
+        baselineX: minX,
         clipData: const FlClipData.all(),
         lineBarsData: bars,
         gridData: FlGridData(
@@ -568,7 +590,7 @@ class _Chart extends StatelessWidget {
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              reservedSize: 42,
+              reservedSize: _leftAxisWidth,
               interval: yInterval <= 0 ? null : yInterval,
               getTitlesWidget: (value, meta) {
                 if (value <= meta.min || value >= meta.max) {
@@ -597,7 +619,15 @@ class _Chart extends StatelessWidget {
               showTitles: true,
               reservedSize: 28,
               interval: xInterval <= 0 ? null : xInterval,
+              // Endpoints are part of the equal-spaced grid (left = now-range,
+              // right = now floored to 15 min); keep them visible.
+              minIncluded: true,
+              maxIncluded: true,
               getTitlesWidget: (value, meta) {
+                // Only accept ticks on our equal-spaced grid from minX.
+                if (!_isAxisTick(value, minX, xStep)) {
+                  return const SizedBox.shrink();
+                }
                 return Padding(
                   padding: const EdgeInsets.only(top: 6),
                   child: Text(
@@ -790,36 +820,24 @@ double _niceTempStep(double range) {
   return 10.0;
 }
 
-/// Pick a clock-friendly time step (15 min, 30 min, 1 h, …) targeting roughly
-/// [target] labels across the window.
-int _niceTimeStep(int rangeMs, int target) {
-  const min = 60 * 1000;
-  const hour = 60 * min;
-  const day = 24 * hour;
-  const steps = <int>[
-    15 * min, 30 * min, hour, 2 * hour, 3 * hour, 6 * hour, 12 * hour,
-    day, 2 * day, 7 * day, 14 * day, 30 * day,
-  ];
-  for (final s in steps) {
-    if (rangeMs / s <= target) return s;
-  }
-  return steps.last;
+const int _quarterHourMs = 15 * 60 * 1000;
+
+/// Floor [ms] to the previous 15-minute mark on the local clock
+/// (e.g. 14:58 → 14:45). Used for every zoom window's right edge.
+int _floorTo15Min(int ms) {
+  final d = DateTime.fromMillisecondsSinceEpoch(ms);
+  final dayStart = DateTime(d.year, d.month, d.day);
+  final since = d.difference(dayStart).inMilliseconds;
+  final aligned = (since ~/ _quarterHourMs) * _quarterHourMs;
+  return dayStart.millisecondsSinceEpoch + aligned;
 }
 
-/// Floor [ms] to the previous clock-aligned multiple of [stepMs] (relative to
-/// local midnight, so quarter/hour marks land on round times).
-double _floorToStep(double ms, int stepMs) {
-  final d = DateTime.fromMillisecondsSinceEpoch(ms.round());
-  final dayStart =
-      DateTime(d.year, d.month, d.day).millisecondsSinceEpoch;
-  final since = d.millisecondsSinceEpoch - dayStart;
-  final aligned = (since ~/ stepMs) * stepMs;
-  return (dayStart + aligned).toDouble();
-}
-
-double _ceilToStep(double ms, int stepMs) {
-  final f = _floorToStep(ms, stepMs);
-  return f >= ms ? f : f + stepMs;
+/// True when [value] lands on the equal-spaced grid starting at [minX].
+bool _isAxisTick(double value, double minX, double stepMs) {
+  if (stepMs <= 0) return false;
+  final n = ((value - minX) / stepMs).round();
+  final aligned = minX + n * stepMs;
+  return (value - aligned).abs() < 1.0;
 }
 
 String _fmtAxis(int ms, int rangeMs) {

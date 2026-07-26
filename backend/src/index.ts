@@ -21,6 +21,7 @@ import {
   getConnectivitySnapshot,
   logStartupConnectivityReport
 } from "./startupConnectivity";
+import { appVersionInfo } from "./version";
 
 function main() {
   const cfg = loadConfig();
@@ -43,7 +44,9 @@ function main() {
   app.use(express.json({ limit: "10mb" }));
 
   // ── Serve Flutter web build ────────────────────────────────────────────────
-  const webBuildDir = path.join(process.cwd(), "..", "app", "build", "web");
+  // WEB_ROOT: absolute path in Docker (/app/web). Dev default: ../app/build/web.
+  const webBuildDir = (process.env.WEB_ROOT?.trim() ||
+    path.join(process.cwd(), "..", "app", "build", "web")).replace(/\/+$/, "");
   const webIndexHtml = path.join(webBuildDir, "index.html");
   if (fs.existsSync(webBuildDir)) {
     const webNoCache = new Set([
@@ -63,33 +66,38 @@ function main() {
         },
       })
     );
-    const webMainJs = path.join(webBuildDir, "main.dart.js");
-    if (fs.existsSync(webMainJs)) {
-      const buildMtime = fs.statSync(webMainJs).mtimeMs;
-      const libDir = path.join(process.cwd(), "..", "app", "lib");
-      let newestSource = 0;
-      const walk = (dir: string) => {
-        for (const name of fs.readdirSync(dir)) {
-          const full = path.join(dir, name);
-          const st = fs.statSync(full);
-          if (st.isDirectory()) walk(full);
-          else if (name.endsWith(".dart") && st.mtimeMs > newestSource) {
-            newestSource = st.mtimeMs;
+    if (devMode) {
+      const webMainJs = path.join(webBuildDir, "main.dart.js");
+      if (fs.existsSync(webMainJs)) {
+        const buildMtime = fs.statSync(webMainJs).mtimeMs;
+        const libDir = path.join(process.cwd(), "..", "app", "lib");
+        let newestSource = 0;
+        const walk = (dir: string) => {
+          for (const name of fs.readdirSync(dir)) {
+            const full = path.join(dir, name);
+            const st = fs.statSync(full);
+            if (st.isDirectory()) walk(full);
+            else if (name.endsWith(".dart") && st.mtimeMs > newestSource) {
+              newestSource = st.mtimeMs;
+            }
           }
+        };
+        if (fs.existsSync(libDir)) walk(libDir);
+        if (newestSource > buildMtime) {
+          logger.warn(
+            {
+              buildAge: new Date(buildMtime).toISOString(),
+              sourceAge: new Date(newestSource).toISOString(),
+            },
+            "Flutter web build is ouder dan broncode — telefoon/PWA ziet nog oude UI. Voer uit: npm run refresh:phone"
+          );
         }
-      };
-      if (fs.existsSync(libDir)) walk(libDir);
-      if (newestSource > buildMtime) {
-        logger.warn(
-          {
-            buildAge: new Date(buildMtime).toISOString(),
-            sourceAge: new Date(newestSource).toISOString(),
-          },
-          "Flutter web build is ouder dan broncode — telefoon/PWA ziet nog oude UI. Voer uit: npm run refresh:phone"
-        );
       }
     }
-    logger.info({ dir: webBuildDir }, "Flutter web build wordt geserveerd");
+    logger.info(
+      { dir: webBuildDir, appVersion: appVersionInfo.version },
+      "Flutter web build wordt geserveerd"
+    );
   } else {
     app.get("/", (_req, res) => {
       res

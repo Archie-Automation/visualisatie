@@ -1,0 +1,18 @@
+# Keep Docker build context small (build from repo root).
+.git
+.cursor
+**/node_modules
+**/build
+**/.dart_tool
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/coverage
+backend/data
+docker/data
+docker/go2rtc
+**/*.md
+!docs/DEPLOY.md
+agent-transcripts
+*.db
+*.db-shm
+*.db-wal

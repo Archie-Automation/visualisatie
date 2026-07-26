@@ -6,23 +6,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import 'package:go_router/go_router.dart';
-
 import '../api.dart';
 import '../display_panel_config.dart';
 import '../media_api.dart';
 import '../models.dart';
 import '../schedule_api.dart';
+import '../software_version.dart';
 import '../theme.dart';
 import 'schedule_editor_sheet.dart';
 import 'widgets/glass_card.dart';
 import 'widgets/luxe_backdrop.dart';
 import 'installer_nav.dart';
-
-/// App version embedded at build time via --dart-define=APP_VERSION=x.y.z+N.
-/// Falls back to 'dev' when running without a production build (flutter run).
-const _kAppVersion =
-    String.fromEnvironment('APP_VERSION', defaultValue: 'dev');
 
 /// Customer-facing settings screen: time / astro schedules.
 class SettingsScreen extends ConsumerWidget {
@@ -1154,7 +1148,7 @@ class _VersionFooter extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 4),
       child: Center(
         child: Text(
-          'versie $_kAppVersion',
+          'versie $kAppVersion',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: LuxeColors.inkSoft.withValues(alpha: 0.45),
                 fontSize: 11,

@@ -26,6 +26,11 @@ The entire house is described by a single **JSON tree** (Project → Floors → 
 /docs              Architecture notes
 ```
 
+## Getting started (server / NUC / Proxmox)
+
+Voor iemand zonder programmeerkennis: **[docs/DEPLOY.md](docs/DEPLOY.md)**  
+Kort: Ubuntu-VM in Proxmox → projectmap op de VM → `./installeer.sh`
+
 ## Getting started (development)
 
 1. **Backend**

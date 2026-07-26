@@ -1,13 +1,14 @@
-# Eén stack: Luxe KNX API + camera-streaming (go2rtc) in één container.
-# Start op de server:  ./up.sh   of   docker compose up -d --build
+# Eén stack: Flutter web UI + Luxe KNX API + go2rtc.
+# Installatie:  ./install.sh
 #
-# Vereist: ../config/house.json en (aanbevolen) een .env naast dit bestand
-# (kopieer .env.example, zet JWT_SECRET en voor telefoons MEDIA_BASE_URL).
+# Vereist: docker/.env (zie .env.example). Ontbrekende house.json wordt
+# aangemaakt vanuit config/house.empty.json (bestaande config blijft onaangetast).
 
 services:
   knx-stack:
     build:
-      context: ../backend
+      context: ..
+      dockerfile: docker/Dockerfile
     image: luxe-knx-stack:latest
     container_name: luxe-knx-stack
     restart: unless-stopped
@@ -18,11 +19,18 @@ services:
       - JWT_SECRET=${JWT_SECRET:-change-me-to-a-long-random-string}
       - LOG_LEVEL=info
       - KNX_SIMULATE=0
-      # LAN-IP van deze server + poort 1984, voor apps op telefoon/tablet
       - MEDIA_BASE_URL=${MEDIA_BASE_URL:-http://127.0.0.1:1984}
       - PUBLIC_API_BASE=${PUBLIC_API_BASE:-}
+      - WEB_ROOT=/app/web
       - GO2RTC_CONFIG_PATH=/media/go2rtc.yaml
       - GO2RTC_AUTO_START=1
+      - LOG_STORE_PATH=/data/logs.db
+      - HVAC_LOCK_STORE_PATH=/data/hvac-locks.json
+      - SPOTIFY_STORE_PATH=/data/spotify.json
+      - GITHUB_REPO=${GITHUB_REPO:-Archie-Automation/visualisatie}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
     volumes:
-      - ../config:/config:ro
+      # Writable: installer saves house.json from the app.
+      - ../config:/config
       - ./go2rtc:/media
+      - ./data:/data

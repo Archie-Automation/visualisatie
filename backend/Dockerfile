@@ -1,4 +1,8 @@
-# Production image: API + ingebouwde go2rtc + ffmpeg (één container op de server).
+# Production API-only image (zonder Flutter web).
+# Volledige stack (UI + API + go2rtc): gebruik docker/Dockerfile vanaf repo-root
+#   docker compose -f docker/docker-compose.yml up -d --build
+#
+# Dit bestand blijft nuttig voor API-only builds / CI zonder Flutter SDK.
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json tsconfig.json ./

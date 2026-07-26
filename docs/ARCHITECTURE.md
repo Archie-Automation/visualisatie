@@ -45,11 +45,13 @@ The backend knows per device type which GAs are mandatory, which DPT (Datapoint 
 
 ## 4. Remote access
 
-The backend does **not** expose itself directly to the internet. For off-site use the recommended path is a **Gira S1** or **ISE Smart Connect KNX Remote Access** device, which tunnels to a manufacturer cloud; the Flutter app can connect through that tunnel. Alternative: Wireguard/Tailscale into the NUC.
+**Fase 1 (nu):** bereik de stack op het LAN via `http://<nuc-ip>:4000/`. Zie [DEPLOY.md](./DEPLOY.md).
+
+**Later:** Cloudflare Tunnel naar een domein (bijv. `home.archie.cloud`) + optioneel TURN voor WebRTC/intercom buitenshuis. Directe internet-exposure zonder tunnel blijft afgeraden.
 
 ## 5. Deployment
 
-**Server (aanbevolen):** één Docker-image (`backend/Dockerfile`) met Node API + **go2rtc** + **ffmpeg**; start met `docker/up.sh` of `docker compose up -d` vanuit `docker/` (zie `docker/.env.example`). Geen aparte go2rtc-container meer nodig.
+**Server:** één Docker-image (`docker/Dockerfile`) met Flutter web UI + Node API + **go2rtc** + **ffmpeg**. Start met `docker/install.sh` (seedt leeg huis alleen als `house.json` ontbreekt). Zie [DEPLOY.md](./DEPLOY.md).
 
 **Ontwikkeling:** backend met `npm run dev`; optioneel `GO2RTC_AUTO_START=1` als go2rtc lokaal op PATH staat.
 
