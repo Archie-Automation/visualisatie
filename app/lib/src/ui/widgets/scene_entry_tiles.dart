@@ -37,7 +37,7 @@ class SceneEntryHeader extends StatelessWidget {
             locationLabel!.toUpperCase(),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10,
               letterSpacing: 1.2,
               fontWeight: FontWeight.w600,
@@ -278,7 +278,7 @@ class _DelayRepeatButtonState extends State<_DelayRepeatButton> {
       onPointerCancel: _onPointerUp,
       child: Material(
         color: LuxeColors.surface,
-        shape: const CircleBorder(side: BorderSide(color: LuxeColors.line)),
+        shape: CircleBorder(side: BorderSide(color: LuxeColors.line)),
         child: SizedBox(
           width: 48,
           height: 48,
@@ -344,7 +344,7 @@ class _SceneDelayPickerState extends State<_SceneDelayPicker> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'START NA (SECONDES)',
           style: TextStyle(
             fontSize: 10,
@@ -353,7 +353,7 @@ class _SceneDelayPickerState extends State<_SceneDelayPicker> {
             color: LuxeColors.inkSoft,
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
@@ -387,11 +387,11 @@ class _SceneDelayPickerState extends State<_SceneDelayPicker> {
                   fillColor: LuxeColors.surface,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: LuxeColors.line),
+                    borderSide: BorderSide(color: LuxeColors.line),
                   ),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: LuxeColors.line),
+                    borderSide: BorderSide(color: LuxeColors.line),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
@@ -405,7 +405,7 @@ class _SceneDelayPickerState extends State<_SceneDelayPicker> {
                 onTapOutside: (_) => _commit(),
               ),
             ),
-            const SizedBox(width: 10),
+            SizedBox(width: 10),
             _DelayRepeatButton(
               icon: Icons.add,
               direction: 1,
@@ -415,7 +415,7 @@ class _SceneDelayPickerState extends State<_SceneDelayPicker> {
           ],
         ),
         const SizedBox(height: 4),
-        const Text(
+        Text(
           'Tot 3 secondes in stappen van 0,5 · daarna hele seconden',
           style: TextStyle(fontSize: 11, color: LuxeColors.inkSoft),
         ),
@@ -442,10 +442,10 @@ class _OnOffRow extends StatelessWidget {
       onSelectionChanged: (sel) => onChanged(sel.first),
       style: ButtonStyle(
         side: WidgetStateProperty.all(
-            const BorderSide(color: LuxeColors.line)),
+            BorderSide(color: LuxeColors.line)),
         foregroundColor: WidgetStateProperty.resolveWith(
           (s) => s.contains(WidgetState.selected)
-              ? Colors.white
+              ? LuxeColors.onInk
               : LuxeColors.ink,
         ),
         backgroundColor: WidgetStateProperty.resolveWith(
@@ -459,15 +459,15 @@ class _OnOffRow extends StatelessWidget {
 }
 
 class _ValueSlider extends StatelessWidget {
-  const _ValueSlider({
+  _ValueSlider({
     required this.value,
     required this.min,
     required this.max,
     required this.label,
     required this.onChanged,
-    this.accent = LuxeColors.ink,
+    Color? accent,
     this.suffix = '%',
-  });
+  }) : accent = accent ?? LuxeColors.ink;
   final double value;
   final double min;
   final double max;
@@ -486,13 +486,13 @@ class _ValueSlider extends StatelessWidget {
         Row(
           children: [
             Text(label,
-                style: const TextStyle(
+                style: TextStyle(
                   color: LuxeColors.inkSoft,
                   fontSize: 11,
                   letterSpacing: 1.8,
                   fontWeight: FontWeight.w600,
                 )),
-            const Spacer(),
+            Spacer(),
             Text(right,
                 style: Theme.of(context).textTheme.titleMedium),
           ],
@@ -539,7 +539,7 @@ class _SetpointAdjuster extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             color: LuxeColors.inkSoft,
             fontSize: 11,
             letterSpacing: 1.8,
@@ -557,7 +557,7 @@ class _SetpointAdjuster extends StatelessWidget {
             Text(
               spec.format(v),
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w300,
+                    fontWeight: FontWeight.w600,
                     fontSize: 40,
                   ),
             ),
@@ -581,9 +581,9 @@ class _RoundStepButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: LuxeColors.surface,
-      shape: const CircleBorder(side: BorderSide(color: LuxeColors.line)),
+      shape: CircleBorder(side: BorderSide(color: LuxeColors.line)),
       child: InkWell(
-        customBorder: const CircleBorder(),
+        customBorder: CircleBorder(),
         onTap: onTap,
         child: SizedBox(
           width: 44,
@@ -657,7 +657,7 @@ class _ShadingControls extends StatelessWidget {
               delayMs: entry.delayMs)),
         ),
         if (hasSlats) ...[
-          const SizedBox(height: 10),
+          SizedBox(height: 10),
           _ValueSlider(
             accent: LuxeColors.brass,
             label: 'LAMELLEN',
@@ -818,7 +818,7 @@ class _SceneFireplaceFlameBar extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Expanded(
+            Expanded(
               child: Text(
                 'VLAMSTAND',
                 style: TextStyle(
@@ -939,13 +939,13 @@ class _OptionRow extends StatelessWidget {
         Row(
           children: [
             Text(label,
-                style: const TextStyle(
+                style: TextStyle(
                   color: LuxeColors.inkSoft,
                   fontSize: 11,
                   letterSpacing: 1.8,
                   fontWeight: FontWeight.w600,
                 )),
-            const Spacer(),
+            Spacer(),
             if (clearable && active != null)
               TextButton(
                 onPressed: onClear,
@@ -1035,7 +1035,7 @@ class _FanControls extends StatelessWidget {
           onChanged: (v) => onChanged(copy(on: v)),
         ),
         if (entry.on) ...[
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           _SceneFanSpeedBar(
             spec: speedSpec,
             active: entry.speed,
@@ -1045,7 +1045,7 @@ class _FanControls extends StatelessWidget {
             const SizedBox(height: 10),
             Row(
               children: [
-                const Text('OSCILLATIE',
+                Text('OSCILLATIE',
                     style: TextStyle(
                       color: LuxeColors.inkSoft,
                       fontSize: 11,
@@ -1112,7 +1112,7 @@ class _SceneFanSpeedBar extends StatelessWidget {
       children: [
         Text(
           spec.isSteps ? 'STAND' : 'SNELHEID',
-          style: const TextStyle(
+          style: TextStyle(
             color: LuxeColors.inkSoft,
             fontSize: 11,
             letterSpacing: 1.8,
@@ -1146,7 +1146,7 @@ class _MediaControls extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'ACTIE',
           style: TextStyle(
             color: LuxeColors.inkSoft,
@@ -1174,10 +1174,10 @@ class _MediaControls extends ConsumerWidget {
           },
           style: ButtonStyle(
             side: WidgetStateProperty.all(
-                const BorderSide(color: LuxeColors.line)),
+                BorderSide(color: LuxeColors.line)),
             foregroundColor: WidgetStateProperty.resolveWith(
               (s) => s.contains(WidgetState.selected)
-                  ? Colors.white
+                  ? LuxeColors.onInk
                   : LuxeColors.ink,
             ),
             backgroundColor: WidgetStateProperty.resolveWith(
@@ -1188,8 +1188,8 @@ class _MediaControls extends ConsumerWidget {
           ),
         ),
         if (presets.isNotEmpty) ...[
-          const SizedBox(height: 14),
-          const Text(
+          SizedBox(height: 14),
+          Text(
             'FAVORIET',
             style: TextStyle(
               color: LuxeColors.inkSoft,
@@ -1229,7 +1229,7 @@ class _MediaControls extends ConsumerWidget {
             },
           ),
         ],
-        const SizedBox(height: 14),
+        SizedBox(height: 14),
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Volume instellen'),
@@ -1399,7 +1399,7 @@ class _TriStateChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: active ? LuxeColors.ink : LuxeColors.surface,
           borderRadius: BorderRadius.circular(999),
@@ -1542,7 +1542,7 @@ class SceneDeviceRoomSection extends StatelessWidget {
                 children: [
                   for (int i = 0; i < children.length; i++) ...[
                     if (i > 0)
-                      const Divider(
+                      Divider(
                         height: 2,
                         thickness: 1.5,
                         color: LuxeColors.line,
@@ -1583,7 +1583,7 @@ Future<List<Device>?> pickDevicesForScene(
             maxChildSize: 0.95,
             expand: false,
             builder: (ctx, scrollCtl) => Container(
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: LuxeColors.cream,
                 borderRadius:
                     BorderRadius.vertical(top: Radius.circular(28)),
@@ -1593,7 +1593,7 @@ Future<List<Device>?> pickDevicesForScene(
                   Container(
                     width: 48,
                     height: 5,
-                    margin: const EdgeInsets.only(top: 10, bottom: 6),
+                    margin: EdgeInsets.only(top: 10, bottom: 6),
                     decoration: BoxDecoration(
                       color: LuxeColors.inkFaint.withValues(alpha: 0.4),
                       borderRadius: BorderRadius.circular(4),
@@ -1691,7 +1691,7 @@ Future<List<Device>?> pickDevicesForScene(
                                   },
                             style: FilledButton.styleFrom(
                               backgroundColor: LuxeColors.ink,
-                              foregroundColor: Colors.white,
+                              foregroundColor: LuxeColors.onInk,
                               minimumSize: const Size.fromHeight(48),
                               shape: const StadiumBorder(),
                             ),
@@ -1773,7 +1773,7 @@ class _DeviceCheckbox extends StatelessWidget {
       borderRadius: BorderRadius.circular(14),
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        padding: EdgeInsets.fromLTRB(14, 12, 14, 12),
         child: Row(
           children: [
             Container(
@@ -1799,7 +1799,7 @@ class _DeviceCheckbox extends StatelessWidget {
                       size: 18,
                       color: selected ? LuxeColors.brass : LuxeColors.ink),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Expanded(
               child: Text(
                 device.name,

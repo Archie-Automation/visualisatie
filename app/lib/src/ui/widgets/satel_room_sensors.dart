@@ -30,7 +30,7 @@ class SatelRoomSensors extends ConsumerWidget {
     return GestureDetector(
       onTap: () => context.push('/alarm'),
       child: Container(
-        margin: const EdgeInsets.only(top: 4, bottom: 8),
+        margin: EdgeInsets.only(top: 4, bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: anyViolated
@@ -39,14 +39,14 @@ class SatelRoomSensors extends ConsumerWidget {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: anyViolated
-                ? const Color(0xFFD64545).withValues(alpha: 0.22)
+                ? Color(0xFFD64545).withValues(alpha: 0.22)
                 : LuxeColors.line,
             width: 0.5,
           ),
         ),
         child: Row(
           children: [
-            const Text(
+            Text(
               'BEVEILIGING',
               style: TextStyle(
                 fontSize: 10,
@@ -55,7 +55,7 @@ class SatelRoomSensors extends ConsumerWidget {
                 color: LuxeColors.inkFaint,
               ),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Expanded(
               child: Wrap(
                 spacing: 8,

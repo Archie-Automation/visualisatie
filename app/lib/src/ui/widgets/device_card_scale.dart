@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import '../responsive.dart';
 
 /// Responsive schaal voor device-kaarten — phone / tablet / desktop-web.
+///
+/// Compact gehouden t.o.v. hoofdnavigatie (scenes/systemen/kamers), zodat
+/// titels, gemeten temp en Sonos-bediening op smalle kaarten blijven passen.
 abstract final class DeviceCardScale {
   /// Uniforme knopmaat — gelijk aan audio ([DeviceControlBar.buttonSize]).
   static double buttonSize(BuildContext context) => 56;
@@ -49,11 +52,12 @@ abstract final class DeviceCardScale {
   static double setpointStepButtonSize(BuildContext context) =>
       buttonSize(context);
 
-  /// Breedte van het gemeten-temp-vakje.
+  /// Breedte van het gemeten-temp-vakje (ruim genoeg voor `21.5°` + icoon,
+  /// ook met tablet textScaler).
   static double climateChipWidth(BuildContext context) {
-    if (context.isPhone) return 148;
-    if (context.isTablet) return 164;
-    return 156;
+    if (context.isPhone) return 156;
+    if (context.isTablet) return 176;
+    return 164;
   }
 
   static double heroValueFontSize(BuildContext context) {

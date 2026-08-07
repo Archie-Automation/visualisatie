@@ -262,7 +262,7 @@ class _FavorietenBody extends ConsumerWidget {
                 if (favDevices.isNotEmpty) ...[
                   const _SectionLabel(label: 'APPARATEN'),
                   for (var i = 0; i < favDevices.length; i++) ...[
-                    if (i > 0) const SizedBox(height: 18),
+                    if (i > 0) SizedBox(height: 18),
                     _FavoriteDeviceBlock(
                       device: favDevices[i],
                       roomName: cfg.roomForDevice(favDevices[i].id)?.name,
@@ -315,7 +315,7 @@ class _FavoriteShortcutRow extends StatelessWidget {
 
     return GlassCard(
       radius: 20,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       onTap: () => context.push(path),
       child: Row(
         children: [
@@ -324,7 +324,7 @@ class _FavoriteShortcutRow extends StatelessWidget {
             color: LuxeColors.brass,
             size: 22,
           ),
-          const SizedBox(width: 14),
+          SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -360,7 +360,7 @@ class _FavoriteDeviceBlock extends StatelessWidget {
       children: [
         if (roomName != null)
           Padding(
-            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            padding: EdgeInsets.only(left: 4, bottom: 8),
             child: Text(
               roomName!.toUpperCase(),
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -388,22 +388,36 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Verdiepingen (brass): groter; light = ink (leesbaar), dark = brass.
+    final color = brass
+        ? (isDark ? LuxeColors.brass : LuxeColors.ink)
+        : LuxeColors.inkSoft;
+    final style = brass
+        ? Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: color,
+              letterSpacing: 1.4,
+              fontWeight: FontWeight.w700,
+              fontSize: context.isPhone ? 15 : 17,
+              height: 1.2,
+            )
+        : Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: color,
+              letterSpacing: 1.15,
+              fontWeight: FontWeight.w600,
+              fontSize: context.isPhone ? 13 : 15,
+              height: 1.2,
+            );
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 16, 4, 10),
+      padding: EdgeInsets.fromLTRB(4, brass ? 20 : 18, 4, brass ? 12 : 10),
       child: Row(
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 13, color: LuxeColors.brass),
-            const SizedBox(width: 6),
+            Icon(icon, size: brass ? 18 : 15, color: color),
+            SizedBox(width: 6),
           ],
-          Text(
-            label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: brass ? LuxeColors.brass : LuxeColors.inkSoft,
-                  letterSpacing: brass ? 1.3 : 1.1,
-                  fontWeight: brass ? FontWeight.w700 : null,
-                ),
-          ),
+          Text(label, style: style),
         ],
       ),
     );
@@ -455,7 +469,7 @@ class _AudioGroupSummary extends StatelessWidget {
         children: groups.entries.map((entry) {
           final allIds = [entry.key, ...entry.value];
           return Container(
-            margin: const EdgeInsets.only(bottom: 8),
+            margin: EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
               color: LuxeColors.brass.withValues(alpha: 0.07),
@@ -464,7 +478,7 @@ class _AudioGroupSummary extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.link_rounded, size: 15, color: LuxeColors.brass),
+                Icon(Icons.link_rounded, size: 15, color: LuxeColors.brass),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Wrap(
@@ -473,7 +487,7 @@ class _AudioGroupSummary extends StatelessWidget {
                     children: allIds.map((id) {
                       final isCoord = id == entry.key;
                       return Container(
-                        padding: const EdgeInsets.symmetric(
+                        padding: EdgeInsets.symmetric(
                             horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
                           color: isCoord

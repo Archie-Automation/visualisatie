@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import '../../ac_mode_config.dart';
 import '../../api.dart';
 import '../../camera_api.dart';
+import '../../fireplace_status.dart';
 import '../../fireplace_step_ranges.dart';
 import '../../fireplace_virtual.dart';
 import '../../hvac_switch_lock.dart';
@@ -83,7 +84,7 @@ class _LightTileHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(name, style: Theme.of(context).textTheme.titleLarge),
+          Text(name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
           const SizedBox(height: DeviceTileLayout.titleStatusGap),
           Text(status, style: Theme.of(context).textTheme.bodyMedium),
         ],
@@ -570,7 +571,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
                 Expanded(
                   child: Text(
                     d.name,
-                    style: Theme.of(context).textTheme.titleLarge,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                   ),
                 ),
                 Text(
@@ -686,7 +687,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
                 Expanded(
                   child: Text(
                     d.name,
-                    style: Theme.of(context).textTheme.titleLarge,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                   ),
                 ),
                 Text(
@@ -758,7 +759,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
                 Expanded(
                   child: Text(
                     d.name,
-                    style: Theme.of(context).textTheme.titleLarge,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                   ),
                 ),
                 Text(
@@ -772,7 +773,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
             ),
             trailing: hasOnGa ? _lightOnOffSwitch(context, d, on) : null,
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Text('Ruwe bytes op één GA.',
               style: Theme.of(context)
                   .textTheme
@@ -990,10 +991,10 @@ class _LuxeGradientBarState extends State<_LuxeGradientBar> {
       children: [
         if (widget.label != null)
           Padding(
-            padding: const EdgeInsets.only(bottom: 6),
+            padding: EdgeInsets.only(bottom: 6),
             child: Text(
               widget.label!,
-              style: const TextStyle(
+              style: TextStyle(
                 color: LuxeColors.inkSoft,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
@@ -1046,7 +1047,7 @@ class _LuxeGradientBarState extends State<_LuxeGradientBar> {
                       child: AnimatedContainer(
                         duration: _dragging
                             ? Duration.zero
-                            : const Duration(milliseconds: 80),
+                            : Duration(milliseconds: 80),
                         width:  thumbR * 2,
                         height: thumbR * 2,
                         decoration: BoxDecoration(
@@ -1154,13 +1155,13 @@ class LutronHomeworksTile extends ConsumerWidget {
             icon: Icons.home_work_outlined,
             active: telEnabled && hostLine != null,
           ),
-          const SizedBox(width: DeviceTileLayout.iconGap),
+          SizedBox(width: DeviceTileLayout.iconGap),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(device.name,
-                    style: Theme.of(context).textTheme.titleLarge),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: 6),
                 Text(
                   sub.isEmpty
@@ -1444,7 +1445,7 @@ class _ShadingPositionStateIconState extends State<_ShadingPositionStateIcon>
             ),
             child: Center(
               child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 120),
+                duration: Duration(milliseconds: 120),
                 switchInCurve: Curves.easeOut,
                 switchOutCurve: Curves.easeIn,
                 child: _ShadingPosIconGraphic(
@@ -1594,12 +1595,12 @@ class _ShadingTileState extends ConsumerState<ShadingTile> {
                       ),
                     ),
         ),
-        const SizedBox(width: DeviceTileLayout.iconGap),
+        SizedBox(width: DeviceTileLayout.iconGap),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(d.name, style: Theme.of(context).textTheme.titleLarge),
+              Text(d.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
               if (isPositionActuator) ...[
                 const SizedBox(height: DeviceTileLayout.titleStatusGap),
                 Text(
@@ -1761,7 +1762,7 @@ class _ShadingPopupState extends ConsumerState<_ShadingPopup> {
                   .textTheme
                   .labelSmall
                   ?.copyWith(color: LuxeColors.inkFaint)),
-          const SizedBox(height: 4),
+          SizedBox(height: 4),
           RotatedBox(
             quarterTurns: 1,
             child: SizedBox(
@@ -1774,7 +1775,7 @@ class _ShadingPopupState extends ConsumerState<_ShadingPopup> {
               ),
             ),
           ),
-          const SizedBox(height: 4),
+          SizedBox(height: 4),
           Text('Gesloten',
               style: Theme.of(context)
                   .textTheme
@@ -1786,7 +1787,7 @@ class _ShadingPopupState extends ConsumerState<_ShadingPopup> {
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 32, vertical: 40),
+      insetPadding: EdgeInsets.symmetric(horizontal: 32, vertical: 40),
       child: Container(
         constraints: const BoxConstraints(maxWidth: 340),
         decoration: BoxDecoration(
@@ -1814,7 +1815,7 @@ class _ShadingPopupState extends ConsumerState<_ShadingPopup> {
                           size: DeviceControlIcons.size,
                           color: LuxeColors.ink,
                         ),
-                  const SizedBox(width: 10),
+                  SizedBox(width: 10),
                   Expanded(
                     child: Text(d.name,
                         style: Theme.of(context).textTheme.titleMedium),
@@ -1838,13 +1839,13 @@ class _ShadingPopupState extends ConsumerState<_ShadingPopup> {
                       .displaySmall
                       ?.copyWith(
                           color: LuxeColors.brass,
-                          fontWeight: FontWeight.w300),
+                          fontWeight: FontWeight.w600),
                 ),
               ),
             // Slider
             if (hasPosition)
               Padding(
-                padding: const EdgeInsets.symmetric(
+                padding: EdgeInsets.symmetric(
                     horizontal: 12, vertical: 8),
                 child: positionSlider,
               ),
@@ -1886,13 +1887,14 @@ class _ShadingPopupState extends ConsumerState<_ShadingPopup> {
     required double value,
     required ValueChanged<double> onChanged,
     required ValueChanged<double> onChangeEnd,
-    Color accent = LuxeColors.brass,
+    Color? accent,
   }) {
+    final accentColor = accent ?? LuxeColors.brass;
     return Builder(
       builder: (context) => SliderTheme(
         data: SliderTheme.of(context).copyWith(
           trackHeight: 4,
-          activeTrackColor: accent.withValues(alpha: 0.6),
+          activeTrackColor: accentColor.withValues(alpha: 0.6),
           inactiveTrackColor: LuxeColors.line,
           thumbColor: LuxeColors.brass,
           overlayShape: SliderComponentShape.noOverlay,
@@ -1925,7 +1927,7 @@ class _MiniBtn extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: LuxeColors.surface,
           borderRadius: BorderRadius.circular(999),
@@ -1935,9 +1937,9 @@ class _MiniBtn extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: DeviceControlIcons.size, color: LuxeColors.ink),
-            const SizedBox(width: 6),
+            SizedBox(width: 6),
             Text(label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: LuxeColors.ink,
@@ -2206,7 +2208,7 @@ class _ClimateTileState extends ConsumerState<ClimateTile> {
                   right: -3,
                   bottom: -3,
                   child: Container(
-                    padding: const EdgeInsets.all(3),
+                    padding: EdgeInsets.all(3),
                     decoration: BoxDecoration(
                       color: LuxeColors.brass,
                       shape: BoxShape.circle,
@@ -2215,7 +2217,7 @@ class _ClimateTileState extends ConsumerState<ClimateTile> {
                         width: 1.5,
                       ),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.show_chart_rounded,
                       size: 10,
                       color: Colors.white,
@@ -2231,15 +2233,23 @@ class _ClimateTileState extends ConsumerState<ClimateTile> {
                   d.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleLarge,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                 ),
                 if (hvacSwitchLocked) ...[
                   const SizedBox(height: DeviceTileLayout.titleStatusGap),
-                  Text(
-                    'Vergrendeld · ${HvacLockStore.formatRemaining(hvacLockRemaining!)}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: LuxeColors.inkSoft,
-                        ),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '${isHeating ? 'Koel' : 'Verwarm'} blokkade · ${HvacLockStore.formatRemaining(hvacLockRemaining!)}',
+                      maxLines: 1,
+                      softWrap: false,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: LuxeColors.inkSoft,
+                          ),
+                    ),
                   ),
                 ],
               ],
@@ -2429,7 +2439,7 @@ class _ClimateMeasuredStatusRow extends StatelessWidget {
       child: DeviceControlButtonSurface(
         width: DeviceCardScale.climateChipWidth(context),
         height: btn,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
+        padding: EdgeInsets.symmetric(horizontal: 12),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           mainAxisSize: MainAxisSize.max,
@@ -2440,19 +2450,24 @@ class _ClimateMeasuredStatusRow extends StatelessWidget {
                 size: glyph + 2,
                 color: LuxeColors.inkSoft,
               ),
-              const SizedBox(width: 6),
+              SizedBox(width: 6),
               Flexible(
-                child: Text(
-                  actual != null
-                      ? '${actual!.toStringAsFixed(1)}°'
-                      : '--°',
-                  maxLines: 1,
-                  overflow: TextOverflow.clip,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontSize: DeviceCardScale.measuredTempFontSize(context),
-                        fontWeight: FontWeight.w600,
-                        height: 1,
-                      ),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    actual != null
+                        ? '${actual!.toStringAsFixed(1)}°'
+                        : '--°',
+                    maxLines: 1,
+                    softWrap: false,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontSize:
+                              DeviceCardScale.measuredTempFontSize(context),
+                          fontWeight: FontWeight.w600,
+                          height: 1,
+                        ),
+                  ),
                 ),
               ),
             ],
@@ -2529,17 +2544,17 @@ class CameraTile extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.only(bottom: 14),
+            padding: EdgeInsets.only(bottom: 14),
             child: Row(
               children: [
-                const Icon(Icons.videocam_outlined,
+                Icon(Icons.videocam_outlined,
                     color: LuxeColors.inkSoft, size: 20),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: Text(device.name,
-                      style: Theme.of(context).textTheme.titleLarge),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                 ),
-                const Icon(Icons.open_in_full,
+                Icon(Icons.open_in_full,
                     size: 18, color: LuxeColors.inkSoft),
               ],
             ),
@@ -2583,21 +2598,21 @@ class IntercomTile extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: const EdgeInsets.only(bottom: 14),
+            padding: EdgeInsets.only(bottom: 14),
             child: Row(
               children: [
-                const Icon(Icons.doorbell_outlined,
+                Icon(Icons.doorbell_outlined,
                     color: LuxeColors.brass, size: 22),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 Expanded(
                   child: Text(device.name,
-                      style: Theme.of(context).textTheme.titleLarge),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                 ),
                 FilledButton.tonal(
                   onPressed: () => context.push('/intercom/${device.id}'),
                   style: FilledButton.styleFrom(
                     backgroundColor: LuxeColors.ink,
-                    foregroundColor: Colors.white,
+                    foregroundColor: LuxeColors.onInk,
                     shape: const StadiumBorder(),
                     padding: const EdgeInsets.symmetric(
                         horizontal: 18, vertical: 10),
@@ -2770,7 +2785,7 @@ Widget _placeholderBox(double ar) => AspectRatio(
       aspectRatio: ar,
       child: Container(
         color: Colors.black,
-        child: const Center(
+        child: Center(
           child: SizedBox(
             width: 22,
             height: 22,
@@ -2802,7 +2817,7 @@ class _Placeholder extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(name, style: Theme.of(context).textTheme.titleLarge),
+            Text(name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
             const SizedBox(height: 8),
             Text(hint, style: Theme.of(context).textTheme.bodyMedium),
           ],
@@ -2935,14 +2950,21 @@ class _FireplaceTileState extends ConsumerState<FireplaceTile> {
 
     final onOff = (cfg['onOff'] as Map).cast<String, dynamic>();
     final discreteMode = _fireplaceIsDiscrete(cfg);
+    final statusBits = fireplaceStatusBitsMap(cfg);
+    final hasStatusBits = fireplaceHasStatusBits(cfg);
     final onStatusGa = onOff['statusGa'] as String? ?? onOff['ga'] as String;
     final busOn = bus.values[onStatusGa] == true || bus.values[onStatusGa] == 1;
-    final on = FireplaceVirtualStore.resolveOn(
-      discreteMode: discreteMode,
-      virtual: fireplaceVirtual,
-      deviceId: device.id,
-      busOn: busOn,
-    );
+    final workingOn = fireplaceWorkingOn(cfg, bus.values);
+    final on = workingOn ??
+        FireplaceVirtualStore.resolveOn(
+          discreteMode: discreteMode,
+          virtual: fireplaceVirtual,
+          deviceId: device.id,
+          busOn: busOn,
+        );
+    final statusLabel = hasStatusBits
+        ? fireplaceComposeStatusLabel(bus.values, statusBits)
+        : (on ? 'Aan' : 'Uit');
 
     final discreteLevel =
         cfg['discreteLevel'] as Map<String, dynamic>?;
@@ -3052,10 +3074,10 @@ class _FireplaceTileState extends ConsumerState<FireplaceTile> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(device.name,
-                    style: Theme.of(context).textTheme.titleLarge),
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: DeviceTileLayout.titleStatusGap),
                 Text(
-                  on ? 'Aan' : 'Uit',
+                  statusLabel ?? (on ? 'Aan' : 'Uit'),
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ],
@@ -3069,19 +3091,19 @@ class _FireplaceTileState extends ConsumerState<FireplaceTile> {
           if (discreteMode && discreteLevel != null) ...[
             SizedBox(height: DeviceControlBar.sectionSpacing(context)),
             fireplaceControlBar([
-              if (_fireplacePulse(discreteLevel, 'up') != null)
-                DeviceControlItem(
-                  icon: Icons.add,
-                  label: 'Hoger',
-                  labelMode: DeviceControlLabelMode.iconOnly,
-                  onTap: () => sendDiscrete('up'),
-                ),
               if (_fireplacePulse(discreteLevel, 'down') != null)
                 DeviceControlItem(
                   icon: Icons.remove,
                   label: 'Lager',
                   labelMode: DeviceControlLabelMode.iconOnly,
                   onTap: () => sendDiscrete('down'),
+                ),
+              if (_fireplacePulse(discreteLevel, 'up') != null)
+                DeviceControlItem(
+                  icon: Icons.add,
+                  label: 'Hoger',
+                  labelMode: DeviceControlLabelMode.iconOnly,
+                  onTap: () => sendDiscrete('up'),
                 ),
             ]),
           ],
@@ -3221,7 +3243,7 @@ class _AcTileState extends ConsumerState<AcTile> {
                   widget.device.name,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleLarge,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: DeviceTileLayout.titleStatusGap),
                 Text(
@@ -3418,7 +3440,7 @@ class FanTile extends ConsumerWidget {
             content: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(d.name, style: Theme.of(context).textTheme.titleLarge),
+                Text(d.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                 const SizedBox(height: DeviceTileLayout.titleStatusGap),
                 Text(
                   on ? 'Aan' : 'Uit',
@@ -3666,7 +3688,7 @@ class UniversalTile extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(device.name,
-                  style: Theme.of(context).textTheme.titleLarge),
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
               const SizedBox(height: DeviceTileLayout.titleStatusGap),
               Text(on ? 'AAN' : 'UIT',
                   style: Theme.of(context).textTheme.bodyMedium),
@@ -3707,14 +3729,14 @@ class UniversalTile extends ConsumerWidget {
               glyph: headerGlyph,
             ),
             content: Text(device.name,
-                style: Theme.of(context).textTheme.titleLarge),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
           ),
           if (buttonItems.isNotEmpty) ...[
             SizedBox(height: DeviceControlBar.sectionSpacing(context)),
             DeviceControlBar.gridAuto(context, buttonItems),
           ] else
             Padding(
-              padding: const EdgeInsets.only(top: 12),
+              padding: EdgeInsets.only(top: 12),
               child: Text(
                 'Geen knoppen geconfigureerd.',
                 style: Theme.of(context)
@@ -3813,28 +3835,28 @@ class _UniversalButton extends StatelessWidget {
       };
 
   static _BtnPalette _palette(String? style) => switch (style) {
-        'primary' => const _BtnPalette(
+        'primary' => _BtnPalette(
             bg: LuxeColors.ink,
             fg: Colors.white,
             activeBg: LuxeColors.ink,
             activeFg: LuxeColors.brassGlow,
             border: LuxeColors.ink,
           ),
-        'brass' => const _BtnPalette(
+        'brass' => _BtnPalette(
             bg: LuxeColors.surface,
             fg: LuxeColors.brassDeep,
             activeBg: LuxeColors.brass,
             activeFg: Colors.white,
             border: LuxeColors.brass,
           ),
-        'danger' => const _BtnPalette(
+        'danger' => _BtnPalette(
             bg: LuxeColors.surface,
             fg: LuxeColors.danger,
             activeBg: LuxeColors.danger,
             activeFg: Colors.white,
             border: LuxeColors.danger,
           ),
-        _ => const _BtnPalette(
+        _ => _BtnPalette(
             bg: LuxeColors.surface,
             fg: LuxeColors.ink,
             activeBg: LuxeColors.ink,
@@ -3894,7 +3916,7 @@ class _StepBar extends StatelessWidget {
             child: GestureDetector(
               onTap: () => onChanged(i),
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
+                duration: Duration(milliseconds: 160),
                 height: 48,
                 decoration: BoxDecoration(
                   color: i == value ? LuxeColors.ink : LuxeColors.surface,
@@ -3904,7 +3926,7 @@ class _StepBar extends StatelessWidget {
                   ),
                 ),
                 alignment: Alignment.center,
-                padding: const EdgeInsets.symmetric(horizontal: 4),
+                padding: EdgeInsets.symmetric(horizontal: 4),
                 child: Text(
                   (effectiveLabels != null &&
                           !allowZero &&
@@ -3989,7 +4011,7 @@ class WtwTile extends ConsumerWidget {
             context: context,
             leading: DeviceTileIconBadge(icon: Icons.air_outlined),
             content: Text(device.name,
-                style: Theme.of(context).textTheme.titleLarge),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
           ),
 
           if (buttonItems.isNotEmpty) ...[
@@ -4061,7 +4083,7 @@ class _WtwStatusRow extends StatelessWidget {
     final dotColor = isAlert ? LuxeColors.danger : LuxeColors.brass;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
           // Leading indicator: icon or dot
@@ -4095,7 +4117,7 @@ class _WtwStatusRow extends StatelessWidget {
             )
           else
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 3),
               decoration: BoxDecoration(
                 color: isAlert
                     ? LuxeColors.danger.withValues(alpha: 0.10)
@@ -4354,7 +4376,7 @@ class MeldingTile extends ConsumerWidget {
               device.name,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: Theme.of(context).textTheme.titleLarge,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             trailing: DeviceTileLayout.statusIconSlot(
               context,
@@ -4365,7 +4387,7 @@ class MeldingTile extends ConsumerWidget {
                         urgency: worstUrgency!,
                         count: activeAll.length,
                       )
-                    : const _MeldingOkButton(),
+                    : _MeldingOkButton(),
               ),
             ),
           ),
@@ -4425,32 +4447,41 @@ class _MeldingIconBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = DeviceCardScale.iconBadgeSize(context);
-    final radius = BorderRadius.circular(DeviceCardScale.iconRadius(context));
+    final outerR = DeviceCardScale.iconRadius(context);
+    const rim = 1.5;
+    final innerR = (outerR - rim).clamp(0.0, outerR);
     final glyph = DeviceCardScale.glyphSize(context);
     final active = urgency != null;
+    final rimColor = active ? accentColor : LuxeColors.line;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fillColor = active
+        ? accentColor.withValues(alpha: 0.14)
+        : LuxeColors.surfaceDim.withValues(alpha: isDark ? 0.7 : 0.45);
 
     return SizedBox(
       width: size,
       height: size,
       child: DecoratedBox(
         decoration: BoxDecoration(
-          borderRadius: radius,
-          color: active
-              ? accentColor.withValues(alpha: 0.14)
-              : LuxeColors.surfaceDim.withValues(alpha: 0.7),
-          border: Border.all(
-            color: active
-                ? accentColor.withValues(alpha: 0.38)
-                : LuxeColors.line,
-          ),
+          borderRadius: BorderRadius.circular(outerR),
+          color: rimColor,
         ),
-        child: Center(
-          child: Icon(
-            urgency != null
-                ? MeldingTile._urgencyIcon(urgency!)
-                : Icons.notifications_outlined,
-            size: glyph,
-            color: active ? accentColor : LuxeColors.ink,
+        child: Padding(
+          padding: const EdgeInsets.all(rim),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(innerR),
+              color: fillColor,
+            ),
+            child: Center(
+              child: Icon(
+                urgency != null
+                    ? MeldingTile._urgencyIcon(urgency!)
+                    : Icons.notifications_outlined,
+                size: glyph,
+                color: active ? accentColor : LuxeColors.ink,
+              ),
+            ),
           ),
         ),
       ),

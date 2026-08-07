@@ -192,7 +192,7 @@ class _IntercomPlayerState extends ConsumerState<IntercomPlayer> {
             else if (_error != null)
               Center(
                 child: Padding(
-                  padding: const EdgeInsets.all(16),
+                  padding: EdgeInsets.all(16),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -208,7 +208,7 @@ class _IntercomPlayerState extends ConsumerState<IntercomPlayer> {
                 ),
               )
             else
-              const Center(
+              Center(
                 child: SizedBox(
                   width: 22,
                   height: 22,
@@ -236,7 +236,7 @@ class _Badge extends StatelessWidget {
   Widget build(BuildContext context) {
     if (!connected) return const SizedBox.shrink();
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: Colors.black54,
         borderRadius: BorderRadius.circular(30),
@@ -248,7 +248,7 @@ class _Badge extends StatelessWidget {
             width: 7,
             height: 7,
             decoration: BoxDecoration(
-              color: talking ? LuxeColors.brass : const Color(0xFFE44B4B),
+              color: talking ? LuxeColors.brass : Color(0xFFE44B4B),
               shape: BoxShape.circle,
             ),
           ),

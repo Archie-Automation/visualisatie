@@ -621,12 +621,34 @@
             },
             "discreteLevel": {
               "type": "object",
-              "description": "Voor controlMode discrete: pulscontacten (true, wacht pulseMs, false).",
+              "description": "Voor controlMode discrete: pulscontacten (true, wacht pulseMs, false) — start/stop/omhoog/omlaag.",
               "properties": {
                 "on": { "$ref": "#/definitions/knxPulseChannel" },
                 "off": { "$ref": "#/definitions/knxPulseChannel" },
                 "up": { "$ref": "#/definitions/knxPulseChannel" },
                 "down": { "$ref": "#/definitions/knxPulseChannel" }
+              }
+            },
+            "statusBits": {
+              "type": "object",
+              "description": "Optionele statuscontacten (DPT1). Combinaties: error+fuel=Bijvullen, working+ready=Wachten/Koelen.",
+              "properties": {
+                "error": {
+                  "type": "object",
+                  "properties": { "ga": { "$ref": "#/definitions/gaPattern" } }
+                },
+                "fuel": {
+                  "type": "object",
+                  "properties": { "ga": { "$ref": "#/definitions/gaPattern" } }
+                },
+                "working": {
+                  "type": "object",
+                  "properties": { "ga": { "$ref": "#/definitions/gaPattern" } }
+                },
+                "ready": {
+                  "type": "object",
+                  "properties": { "ga": { "$ref": "#/definitions/gaPattern" } }
+                }
               }
             },
             "safetyLockout": {

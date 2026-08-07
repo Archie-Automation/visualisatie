@@ -86,7 +86,7 @@ class _Banner extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+        padding: EdgeInsets.fromLTRB(24, 20, 24, 0),
         child: Material(
           color: Colors.transparent,
           child: Container(
@@ -115,20 +115,20 @@ class _Banner extends ConsumerWidget {
             ),
             child: Row(
               children: [
-                const _RingIcon(),
+                _RingIcon(),
                 const SizedBox(width: 18),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('INKOMENDE OPROEP',
+                      Text('INKOMENDE OPROEP',
                           style: TextStyle(
                             color: LuxeColors.brassGlow,
                             fontSize: 10,
                             letterSpacing: 2.8,
                             fontWeight: FontWeight.w600,
                           )),
-                      const SizedBox(height: 6),
+                      SizedBox(height: 6),
                       Text(ring.name,
                           style: const TextStyle(
                             color: Colors.white,
@@ -144,7 +144,7 @@ class _Banner extends ConsumerWidget {
                   onTap: () =>
                       ref.read(intercomRingProvider.notifier).clear(),
                 ),
-                const SizedBox(width: 12),
+                SizedBox(width: 12),
                 _round(
                   icon: Icons.call,
                   color: LuxeColors.brass,
@@ -210,7 +210,7 @@ class _RingIconState extends State<_RingIcon>
         animation: _c,
         builder: (_, __) => Transform.rotate(
           angle: (_c.value - 0.5) * 0.3,
-          child: const Icon(Icons.notifications_active,
+          child: Icon(Icons.notifications_active,
               color: LuxeColors.brass, size: 28),
         ),
       );

@@ -6,7 +6,10 @@ import 'package:go_router/go_router.dart';
 
 import 'api.dart';
 import 'call_service.dart';
+import 'kiosk_system_ui.dart';
 import 'theme.dart';
+import 'theme_mode.dart';
+import 'ui/responsive.dart';
 import 'ui/camera_screen.dart';
 import 'ui/cameras_overview_screen.dart';
 import 'ui/dashboard_screen.dart';
@@ -65,6 +68,7 @@ class _LuxeKnxAppState extends ConsumerState<LuxeKnxApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       ref.read(busProvider.notifier).reconnectNow();
+      applyAndroidKioskSystemUi();
     }
   }
 
@@ -243,9 +247,13 @@ class _LuxeKnxAppState extends ConsumerState<LuxeKnxApp>
     // Auto-start SIP registration when config is available with SIP intercoms.
     ref.watch(sipStartupProvider);
 
+    final themeMode = ref.watch(effectiveThemeModeProvider);
+
     return MaterialApp.router(
       title: 'Luxe KNX',
-      theme: buildLuxeTheme(),
+      theme: buildLuxeTheme(Brightness.light),
+      darkTheme: buildLuxeTheme(Brightness.dark),
+      themeMode: themeMode,
       debugShowCheckedModeBanner: false,
       scrollBehavior: _AppScrollBehavior(),
       localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -260,6 +268,8 @@ class _LuxeKnxAppState extends ConsumerState<LuxeKnxApp>
       },
       routerConfig: _router,
       builder: (context, child) {
+        final palette = Theme.of(context).extension<LuxePalette>();
+        if (palette != null) LuxeColors.bind(palette);
         // Warm the version check (server + GitHub latest) early.
         ref.watch(softwareVersionStatusProvider);
         final layered = SatelEntryDelayLayer(
@@ -272,15 +282,53 @@ class _LuxeKnxAppState extends ConsumerState<LuxeKnxApp>
             ),
           ),
         );
-        return Column(
+        final content = Column(
           children: [
             const SoftwareUpdateBanner(),
             Expanded(child: layered),
           ],
         );
+        // Tablet: slightly larger for wall readability.
+        // Phone: near-native scale + slightly lighter weights (finer / chic).
+        final phone = context.isPhone;
+        final themed = phone
+            ? Theme(
+                data: _phoneTextPolish(Theme.of(context)),
+                child: content,
+              )
+            : content;
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaler: TextScaler.linear(phone ? 1.0 : 1.14),
+          ),
+          child: themed,
+        );
       },
     );
   }
+}
+
+/// Soften Inter weights on phone without changing layout or tablet look.
+ThemeData _phoneTextPolish(ThemeData base) {
+  final t = base.textTheme;
+  TextStyle? soft(TextStyle? s, FontWeight w, {double? tracking}) =>
+      s?.copyWith(fontWeight: w, letterSpacing: tracking ?? s.letterSpacing);
+
+  final lightNardo = base.brightness == Brightness.light;
+  return base.copyWith(
+    scaffoldBackgroundColor:
+        lightNardo ? LuxePalette.phoneCream : base.scaffoldBackgroundColor,
+    textTheme: t.copyWith(
+      titleLarge: soft(t.titleLarge, FontWeight.w600),
+      titleMedium: soft(t.titleMedium, FontWeight.w600),
+      bodyLarge: soft(t.bodyLarge, FontWeight.w500),
+      bodyMedium: soft(t.bodyMedium, FontWeight.w500),
+      bodySmall: soft(t.bodySmall, FontWeight.w500),
+      labelLarge: soft(t.labelLarge, FontWeight.w600, tracking: 1.15),
+      labelMedium: soft(t.labelMedium, FontWeight.w600, tracking: 0.9),
+      labelSmall: soft(t.labelSmall, FontWeight.w600, tracking: 0.8),
+    ),
+  );
 }
 
 /// Nudges GoRouter's redirect to re-run when auth changes.

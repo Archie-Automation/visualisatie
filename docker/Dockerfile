@@ -7,7 +7,7 @@
 # ── Flutter web ──────────────────────────────────────────────────────────────
 FROM ghcr.io/cirruslabs/flutter:stable AS flutter
 WORKDIR /src/app
-COPY app/pubspec.yaml app/pubspec.lock ./
+COPY app/pubspec.yaml ./
 RUN flutter pub get
 COPY app/ ./
 # Use pubspec version as APP_VERSION (no bump during image build).

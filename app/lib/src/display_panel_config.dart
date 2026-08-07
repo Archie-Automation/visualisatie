@@ -222,6 +222,147 @@ double? resolveDisplayTemperature({
   return null;
 }
 
+/// HVAC-modus + vraag voor screensaver (zelfde bron als temperatuur).
+class DisplayHvacStatus {
+  const DisplayHvacStatus({
+    required this.isHeating,
+    required this.demandActive,
+  });
+
+  final bool isHeating;
+  final bool demandActive;
+}
+
+bool _demandActive(dynamic value) {
+  if (value == null) return false;
+  if (value is bool) return value;
+  if (value is num) return value > 0;
+  return false;
+}
+
+bool _isHeatingRaw(dynamic hvacRaw, {required bool defaultHeat}) {
+  if (hvacRaw == null) return defaultHeat;
+  if (hvacRaw is bool) return hvacRaw;
+  if (hvacRaw is num) return hvacRaw != 0;
+  if (hvacRaw is String) {
+    final s = hvacRaw.trim().toLowerCase();
+    if (s == '1' || s == 'true' || s == 'heat') return true;
+    if (s == '0' || s == 'false' || s == 'cool') return false;
+  }
+  return defaultHeat;
+}
+
+Device? _climateOrAcForDisplay({
+  required HouseConfig? cfg,
+  required DisplayPanelSettings settings,
+}) {
+  if (cfg == null) return null;
+
+  final tempGa = settings.temperatureGa?.trim();
+  if (tempGa != null && tempGa.isNotEmpty) {
+    for (final f in cfg.floors) {
+      for (final r in f.rooms) {
+        for (final d in r.devices) {
+          if (d.type == DeviceType.climate && d.ga['actual_temp'] == tempGa) {
+            return d;
+          }
+          if (d.type == DeviceType.ac) {
+            final ac = d.raw['ac'] as Map<String, dynamic>?;
+            final tga = (ac?['actualTemp'] as Map?)?['ga'] as String?;
+            if (tga == tempGa) return d;
+          }
+        }
+      }
+    }
+  }
+
+  final roomId = (settings.temperatureRoomId ?? settings.panelRoomId)?.trim();
+  if (roomId == null || roomId.isEmpty) return null;
+  final room = roomById(cfg, roomId);
+  if (room == null) return null;
+  for (final d in room.devices) {
+    if (d.type == DeviceType.climate || d.type == DeviceType.ac) return d;
+  }
+  return null;
+}
+
+DisplayHvacStatus? resolveDisplayHvacStatus({
+  required HouseConfig? cfg,
+  required BusState bus,
+  required DisplayPanelSettings settings,
+}) {
+  final d = _climateOrAcForDisplay(cfg: cfg, settings: settings);
+  if (d == null) return null;
+
+  if (d.type == DeviceType.climate) {
+    final climateCfg = d.raw['climate'] as Map<String, dynamic>?;
+    final canHeat = climateCfg?['canHeat'] != false;
+    final canCool = climateCfg?['canCool'] == true;
+    if (!canHeat && !canCool) return null;
+
+    final hvacStatusGa = d.ga['hvac_mode_status'] ?? d.ga['hvac_mode'];
+    final hvacRaw = hvacStatusGa != null ? bus.values[hvacStatusGa] : null;
+    final isHeating = _isHeatingRaw(hvacRaw, defaultHeat: canHeat);
+
+    final heatDemandGa = d.ga['heat_demand'];
+    final coolDemandGa = d.ga['cool_demand'];
+    final demandGa = isHeating ? heatDemandGa : coolDemandGa;
+    final demandActive =
+        demandGa != null ? _demandActive(bus.values[demandGa]) : false;
+    return DisplayHvacStatus(isHeating: isHeating, demandActive: demandActive);
+  }
+
+  if (d.type == DeviceType.ac) {
+    final ac = d.raw['ac'] as Map<String, dynamic>?;
+    if (ac == null) return null;
+    final onOff = ac['onOff'] as Map<String, dynamic>?;
+    final onStatusGa =
+        onOff?['statusGa'] as String? ?? onOff?['ga'] as String?;
+    final onVal = onStatusGa == null ? null : bus.values[onStatusGa];
+    final on = onVal == true || onVal == 1;
+    if (!on) return null;
+
+    final mode = ac['mode'] as Map<String, dynamic>?;
+    final modeStatusGa =
+        mode?['statusGa'] as String? ?? mode?['ga'] as String?;
+    final modeRaw = modeStatusGa == null ? null : bus.values[modeStatusGa];
+    final activeMode = modeRaw is num ? modeRaw.toInt() : null;
+    final options = (mode?['options'] as List?)?.cast<Map<String, dynamic>>() ??
+        const [];
+    int? heatVal;
+    int? coolVal;
+    for (final o in options) {
+      final icon = (o['icon'] as String?)?.toLowerCase() ?? '';
+      final label = (o['label'] as String?)?.toLowerCase() ?? '';
+      final v = (o['value'] as num?)?.toInt();
+      if (v == null) continue;
+      if (icon.contains('fire') ||
+          icon.contains('heat') ||
+          label.contains('verwarm') ||
+          label.contains('heat')) {
+        heatVal ??= v;
+      }
+      if (icon.contains('snow') ||
+          icon.contains('cool') ||
+          icon.contains('ac') ||
+          label.contains('koel') ||
+          label.contains('cool')) {
+        coolVal ??= v;
+      }
+    }
+    if (activeMode == null) return null;
+    final isHeating = heatVal != null && activeMode == heatVal;
+    final isCooling = coolVal != null && activeMode == coolVal;
+    if (!isHeating && !isCooling) return null;
+    return DisplayHvacStatus(
+      isHeating: isHeating,
+      demandActive: true,
+    );
+  }
+
+  return null;
+}
+
 /// Of Sonos/Bluesound in de gekoppelde ruimte actief speelt.
 bool isMusicPlayingInRoom({
   required HouseConfig? cfg,
@@ -239,15 +380,34 @@ bool isMusicPlayingInRoom({
   return false;
 }
 
+/// Screensaver blokkeren alleen als de fullscreen media-speler open is voor
+/// een Sonos/Bluesound in de paneel-ruimte én die speelt.
 bool shouldSuppressIdleForMusic({
   required DisplayPanelSettings settings,
   required HouseConfig? cfg,
   required Map<String, MediaState> mediaStates,
+  required String matchedLocation,
 }) {
   if (!settings.suppressScreensaverWhenMusicPlaying) return false;
-  return isMusicPlayingInRoom(
-    cfg: cfg,
-    mediaStates: mediaStates,
-    roomId: settings.panelRoomId,
-  );
+  if (cfg == null) return false;
+  final roomId = settings.panelRoomId?.trim();
+  if (roomId == null || roomId.isEmpty) return false;
+
+  final mediaMatch = RegExp(r'^/media/([^/]+)/?$').firstMatch(matchedLocation);
+  if (mediaMatch == null) return false;
+  final deviceId = mediaMatch.group(1)!;
+
+  final room = roomById(cfg, roomId);
+  if (room == null) return false;
+  Device? device;
+  for (final d in room.devices) {
+    if (d.id == deviceId) {
+      device = d;
+      break;
+    }
+  }
+  if (device == null || !device.type.isMedia) return false;
+
+  final ms = mediaStates[deviceId];
+  return ms != null && ms.transport.isActive;
 }

@@ -188,7 +188,7 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
       height: sheetHeight,
       child: Container(
         clipBehavior: Clip.antiAlias,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: LuxeColors.cream,
           borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
           boxShadow: LuxeShadows.lift,
@@ -200,7 +200,7 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
               _buildHandle(),
               _buildHeader(),
               _buildScenePickerRail(),
-              const Divider(height: 1, color: LuxeColors.lineSoft),
+              Divider(height: 1, color: LuxeColors.lineSoft),
               Expanded(child: _buildEditor()),
               _buildFooter(),
             ],
@@ -211,7 +211,7 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
   }
 
   Widget _buildHandle() => Padding(
-        padding: const EdgeInsets.only(top: 10),
+        padding: EdgeInsets.only(top: 10),
         child: Container(
           width: 48,
           height: 5,
@@ -223,7 +223,7 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
       );
 
   Widget _buildHeader() => Padding(
-        padding: const EdgeInsets.fromLTRB(28, 16, 16, 18),
+        padding: EdgeInsets.fromLTRB(28, 16, 16, 18),
         child: Row(
           children: [
             Expanded(
@@ -234,7 +234,7 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
                     widget.scope == SceneScope.global
                         ? 'SCENES · HOOFDPAGINA'
                         : 'SCENES · KAMER',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: LuxeColors.inkSoft,
                       fontSize: 11,
                       letterSpacing: 2.2,
@@ -316,7 +316,7 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
+        duration: Duration(milliseconds: 160),
         width: 130,
         height: _sceneChipHeight,
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -338,7 +338,7 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: selected ? Colors.white : LuxeColors.ink,
+                color: selected ? LuxeColors.onInk : LuxeColors.ink,
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
               ),
@@ -415,12 +415,12 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
             _touch();
           },
         ),
-        const SizedBox(height: 22),
+        SizedBox(height: 22),
         if (phone)
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('APPARATEN IN DEZE SCENE', style: _kSectionStyle),
+              Text('APPARATEN IN DEZE SCENE', style: _kSectionStyle),
               if (draft.entries.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 TextButton.icon(
@@ -434,7 +434,7 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
         else
           Row(
             children: [
-              const Text('APPARATEN IN DEZE SCENE', style: _kSectionStyle),
+              Text('APPARATEN IN DEZE SCENE', style: _kSectionStyle),
               const Spacer(),
               if (draft.entries.isNotEmpty)
                 TextButton.icon(
@@ -472,9 +472,9 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
         ],
         const SizedBox(height: 16),
         TextButton.icon(
-          icon: const Icon(Icons.delete_outline,
+          icon: Icon(Icons.delete_outline,
               size: 18, color: LuxeColors.danger),
-          label: const Text('Scene verwijderen',
+          label: Text('Scene verwijderen',
               style: TextStyle(color: LuxeColors.danger)),
           onPressed: _deleteSelected,
         ),
@@ -484,7 +484,7 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
 
   Widget _buildFooter() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 18),
+      padding: EdgeInsets.fromLTRB(24, 12, 24, 18),
       child: Row(
         children: [
           Expanded(
@@ -503,16 +503,16 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
               onPressed: _saving ? null : _save,
               style: FilledButton.styleFrom(
                 backgroundColor: LuxeColors.ink,
-                foregroundColor: Colors.white,
+                foregroundColor: LuxeColors.onInk,
                 minimumSize: const Size.fromHeight(52),
                 shape: const StadiumBorder(),
               ),
               child: _saving
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
+                          strokeWidth: 2, color: LuxeColors.onInk),
                     )
                   : const Text('Opslaan'),
             ),
@@ -523,7 +523,7 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
   }
 }
 
-const _kSectionStyle = TextStyle(
+final _kSectionStyle = TextStyle(
   fontSize: 11,
   letterSpacing: 2.0,
   fontWeight: FontWeight.w700,
@@ -557,7 +557,7 @@ class _EntryCard extends StatelessWidget {
       ),
       IconButton(
         tooltip: 'Huidige stand overnemen',
-        icon: const Icon(Icons.download_rounded,
+        icon: Icon(Icons.download_rounded,
             size: 20, color: LuxeColors.inkSoft),
         visualDensity: VisualDensity.compact,
         onPressed: onSnapshot,
@@ -612,7 +612,7 @@ class _EntryCard extends StatelessWidget {
     }
 
     return Container(
-      margin: const EdgeInsets.only(top: 10),
+      margin: EdgeInsets.only(top: 10),
       padding: const EdgeInsets.fromLTRB(16, 14, 10, 16),
       decoration: BoxDecoration(
         color: LuxeColors.surface.withValues(alpha: 0.9),
@@ -635,7 +635,7 @@ class _AddDeviceButton extends StatelessWidget {
       onTap: onTap,
       child: Container(
         width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 18),
+        padding: EdgeInsets.symmetric(vertical: 18),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
@@ -666,7 +666,7 @@ class _EmptyHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(top: 8),
+      margin: EdgeInsets.only(top: 8),
       padding: const EdgeInsets.fromLTRB(18, 22, 18, 22),
       decoration: BoxDecoration(
         color: LuxeColors.surface,
@@ -678,7 +678,7 @@ class _EmptyHint extends StatelessWidget {
         children: [
           Text('Nog geen apparaten',
               style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 6),
+          SizedBox(height: 6),
           Text(
             'Voeg lampen, zonwering, airco en andere apparaten toe. Zet ze op '
             'de stand die deze scene moet activeren — of gebruik “Huidige '
@@ -692,7 +692,7 @@ class _EmptyHint extends StatelessWidget {
             label: const Text('Apparaten toevoegen'),
             style: FilledButton.styleFrom(
               backgroundColor: LuxeColors.ink,
-              foregroundColor: Colors.white,
+              foregroundColor: LuxeColors.onInk,
               shape: const StadiumBorder(),
               minimumSize: const Size.fromHeight(44),
             ),
@@ -756,7 +756,7 @@ class _IconPicker extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('ICOON', style: _kSectionStyle),
+        Text('ICOON', style: _kSectionStyle),
         const SizedBox(height: 10),
         Wrap(
           spacing: 10,

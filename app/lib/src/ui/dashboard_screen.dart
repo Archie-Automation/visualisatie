@@ -1,11 +1,11 @@
 ﻿import 'dart:math';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../api.dart';
+import '../fireplace_status.dart';
 import '../fireplace_virtual.dart';
 import '../idle_reset.dart';
 import '../media_api.dart';
@@ -15,8 +15,13 @@ import '../satel_api.dart';
 import '../theme.dart';
 import '../user_favorite_shortcuts.dart';
 import 'responsive.dart';
+import 'widgets/back_pill.dart';
+import 'widgets/device_tile_shell.dart';
 import 'widgets/glass_card.dart';
 import 'widgets/heater_icon.dart';
+import 'widgets/honeycomb_pattern.dart';
+import 'widgets/light_status_icon.dart';
+import 'widgets/split_unit_icon.dart';
 import 'widgets/room_category_strip.dart';
 import 'widgets/luxe_backdrop.dart';
 import 'widgets/scene_strip.dart';
@@ -72,10 +77,13 @@ class _DashboardBody extends ConsumerStatefulWidget {
 
 class _DashboardBodyState extends ConsumerState<_DashboardBody> {
   int _floorIndex = 0;
+  /// Tablet/desktop: false = startscherm (geen kamers); true = verdieping open.
+  bool _floorBrowsing = false;
   late final ScrollController _mainScroll;
   late final ScrollController _floorScroll;
   late final ScrollController _systemScroll;
   late final ScrollController _sceneScroll;
+  late final ScrollController _roomsScroll;
 
   @override
   void initState() {
@@ -84,6 +92,7 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
     _floorScroll = ScrollController();
     _systemScroll = ScrollController();
     _sceneScroll = ScrollController();
+    _roomsScroll = ScrollController();
   }
 
   @override
@@ -92,6 +101,7 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
     _floorScroll.dispose();
     _systemScroll.dispose();
     _sceneScroll.dispose();
+    _roomsScroll.dispose();
     super.dispose();
   }
 
@@ -100,7 +110,13 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
     if (_floorScroll.hasClients) _floorScroll.jumpTo(0);
     if (_systemScroll.hasClients) _systemScroll.jumpTo(0);
     if (_sceneScroll.hasClients) _sceneScroll.jumpTo(0);
-    if (_floorIndex != 0) setState(() => _floorIndex = 0);
+    if (_roomsScroll.hasClients) _roomsScroll.jumpTo(0);
+    if (_floorIndex != 0 || _floorBrowsing) {
+      setState(() {
+        _floorIndex = 0;
+        _floorBrowsing = false;
+      });
+    }
   }
 
   @override
@@ -146,33 +162,68 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
     final safeIndex =
         floors.isEmpty ? 0 : _floorIndex.clamp(0, floors.length - 1);
     final selectedFloor = floors.isEmpty ? null : floors[safeIndex];
+    final isPanel = !context.isPhone;
+
+    // Wall tablet / desktop: floor drill-down — header als systemen (hoogte + honeycomb).
+    if (isPanel && _floorBrowsing && selectedFloor != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _FloorBrowseHeader(
+            floors: floors,
+            selectedIndex: safeIndex,
+            scrollController: _floorScroll,
+            onBack: () => setState(() => _floorBrowsing = false),
+            onSelect: (i) => setState(() {
+              _floorIndex = i;
+              if (_roomsScroll.hasClients) _roomsScroll.jumpTo(0);
+            }),
+          ),
+          Expanded(
+            child: ListView(
+              controller: _roomsScroll,
+              physics: const ClampingScrollPhysics(
+                parent: AlwaysScrollableScrollPhysics(),
+              ),
+              children: [
+                _FloorRoomsBlock(
+                  floor: selectedFloor,
+                  showTopBorder: false,
+                  onOpenRoom: (room) => context
+                      .push('/floor/${selectedFloor.id}/room/${room.id}'),
+                ),
+                const SizedBox(height: 64),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
 
     return CustomScrollView(
       controller: _mainScroll,
       physics: const ClampingScrollPhysics(
           parent: AlwaysScrollableScrollPhysics()),
       slivers: [
-        SliverToBoxAdapter(
-            child: _header(context, cfg, auth, ref)),
+        SliverToBoxAdapter(child: _header(context, cfg, auth, ref)),
         SliverToBoxAdapter(
             child: _scenes(context, cfg, canEdit, ref,
                 scrollController: _sceneScroll)),
         SliverToBoxAdapter(
             child: _Systemen(cfg: cfg, scrollController: _systemScroll)),
-        if (floors.isNotEmpty)
-          SliverToBoxAdapter(
-            child: Padding(
-              // Bottom space here mirrors the gap below the floor buttons
-              // (tab margin) down to the line above the rooms, so the floor
-              // buttons sit symmetrically between both lines.
-              padding: const EdgeInsets.only(bottom: 14),
-              child: Container(
-                height: 0.5,
-                color: LuxeColors.line.withValues(alpha: 0.22),
-              ),
+        if (floors.isNotEmpty && isPanel)
+          SliverFillRemaining(
+            hasScrollBody: false,
+            child: _FloorsHomeBand(
+              floors: floors,
+              scrollController: _floorScroll,
+              onSelect: (i) => setState(() {
+                _floorIndex = i;
+                _floorBrowsing = true;
+              }),
             ),
-          ),
-        if (floors.isNotEmpty)
+          )
+        else if (floors.isNotEmpty) ...[
           SliverToBoxAdapter(
             child: _FloorTabBar(
               floors: floors,
@@ -181,16 +232,64 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
               onSelect: (i) => setState(() => _floorIndex = i),
             ),
           ),
-        if (selectedFloor != null)
-          SliverToBoxAdapter(
-            child: _FloorRoomsBlock(
-              floor: selectedFloor,
-              onOpenRoom: (room) =>
-                  context.push('/floor/${selectedFloor.id}/room/${room.id}'),
+          if (selectedFloor != null)
+            SliverToBoxAdapter(
+              child: _FloorRoomsBlock(
+                floor: selectedFloor,
+                onOpenRoom: (room) =>
+                    context.push('/floor/${selectedFloor.id}/room/${room.id}'),
+              ),
             ),
-          ),
-        const SliverToBoxAdapter(child: SizedBox(height: 64)),
+          const SliverToBoxAdapter(child: SizedBox(height: 64)),
+        ],
       ],
+    );
+  }
+}
+
+/// Sticky header bij kamer-browse: zelfde hoogte als systemen, terug + verdiepingen.
+class _FloorBrowseHeader extends StatelessWidget {
+  const _FloorBrowseHeader({
+    required this.floors,
+    required this.selectedIndex,
+    required this.onSelect,
+    required this.onBack,
+    this.scrollController,
+  });
+
+  final List<Floor> floors;
+  final int selectedIndex;
+  final ValueChanged<int> onSelect;
+  final VoidCallback onBack;
+  final ScrollController? scrollController;
+
+  @override
+  Widget build(BuildContext context) {
+    return StickyHeaderSurface(
+      height: context.roomStickyHeaderH,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(context.hPad - 4, 14, 8, 14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            HeaderIconButton(
+              icon: Icons.arrow_back_ios_new,
+              onTap: onBack,
+              tooltip: 'Terug',
+            ),
+            Expanded(
+              child: _FloorTabBar(
+                floors: floors,
+                selectedIndex: selectedIndex,
+                scrollController: scrollController,
+                onSelect: onSelect,
+                bottomPadding: 0,
+                listPadding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -202,12 +301,17 @@ class _FloorTabBar extends ConsumerWidget {
     required this.selectedIndex,
     required this.onSelect,
     this.scrollController,
+    this.bottomPadding = 14,
+    this.listPadding,
   });
 
   final List<Floor> floors;
+  /// Use `-1` when no floor should appear selected (tablet home).
   final int selectedIndex;
   final ValueChanged<int> onSelect;
   final ScrollController? scrollController;
+  final double bottomPadding;
+  final EdgeInsetsGeometry? listPadding;
 
   void _openReorderSheet(BuildContext context, WidgetRef ref) {
     showModalBottomSheet<void>(
@@ -221,18 +325,21 @@ class _FloorTabBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    const double vPad = 8;
+    const chipH = HeaderIconButton.size;
+    final pad = listPadding ??
+        EdgeInsets.fromLTRB(context.hPad, 8, context.hPad, 8);
+    final vPadTotal = pad is EdgeInsets ? pad.vertical : 16.0;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
+      padding: EdgeInsets.only(bottom: bottomPadding),
       child: SizedBox(
-        height: 48 + vPad * 2,
+        height: chipH + vPadTotal,
         child: ListView.separated(
           controller: scrollController,
           scrollDirection: Axis.horizontal,
           primary: false,
           clipBehavior: Clip.none,
           physics: const ClampingScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(context.hPad, vPad, context.hPad, vPad),
+          padding: pad,
           itemCount: floors.length,
           separatorBuilder: (_, __) => const SizedBox(width: 10),
           itemBuilder: (context, i) {
@@ -243,47 +350,72 @@ class _FloorTabBar extends ConsumerWidget {
               child: InkWell(
                 onTap: () => onSelect(i),
                 onLongPress: () => _openReorderSheet(context, ref),
-                borderRadius: BorderRadius.circular(16),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeOutCubic,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    color: selected
-                        ? LuxeColors.surface.withValues(alpha: 0.94)
-                        : LuxeColors.surface.withValues(alpha: 0.55),
-                    border: Border.all(
-                      color: selected
-                          ? LuxeColors.brass.withValues(alpha: 0.75)
-                          : LuxeColors.glassRim,
-                      width: selected ? 1.25 : 1,
-                    ),
-                    boxShadow: selected ? LuxeShadows.soft : null,
+                borderRadius: BorderRadius.circular(12),
+                child: LuxeRimBox(
+                  height: chipH,
+                  radius: 12,
+                  rimWidth: selected ? 2 : 1,
+                  rimColor: selected
+                      ? LuxeBorders.solid(LuxeColors.brass)
+                      : LuxeColors.glassRim,
+                  fillColor: LuxeChipChrome.fill(
+                    context,
+                    pressed: selected,
                   ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    floor.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textHeightBehavior: const TextHeightBehavior(
-                      applyHeightToFirstAscent: true,
-                      applyHeightToLastDescent: true,
+                  shadows: selected ? LuxeShadows.soft : null,
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  child: Center(
+                    child: Text(
+                      floor.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      textHeightBehavior: const TextHeightBehavior(
+                        applyHeightToFirstAscent: false,
+                        applyHeightToLastDescent: false,
+                      ),
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            height: 1.0,
+                            color: selected
+                                ? LuxeColors.ink
+                                : LuxeColors.inkSoft,
+                            fontWeight: selected
+                                ? FontWeight.w600
+                                : FontWeight.w500,
+                          ),
                     ),
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          height: 1.2,
-                          color:
-                              selected ? LuxeColors.ink : LuxeColors.inkSoft,
-                          fontWeight:
-                              selected ? FontWeight.w600 : FontWeight.w500,
-                        ),
                   ),
                 ),
               ),
             );
           },
         ),
+      ),
+    );
+  }
+}
+
+/// Tablet startscherm: verdiepingen verticaal gecentreerd (geen lijn onder systemen).
+class _FloorsHomeBand extends StatelessWidget {
+  const _FloorsHomeBand({
+    required this.floors,
+    required this.onSelect,
+    this.scrollController,
+  });
+
+  final List<Floor> floors;
+  final ValueChanged<int> onSelect;
+  final ScrollController? scrollController;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: _FloorTabBar(
+        floors: floors,
+        selectedIndex: -1,
+        scrollController: scrollController,
+        onSelect: onSelect,
+        bottomPadding: 0,
       ),
     );
   }
@@ -314,7 +446,7 @@ class _FloorReorderSheetState extends ConsumerState<_FloorReorderSheet> {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       child: Container(
         color: LuxeColors.cream,
         child: Column(
@@ -322,12 +454,12 @@ class _FloorReorderSheetState extends ConsumerState<_FloorReorderSheet> {
           children: [
             _handle(),
             Padding(
-              padding: const EdgeInsets.fromLTRB(22, 10, 22, 4),
+              padding: EdgeInsets.fromLTRB(22, 10, 22, 4),
               child: Row(
                 children: [
-                  const Icon(Icons.layers_outlined,
+                  Icon(Icons.layers_outlined,
                       size: 20, color: LuxeColors.brass),
-                  const SizedBox(width: 10),
+                  SizedBox(width: 10),
                   Text('Verdiepingen rangschikken',
                       style: Theme.of(context).textTheme.titleLarge),
                 ],
@@ -336,7 +468,7 @@ class _FloorReorderSheetState extends ConsumerState<_FloorReorderSheet> {
             Padding(
               padding: const EdgeInsets.fromLTRB(22, 2, 22, 12),
               child: Text(
-                'Houd de handgreep vast en sleep om de volgorde te wijzigen.',
+                'Houd de handgreep even ingedrukt en sleep om de volgorde te wijzigen.',
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
@@ -364,29 +496,29 @@ class _FloorReorderSheetState extends ConsumerState<_FloorReorderSheet> {
                   return ListTile(
                     key: ValueKey(floor.id),
                     contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 8),
-                    leading: ReorderableDragStartListener(
+                        EdgeInsets.symmetric(horizontal: 8),
+                    leading: ReorderableDelayedDragStartListener(
                       index: i,
-                      child: const Padding(
+                      child: Padding(
                         padding: EdgeInsets.all(8),
                         child: Icon(Icons.drag_handle_rounded,
                             color: LuxeColors.inkSoft),
                       ),
                     ),
                     title: Text(floor.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                             fontWeight: FontWeight.w500,
                             color: LuxeColors.ink)),
                     subtitle: Text(
                         '${floor.rooms.length} kamer${floor.rooms.length == 1 ? '' : 's'}',
-                        style: const TextStyle(
+                        style: TextStyle(
                             fontSize: 12, color: LuxeColors.inkSoft)),
                   );
                 },
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 24),
               child: FilledButton(
                 style: FilledButton.styleFrom(
                   backgroundColor: LuxeColors.ink,
@@ -434,7 +566,7 @@ class _SceneReorderSheetState extends State<_SceneReorderSheet> {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       child: Container(
         color: LuxeColors.cream,
         child: Column(
@@ -442,12 +574,12 @@ class _SceneReorderSheetState extends State<_SceneReorderSheet> {
           children: [
             _sheetHandle(),
             Padding(
-              padding: const EdgeInsets.fromLTRB(22, 10, 22, 4),
+              padding: EdgeInsets.fromLTRB(22, 10, 22, 4),
               child: Row(
                 children: [
-                  const Icon(Icons.sort_rounded,
+                  Icon(Icons.sort_rounded,
                       size: 20, color: LuxeColors.brass),
-                  const SizedBox(width: 10),
+                  SizedBox(width: 10),
                   Text('Scenes rangschikken',
                       style: Theme.of(context).textTheme.titleLarge),
                 ],
@@ -456,7 +588,7 @@ class _SceneReorderSheetState extends State<_SceneReorderSheet> {
             Padding(
               padding: const EdgeInsets.fromLTRB(22, 2, 22, 12),
               child: Text(
-                'Houd de handgreep vast en sleep om de volgorde te wijzigen.',
+                'Houd de handgreep even ingedrukt en sleep om de volgorde te wijzigen.',
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
@@ -482,17 +614,17 @@ class _SceneReorderSheetState extends State<_SceneReorderSheet> {
                   return ListTile(
                     key: ValueKey(scene.id),
                     contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 8),
-                    leading: ReorderableDragStartListener(
+                        EdgeInsets.symmetric(horizontal: 8),
+                    leading: ReorderableDelayedDragStartListener(
                       index: i,
-                      child: const Padding(
+                      child: Padding(
                         padding: EdgeInsets.all(8),
                         child: Icon(Icons.drag_handle_rounded,
                             color: LuxeColors.inkSoft),
                       ),
                     ),
                     title: Text(scene.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                             fontWeight: FontWeight.w500,
                             color: LuxeColors.ink)),
                   );
@@ -500,7 +632,7 @@ class _SceneReorderSheetState extends State<_SceneReorderSheet> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 24),
               child: FilledButton(
                 style: FilledButton.styleFrom(
                   backgroundColor: LuxeColors.ink,
@@ -521,7 +653,7 @@ class _SceneReorderSheetState extends State<_SceneReorderSheet> {
 /// Shared drag-handle pip for bottom sheets.
 Widget _sheetHandle() => Center(
       child: Padding(
-        padding: const EdgeInsets.only(top: 12, bottom: 4),
+        padding: EdgeInsets.only(top: 12, bottom: 4),
         child: Container(
           width: 36,
           height: 4,
@@ -537,10 +669,12 @@ class _FloorRoomsBlock extends ConsumerWidget {
   const _FloorRoomsBlock({
     required this.floor,
     required this.onOpenRoom,
+    this.showTopBorder = true,
   });
 
   final Floor floor;
   final void Function(Room room) onOpenRoom;
+  final bool showTopBorder;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -551,21 +685,12 @@ class _FloorRoomsBlock extends ConsumerWidget {
 
     return Padding(
       // Only bottom spacing; cards go edge-to-edge horizontally.
-      padding: const EdgeInsets.only(bottom: 28),
+      padding: EdgeInsets.only(bottom: 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Full-width container housing all room rows.
-          Container(
-            decoration: BoxDecoration(
-              border: Border.symmetric(
-                horizontal: BorderSide(
-                  color: LuxeColors.line.withValues(alpha: 0.22),
-                  width: 0.5,
-                ),
-              ),
-            ),
-            child: ReorderableListView.builder(
+          // Full-width room list (geen top/bottom banen).
+          ReorderableListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               buildDefaultDragHandles: false,
@@ -586,18 +711,16 @@ class _FloorRoomsBlock extends ConsumerWidget {
               itemCount: rooms.length,
               itemBuilder: (context, i) {
                 final room = rooms[i];
-                final isLast = i == rooms.length - 1;
                 return _RoomDashboardRow(
                   key: ValueKey(room.id),
                   floor: floor,
                   room: room,
                   index: i,
-                  showDivider: !isLast,
+                  showDivider: false,
                   onOpenRoom: () => onOpenRoom(room),
                 );
               },
             ),
-          ),
         ],
       ),
     );
@@ -625,18 +748,7 @@ class _RoomDashboardRow extends ConsumerWidget {
     final segments = roomControlSegments(room.devices);
     final hp = context.hPad;
 
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Colors.white.withValues(alpha: 0.0),
-            Colors.black.withValues(alpha: 0.04),
-          ],
-        ),
-      ),
-      child: Column(
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         // â”€â”€ Room header row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -646,17 +758,17 @@ class _RoomDashboardRow extends ConsumerWidget {
           padding: EdgeInsets.fromLTRB(hp, 16, hp, segments.isEmpty ? 16 : 10),
           child: Row(
             children: [
-              // Drag handle for reordering â€” direct slepen vanaf de handgreep.
-              ReorderableDragStartListener(
+              // Drag handle — long-press first so horizontal swipes don't reorder.
+              ReorderableDelayedDragStartListener(
                 index: index,
                 child: MouseRegion(
                   cursor: SystemMouseCursors.grab,
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(2, 6, 12, 6),
+                    padding: EdgeInsets.fromLTRB(2, 6, 12, 6),
                     child: Icon(
                       Icons.drag_indicator_rounded,
                       size: 22,
-                      color: LuxeColors.inkSoft.withValues(alpha: 0.5),
+                      color: LuxeColors.inkSoft.withValues(alpha: 0.75),
                     ),
                   ),
                 ),
@@ -670,19 +782,21 @@ class _RoomDashboardRow extends ConsumerWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        room.name,
+                        room.name.toUpperCase(),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              height: 1.2,
-                            ),
+                        // Same family as scenes/systems; slightly larger for
+                        // list-row context (chips read bigger inside their tile).
+                        style: TextStyle(
+                          color: LuxeColors.ink,
+                          fontSize: 12,
+                          height: 1.35,
+                          letterSpacing: 1.4,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                    const SizedBox(width: 2),
+                    SizedBox(width: 2),
                     Icon(
                       Icons.chevron_right_rounded,
                       size: 18,
@@ -691,8 +805,8 @@ class _RoomDashboardRow extends ConsumerWidget {
                   ],
                 ),
               ),
-              const Spacer(),
-              _RoomActivityBadges(room: room),
+              Spacer(),
+              _RoomActivityBadges(floor: floor, room: room),
             ],
           ),
         ),
@@ -726,7 +840,6 @@ class _RoomDashboardRow extends ConsumerWidget {
             color: LuxeColors.line.withValues(alpha: 0.25),
           ),
       ],
-      ),
     );
   }
 }
@@ -772,6 +885,7 @@ Widget _header(
           ),
         ),
         const SizedBox(width: 12),
+        _HouseActivityHeaderButtons(cfg: cfg),
         // On narrow phones collapse installer icon into a single menu
         if (auth.isAdmin) ...[
           _GlassIconButton(
@@ -817,26 +931,10 @@ Widget _scenes(
         child: Row(
           children: [
             Text('SCENES', style: Theme.of(context).textTheme.labelLarge),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Container(
-                height: 1,
-                margin: const EdgeInsets.only(top: 4),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [LuxeColors.line, Colors.transparent],
-                  ),
-                ),
-              ),
-            ),
-            if (cfg.scenes.length > 1)
-              IconButton(
-                icon: const Icon(Icons.sort_rounded, size: 22),
-                tooltip: 'Volgorde aanpassen',
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                onPressed: () => showModalBottomSheet<void>(
+            if (cfg.scenes.length > 1) ...[
+              const Spacer(),
+              GestureDetector(
+                onTap: () => showModalBottomSheet<void>(
                   context: context,
                   isScrollControlled: true,
                   useSafeArea: true,
@@ -847,7 +945,16 @@ Widget _scenes(
                         ref.read(sceneOrderProvider.notifier).reorder(ids),
                   ),
                 ),
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Icon(
+                    Icons.sort_rounded,
+                    size: 22,
+                    color: LuxeColors.inkSoft.withValues(alpha: 0.6),
+                  ),
+                ),
               ),
+            ],
           ],
         ),
       ),
@@ -979,7 +1086,7 @@ class _Systemen extends ConsumerWidget {
     return Padding(
       // Bottom gap (chip vPad + this) matches the gap between the scene
       // buttons and the "Systemen" line above (~54px) for a consistent rhythm.
-      padding: const EdgeInsets.fromLTRB(0, 16, 0, 44),
+      padding: EdgeInsets.fromLTRB(0, 16, 0, 44),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -989,22 +1096,11 @@ class _Systemen extends ConsumerWidget {
               children: [
                 Text('SYSTEMEN',
                     style: Theme.of(context).textTheme.labelLarge),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Container(
-                    height: 1,
-                    margin: const EdgeInsets.only(top: 4),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [LuxeColors.line, Colors.transparent],
-                      ),
-                    ),
-                  ),
-                ),
+                const Spacer(),
                 GestureDetector(
                   onTap: () => _openManageSheet(context, ref, allOrderedChips, sysHidden),
                   child: Padding(
-                    padding: const EdgeInsets.only(left: 8),
+                    padding: EdgeInsets.only(left: 8),
                     child: Icon(
                       Icons.tune_rounded,
                       size: 22,
@@ -1103,7 +1199,7 @@ class _SystemManageSheetState extends ConsumerState<_SystemManageSheet> {
   @override
   Widget build(BuildContext context) {
     return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       child: Container(
         color: LuxeColors.cream,
         child: Column(
@@ -1111,12 +1207,12 @@ class _SystemManageSheetState extends ConsumerState<_SystemManageSheet> {
           children: [
             _handle(),
             Padding(
-              padding: const EdgeInsets.fromLTRB(22, 10, 22, 4),
+              padding: EdgeInsets.fromLTRB(22, 10, 22, 4),
               child: Row(
                 children: [
-                  const Icon(Icons.tune_rounded,
+                  Icon(Icons.tune_rounded,
                       size: 20, color: LuxeColors.brass),
-                  const SizedBox(width: 10),
+                  SizedBox(width: 10),
                   Text('Systemen beheren',
                       style: Theme.of(context).textTheme.titleLarge),
                 ],
@@ -1151,10 +1247,10 @@ class _SystemManageSheetState extends ConsumerState<_SystemManageSheet> {
                   return ListTile(
                     key: ValueKey(chip.name),
                     contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 8),
-                    leading: ReorderableDragStartListener(
+                        EdgeInsets.symmetric(horizontal: 8),
+                    leading: ReorderableDelayedDragStartListener(
                       index: i,
-                      child: const Padding(
+                      child: Padding(
                         padding: EdgeInsets.all(8),
                         child: Icon(Icons.drag_handle_rounded,
                             color: LuxeColors.inkSoft),
@@ -1167,7 +1263,7 @@ class _SystemManageSheetState extends ConsumerState<_SystemManageSheet> {
                             color: visible
                                 ? (chip.accent ?? LuxeColors.brass)
                                 : LuxeColors.inkSoft.withValues(alpha: 0.4)),
-                        const SizedBox(width: 10),
+                        SizedBox(width: 10),
                         Text(
                           chip.name,
                           style: TextStyle(
@@ -1198,7 +1294,7 @@ class _SystemManageSheetState extends ConsumerState<_SystemManageSheet> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 24),
               child: FilledButton(
                 style: FilledButton.styleFrom(
                   backgroundColor: LuxeColors.ink,
@@ -1440,16 +1536,21 @@ class _SystemChipState extends ConsumerState<_SystemChip>
                 : const Color(0xFFC08500))
         : defaultAccent;
 
-    final fillColor =
-        LuxeColors.surface.withValues(alpha: _pressed ? 0.95 : 0.82);
+    final fillColor = LuxeChipChrome.fill(context, pressed: _pressed);
     final borderColor = hasAlert
-        ? accent.withValues(alpha: 0.55)
-        : _pressed
-            ? defaultAccent.withValues(alpha: 0.55)
-            : LuxeColors.glassRim;
+        ? LuxeBorders.solid(accent.withValues(alpha: 0.7))
+        : LuxeChipChrome.border(
+            context,
+            pressed: _pressed,
+            accent: defaultAccent,
+          );
+
+    final iconBox = context.chipIconBox;
+    final iconSize = context.chipIconSize;
+    final iconRadius = context.chipIconRadius;
 
     // The icon for the alarm chip needs animated transforms.
-    Widget iconWidget = Icon(widget.data.icon, size: 18, color: accent);
+    Widget iconWidget = Icon(widget.data.icon, size: iconSize, color: accent);
     if (isAlarm) {
       if (alarmState == SatelPartitionState.armed) {
         // Slow continuous y-axis flip (simulate rotating on its axis).
@@ -1491,23 +1592,24 @@ class _SystemChipState extends ConsumerState<_SystemChip>
           // Rebuild the border when blinking (Entry/Exit delay).
           animation: _blinkAnim,
           builder: (_, child) {
-            final blinkBorder = (isAlarm && alarmIsActive)
-                ? accent.withValues(
-                    alpha: 0.30 + 0.50 * _blinkAnim.value)
-                : borderColor;
+            final blinkBorder = LuxeBorders.solid(
+              (isAlarm && alarmIsActive)
+                  ? accent.withValues(
+                      alpha: 0.30 + 0.50 * _blinkAnim.value)
+                  : borderColor,
+            );
             final blinkWidth = (isAlarm && alarmIsActive)
                 ? 1.0 + 0.8 * _blinkAnim.value
                 : (_pressed || hasAlert ? 1.3 : 1.0);
-            return Container(
+            return LuxeRimBox(
               width: 118,
+              radius: 22,
+              rimWidth: blinkWidth,
+              rimColor: blinkBorder,
+              fillColor: fillColor,
+              shadows: LuxeShadows.chip(context),
               padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(22),
-                color: fillColor,
-                border: Border.all(color: blinkBorder, width: blinkWidth),
-                boxShadow: LuxeShadows.soft,
-              ),
-              child: child,
+              child: child!,
             );
           },
           child: Column(
@@ -1517,15 +1619,10 @@ class _SystemChipState extends ConsumerState<_SystemChip>
               Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(9),
-                      color: accent.withValues(alpha: 0.15),
-                      border:
-                          Border.all(color: accent.withValues(alpha: 0.45)),
-                    ),
+                  LuxeAccentIconWell(
+                    size: iconBox,
+                    radius: iconRadius,
+                    accent: accent,
                     child: iconWidget,
                   ),
                   if (hasAlert)
@@ -1533,7 +1630,7 @@ class _SystemChipState extends ConsumerState<_SystemChip>
                       right: -4,
                       top: -4,
                       child: Container(
-                        padding: const EdgeInsets.all(3),
+                        padding: EdgeInsets.all(3),
                         constraints: const BoxConstraints(
                             minWidth: 17, minHeight: 17),
                         decoration: BoxDecoration(
@@ -1613,30 +1710,24 @@ class _GlassIconButton extends StatelessWidget {
   final VoidCallback onTap;
   final String? tooltip;
 
+  static const double size = 48;
+  static const double iconSize = 20;
+  static const double radius = 14;
+
   @override
   Widget build(BuildContext context) {
     final child = GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: LuxeShadows.soft,
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                color: LuxeColors.surface.withValues(alpha: 0.7),
-                border: Border.all(color: LuxeColors.glassRim),
-              ),
-              child: Icon(icon, color: LuxeColors.ink, size: 20),
-            ),
-          ),
+      child: LuxeRimBox(
+        width: size,
+        height: size,
+        radius: radius,
+        rimWidth: 1,
+        rimColor: LuxeColors.glassRim,
+        fillColor: LuxeChipChrome.fill(context, pressed: false),
+        shadows: LuxeShadows.soft,
+        child: Center(
+          child: Icon(icon, color: LuxeColors.ink, size: iconSize),
         ),
       ),
     );
@@ -1647,18 +1738,156 @@ class _GlassIconButton extends StatelessWidget {
   }
 }
 
+/// Same shell as [_GlassIconButton] — neutrale chrome, brass blijft op het glyph.
+class _GlassStatusButton extends StatelessWidget {
+  const _GlassStatusButton({
+    required this.child,
+    required this.onTap,
+    required this.tooltip,
+  });
+
+  final Widget child;
+  final VoidCallback onTap;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: LuxeRimBox(
+          width: _GlassIconButton.size,
+          height: _GlassIconButton.size,
+          radius: _GlassIconButton.radius,
+          rimWidth: 1,
+          rimColor: LuxeColors.glassRim,
+          fillColor: LuxeChipChrome.fill(context, pressed: false),
+          shadows: LuxeShadows.soft,
+          child: Center(child: child),
+        ),
+      ),
+    );
+  }
+}
+
+/// House-wide activity: lights / heater / fireplace / ac / music → system pages.
+class _HouseActivityHeaderButtons extends ConsumerWidget {
+  const _HouseActivityHeaderButtons({required this.cfg});
+  final HouseConfig cfg;
+
+  static const _glyph = 24.0;
+
+  void _openSystem(BuildContext context, String sysName) {
+    final sys = houseSystemByName(sysName);
+    final route = sys?.routePath;
+    if (route != null) context.push(route);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Header status cluster is tablet/desktop only — phone keeps a clean header.
+    if (context.isPhone) return const SizedBox.shrink();
+
+    final bus = ref.watch(busProvider);
+    final mediaStates = ref.watch(mediaStateProvider);
+    final fireplaceVirtual = ref.watch(fireplaceVirtualProvider);
+    final gap = 10.0;
+
+    var lightsOn = false;
+    var heaterOn = false;
+    var fireplaceOn = false;
+    var acOn = false;
+    var mediaPlaying = false;
+
+    for (final d in cfg.allDevices) {
+      if (!lightsOn && _RoomActivityBadges._isLightOn(d, bus)) lightsOn = true;
+      if (!heaterOn && _RoomActivityBadges._isHeaterActive(d, bus)) {
+        heaterOn = true;
+      }
+      if (!fireplaceOn &&
+          _RoomActivityBadges._isFireplaceOn(d, bus, fireplaceVirtual)) {
+        fireplaceOn = true;
+      }
+      if (!acOn && _RoomActivityBadges._isAcOn(d, bus)) acOn = true;
+      if (!mediaPlaying && d.type.isMedia) {
+        final ms = mediaStates[d.id];
+        if (ms != null && ms.transport.isActive) mediaPlaying = true;
+      }
+      if (lightsOn && heaterOn && fireplaceOn && acOn && mediaPlaying) break;
+    }
+
+    final buttons = <Widget>[
+      if (lightsOn)
+        _GlassStatusButton(
+          tooltip: 'Verlichting aan',
+          onTap: () => _openSystem(context, 'Verlichting'),
+          child: LightStatusIcon(size: _glyph, color: LuxeColors.ink),
+        ),
+      if (heaterOn)
+        _GlassStatusButton(
+          tooltip: 'Heater aan',
+          onTap: () => _openSystem(context, 'Diverse'),
+          child: _HeaterBadge(size: _glyph, color: LuxeColors.ink),
+        ),
+      if (fireplaceOn)
+        _GlassStatusButton(
+          tooltip: 'Openhaard aan',
+          onTap: () => _openSystem(context, 'Openhaard'),
+          child: _FireBadge(size: _glyph, color: LuxeColors.ink),
+        ),
+      if (acOn)
+        _GlassStatusButton(
+          tooltip: 'Airco aan',
+          onTap: () => _openSystem(context, 'Klimaat'),
+          child: SplitUnitIcon(size: _glyph, color: LuxeColors.ink),
+        ),
+      if (mediaPlaying)
+        _GlassStatusButton(
+          tooltip: 'Muziek speelt',
+          onTap: () => _openSystem(context, 'Audio'),
+          child: _EqualizerBadge(size: _glyph, color: LuxeColors.ink),
+        ),
+    ];
+
+    if (buttons.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(right: 20),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < buttons.length; i++) ...[
+            if (i > 0) SizedBox(width: gap),
+            buttons[i],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /*  Room activity badges                                                */
 /* ------------------------------------------------------------------ */
 
 class _RoomActivityBadges extends ConsumerWidget {
-  const _RoomActivityBadges({required this.room});
+  const _RoomActivityBadges({required this.floor, required this.room});
+  final Floor floor;
   final Room room;
 
-  /// Vaste hoogte zodat iconen (vlam, equalizer, â€¦) de kamerbalk niet laten verspringen.
+  /// Baseline for equalizer scale math.
   static const _badgeSize = 22.0;
   static const _glyphSize = 18.0;
   static const _slotHeight = 36.0;
+
+  void _openCategory(BuildContext context, String categorySlug) {
+    context.push(
+      '/floor/${floor.id}/room/${room.id}/category/$categorySlug',
+    );
+  }
 
   static bool _isLightOn(Device d, BusState bus) {
     switch (d.type) {
@@ -1702,6 +1931,8 @@ class _RoomActivityBadges extends ConsumerWidget {
     if (d.type != DeviceType.fireplace) return false;
     final cfg = d.raw['fireplace'] as Map<String, dynamic>?;
     if (cfg == null) return false;
+    final workingOn = fireplaceWorkingOn(cfg, bus.values);
+    if (workingOn != null) return workingOn;
     final onOff = cfg['onOff'];
     if (onOff is! Map) return false;
     final ga = (onOff['statusGa'] ?? onOff['ga']) as String?;
@@ -1715,6 +1946,18 @@ class _RoomActivityBadges extends ConsumerWidget {
       deviceId: d.id,
       busOn: busOn,
     );
+  }
+
+  static bool _isAcOn(Device d, BusState bus) {
+    if (d.type != DeviceType.ac) return false;
+    final cfg = d.raw['ac'] as Map<String, dynamic>?;
+    if (cfg == null) return false;
+    final onOff = cfg['onOff'];
+    if (onOff is! Map) return false;
+    final ga = (onOff['statusGa'] ?? onOff['ga']) as String?;
+    if (ga == null) return false;
+    final v = bus.values[ga];
+    return v == true || v == 1;
   }
 
   /// Returns true/false/garage for open window or door melding-items.
@@ -1750,115 +1993,120 @@ class _RoomActivityBadges extends ConsumerWidget {
     return (window: win, door: door, garageDoor: garage);
   }
 
-  void _openSystem(BuildContext context, HouseConfig cfg, String sysName) {
-    final sys = houseSystemByName(sysName);
-    final route = sys?.routePath;
-    if (route != null) context.push(route);
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final bus = ref.watch(busProvider);
     final mediaStates = ref.watch(mediaStateProvider);
     final fireplaceVirtual = ref.watch(fireplaceVirtualProvider);
-    final cfg = ref.watch(configProvider).value;
 
     bool lightsOn = false;
     bool mediaPlaying = false;
     bool fireplaceOn = false;
-    bool heaterOn = false;
-    bool windowOpen = false;
-    bool doorOpen = false;
-    bool garageDoorOpen = false;
+    Device? activeHeater;
+    Device? activeAc;
+    Device? meldingWindow;
+    Device? meldingDoor;
+    Device? meldingGarage;
 
     for (final d in room.devices) {
       if (!lightsOn && _isLightOn(d, bus)) lightsOn = true;
       if (!fireplaceOn && _isFireplaceOn(d, bus, fireplaceVirtual)) {
         fireplaceOn = true;
       }
-      if (!heaterOn && _isHeaterActive(d, bus)) heaterOn = true;
+      if (activeHeater == null && _isHeaterActive(d, bus)) activeHeater = d;
+      if (activeAc == null && _isAcOn(d, bus)) activeAc = d;
       if (!mediaPlaying && d.type.isMedia) {
         final ms = mediaStates[d.id];
         if (ms != null && ms.transport.isActive) mediaPlaying = true;
       }
       if (d.type == DeviceType.melding) {
         final o = _openings(d, bus);
-        if (o.window) windowOpen = true;
-        if (o.door) doorOpen = true;
-        if (o.garageDoor) garageDoorOpen = true;
+        if (o.window && meldingWindow == null) meldingWindow = d;
+        if (o.door && meldingDoor == null) meldingDoor = d;
+        if (o.garageDoor && meldingGarage == null) meldingGarage = d;
       }
     }
 
-    final any = lightsOn || mediaPlaying || fireplaceOn || heaterOn ||
-        windowOpen || doorOpen || garageDoorOpen;
+    final heaterOn = activeHeater != null;
+    final acOn = activeAc != null;
+    final windowOpen = meldingWindow != null;
+    final doorOpen = meldingDoor != null;
+    final garageDoorOpen = meldingGarage != null;
 
-    // Wrap an icon so its tap opens a system sheet without propagating to the
-    // parent room InkWell. Vertical padding gives a taller touch target;
-    // horizontal padding is kept small so the rest of the row stays navigable.
-    Widget tap(Widget child, String sysName) => GestureDetector(
+    final any = lightsOn ||
+        mediaPlaying ||
+        fireplaceOn ||
+        heaterOn ||
+        acOn ||
+        windowOpen ||
+        doorOpen ||
+        garageDoorOpen;
+
+    if (!any) return const SizedBox.shrink();
+
+    // Kale glyphs — geen glass/wells.
+    // Phone: brass. Tablet: ink (zwart light / wit dark), gelijk aan header.
+    final phone = context.isPhone;
+    final glyph = phone ? _glyphSize : 22.0;
+    final slot = phone ? _slotHeight : 40.0;
+    final badge = phone ? _badgeSize : 26.0;
+    final color = phone ? LuxeColors.brass : LuxeColors.ink;
+
+    Widget tap(Widget child, String categorySlug) => GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: cfg == null ? null : () => _openSystem(context, cfg, sysName),
+          onTap: () => _openCategory(context, categorySlug),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 8),
             child: SizedBox(
-              width: _badgeSize,
-              height: _badgeSize,
+              width: badge,
+              height: badge,
               child: Center(child: child),
             ),
           ),
         );
 
     return SizedBox(
-      height: _slotHeight,
-      child: any
-          ? Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                if (lightsOn)
-                  tap(
-                    Icon(Icons.lightbulb_rounded,
-                        size: _glyphSize,
-                        color: LuxeColors.brass.withValues(alpha: 0.85)),
-                    'Verlichting',
-                  ),
-                if (fireplaceOn)
-                  tap(const _FireBadge(), 'Openhaard'),
-                if (heaterOn)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 3, vertical: 8),
-                    child: SizedBox(
-                      width: _badgeSize,
-                      height: _badgeSize,
-                      child: const Center(child: _HeaterBadge()),
-                    ),
-                  ),
-                if (windowOpen)
-                  tap(
-                    Icon(Icons.sensor_window_outlined,
-                        size: _glyphSize,
-                        color: LuxeColors.brass.withValues(alpha: 0.85)),
-                    'Meldingen',
-                  ),
-                if (doorOpen)
-                  tap(
-                    Icon(Icons.door_front_door_outlined,
-                        size: _glyphSize,
-                        color: LuxeColors.brass.withValues(alpha: 0.85)),
-                    'Meldingen',
-                  ),
-                if (garageDoorOpen)
-                  tap(
-                    Icon(Icons.garage_outlined,
-                        size: _glyphSize,
-                        color: LuxeColors.brass.withValues(alpha: 0.85)),
-                    'Meldingen',
-                  ),
-                if (mediaPlaying) tap(const _EqualizerBadge(), 'Audio'),
-              ],
-            )
-          : null,
+      height: slot,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (lightsOn)
+            tap(
+              Icon(Icons.lightbulb_outline_rounded, size: glyph, color: color),
+              'lighting',
+            ),
+          if (fireplaceOn)
+            tap(_FireBadge(size: glyph + 2, color: color), 'fireplace'),
+          if (heaterOn)
+            tap(
+              _HeaterBadge(size: glyph + 1, color: color),
+              'universal__${activeHeater.id}',
+            ),
+          if (acOn)
+            tap(
+              SplitUnitIcon(size: glyph, color: color),
+              'climate',
+            ),
+          if (windowOpen)
+            tap(
+              Icon(Icons.sensor_window_outlined, size: glyph, color: color),
+              'melding__${meldingWindow.id}',
+            ),
+          if (doorOpen)
+            tap(
+              Icon(Icons.door_front_door_outlined, size: glyph, color: color),
+              'melding__${meldingDoor.id}',
+            ),
+          if (garageDoorOpen)
+            tap(
+              Icon(Icons.garage_outlined, size: glyph, color: color),
+              'melding__${meldingGarage.id}',
+            ),
+          if (mediaPlaying)
+            tap(_EqualizerBadge(size: badge, color: color), 'audio'),
+        ],
+      ),
     );
   }
 }
@@ -1868,7 +2116,12 @@ class _RoomActivityBadges extends ConsumerWidget {
 /* ------------------------------------------------------------------ */
 
 class _FireBadge extends StatefulWidget {
-  const _FireBadge();
+  const _FireBadge({
+    this.size = _RoomActivityBadges._glyphSize + 2,
+    this.color,
+  });
+  final double size;
+  final Color? color;
 
   @override
   State<_FireBadge> createState() => _FireBadgeState();
@@ -1883,7 +2136,7 @@ class _FireBadgeState extends State<_FireBadge>
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1400),
+      duration: const Duration(milliseconds: 1750),
     )..repeat();
   }
 
@@ -1906,8 +2159,8 @@ class _FireBadgeState extends State<_FireBadge>
             scale: scale,
             child: Icon(
               Icons.local_fire_department_rounded,
-              size: _RoomActivityBadges._glyphSize + 2,
-              color: LuxeColors.brass.withValues(alpha: 0.85),
+              size: widget.size,
+              color: widget.color ?? LuxeColors.brass,
             ),
           );
         },
@@ -1920,47 +2173,20 @@ class _FireBadgeState extends State<_FireBadge>
 /*  Animated heater badge                                               */
 /* ------------------------------------------------------------------ */
 
-class _HeaterBadge extends StatefulWidget {
-  const _HeaterBadge();
-
-  @override
-  State<_HeaterBadge> createState() => _HeaterBadgeState();
-}
-
-class _HeaterBadgeState extends State<_HeaterBadge>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1600),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
+class _HeaterBadge extends StatelessWidget {
+  const _HeaterBadge({
+    this.size = _RoomActivityBadges._glyphSize + 1,
+    this.color,
+  });
+  final double size;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (_, __) {
-        final t = _ctrl.value * 2 * pi;
-        final pulse = 0.88 + 0.12 * ((sin(t * 1.5) + 1) / 2);
-        return Transform.scale(
-          scale: pulse,
-          child: HeaterIcon(
-            size: _RoomActivityBadges._glyphSize + 1,
-            color: LuxeColors.brass.withValues(alpha: 0.85),
-          ),
-        );
-      },
+    return HeaterIcon(
+      size: size,
+      color: color ?? LuxeColors.brass,
+      animate: true,
     );
   }
 }
@@ -1970,7 +2196,12 @@ class _HeaterBadgeState extends State<_HeaterBadge>
 /* ------------------------------------------------------------------ */
 
 class _EqualizerBadge extends StatefulWidget {
-  const _EqualizerBadge();
+  const _EqualizerBadge({
+    this.size = _RoomActivityBadges._badgeSize,
+    this.color,
+  });
+  final double size;
+  final Color? color;
 
   @override
   State<_EqualizerBadge> createState() => _EqualizerBadgeState();
@@ -1985,7 +2216,7 @@ class _EqualizerBadgeState extends State<_EqualizerBadge>
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 900),
+      duration: const Duration(milliseconds: 1150),
     )..repeat();
   }
 
@@ -1997,6 +2228,12 @@ class _EqualizerBadgeState extends State<_EqualizerBadge>
 
   @override
   Widget build(BuildContext context) {
+    final scale = widget.size / _RoomActivityBadges._badgeSize;
+    final maxH = 17.0 * scale;
+    final bottomInset = 3.0 * scale;
+    final barW = 3.5 * scale;
+    final gap = 2.0 * scale;
+    final color = widget.color ?? LuxeColors.brass;
     return AnimatedBuilder(
       animation: _ctrl,
       builder: (_, __) {
@@ -2005,24 +2242,19 @@ class _EqualizerBadgeState extends State<_EqualizerBadge>
         final h1 = (0.35 + 0.65 * ((sin(t) + 1) / 2)).clamp(0.15, 1.0);
         final h2 = (0.35 + 0.65 * ((sin(t + 2.1) + 1) / 2)).clamp(0.15, 1.0);
         final h3 = (0.35 + 0.65 * ((sin(t + 4.2) + 1) / 2)).clamp(0.15, 1.0);
-        // Balkjes optisch even hoog als de iconen, met dezelfde onderlijn:
-        // een kleine bodem-inset tilt ze gelijk met lamp/vlam.
-        const maxH = 17.0;
-        const bottomInset = 3.0;
-        const barW = 3.5;
         return SizedBox(
-          width: barW * 3 + 2 * 2, // 3 bars + 2 gaps
-          height: _RoomActivityBadges._badgeSize,
+          width: barW * 3 + gap * 2,
+          height: widget.size,
           child: Padding(
-            padding: const EdgeInsets.only(bottom: bottomInset),
+            padding: EdgeInsets.only(bottom: bottomInset),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                _bar(barW, maxH * h1),
-                const SizedBox(width: 2),
-                _bar(barW, maxH * h2),
-                const SizedBox(width: 2),
-                _bar(barW, maxH * h3),
+                _bar(barW, maxH * h1, color),
+                SizedBox(width: gap),
+                _bar(barW, maxH * h2, color),
+                SizedBox(width: gap),
+                _bar(barW, maxH * h3, color),
               ],
             ),
           ),
@@ -2031,11 +2263,11 @@ class _EqualizerBadgeState extends State<_EqualizerBadge>
     );
   }
 
-  Widget _bar(double w, double h) => Container(
+  Widget _bar(double w, double h, Color color) => Container(
         width: w,
         height: h,
         decoration: BoxDecoration(
-          color: LuxeColors.brass.withValues(alpha: 0.85),
+          color: color,
           borderRadius: BorderRadius.circular(1.5),
         ),
       );

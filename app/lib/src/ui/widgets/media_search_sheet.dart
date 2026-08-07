@@ -136,7 +136,7 @@ class _MediaSearchSheetState extends ConsumerState<MediaSearchSheet> {
       padding: EdgeInsets.only(bottom: bottomInset),
       child: Container(
         height: height,
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        margin: EdgeInsets.fromLTRB(12, 0, 12, 12),
         decoration: BoxDecoration(
           color: LuxeColors.surface,
           borderRadius: BorderRadius.circular(28),
@@ -144,7 +144,7 @@ class _MediaSearchSheetState extends ConsumerState<MediaSearchSheet> {
         ),
         child: Column(
           children: [
-            const SizedBox(height: 8),
+            SizedBox(height: 8),
             Container(
               width: 36,
               height: 4,
@@ -154,13 +154,13 @@ class _MediaSearchSheetState extends ConsumerState<MediaSearchSheet> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+              padding: EdgeInsets.fromLTRB(16, 14, 16, 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.search_rounded,
+                      Icon(Icons.search_rounded,
                           color: LuxeColors.brass, size: 20),
                       const SizedBox(width: 10),
                       Expanded(
@@ -228,7 +228,7 @@ class _MediaSearchSheetState extends ConsumerState<MediaSearchSheet> {
 
   Widget _spotifyReconnectBanner() => Container(
         width: double.infinity,
-        margin: const EdgeInsets.fromLTRB(12, 10, 12, 4),
+        margin: EdgeInsets.fromLTRB(12, 10, 12, 4),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: LuxeColors.brass.withValues(alpha: 0.12),
@@ -237,9 +237,9 @@ class _MediaSearchSheetState extends ConsumerState<MediaSearchSheet> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.link_off_rounded,
+            Icon(Icons.link_off_rounded,
                 color: LuxeColors.brassDeep, size: 20),
-            const SizedBox(width: 10),
+            SizedBox(width: 10),
             Expanded(
               child: Text(
                 'De Spotify-koppeling is verlopen. Verbind opnieuw om in Spotify te zoeken.',
@@ -287,7 +287,7 @@ class _MediaSearchSheetState extends ConsumerState<MediaSearchSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(8, 14, 8, 6),
+              padding: EdgeInsets.fromLTRB(8, 14, 8, 6),
               child: Text(
                 section.title.toUpperCase(),
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -308,12 +308,12 @@ class _MediaSearchSheetState extends ConsumerState<MediaSearchSheet> {
 
   Widget _centered(IconData icon, String text) => Center(
         child: Padding(
-          padding: const EdgeInsets.all(32),
+          padding: EdgeInsets.all(32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(icon, size: 40, color: LuxeColors.ink.withValues(alpha: 0.25)),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               Text(
                 text,
                 textAlign: TextAlign.center,
@@ -370,7 +370,7 @@ class _ResultRow extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Row(
             children: [
               art,
@@ -404,8 +404,8 @@ class _ResultRow extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              const Icon(Icons.play_arrow_rounded,
+              SizedBox(width: 8),
+              Icon(Icons.play_arrow_rounded,
                   color: LuxeColors.brass, size: 22),
             ],
           ),

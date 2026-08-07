@@ -13,15 +13,23 @@ import 'responsive_platform.dart' as platform;
 ///   context.favTileW   // favourite tile width in horizontal carousel
 extension ResponsiveX on BuildContext {
   double get _w => MediaQuery.sizeOf(this).width;
+  double get _h => MediaQuery.sizeOf(this).height;
   double get _shortest => MediaQuery.sizeOf(this).shortestSide;
 
   /// Phone layout — shortestSide for orientation, width for narrow viewports,
   /// plus mobile user-agent on web (PWA in browser).
-  bool get isPhone =>
-      _shortest < 600 || _w < 600 || platform.isMobileWebUserAgent;
+  ///
+  /// Landscape wall panels (e.g. 1280×800 @240dpi ≈ 853×533) would otherwise
+  /// count as phones and look oversized; treat wide landscape as tablet+.
+  bool get isPhone {
+    if (platform.isMobileWebUserAgent) return true;
+    final landscape = _w > _h;
+    if (landscape && _w >= 700) return false;
+    return _shortest < 600 || _w < 600;
+  }
 
-  bool get isTablet => !isPhone && _shortest >= 600 && _shortest < 900;
-  bool get isDesktop => !isPhone && _shortest >= 900;
+  bool get isDesktop => !isPhone && (_shortest >= 900 || _w >= 1100);
+  bool get isTablet => !isPhone && !isDesktop;
 
   /// Horizontal padding used on top-level page content.
   double get hPad => isPhone ? 20.0 : 40.0;
@@ -39,20 +47,26 @@ extension ResponsiveX on BuildContext {
   double get cardVPad => isPhone ? 18.0 : 26.0;
 
   /// Width of a favourite shortcut tile in the horizontal carousel.
-  double get favTileW => isPhone ? 152.0 : 190.0;
+  double get favTileW => isPhone ? 164.0 : 204.0;
 
   /// Height of the favourite carousel.
-  double get favCarouselH => isPhone ? 136.0 : 150.0;
+  double get favCarouselH => isPhone ? 148.0 : 164.0;
 
   /// Height of the pinned room header (back + titles).
-  double get roomStickyHeaderH => isPhone ? 88.0 : 100.0;
+  double get roomStickyHeaderH => isPhone ? 92.0 : 108.0;
 
   /// Height of the SliverAppBar on a room screen.
   double get roomHeaderH => isPhone ? 200.0 : 280.0;
 
   /// Font size for the large dashboard project title.
-  double get displayLargeFontSize => isPhone ? 34.0 : 64.0;
+  double get displayLargeFontSize => isPhone ? 40.0 : 58.0;
 
   /// Font size for room / medium titles.
-  double get displayMediumFontSize => isPhone ? 28.0 : 44.0;
+  double get displayMediumFontSize => isPhone ? 30.0 : 42.0;
+
+  /// Icon well inside scene / system / room-category chips.
+  /// Phone keeps the original size; tablet uses a larger glyph.
+  double get chipIconBox => isPhone ? 34.0 : 44.0;
+  double get chipIconSize => isPhone ? 18.0 : 24.0;
+  double get chipIconRadius => isPhone ? 9.0 : 12.0;
 }

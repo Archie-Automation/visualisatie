@@ -6,6 +6,7 @@ import '../models.dart';
 import '../schedule_api.dart';
 import '../scene_entry.dart';
 import '../theme.dart';
+import '../theme_auto_schedule.dart';
 import 'widgets/scene_entry_tiles.dart';
 
 /// Bottom sheet for creating and editing time/astro schedules. Uses the
@@ -17,11 +18,17 @@ class ScheduleEditorSheet extends ConsumerStatefulWidget {
     required this.schedules,
     required this.config,
     this.initiallySelectedId,
+    this.lockedIds = const {},
+    this.persistHouseSchedules = true,
   });
 
   final List<Schedule> schedules;
   final HouseConfig config;
   final String? initiallySelectedId;
+  /// Non-deletable entries (tablet Auto weergave-schema).
+  final Set<String> lockedIds;
+  /// When false, only theme schedules are written (no PUT /schedules).
+  final bool persistHouseSchedules;
 
   @override
   ConsumerState<ScheduleEditorSheet> createState() =>
@@ -122,7 +129,9 @@ class _Draft {
       );
     }
     final ScheduleAction action;
-    if (actionKind == _ActionKind.scene) {
+    if (isThemeScheduleId(id)) {
+      action = ScheduleThemeAction(toLight: id == kThemeLightOnId);
+    } else if (actionKind == _ActionKind.scene) {
       action = ScheduleSceneAction(sceneId: sceneId ?? '');
     } else {
       final acts = <SceneAction>[];
@@ -204,7 +213,7 @@ class _ScheduleEditorSheetState
 
   void _deleteSelected() {
     final id = _selectedId;
-    if (id == null) return;
+    if (id == null || widget.lockedIds.contains(id)) return;
     setState(() {
       _schedules = _schedules.where((s) => s.id != id).toList();
       _drafts.remove(id);
@@ -219,7 +228,20 @@ class _ScheduleEditorSheetState
         for (final s in _schedules)
           _drafts[s.id]?.toSchedule(s.id) ?? s,
       ];
-      await ref.read(scheduleApiProvider).save(out);
+      final themeOnes =
+          out.where((s) => isThemeScheduleId(s.id)).toList(growable: false);
+      final houseOnes =
+          out.where((s) => !isThemeScheduleId(s.id)).toList(growable: false);
+
+      if (themeOnes.isNotEmpty) {
+        final current = ref.read(themeAutoScheduleProvider);
+        await ref
+            .read(themeAutoScheduleProvider.notifier)
+            .save(current.mergeFromSchedules(themeOnes));
+      }
+      if (widget.persistHouseSchedules) {
+        await ref.read(scheduleApiProvider).save(houseOnes);
+      }
       if (!mounted) return;
       Navigator.of(context).pop(out);
     } catch (err) {
@@ -243,7 +265,7 @@ class _ScheduleEditorSheetState
     return Padding(
       padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
       child: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: LuxeColors.cream,
           borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
           boxShadow: LuxeShadows.lift,
@@ -267,7 +289,7 @@ class _ScheduleEditorSheetState
   }
 
   Widget _handle() => Padding(
-        padding: const EdgeInsets.only(top: 10),
+        padding: EdgeInsets.only(top: 10),
         child: Container(
           width: 48,
           height: 5,
@@ -279,14 +301,14 @@ class _ScheduleEditorSheetState
       );
 
   Widget _header() => Padding(
-        padding: const EdgeInsets.fromLTRB(28, 16, 16, 12),
+        padding: EdgeInsets.fromLTRB(28, 16, 16, 12),
         child: Row(
           children: [
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('INSTELLINGEN · TIJDSCHEMA\'S',
+                  Text('INSTELLINGEN · TIJDSCHEMA\'S',
                       style: TextStyle(
                         color: LuxeColors.inkSoft,
                         fontSize: 11,
@@ -312,11 +334,13 @@ class _ScheduleEditorSheetState
       height: 88,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        itemCount: _schedules.length + 1,
+        padding: EdgeInsets.symmetric(horizontal: 24),
+        itemCount: widget.persistHouseSchedules
+            ? _schedules.length + 1
+            : _schedules.length,
         separatorBuilder: (_, __) => const SizedBox(width: 10),
         itemBuilder: (context, i) {
-          if (i == _schedules.length) {
+          if (widget.persistHouseSchedules && i == _schedules.length) {
             return GestureDetector(
               onTap: _addSchedule,
               child: Container(
@@ -351,7 +375,7 @@ class _ScheduleEditorSheetState
           return GestureDetector(
             onTap: () => setState(() => _selectedId = s.id),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 160),
+              duration: Duration(milliseconds: 160),
               width: 140,
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
               decoration: BoxDecoration(
@@ -376,13 +400,13 @@ class _ScheduleEditorSheetState
                         ? LuxeColors.brassGlow
                         : LuxeColors.ink,
                   ),
-                  const Spacer(),
+                  Spacer(),
                   Text(
                     d?.name ?? s.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: selected ? Colors.white : LuxeColors.ink,
+                      color: selected ? LuxeColors.onInk : LuxeColors.ink,
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
                     ),
@@ -406,8 +430,9 @@ class _ScheduleEditorSheetState
         ),
       );
     }
+    final locked = widget.lockedIds.contains(_selectedId);
     return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+      padding: EdgeInsets.fromLTRB(24, 12, 24, 24),
       children: [
         _NameField(
           key: ValueKey('name-$_selectedId'),
@@ -425,40 +450,69 @@ class _ScheduleEditorSheetState
         else
           _AstroTriggerEditor(draft: d, onTouch: () => setState(() {})),
         const SizedBox(height: 18),
-        const Text('ACTIE', style: _kSectionStyle),
+        Text('ACTIE', style: _kSectionStyle),
         const SizedBox(height: 10),
-        _ActionKindSelector(
-          value: d.actionKind,
-          onChanged: (v) => setState(() => d.actionKind = v),
-        ),
-        const SizedBox(height: 12),
-        if (d.actionKind == _ActionKind.scene)
-          _ScenePicker(
-            config: widget.config,
-            value: d.sceneId,
-            onChanged: (v) => setState(() => d.sceneId = v),
+        if (locked)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              color: LuxeColors.surface.withValues(alpha: 0.8),
+              border: Border.all(color: LuxeColors.lineSoft),
+            ),
+            child: Text(
+              _selectedId == kThemeLightOnId
+                  ? 'Weergave → licht thema'
+                  : 'Weergave → donker thema',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
           )
-        else
-          _DevicesActionEditor(
-            draft: d,
-            config: widget.config,
-            onTouch: () => setState(() {}),
+        else ...[
+          _ActionKindSelector(
+            value: d.actionKind,
+            onChanged: (v) => setState(() => d.actionKind = v),
           ),
-        const SizedBox(height: 22),
-        TextButton.icon(
-          icon: const Icon(Icons.delete_outline,
-              size: 18, color: LuxeColors.danger),
-          label: const Text('Tijdschema verwijderen',
-              style: TextStyle(color: LuxeColors.danger)),
-          onPressed: _deleteSelected,
-        ),
+          const SizedBox(height: 12),
+          if (d.actionKind == _ActionKind.scene)
+            _ScenePicker(
+              config: widget.config,
+              value: d.sceneId,
+              onChanged: (v) => setState(() => d.sceneId = v),
+            )
+          else
+            _DevicesActionEditor(
+              draft: d,
+              config: widget.config,
+              onTouch: () => setState(() {}),
+            ),
+        ],
+        if (!locked) ...[
+          const SizedBox(height: 22),
+          TextButton.icon(
+            icon: Icon(Icons.delete_outline,
+                size: 18, color: LuxeColors.danger),
+            label: Text('Tijdschema verwijderen',
+                style: TextStyle(color: LuxeColors.danger)),
+            onPressed: _deleteSelected,
+          ),
+        ] else ...[
+          const SizedBox(height: 16),
+          Text(
+            'Vast weergave-schema — niet verwijderbaar. Alleen zichtbaar '
+            'als Weergave op Auto staat.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: LuxeColors.inkSoft,
+                ),
+          ),
+        ],
       ],
     );
   }
 
   Widget _footer() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 18),
+      padding: EdgeInsets.fromLTRB(24, 12, 24, 18),
       child: Row(
         children: [
           Expanded(
@@ -477,16 +531,16 @@ class _ScheduleEditorSheetState
               onPressed: _saving ? null : _save,
               style: FilledButton.styleFrom(
                 backgroundColor: LuxeColors.ink,
-                foregroundColor: Colors.white,
+                foregroundColor: LuxeColors.onInk,
                 minimumSize: const Size.fromHeight(52),
                 shape: const StadiumBorder(),
               ),
               child: _saving
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
+                          strokeWidth: 2, color: LuxeColors.onInk),
                     )
                   : const Text('Opslaan'),
             ),
@@ -499,7 +553,7 @@ class _ScheduleEditorSheetState
 
 /* --------------------------- sub-widgets ------------------------------ */
 
-const _kSectionStyle = TextStyle(
+final _kSectionStyle = TextStyle(
   fontSize: 11,
   letterSpacing: 2.0,
   fontWeight: FontWeight.w700,
@@ -582,7 +636,7 @@ class _TimeTriggerEditor extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('TIJDSTIP', style: _kSectionStyle),
+        Text('TIJDSTIP', style: _kSectionStyle),
         const SizedBox(height: 8),
         InkWell(
           onTap: () async {
@@ -602,7 +656,7 @@ class _TimeTriggerEditor extends StatelessWidget {
           },
           borderRadius: BorderRadius.circular(14),
           child: Container(
-            padding: const EdgeInsets.symmetric(
+            padding: EdgeInsets.symmetric(
                 horizontal: 16, vertical: 16),
             decoration: BoxDecoration(
               color: LuxeColors.surface.withValues(alpha: 0.8),
@@ -611,17 +665,17 @@ class _TimeTriggerEditor extends StatelessWidget {
             ),
             child: Row(
               children: [
-                const Icon(Icons.access_time, color: LuxeColors.inkSoft),
-                const SizedBox(width: 12),
+                Icon(Icons.access_time, color: LuxeColors.inkSoft),
+                SizedBox(width: 12),
                 Text(
                   _hhmm(draft.time),
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.w600,
                       color: LuxeColors.ink),
                 ),
-                const Spacer(),
-                const Icon(Icons.chevron_right, color: LuxeColors.inkSoft),
+                Spacer(),
+                Icon(Icons.chevron_right, color: LuxeColors.inkSoft),
               ],
             ),
           ),
@@ -642,7 +696,7 @@ class _AstroTriggerEditor extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('ZON-EVENEMENT', style: _kSectionStyle),
+        Text('ZON-EVENEMENT', style: _kSectionStyle),
         const SizedBox(height: 8),
         SegmentedButton<AstroEvent>(
           showSelectedIcon: false,
@@ -669,7 +723,7 @@ class _AstroTriggerEditor extends StatelessWidget {
         const SizedBox(height: 16),
         _WeekdayRow(days: draft.days, onTouch: onTouch),
         const SizedBox(height: 16),
-        const Text('BEGRENZING (OPTIONEEL)', style: _kSectionStyle),
+        Text('BEGRENZING (OPTIONEEL)', style: _kSectionStyle),
         const SizedBox(height: 6),
         Text(
           'Voer alleen uit binnen een tijdvenster. Bv. "bij zonsondergang, '
@@ -716,7 +770,7 @@ class _OffsetSlider extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Text('VERSCHUIVING', style: _kSectionStyle),
+            Text('VERSCHUIVING', style: _kSectionStyle),
             const Spacer(),
             Text(label, style: Theme.of(context).textTheme.titleMedium),
           ],
@@ -753,7 +807,7 @@ class _WeekdayRow extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('DAGEN', style: _kSectionStyle),
+        Text('DAGEN', style: _kSectionStyle),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -816,7 +870,7 @@ class _GuardRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final g = guard;
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+      padding: EdgeInsets.fromLTRB(14, 10, 10, 10),
       decoration: BoxDecoration(
         color: LuxeColors.surface.withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(14),
@@ -864,7 +918,7 @@ class _GuardRow extends StatelessWidget {
             PopupMenuItem(value: 'sunset', child: Text('Zonsondergang')),
           ],
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: EdgeInsets.symmetric(vertical: 8),
             child: Text(
               'Geen — tik om toe te voegen',
               style:
@@ -986,7 +1040,7 @@ class _ScenePicker extends StatelessWidget {
     }
     if (items.isEmpty) {
       return Container(
-        padding: const EdgeInsets.all(14),
+        padding: EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: LuxeColors.brass.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(14),
@@ -994,7 +1048,7 @@ class _ScenePicker extends StatelessWidget {
             color: LuxeColors.brass.withValues(alpha: 0.35),
           ),
         ),
-        child: const Text(
+        child: Text(
           'Er zijn nog geen scenes. Maak eerst een scene aan '
           'voordat je hem via een tijdschema kunt gebruiken.',
           style: TextStyle(color: LuxeColors.inkSoft, fontSize: 12),
@@ -1061,7 +1115,7 @@ class _DevicesActionEditorState
     final entries = widget.draft.entries;
     if (entries.isEmpty) {
       return Container(
-        margin: const EdgeInsets.only(top: 4),
+        margin: EdgeInsets.only(top: 4),
         padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
         decoration: BoxDecoration(
           color: LuxeColors.surface,
@@ -1073,7 +1127,7 @@ class _DevicesActionEditorState
           children: [
             Text('Nog geen apparaten',
                 style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 6),
+            SizedBox(height: 6),
             Text(
               'Kies de apparaten die dit schema moet aansturen en zet ze op '
               'de gewenste stand.',
@@ -1086,7 +1140,7 @@ class _DevicesActionEditorState
               label: const Text('Apparaten kiezen'),
               style: FilledButton.styleFrom(
                 backgroundColor: LuxeColors.ink,
-                foregroundColor: Colors.white,
+                foregroundColor: LuxeColors.onInk,
                 shape: const StadiumBorder(),
               ),
             ),
@@ -1148,7 +1202,7 @@ class _DeviceEntryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(top: 8),
+      margin: EdgeInsets.only(top: 8),
       padding: const EdgeInsets.fromLTRB(14, 12, 8, 14),
       decoration: BoxDecoration(
         color: LuxeColors.surface.withValues(alpha: 0.9),

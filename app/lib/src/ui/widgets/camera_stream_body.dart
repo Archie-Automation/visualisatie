@@ -65,7 +65,7 @@ class _CameraLivePlayerState extends ConsumerState<CameraLivePlayer> {
     if (!_streamReady) {
       return AspectRatio(
         aspectRatio: widget.info.aspectRatio,
-        child: const Center(
+        child: Center(
           child: SizedBox(
             width: 28,
             height: 28,

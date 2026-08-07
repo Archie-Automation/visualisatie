@@ -17,10 +17,19 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
+  final _server = TextEditingController(text: apiBase);
   final _user = TextEditingController(text: 'admin');
   final _pass = TextEditingController(text: 'admin');
   bool _busy = false;
   String? _err;
+
+  @override
+  void dispose() {
+    _server.dispose();
+    _user.dispose();
+    _pass.dispose();
+    super.dispose();
+  }
 
   Future<void> _submit() async {
     final l10n = AppLocalizations.of(context)!;
@@ -28,6 +37,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       _busy = true;
       _err = null;
     });
+
+    if (!kIsWeb) {
+      await setApiBase(
+        _server.text,
+        auth: ref.read(authProvider.notifier),
+      );
+    }
+
     bool ok = false;
     try {
       ok = await ref.read(authProvider.notifier).login(
@@ -62,13 +79,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final showServer = !kIsWeb;
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: LuxeBackdrop(
         child: SafeArea(
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 440),
+              constraints: BoxConstraints(maxWidth: 440),
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: GlassCard(
@@ -91,6 +109,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         const SizedBox(height: 40),
+                        if (showServer) ...[
+                          _field(
+                            _server,
+                            'Server',
+                            hint: 'http://192.168.1.20:4000',
+                            keyboardType: TextInputType.url,
+                          ),
+                          const SizedBox(height: 22),
+                        ],
                         _field(_user, l10n.loginUserLabel),
                         const SizedBox(height: 22),
                         _field(_pass, l10n.loginPasswordLabel, obscure: true),
@@ -98,24 +125,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         FilledButton(
                           style: FilledButton.styleFrom(
                             backgroundColor: LuxeColors.ink,
+                            foregroundColor: LuxeColors.onInk,
                             minimumSize: const Size.fromHeight(60),
-                            shape: const StadiumBorder(),
+                            shape: StadiumBorder(),
                             elevation: 0,
                           ),
                           onPressed: _busy ? null : _submit,
                           child: _busy
-                              ? const SizedBox(
+                              ? SizedBox(
                                   width: 18,
                                   height: 18,
                                   child: CircularProgressIndicator(
-                                      strokeWidth: 2, color: Colors.white),
+                                      strokeWidth: 2, color: LuxeColors.onInk),
                                 )
                               : Text(
                                   l10n.loginAction,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     letterSpacing: 0.6,
                                     fontWeight: FontWeight.w600,
                                     fontSize: 14,
+                                    color: LuxeColors.onInk,
                                   ),
                                 ),
                         ),
@@ -124,7 +153,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           Text(_err!,
                               textAlign: TextAlign.center,
                               style:
-                                  const TextStyle(color: LuxeColors.danger)),
+                                  TextStyle(color: LuxeColors.danger)),
                         ],
                       ],
                     ),
@@ -138,29 +167,38 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 
-  Widget _field(TextEditingController c, String label, {bool obscure = false}) {
+  Widget _field(
+    TextEditingController c,
+    String label, {
+    bool obscure = false,
+    String? hint,
+    TextInputType? keyboardType,
+  }) {
     return TextField(
       controller: c,
       obscureText: obscure,
-      style: const TextStyle(fontSize: 15, color: LuxeColors.ink),
+      keyboardType: keyboardType,
+      style: TextStyle(fontSize: 15, color: LuxeColors.ink),
       decoration: InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: LuxeColors.inkSoft),
+        hintText: hint,
+        labelStyle: TextStyle(color: LuxeColors.inkSoft),
+        hintStyle: TextStyle(color: LuxeColors.inkSoft.withValues(alpha: 0.7)),
         filled: true,
         fillColor: LuxeColors.surface.withValues(alpha: 0.6),
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            EdgeInsets.symmetric(horizontal: 20, vertical: 18),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: LuxeColors.line),
+          borderSide: BorderSide(color: LuxeColors.line),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: LuxeColors.line),
+          borderSide: BorderSide(color: LuxeColors.line),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: const BorderSide(color: LuxeColors.ink, width: 1.4),
+          borderSide: BorderSide(color: LuxeColors.ink, width: 1.4),
         ),
       ),
     );

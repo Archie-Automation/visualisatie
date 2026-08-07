@@ -4105,11 +4105,19 @@ class _FireplaceStepRangesSection extends StatelessWidget {
   }
 }
 
-/// Openhaard: geen JSON ? KNX-configurateur kiest werking en vult GA?s in.
-enum _FireplaceOpMode { analogFlame, analogSwitchOnly, discretePulses }
+/// Openhaard: geen JSON — KNX-configurateur kiest werking en vult GA’s in.
+enum _FireplaceOpMode {
+  analogFlame,
+  analogSwitchOnly,
+  discretePulses,
+  discretePulsesStatus,
+}
 
 _FireplaceOpMode _fireplaceReadMode(Map<String, dynamic> fp) {
-  if (fp['controlMode'] == 'discrete') return _FireplaceOpMode.discretePulses;
+  if (fp['controlMode'] == 'discrete') {
+    if (fp['statusBits'] is Map) return _FireplaceOpMode.discretePulsesStatus;
+    return _FireplaceOpMode.discretePulses;
+  }
   if (fp['flame'] is Map) return _FireplaceOpMode.analogFlame;
   return _FireplaceOpMode.analogSwitchOnly;
 }
@@ -4119,6 +4127,7 @@ void _fireplaceApplyMode(Map<String, dynamic> fp, _FireplaceOpMode mode) {
     case _FireplaceOpMode.analogFlame:
       fp['controlMode'] = 'analog';
       fp.remove('discreteLevel');
+      fp.remove('statusBits');
       final old = fp['flame'];
       final oldM = <String, dynamic>{};
       if (old is Map) {
@@ -4148,12 +4157,20 @@ void _fireplaceApplyMode(Map<String, dynamic> fp, _FireplaceOpMode mode) {
     case _FireplaceOpMode.analogSwitchOnly:
       fp['controlMode'] = 'analog';
       fp.remove('discreteLevel');
+      fp.remove('statusBits');
       fp.remove('flame');
       break;
     case _FireplaceOpMode.discretePulses:
       fp['controlMode'] = 'discrete';
       fp.remove('flame');
+      fp.remove('statusBits');
       fp['discreteLevel'] ??= <String, dynamic>{};
+      break;
+    case _FireplaceOpMode.discretePulsesStatus:
+      fp['controlMode'] = 'discrete';
+      fp.remove('flame');
+      fp['discreteLevel'] ??= <String, dynamic>{};
+      fp['statusBits'] ??= <String, dynamic>{};
       break;
   }
 }
@@ -4235,6 +4252,35 @@ Map<String, dynamic> _ensurePulseChannel(
   return m;
 }
 
+Map<String, dynamic> _ensureStatusBits(Map<String, dynamic> fp) {
+  final d = fp['statusBits'];
+  if (d is Map<String, dynamic>) return d;
+  if (d is Map) {
+    final c = Map<String, dynamic>.from(
+        d.map((k, val) => MapEntry(k.toString(), val)));
+    fp['statusBits'] = c;
+    return c;
+  }
+  final m = <String, dynamic>{};
+  fp['statusBits'] = m;
+  return m;
+}
+
+Map<String, dynamic> _ensureStatusBitGa(
+    Map<String, dynamic> statusBits, String key) {
+  final x = statusBits[key];
+  if (x is Map<String, dynamic>) return x;
+  if (x is Map) {
+    final c = Map<String, dynamic>.from(
+        x.map((k, val) => MapEntry(k.toString(), val)));
+    statusBits[key] = c;
+    return c;
+  }
+  final m = <String, dynamic>{'ga': ''};
+  statusBits[key] = m;
+  return m;
+}
+
 class _FireplaceInstallerSection extends StatelessWidget {
   const _FireplaceInstallerSection({
     super.key,
@@ -4268,39 +4314,53 @@ class _FireplaceInstallerSection extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          SegmentedButton<_FireplaceOpMode>(
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(
+          DropdownButtonFormField<_FireplaceOpMode>(
+            key: ValueKey('fp-mode-${device['id']}-$mode'),
+            decoration: const InputDecoration(
+              labelText: 'Werking',
+              border: OutlineInputBorder(),
+            ),
+            initialValue: mode,
+            items: const [
+              DropdownMenuItem(
                 value: _FireplaceOpMode.analogFlame,
-                label: Text('Bit + byte'),
-                tooltip:
-                    'Aan/uit (DPT1) + vlam 0?100 % (DPT5); weergave als % of 0?10 V / 0?3 V',
+                child: Text('Bit + byte (aan/uit + vlam)'),
               ),
-              ButtonSegment(
+              DropdownMenuItem(
                 value: _FireplaceOpMode.analogSwitchOnly,
-                label: Text('Alleen bit'),
-                tooltip: 'Alleen aan/uit met bit + status',
+                child: Text('Alleen bit (aan/uit)'),
               ),
-              ButtonSegment(
+              DropdownMenuItem(
                 value: _FireplaceOpMode.discretePulses,
-                label: Text('4? puls'),
-                tooltip:
-                    'Vier aparte bit-GA?s: alleen kort waarde 1 (puls), daarna 0',
+                child: Text('4× puls (start/stop/omhoog/omlaag)'),
+              ),
+              DropdownMenuItem(
+                value: _FireplaceOpMode.discretePulsesStatus,
+                child: Text('4× puls + status (8 GA’s)'),
               ),
             ],
-            selected: {mode},
-            onSelectionChanged: (Set<_FireplaceOpMode> next) {
-              if (next.isEmpty) return;
-              _fireplaceApplyMode(fp, next.single);
+            onChanged: (_FireplaceOpMode? next) {
+              if (next == null) return;
+              _fireplaceApplyMode(fp, next);
               onChanged();
             },
           ),
+          if (mode == _FireplaceOpMode.discretePulsesStatus) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Acht bit-GA’s: 4× pulscommando (waarde 1) + 4× statuscontact. '
+              'Combinaties: Error+Fuel = Bijvullen, Working+Ready = Wachten/Koelen.',
+              style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
+            ),
+          ],
           const SizedBox(height: 20),
           Text('Aan / uit', style: theme.textTheme.labelLarge),
           const SizedBox(height: 4),
           Text(
-            'Schrijf-Groepadres (bit). Optioneel status voor terugmelding in de app.',
+            mode == _FireplaceOpMode.discretePulsesStatus
+                ? 'Schema-veld (bit). Bij deze modus komt de app-status uit de '
+                    '4 statuscontacten hieronder; Working = aan.'
+                : 'Schrijf-Groepadres (bit). Optioneel status voor terugmelding in de app.',
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 8),
@@ -4418,17 +4478,21 @@ class _FireplaceInstallerSection extends StatelessWidget {
               },
             ),
           ],
-          if (mode == _FireplaceOpMode.discretePulses) ...[
+          if (mode == _FireplaceOpMode.discretePulses ||
+              mode == _FireplaceOpMode.discretePulsesStatus) ...[
             const SizedBox(height: 16),
             Text(
-              'Pulscontacten ? per functie ??n bit-GA; de app stuurt alleen kort '
-              '?aan? (1), daarna 0. Pulsduur standaard 250 ms.',
+              mode == _FireplaceOpMode.discretePulsesStatus
+                  ? 'Commando’s — per functie één bit-GA; de app stuurt kort waarde 1, daarna 0. Pulsduur standaard 250 ms.'
+                  : 'Pulscontacten — per functie één bit-GA; de app stuurt alleen kort aan (1), daarna 0. Pulsduur standaard 250 ms.',
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
             Builder(
               builder: (context) {
                 final dl = _ensureDiscreteLevel(fp);
+                final withStatus =
+                    mode == _FireplaceOpMode.discretePulsesStatus;
                 Widget row(String key, String title) {
                   final ch = _ensurePulseChannel(dl, key);
                   return Padding(
@@ -4461,10 +4525,55 @@ class _FireplaceInstallerSection extends StatelessWidget {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    row('on', 'Aanzetten'),
-                    row('off', 'Uitzetten'),
-                    row('up', 'Vlam hoger'),
-                    row('down', 'Vlam lager'),
+                    row('on', withStatus ? '1 · Start' : 'Aanzetten'),
+                    row('off', withStatus ? '2 · Stop' : 'Uitzetten'),
+                    row('up', withStatus ? '3 · Omhoog' : 'Vlam hoger'),
+                    row('down', withStatus ? '4 · Omlaag' : 'Vlam lager'),
+                  ],
+                );
+              },
+            ),
+          ],
+          if (mode == _FireplaceOpMode.discretePulsesStatus) ...[
+            const SizedBox(height: 8),
+            Text('Statuscontacten (bit)', style: theme.textTheme.labelLarge),
+            const SizedBox(height: 4),
+            Text(
+              'Vier status-GA’s. Combinaties: Error+Fuel = Bijvullen, '
+              'Working+Ready = Wachten / Koelen.',
+              style: theme.textTheme.bodySmall,
+            ),
+            const SizedBox(height: 12),
+            Builder(
+              builder: (context) {
+                final sb = _ensureStatusBits(fp);
+                Widget statusRow(String key, String title) {
+                  final ch = _ensureStatusBitGa(sb, key);
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: theme.textTheme.labelLarge),
+                        _BoundStrField(
+                          'ga',
+                          ch,
+                          onChanged,
+                          labelOverride: 'Groepsadres (bit)',
+                          key: ValueKey('fp-sb-${device['id']}-$key-ga'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    statusRow('error', '1 · Error (fout)'),
+                    statusRow('fuel', '2 · Fuel (geen brandstof)'),
+                    statusRow('working', '3 · Working (bezig)'),
+                    statusRow('ready', '4 · Ready (gereed)'),
                   ],
                 );
               },
@@ -4474,7 +4583,7 @@ class _FireplaceInstallerSection extends StatelessWidget {
           Text('Optioneel: veiligheidsslot', style: theme.textTheme.labelLarge),
           const SizedBox(height: 4),
           Text(
-            '??n bit-GA: als deze ?aan? staat, kan de app de haard niet starten.',
+            'Één bit-GA: als deze aan staat, kan de app de haard niet starten.',
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 8),

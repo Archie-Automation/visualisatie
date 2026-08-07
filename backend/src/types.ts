@@ -502,10 +502,23 @@ export interface FireplaceDiscreteLevel {
   down?: FireplacePulseChannel;
 }
 
+/** Status feedback bits (DPT1) — optional; used with discrete pulse control. */
+export interface FireplaceStatusBits {
+  /** Fault / alarm. */
+  error?: { ga: GA };
+  /** No fuel / empty. */
+  fuel?: { ga: GA };
+  /** Fire active / working. */
+  working?: { ga: GA };
+  /** Ready for operation. */
+  ready?: { ga: GA };
+}
+
 export interface FireplaceConfig {
   /**
    * `analog` = schakel + slider (percent of 0–10 V / 0–3 V weergave op de bus als DPT5).
-   * `discrete` = pulscommando’s op aparte GA’s voor aan, uit, hoger, lager.
+   * `discrete` = pulscommando’s op aparte GA’s voor start/stop/omhoog/omlaag.
+   * Optional `statusBits` adds Error/Fuel/Working/Ready feedback (4 extra GAs).
    */
   controlMode?: "analog" | "discrete";
   onOff: { ga: GA; statusGa?: GA };
@@ -525,6 +538,8 @@ export interface FireplaceConfig {
     stepRanges?: { min: number; max: number; write?: number }[];
   };
   discreteLevel?: FireplaceDiscreteLevel;
+  /** Four status contact GAs (bit). Combinations: error+fuel=Refuelling, working+ready=Wait/Cooling. */
+  statusBits?: FireplaceStatusBits;
   safetyLockout?: { ga: GA };
 }
 

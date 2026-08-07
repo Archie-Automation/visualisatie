@@ -98,14 +98,14 @@ class _AlarmBodyState extends ConsumerState<_AlarmBody> {
     return showModalBottomSheet<int>(
       context: context,
       backgroundColor: LuxeColors.surface,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Padding(
+            Padding(
               padding: EdgeInsets.fromLTRB(20, 18, 20, 6),
               child: Text('Kies inschakelmodus',
                   style: TextStyle(
@@ -115,10 +115,10 @@ class _AlarmBodyState extends ConsumerState<_AlarmBody> {
             ),
             for (final m in modes)
               ListTile(
-                leading: const Icon(Icons.shield_outlined,
+                leading: Icon(Icons.shield_outlined,
                     color: LuxeColors.brass),
                 title: Text(m.name,
-                    style: const TextStyle(color: LuxeColors.ink)),
+                    style: TextStyle(color: LuxeColors.ink)),
                 onTap: () => Navigator.of(ctx).pop(m.mode),
               ),
             const SizedBox(height: 10),
@@ -265,17 +265,17 @@ class _AlarmHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         color: LuxeColors.surface.withValues(alpha: 0.82),
-        border: const Border(
+        border: Border(
           bottom: BorderSide(color: LuxeColors.line, width: 0.5),
         ),
       ),
       child: Row(
         children: [
           BackPill(onTap: onBack),
-          const Expanded(
+          Expanded(
             child: Text(
               'Alarm',
               textAlign: TextAlign.center,
@@ -320,7 +320,7 @@ class _PartitionTabBar extends StatelessWidget {
           return GestureDetector(
             onTap: () => onSelect(i),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
+              duration: Duration(milliseconds: 200),
               margin: const EdgeInsets.only(right: 10),
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
               decoration: BoxDecoration(
@@ -346,7 +346,7 @@ class _PartitionTabBar extends StatelessWidget {
                       color: selected ? cfg.color : LuxeColors.inkSoft,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  SizedBox(height: 2),
                   Text(
                     cfg.label,
                     style: TextStyle(
@@ -377,7 +377,7 @@ class _PartitionCard extends StatelessWidget {
     final cfg = _stateConfig(partition.state);
 
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 350),
+      duration: Duration(milliseconds: 350),
       curve: Curves.easeOutCubic,
       padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
       decoration: BoxDecoration(
@@ -423,7 +423,7 @@ class _PartitionCard extends StatelessWidget {
                   partition.name.trim().isNotEmpty
                       ? partition.name
                       : 'Partitie ${partition.number}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     color: LuxeColors.inkSoft,
                   ),
@@ -473,7 +473,7 @@ class _PinSection extends StatelessWidget {
         : const Color(0xFF4CAF50);
 
     return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 320),
+      constraints: BoxConstraints(maxWidth: 320),
       child: Column(
         children: [
           // PIN dots display
@@ -490,7 +490,7 @@ class _PinSection extends StatelessWidget {
               children: List.generate(8, (i) {
                 final filled = i < pin.length;
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  padding: EdgeInsets.symmetric(horizontal: 6),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 120),
                     width: 12,
@@ -506,7 +506,7 @@ class _PinSection extends StatelessWidget {
               }),
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
 
           // Numeric keypad
           _NumPad(onDigit: onDigit, onBackspace: onBackspace),
@@ -651,11 +651,11 @@ class _PadKey extends StatelessWidget {
           ),
           alignment: Alignment.center,
           child: isBackspace
-              ? const Icon(Icons.backspace_outlined,
+              ? Icon(Icons.backspace_outlined,
                   size: 20, color: LuxeColors.inkSoft)
               : Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
                     color: LuxeColors.ink,
@@ -719,7 +719,7 @@ class _ZoneListState extends State<_ZoneList> {
           onTap: () => setState(() => _expanded = !_expanded),
           child: Row(
             children: [
-              const Text(
+              Text(
                 'ZONES',
                 style: TextStyle(
                   fontSize: 11,
@@ -728,7 +728,7 @@ class _ZoneListState extends State<_ZoneList> {
                   color: LuxeColors.inkSoft,
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: 8),
               if (violated.isNotEmpty)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
@@ -748,13 +748,13 @@ class _ZoneListState extends State<_ZoneList> {
               const Spacer(),
               Text(
                 _expanded ? 'Verbergen' : 'Alles tonen (${zones.length})',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   color: LuxeColors.brass,
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              const SizedBox(width: 4),
+              SizedBox(width: 4),
               Icon(
                 _expanded
                     ? Icons.keyboard_arrow_up_rounded
@@ -797,15 +797,15 @@ class _EmptyZones extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(vertical: 20),
+      padding: EdgeInsets.symmetric(vertical: 20),
       alignment: Alignment.center,
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.check_circle_outline_rounded,
               size: 16, color: LuxeColors.inkFaint),
-          const SizedBox(width: 8),
-          const Text(
+          SizedBox(width: 8),
+          Text(
             'Alle zones gesloten',
             style: TextStyle(color: LuxeColors.inkFaint, fontSize: 13),
           ),
@@ -822,10 +822,10 @@ class _RoomGroupHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
+      padding: EdgeInsets.only(bottom: 2),
       child: Text(
         room.toUpperCase(),
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w600,
           letterSpacing: 1.8,
@@ -851,7 +851,7 @@ class _ZoneRow extends StatelessWidget {
     return Opacity(
       opacity: dim ? 0.6 : 1.0,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: zone.violated
               ? cfg.color.withValues(alpha: 0.07)
@@ -875,14 +875,14 @@ class _ZoneRow extends StatelessWidget {
               ),
               child: Icon(cfg.icon, size: 18, color: cfg.color),
             ),
-            const SizedBox(width: 12),
+            SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     zone.name,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                       color: LuxeColors.ink,
@@ -890,7 +890,7 @@ class _ZoneRow extends StatelessWidget {
                   ),
                   Text(
                     zone.bypassed ? '${cfg.label} · overbrugd' : cfg.label,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
                       color: LuxeColors.inkSoft,
                     ),
@@ -907,7 +907,7 @@ class _ZoneRow extends StatelessWidget {
                   size: 16,
                   color: LuxeColors.inkFaint.withValues(alpha: 0.50)),
             if (onToggleBypass != null) ...[
-              const SizedBox(width: 4),
+              SizedBox(width: 4),
               IconButton(
                 visualDensity: VisualDensity.compact,
                 tooltip: zone.bypassed ? 'Activeren' : 'Overbruggen',
@@ -967,7 +967,7 @@ _DeviceCfg satelDeviceConfig(String type, bool violated) {
   const red    = Color(0xFFD64545);
   const orange = Color(0xFFE07A3F);
   const blue   = Color(0xFF5BA7E0);
-  const muted  = LuxeColors.inkSoft;
+  final muted  = LuxeColors.inkSoft;
 
   return switch (type) {
     'magneetcontact' => _DeviceCfg(

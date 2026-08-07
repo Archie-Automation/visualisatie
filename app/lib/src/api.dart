@@ -18,13 +18,56 @@ import 'models.dart';
 /// from any IP without a --dart-define.
 /// In debug mode (flutter run) the Flutter dev server runs on a different port
 /// than the backend, so we fall back to the compile-time env var / localhost.
+/// On native, a SharedPreferences override (login/splash) wins over the build default.
+String? _apiBaseOverride;
+
+const String _kApiBasePrefKey = 'api_base';
+
+String get _compileTimeApiBase => const String.fromEnvironment(
+      'API_BASE',
+      defaultValue: 'http://localhost:4000');
+
+/// Normalise user input: trim, add http:// if missing, strip trailing slash.
+String normalizeApiBase(String raw) {
+  var s = raw.trim();
+  if (s.isEmpty) return _compileTimeApiBase;
+  if (!s.contains('://')) s = 'http://$s';
+  while (s.endsWith('/')) {
+    s = s.substring(0, s.length - 1);
+  }
+  return s;
+}
+
 String get apiBase {
   if (kIsWeb && kReleaseMode) {
     final origin = Uri.base.origin;
     return origin.endsWith('/') ? origin.substring(0, origin.length - 1) : origin;
   }
-  return const String.fromEnvironment('API_BASE',
-      defaultValue: 'http://localhost:4000');
+  final o = _apiBaseOverride;
+  if (o != null && o.isNotEmpty) return o;
+  return _compileTimeApiBase;
+}
+
+/// Load persisted server URL into memory. Call once at app start (native).
+Future<void> loadApiBaseOverride() async {
+  if (kIsWeb && kReleaseMode) return;
+  final sp = await SharedPreferences.getInstance();
+  final v = sp.getString(_kApiBasePrefKey)?.trim();
+  if (v != null && v.isNotEmpty) {
+    _apiBaseOverride = normalizeApiBase(v);
+  }
+}
+
+/// Persist and apply a new server URL. Clears auth if the host changed.
+Future<void> setApiBase(String raw, {AuthController? auth}) async {
+  final next = normalizeApiBase(raw);
+  final prev = apiBase;
+  _apiBaseOverride = next;
+  final sp = await SharedPreferences.getInstance();
+  await sp.setString(_kApiBasePrefKey, next);
+  if (auth != null && next != prev) {
+    await auth.logout();
+  }
 }
 
 /// JWT payload `role` (SharedPreferences / API may omit it on web).

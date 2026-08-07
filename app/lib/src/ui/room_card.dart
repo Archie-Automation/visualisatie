@@ -29,7 +29,7 @@ class RoomCard extends ConsumerWidget {
       heroTag: 'room-${room.id}',
       onTap: onTap,
       radius: 28,
-      padding: const EdgeInsets.fromLTRB(28, 26, 28, 30),
+      padding: EdgeInsets.fromLTRB(28, 26, 28, 30),
       shadows: summary.anyOn ? LuxeShadows.brassGlow : LuxeShadows.soft,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -38,27 +38,32 @@ class RoomCard extends ConsumerWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Container(
+              LuxeRimBox(
                 width: 44,
                 height: 44,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(11),
-                  color: summary.anyOn
-                      ? LuxeColors.brass.withValues(alpha: 0.12)
-                      : LuxeColors.surfaceDim.withValues(alpha: 0.7),
-                  border: Border.all(
-                    color: summary.anyOn
-                        ? LuxeColors.brass.withValues(alpha: 0.35)
-                        : LuxeColors.line,
-                  ),
-                ),
+                radius: 11,
+                rimWidth: 1,
+                rimColor: summary.anyOn
+                    ? LuxeBorders.solid(
+                        LuxeColors.brass.withValues(alpha: 0.35),
+                      )
+                    : LuxeColors.line,
+                fillColor: summary.anyOn
+                    ? Color.alphaBlend(
+                        LuxeColors.brass.withValues(alpha: 0.12),
+                        LuxeColors.surface,
+                      )
+                    : Color.alphaBlend(
+                        LuxeColors.surfaceDim.withValues(alpha: 0.7),
+                        LuxeColors.surface,
+                      ),
                 child: Icon(
                   _iconFor(room.icon),
                   size: 20,
                   color: summary.anyOn ? LuxeColors.brass : LuxeColors.ink,
                 ),
               ),
-              const Spacer(),
+              Spacer(),
               AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
                 width: 34,
@@ -73,7 +78,7 @@ class RoomCard extends ConsumerWidget {
                 child: Icon(
                   Icons.arrow_outward,
                   size: 16,
-                  color: summary.anyOn ? Colors.white : LuxeColors.inkSoft,
+                  color: summary.anyOn ? LuxeColors.onInk : LuxeColors.inkSoft,
                 ),
               ),
             ],

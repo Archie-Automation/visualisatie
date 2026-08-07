@@ -3,9 +3,12 @@ import 'package:flutter/material.dart';
 import '../../theme.dart';
 import '../responsive.dart';
 
-const _headerButtonRadius = 14.0;
+const _headerButtonRadius = 12.0;
 
 /// Shared chrome for header icon buttons (back, refresh, …).
+///
+/// Uses a plain [GestureDetector] (no InkWell / Tooltip) so the first
+/// touch on wall tablets and phones registers immediately.
 class HeaderIconButton extends StatelessWidget {
   const HeaderIconButton({
     super.key,
@@ -18,44 +21,44 @@ class HeaderIconButton extends StatelessWidget {
   final VoidCallback onTap;
   final String? tooltip;
 
+  /// Matches floor-chip height (_FloorTabBar) and header glass buttons.
+  static const double size = 48;
+
   @override
   Widget build(BuildContext context) {
     final isPhone = context.isPhone;
-    final size = isPhone ? 44.0 : 48.0;
     final iconSize = isPhone ? 20.0 : 22.0;
-    final radius = BorderRadius.circular(_headerButtonRadius);
 
-    final button = Material(
-      color: Colors.transparent,
-      child: Ink(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          borderRadius: radius,
-          color: LuxeColors.surface.withValues(alpha: 0.96),
-          border: Border.all(
-            color: LuxeColors.ink.withValues(alpha: 0.08),
-          ),
-          boxShadow: const [
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fillAlpha = isDark ? 0.96 : LuxeChipChrome.lightFill();
+    final fill = LuxeColors.surface.withValues(alpha: fillAlpha);
+
+    return Semantics(
+      button: true,
+      label: tooltip ?? 'Terug',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: LuxeRimBox(
+          width: size,
+          height: size,
+          radius: _headerButtonRadius,
+          rimWidth: 1,
+          rimColor: LuxeBorders.solid(LuxeColors.ink.withValues(alpha: 0.12)),
+          fillColor: fill,
+          shadows: const [
             BoxShadow(
-              color: Color(0x12000000),
-              blurRadius: 6,
+              color: Color(0x14000000),
+              blurRadius: 8,
               offset: Offset(0, 2),
             ),
           ],
-        ),
-        child: InkWell(
-          borderRadius: radius,
-          onTap: onTap,
           child: Center(
             child: Icon(icon, size: iconSize, color: LuxeColors.ink),
           ),
         ),
       ),
     );
-
-    if (tooltip == null) return button;
-    return Tooltip(message: tooltip!, child: button);
   }
 }
 
@@ -68,7 +71,7 @@ class BackPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return HeaderIconButton(
-      icon: Icons.arrow_back_ios_new_rounded,
+      icon: Icons.arrow_back_ios_new,
       onTap: onTap,
       tooltip: 'Terug',
     );

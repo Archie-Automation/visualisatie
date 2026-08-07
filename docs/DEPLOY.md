@@ -2,6 +2,8 @@
 
 Doel: de Luxe KNX-app draait op een **Ubuntu-VM in Proxmox**. Op telefoon/PC open je daarna een website-adres. Geen App Store nodig.
 
+**Proxmox `:8006` is niet de app** — dat is alleen de Proxmox-beheerpagina. De app luistert op poort **4000** van de Ubuntu-VM (`http://<vm-ip>:4000`).
+
 Cloudflare (buitenshuis / 5G) komt in een latere stap.
 
 ---
@@ -103,13 +105,14 @@ De app vraagt de server: “draait er iets nieuws op GitHub?”
 
 | Situatie | Wat je ziet |
 |----------|-------------|
-| **Server is bij** (zelfde of nieuwer dan GitHub) | Geen banner |
+| **Server is bij** (zelfde of nieuwer dan GitHub) | Geen banner (tenzij tablet-APK achterloopt — zie hieronder) |
 | **Nieuwere release/tag op GitHub** | Banner: *Nieuwe versie op GitHub (…)* → knop **Bekijken** + hint `./installeer.sh` |
 | **Telefoon toont oude cache** terwijl server al nieuw is | Banner: *Vernieuw de app* |
+| **Android-tablet: nieuwere Release mét APK-asset** | Banner: *Nieuwe app-versie…* → **Installeren** (download via NUC, Android-installprompt) |
 
 Standaard repo: `Archie-Automation/visualisatie` (`.env`: `GITHUB_REPO`).
 
-**Belangrijk:** die repo is **privé**. Zonder token ziet de server geen releases → geen banner.
+**Belangrijk:** die repo is **privé**. Zonder token ziet de server geen releases → geen banner / geen APK-download.
 
 1. GitHub → Settings → Developer settings → Personal access tokens  
 2. Token met recht `repo` (read)  
@@ -119,12 +122,34 @@ Standaard repo: `Archie-Automation/visualisatie` (`.env`: `GITHUB_REPO`).
    ```
 4. Stack herstarten: `./installeer.sh`
 
+### Android-tablet (geen Play Store): update vanaf GitHub
+
+De native app update **niet** door alleen code te pushen. Je hebt een **GitHub Release** nodig met een **`.apk` als asset**. De tablet haalt die APK via de NUC (`/api/app/android.apk`); de GitHub-token blijft op de server.
+
+1. Eerste keer: APK sideloaden (USB/`adb install`) met ontwikkelaarsopties.  
+2. Bouw een release-APK (versie = `pubspec.yaml`, zelfde als de release-tag):
+   ```powershell
+   cd app
+   .\build_release_apk.ps1 -ApiBase http://192.168.x.x:4000
+   ```
+   (`ApiBase` is alleen de *default*; in de app kun je het serveradres op het loginscherm (of splash) wijzigen.)
+3. Maak op GitHub een **Release** (tag bv. `v0.3.0`) en upload `build/app/outputs/flutter-apk/app-release.apk` (of hernoem naar `luxe-knx.apk`).  
+4. Op de NUC: `git pull` + `./installeer.sh` (backend/web moeten ook mee).  
+5. Op de tablet: banner **Installeren** → één keer bevestigen in het Android-scherm. Toestaan: “apps uit onbekende bronnen” voor Luxe KNX.
+
+Bij een **ander subnet / nieuw VM-IP**: open de app → vul op login (of splash) het nieuwe `http://…:4000` in — geen nieuwe APK nodig.
+
+Zonder APK-asset op de Release blijft alleen de server-banner zichtbaar; de tablet-app zelf verandert dan niet.
+
+Check: `curl -s http://127.0.0.1:4000/api/version` → `latest.androidApk.available` moet `true` zijn.
+
 ### Zo publiceer jij een “nieuwe stand” (ontwikkelaar)
 
 1. Merge / push naar GitHub.  
 2. Maak een **Release** (of tag), bv. `v0.3.0` — semver, liefst met `v`.  
-3. Op elke NUC: `git pull` (of nieuwe ZIP) + `./installeer.sh`.  
-4. Tot de NUC is bijgewerkt, zien gebruikers de banner zolang GitHub nieuwer is dan de draaiende server.
+3. (Tablet) Upload de bijpassende APK als release-asset.  
+4. Op elke NUC: `git pull` (of nieuwe ZIP) + `./installeer.sh`.  
+5. Tot de NUC is bijgewerkt, zien browsers de server-banner; tablets met oude APK zien **Installeren** zodra de Release een APK heeft.
 
 Check handmatig: `curl -s http://127.0.0.1:4000/api/version`
 
@@ -149,6 +174,8 @@ git pull          # of nieuwe ZIP uitpakken over de map (house.json niet wissen)
 | Script: “Docker ontbreekt” | Antwoord **J**, of herstart na Docker-install |
 | Pagina niet bereikbaar | VM-IP / Proxmox-bridge / zelfde LAN |
 | Geen GitHub-melding | Release/tag aangemaakt? Repo publiek of `GITHUB_TOKEN`? Internet vanaf VM? |
+| Tablet: geen **Installeren** | Release heeft `.apk`-asset? `latest.androidApk` in `/api/version`? App gebouwd met `--dart-define=APP_VERSION=…` (niet `dev`)? |
+| Tablet: installatie geweigerd | “Onbekende apps installeren” toestaan voor Luxe KNX; zelfde signing als vorige APK |
 | Leeg scherm / oude app | Tab sluiten of banner **Vernieuwen** |
 | KNX werkt niet | Installer: gateway-IP, KNX aanzetten (leeg huis start met KNX uit) |
 

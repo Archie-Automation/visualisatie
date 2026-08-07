@@ -120,6 +120,12 @@ export function collectAllGAs(cfg: HouseConfig): GA[] {
           add(dl[k]?.ga);
         }
       }
+      const sb = d.fireplace.statusBits;
+      if (sb) {
+        for (const k of ["error", "fuel", "working", "ready"] as const) {
+          add(sb[k]?.ga);
+        }
+      }
     }
     if (d.type === "ac") {
       add(d.ac.onOff.ga);
@@ -241,6 +247,11 @@ export function buildGAIndex(cfg: HouseConfig): Map<GA, GARole[]> {
         for (const k of ["on", "off", "up", "down"] as const) {
           const ga = fp.discreteLevel[k]?.ga;
           pushGA(index, ga, "switch", d.id, d.type);
+        }
+      }
+      if (fp.statusBits) {
+        for (const k of ["error", "fuel", "working", "ready"] as const) {
+          pushGA(index, fp.statusBits[k]?.ga, "bit", d.id, d.type);
         }
       }
     }

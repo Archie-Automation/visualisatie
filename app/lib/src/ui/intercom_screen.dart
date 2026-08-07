@@ -104,7 +104,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('INTERCOM',
+              Text('INTERCOM',
                   style: TextStyle(
                     color: LuxeColors.brass,
                     fontSize: 10,
@@ -112,7 +112,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                     fontWeight: FontWeight.w600,
                   )),
               Text(i.name,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: LuxeColors.ink,
                     fontWeight: FontWeight.w400,
                     letterSpacing: 0.5,
@@ -120,7 +120,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                   )),
             ],
           ),
-          orElse: () => const SizedBox.shrink(),
+          orElse: () => SizedBox.shrink(),
         ),
         leading: IconButton(
           icon: const Icon(Icons.close),
@@ -130,12 +130,12 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
       ),
       body: LuxeBackdrop(
         child: info.when(
-          loading: () => const Center(
+          loading: () => Center(
             child: CircularProgressIndicator(color: LuxeColors.brass),
           ),
           error: (e, _) => Center(
             child: Padding(
-              padding: const EdgeInsets.all(32),
+              padding: EdgeInsets.all(32),
               child: Text('Kan intercom niet laden:\n$e',
                   style: TextStyle(color: LuxeColors.inkSoft),
                   textAlign: TextAlign.center),
@@ -152,7 +152,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
               children: [
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 12, 24, 8),
+                    padding: EdgeInsets.fromLTRB(24, 12, 24, 8),
                     child: Hero(
                       tag: 'intercom-${i.id}',
                       child: ClipRRect(
@@ -183,7 +183,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(_releaseFeedback!,
-                          style: const TextStyle(
+                          style: TextStyle(
                             color: LuxeColors.brassGlow,
                             letterSpacing: 2,
                             fontSize: 11,
@@ -192,7 +192,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                     ),
                   ),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(28, 18, 28, 28),
+                  padding: EdgeInsets.fromLTRB(28, 18, 28, 28),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(36),
                     child: BackdropFilter(
@@ -286,7 +286,7 @@ class _ActionButton extends StatelessWidget {
               ],
             ),
             child: loading
-                ? const Center(
+                ? Center(
                     child: SizedBox(
                       width: 22,
                       height: 22,
@@ -324,14 +324,14 @@ class _TalkButton extends StatelessWidget {
           onLongPressEnd: (_) => onChanged(false),
           onTap: () => onChanged(!active),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
+            duration: Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
             width: 108,
             height: 108,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: active
-                  ? const LinearGradient(
+                  ? LinearGradient(
                       colors: [LuxeColors.brassGlow, LuxeColors.brass],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
@@ -361,7 +361,7 @@ class _TalkButton extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: 8),
         Text(
           active ? 'SPREKEN…' : 'HOUD INGEDRUKT',
           style: TextStyle(

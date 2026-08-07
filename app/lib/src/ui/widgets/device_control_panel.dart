@@ -172,57 +172,33 @@ class DeviceControlButtonSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final borderRadius = BorderRadius.circular(radius);
+    const rimW = 1.25;
+    final base = LuxeChipChrome.fill(context, pressed: pressed);
+    final fill = active
+        ? Color.alphaBlend(
+            LuxeColors.brass.withValues(alpha: 0.22),
+            base,
+          )
+        : base;
+    final rim = active
+        ? LuxeColors.brass
+        : locked
+            ? LuxeBorders.solid(LuxeColors.inkSoft.withValues(alpha: 0.45))
+            : LuxeBorders.solid(LuxeColors.ink.withValues(alpha: 0.22));
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: borderRadius,
-        boxShadow: DeviceControlBar.buttonShadows(active: active),
-      ),
-      child: ClipRRect(
-        borderRadius: borderRadius,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          width: width,
-          height: height,
-          constraints: constraints ?? const BoxConstraints(),
-          padding: padding,
-          decoration: DeviceControlBar.buttonDecoration(
-            active: active,
-            pressed: pressed,
-            locked: locked,
-          ),
-          child: Stack(
-            fit: StackFit.passthrough,
-            children: [
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: IgnorePointer(
-                  child: Container(
-                    height: radius + 8,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.vertical(
-                        top: Radius.circular(radius),
-                      ),
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          Colors.white.withValues(alpha: 0.35),
-                          Colors.white.withValues(alpha: 0.0),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              child,
-            ],
-          ),
-        ),
-      ),
+    final body = constraints != null
+        ? ConstrainedBox(constraints: constraints!, child: child)
+        : child;
+    return LuxeRimBox(
+      width: width,
+      height: height,
+      radius: radius,
+      rimWidth: rimW,
+      rimColor: rim,
+      fillColor: fill,
+      shadows: DeviceControlBar.buttonShadows(active: active),
+      padding: padding,
+      child: body,
     );
   }
 }
@@ -658,8 +634,9 @@ class DeviceControlSetpointRow extends StatelessWidget {
               child: Text(
                 '${value.toStringAsFixed(decimals)}°',
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                      fontWeight: FontWeight.w200,
+                // Zelfde familie als gemeten temp (Inter), niet display-serif.
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
                       fontSize: displaySize,
                       height: 1,
                     ),
@@ -787,12 +764,12 @@ class DeviceControlBar {
   static const double tileIconRadius = 14.0;
   static const double tileGlyphSize = 22.0;
   static const double buttonRadius = tileIconRadius;
-  static const double gap = 8.0;
-  static const double rowGap = 8.0;
+  static const double gap = 10.0;
+  static const double rowGap = 10.0;
   static const double sectionGap = 18.0;
   static const double sectionTitleGap = 10.0;
 
-  /// Knopmaat — overal 56×56, gelijk aan audio.
+  /// Knopmaat — overal gelijk aan audio.
   static double buttonSizeFor(BuildContext context) => buttonSize;
 
   static double glyphSizeFor(BuildContext context) =>
@@ -812,11 +789,11 @@ class DeviceControlBar {
           );
 
   /// Tuimel-knoppen: iets breder dan vierkant, zelfde hoogte.
-  static const double tiltButtonMinWidth = 80.0;
+  static const double tiltButtonMinWidth = 96.0;
   static const double tiltButtonHPadding = 16.0;
 
-  static const double labeledFontSize = 10.0;
-  static const double labelOnlyFontSize = 11.0;
+  static const double labeledFontSize = 13.0;
+  static const double labelOnlyFontSize = 14.0;
 
   /// Volle-breedte knoppenrijen op telefoon of smalle tegels.
   static bool useFullWidthRows(BuildContext context, double maxWidth) =>
@@ -863,26 +840,32 @@ class DeviceControlBar {
     return w;
   }
 
-  static BoxDecoration buttonDecoration({
+  static BoxDecoration buttonDecoration(
+    BuildContext context, {
     bool active = false,
     bool pressed = false,
     bool locked = false,
-  }) =>
-      BoxDecoration(
-        color: active
-            ? LuxeColors.brass.withValues(alpha: 0.12)
-            : pressed
-                ? LuxeColors.surfaceDim
-                : LuxeColors.surface,
-        borderRadius: BorderRadius.circular(buttonRadius),
-        border: Border.all(
-          color: active
-              ? LuxeColors.brass.withValues(alpha: 0.35)
-              : locked
-                  ? LuxeColors.inkSoft.withValues(alpha: 0.35)
-                  : LuxeColors.glassRim,
-        ),
-      );
+  }) {
+    final base = LuxeChipChrome.fill(context, pressed: pressed);
+    final fill = active
+        ? Color.alphaBlend(
+            LuxeColors.brass.withValues(alpha: 0.22),
+            base,
+          )
+        : base;
+    final border = active
+        ? LuxeBorders.solid(LuxeColors.brass.withValues(alpha: 0.85), fill)
+        : locked
+            ? LuxeBorders.solid(
+                LuxeColors.inkSoft.withValues(alpha: 0.45), fill)
+            : LuxeBorders.solid(
+                LuxeColors.ink.withValues(alpha: 0.22), fill);
+    return BoxDecoration(
+      color: fill,
+      borderRadius: BorderRadius.circular(buttonRadius),
+      border: Border.all(width: 1.25, color: border),
+    );
+  }
 
   static List<BoxShadow> buttonShadows({bool active = false}) =>
       active ? LuxeShadows.brassGlow : LuxeShadows.controlButton;
