@@ -223,7 +223,7 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
             Container(color: Colors.black),
             AnimatedOpacity(
               opacity: _connected ? 1.0 : 0.0,
-              duration: const Duration(milliseconds: 300),
+              duration: Duration(milliseconds: 300),
               child: RTCVideoView(
                 _renderer,
                 objectFit: widget.fit == BoxFit.cover
@@ -233,7 +233,7 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
               ),
             ),
             if (!_connected && _error == null)
-              const Center(
+              Center(
                 child: SizedBox(
                   width: 28,
                   height: 28,

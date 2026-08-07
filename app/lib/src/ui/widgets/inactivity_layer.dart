@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -13,13 +14,49 @@ import '../../api.dart';
 import '../../display_panel_config.dart';
 import '../../idle_reset.dart';
 import '../../inactivity_controller.dart';
+import '../../kiosk_system_ui.dart';
 import '../../media_api.dart';
 import '../../proximity_wake.dart';
 import '../../satel_api.dart';
 import '../../theme.dart';
 import '../responsive.dart';
+import 'honeycomb_pattern.dart';
 
 bool get _displayPanelActive => !kIsWeb && Platform.isAndroid;
+
+/// Screensaver canvas (burn-in: vast zwart vlak, content faded/shifted).
+const Color _screensaverCanvas = Color(0xFF0A0A09);
+const Color _screensaverTime = Color.fromRGBO(255, 255, 255, 0.85);
+
+const double _ssFadeMax = 1.0;
+const double _ssFadeMin = 0.1;
+const double _ssFadeSeconds = 1.8;
+/// Fade-out start within each minute (second 58).
+const double _ssFadeOutAt = 58.0;
+/// Korte hold na :00 vóór fade-in.
+const double _ssHoldPastMidnight = 0.2;
+
+/// Opacity curve per wall-clock second (ease-in-out), tegen inbranden.
+double screensaverBurnInOpacity(DateTime now) {
+  final t = now.second + now.millisecond / 1000.0;
+  final fadeOutEnd = _ssFadeOutAt + _ssFadeSeconds; // 59.8
+
+  if (t >= _ssFadeOutAt && t < fadeOutEnd) {
+    final p = Curves.easeInOut.transform((t - _ssFadeOutAt) / _ssFadeSeconds);
+    return _ssFadeMax + (_ssFadeMin - _ssFadeMax) * p;
+  }
+  // Hold rond minuutwissel (eind van minuut + kort na :00).
+  if (t >= fadeOutEnd || t < _ssHoldPastMidnight) {
+    return _ssFadeMin;
+  }
+  final fadeInEnd = _ssHoldPastMidnight + _ssFadeSeconds;
+  if (t < fadeInEnd) {
+    final p = Curves.easeInOut
+        .transform((t - _ssHoldPastMidnight) / _ssFadeSeconds);
+    return _ssFadeMin + (_ssFadeMax - _ssFadeMin) * p;
+  }
+  return _ssFadeMax;
+}
 
 /// Fullscreen luxe klok (+ optionele temperatuur) na langdurige inactiviteit.
 class ScreensaverOverlay extends ConsumerStatefulWidget {
@@ -32,22 +69,50 @@ class ScreensaverOverlay extends ConsumerStatefulWidget {
 }
 
 class _ScreensaverOverlayState extends ConsumerState<ScreensaverOverlay> {
-  late Timer _clockTimer;
+  static final _rng = math.Random();
+
+  Timer? _tick;
   DateTime _now = DateTime.now();
+  Offset _pixelShift = Offset.zero;
+  double _tiltRad = 0;
+  /// Epoch-minute id waarvoor de shift al is gezet (tijdens diepe fade).
+  int? _shiftForMinuteId;
 
   @override
   void initState() {
     super.initState();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    _clockTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => _now = DateTime.now());
+    _tick = Timer.periodic(const Duration(milliseconds: 50), (_) {
+      if (!mounted) return;
+      final now = DateTime.now();
+      final opacity = screensaverBurnInOpacity(now);
+      _maybeApplyHiddenShift(now, opacity);
+      setState(() => _now = now);
     });
+  }
+
+  /// Shift/tilt alleen terwijl opacity ~10% is — beweging is niet zichtbaar.
+  void _maybeApplyHiddenShift(DateTime now, double opacity) {
+    if (opacity > _ssFadeMin + 0.02) return;
+    final minuteId = now.millisecondsSinceEpoch ~/ 60000;
+    if (_shiftForMinuteId == minuteId) return;
+    _shiftForMinuteId = minuteId;
+    _pixelShift = Offset(
+      (_rng.nextDouble() * 16) - 8,
+      (_rng.nextDouble() * 16) - 8,
+    );
+    // ±0.35° — te klein om op te vallen, wel pixel-rotatie.
+    _tiltRad = ((_rng.nextDouble() * 0.7) - 0.35) * (math.pi / 180);
   }
 
   @override
   void dispose() {
-    _clockTimer.cancel();
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    _tick?.cancel();
+    if (isAndroidKioskTarget) {
+      applyAndroidKioskSystemUi();
+    } else {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    }
     super.dispose();
   }
 
@@ -65,72 +130,111 @@ class _ScreensaverOverlayState extends ConsumerState<ScreensaverOverlay> {
     final temp = settings.showTemperature
         ? resolveDisplayTemperature(cfg: cfg, bus: bus, settings: settings)
         : null;
+    final hvac = settings.showTemperature
+        ? resolveDisplayHvacStatus(cfg: cfg, bus: bus, settings: settings)
+        : null;
 
     final clockSize = context.isPhone ? 112.0 : 168.0;
     final timeStr = DateFormat('HH:mm').format(_now);
+    final opacity = screensaverBurnInOpacity(_now);
+    const heatColor = Color(0xFFE07A3F);
+    const coolColor = Color(0xFF5BA7E0);
 
     return Material(
-      color: LuxeColors.surfaceDark,
+      color: _screensaverCanvas,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: widget.onDismiss,
         onPanDown: (_) => widget.onDismiss(),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: RadialGradient(
-                    center: const Alignment(0, -0.35),
-                    radius: 1.1,
-                    colors: [
-                      LuxeColors.brass.withValues(alpha: 0.14),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+        child: Opacity(
+          opacity: opacity,
+          child: Transform.translate(
+            offset: _pixelShift,
+            child: Transform.rotate(
+              angle: _tiltRad,
+              child: Stack(
+                fit: StackFit.expand,
                 children: [
-                  Text(
-                    timeStr,
-                    style: GoogleFonts.lexendDeca(
-                      fontSize: clockSize,
-                      fontWeight: FontWeight.w200,
-                      letterSpacing: 6,
-                      height: 1,
-                      color: const Color(0xFFF8F4EC),
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                      shadows: const [
-                        Shadow(
-                          color: Color(0x33B08A4E),
-                          blurRadius: 48,
-                          offset: Offset(0, 8),
+                  IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: RadialGradient(
+                          center: const Alignment(0, -0.35),
+                          radius: 1.1,
+                          colors: [
+                            LuxeColors.brass.withValues(alpha: 0.10),
+                            Colors.transparent,
+                          ],
                         ),
+                      ),
+                    ),
+                  ),
+                  const HoneycombPattern(
+                    color: Colors.white,
+                    opacity: 0.03,
+                    hexSize: 64,
+                  ),
+                  Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          timeStr,
+                          style: GoogleFonts.lexendDeca(
+                            fontSize: clockSize,
+                            fontWeight: FontWeight.w200,
+                            letterSpacing: -1.4,
+                            height: 1,
+                            color: _screensaverTime,
+                            fontFeatures: const [
+                              FontFeature.tabularFigures(),
+                            ],
+                          ),
+                        ),
+                        if (temp != null) ...[
+                          SizedBox(height: context.isPhone ? 28 : 40),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Text(
+                                '${temp.toStringAsFixed(1)}°',
+                                style: GoogleFonts.inter(
+                                  fontSize: context.isPhone ? 40 : 52,
+                                  fontWeight: FontWeight.w300,
+                                  letterSpacing: 0.5,
+                                  color: LuxeColors.brassGlow,
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                              ),
+                              if (hvac != null) ...[
+                                SizedBox(width: context.isPhone ? 12 : 16),
+                                Icon(
+                                  hvac.isHeating
+                                      ? Icons.local_fire_department_outlined
+                                      : Icons.ac_unit_outlined,
+                                  size: context.isPhone ? 34 : 44,
+                                  color: hvac.demandActive
+                                      ? (hvac.isHeating
+                                          ? heatColor
+                                          : coolColor)
+                                      : _screensaverTime.withValues(
+                                          alpha: 0.35,
+                                        ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),
-                  if (temp != null) ...[
-                    SizedBox(height: context.isPhone ? 28 : 40),
-                    Text(
-                      '${temp.toStringAsFixed(1)}°',
-                      style: GoogleFonts.lexendDeca(
-                        fontSize: context.isPhone ? 40 : 52,
-                        fontWeight: FontWeight.w300,
-                        letterSpacing: 1,
-                        color: LuxeColors.brassGlow.withValues(alpha: 0.92),
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -225,6 +329,7 @@ class _InactivityLayerState extends ConsumerState<InactivityLayer> {
       settings: settings,
       cfg: cfg,
       mediaStates: mediaStates,
+      matchedLocation: loc,
     );
 
     if (musicBlocksIdle) {

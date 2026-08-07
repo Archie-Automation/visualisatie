@@ -73,7 +73,7 @@ class _InstallerLoginScreenState extends ConsumerState<InstallerLoginScreen> {
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
+            constraints: BoxConstraints(maxWidth: 440),
             child: Padding(
               padding: const EdgeInsets.all(24),
               child: Card(
@@ -81,7 +81,7 @@ class _InstallerLoginScreenState extends ConsumerState<InstallerLoginScreen> {
                 color: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
-                  side: const BorderSide(color: LuxeColors.line),
+                  side: BorderSide(color: LuxeColors.line),
                 ),
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(32, 40, 32, 36),

@@ -1,26 +1,37 @@
 package com.example.luxe_knx
 
 import android.content.Context
+import android.content.Intent
+import android.graphics.PixelFormat
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.provider.Settings
+import android.view.View
+import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.view.WindowManager
+import androidx.core.content.FileProvider
+import androidx.core.view.WindowCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 
 /**
  * Wandtablet wake:
  * - Proximity-sensor indien aanwezig
  * - Anders lichtsensor: snelle donkere dip = hand over sensor → wake
  * - [wakeScreen] ook aanroepbaar vanuit Flutter (alarm-inloop etc.)
+ * - APK sideload install via FileProvider (GitHub OTA via NUC proxy)
  */
 class MainActivity : FlutterActivity(), SensorEventListener {
     private var sensorManager: SensorManager? = null
@@ -63,11 +74,65 @@ class MainActivity : FlutterActivity(), SensorEventListener {
                 else -> result.notImplemented()
             }
         }
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "luxe_knx/apk_install",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "installApk" -> {
+                    val path = call.argument<String>("path")
+                    if (path.isNullOrBlank()) {
+                        result.error("bad_args", "path required", null)
+                        return@setMethodCallHandler
+                    }
+                    try {
+                        result.success(installApk(path))
+                    } catch (e: Exception) {
+                        result.error("install_failed", e.message, null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+    }
+
+    private fun installApk(path: String): Boolean {
+        val file = File(path)
+        if (!file.exists() || file.length() < 1024L) {
+            throw IllegalStateException("apk_missing")
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            if (!packageManager.canRequestPackageInstalls()) {
+                startActivity(
+                    Intent(
+                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        Uri.parse("package:$packageName"),
+                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                )
+                throw IllegalStateException("install_permission_denied")
+            }
+        }
+
+        val uri = FileProvider.getUriForFile(
+            this,
+            "$packageName.fileprovider",
+            file,
+        )
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        startActivity(intent)
+        return true
     }
 
     private fun wakeScreen() {
         val now = System.currentTimeMillis()
-        if (now - lastWakeAtMs < 800) return
+        // Short debounce — was 800ms and felt sluggish on wall panels.
+        if (now - lastWakeAtMs < 250) return
         lastWakeAtMs = now
 
         runOnUiThread {
@@ -118,15 +183,11 @@ class MainActivity : FlutterActivity(), SensorEventListener {
         proximitySensor = sm.getDefaultSensor(Sensor.TYPE_PROXIMITY)
         lightSensor = sm.getDefaultSensor(Sensor.TYPE_LIGHT)
 
-        proximitySensor?.let {
-            sm.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
-        }
-        // Tablet/paneel zonder proximity: hand over lichtsensor.
-        if (proximitySensor == null) {
-            lightSensor?.let {
-                sm.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
-            }
-        }
+        // FASTEST: wall tablets need snappy hand-approach wake.
+        val rate = SensorManager.SENSOR_DELAY_FASTEST
+        proximitySensor?.let { sm.registerListener(this, it, rate) }
+        // Always also listen to light — many panels have weak/missing proximity.
+        lightSensor?.let { sm.registerListener(this, it, rate) }
     }
 
     private fun stopSensors() {
@@ -142,7 +203,7 @@ class MainActivity : FlutterActivity(), SensorEventListener {
                 val value = event.values[0]
                 val max = event.sensor.maximumRange
                 // Near: 0 of duidelijk onder maxRange (binary of continuous).
-                val near = value < max * 0.5f || value <= 0.1f
+                val near = value < max * 0.65f || value <= 0.5f
                 if (near && !isNear) {
                     isNear = true
                     emitNear()
@@ -155,8 +216,10 @@ class MainActivity : FlutterActivity(), SensorEventListener {
                 val prev = lastLight
                 lastLight = lux
                 if (prev == null) return
-                // Snelle afname: hand dicht bij / over de lichtsensor.
-                val covered = lux < 8f && prev > 40f && lux < prev * 0.25f
+                // Hand over / dichtbij sensor: snelle dip in lux.
+                // Mildere drempels dan voorheen (8/40/0.25) — reageerde te traag.
+                val sharpDrop = lux < prev * 0.4f && (prev - lux) >= 12f
+                val covered = lux < 25f && prev > 18f && sharpDrop
                 if (covered) emitNear()
             }
         }
@@ -165,8 +228,41 @@ class MainActivity : FlutterActivity(), SensorEventListener {
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // 32-bit color path — reduces 16-bit/565 banding on wall-tablet gradients.
+        window.setFormat(PixelFormat.RGBA_8888)
         super.onCreate(savedInstanceState)
+        window.setFormat(PixelFormat.RGBA_8888)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        hideSystemUi()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideSystemUi()
+    }
+
+    /** Immersive sticky: no status bar / nav buttons on wall tablets. */
+    private fun hideSystemUi() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.insetsController?.let { controller ->
+                controller.hide(
+                    WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars(),
+                )
+                controller.systemBarsBehavior =
+                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = (
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                    or View.SYSTEM_UI_FLAG_FULLSCREEN
+                    or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                    or View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                    or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                    or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                )
+        }
     }
 
     override fun onDestroy() {

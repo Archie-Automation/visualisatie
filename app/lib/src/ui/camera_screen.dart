@@ -36,7 +36,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
         foregroundColor: Colors.white,
         title: info.maybeWhen(
           data: (i) => Text(i.name,
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w400,
                 letterSpacing: 0.5,
@@ -49,7 +49,7 @@ class _CameraScreenState extends ConsumerState<CameraScreen> {
         child: Center(
           child: info.when(
             loading: () =>
-                const CircularProgressIndicator(color: LuxeColors.brass),
+                CircularProgressIndicator(color: LuxeColors.brass),
             error: (e, _) => Padding(
               padding: const EdgeInsets.all(40),
               child: Text('Kan camera niet laden:\n$e',

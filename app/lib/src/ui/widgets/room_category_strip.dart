@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../room_control_category.dart';
 import '../../theme.dart';
 import '../responsive.dart';
+import 'device_tile_shell.dart';
 import 'heater_icon.dart';
 
 /// Horizontale chips (scene-stijl) per bedieningssegment; navigeert naar
@@ -68,12 +69,13 @@ class _SegmentChipState extends State<_SegmentChip> {
 
   @override
   Widget build(BuildContext context) {
-    const accent = LuxeColors.brass;
-
-    final fillColor =
-        LuxeColors.surface.withValues(alpha: _pressed ? 0.95 : 0.82);
+    final accent = LuxeColors.brass;
+    final fillColor = LuxeChipChrome.fill(context, pressed: _pressed);
     final borderColor =
-        _pressed ? accent.withValues(alpha: 0.55) : LuxeColors.glassRim;
+        LuxeChipChrome.border(context, pressed: _pressed, accent: accent);
+    final iconBox = context.chipIconBox;
+    final iconSize = context.chipIconSize;
+    final iconRadius = context.chipIconRadius;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -83,37 +85,30 @@ class _SegmentChipState extends State<_SegmentChip> {
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
         scale: _pressed ? 0.92 : 1.0,
-        duration: const Duration(milliseconds: 110),
+        duration: Duration(milliseconds: 110),
         curve: Curves.easeOutCubic,
-        child: Container(
+        child: LuxeRimBox(
           width: 118,
+          radius: 22,
+          rimWidth: _pressed ? 1.3 : 1.0,
+          rimColor: borderColor,
+          fillColor: fillColor,
+          shadows: LuxeShadows.chip(context),
           padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            color: fillColor,
-            border: Border.all(color: borderColor, width: _pressed ? 1.3 : 1),
-            boxShadow: LuxeShadows.soft,
-          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(9),
-                  color: accent.withValues(alpha: 0.15),
-                  border: Border.all(color: accent.withValues(alpha: 0.45)),
-                ),
-                child: Center(
-                  child: iconWidgetForData(
-                        widget.segment.icon,
-                        size: 18,
-                        color: accent,
-                      ) ??
-                      Icon(widget.segment.icon, size: 18, color: accent),
-                ),
+              LuxeAccentIconWell(
+                size: iconBox,
+                radius: iconRadius,
+                accent: accent,
+                child: iconWidgetForData(
+                      widget.segment.icon,
+                      size: iconSize,
+                      color: accent,
+                    ) ??
+                    Icon(widget.segment.icon, size: iconSize, color: accent),
               ),
               SizedBox(
                 width: 118 - 24,
@@ -126,7 +121,7 @@ class _SegmentChipState extends State<_SegmentChip> {
                       widget.segment.labelUpper,
                       maxLines: 1,
                       softWrap: false,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: LuxeColors.ink,
                         fontSize: 11,
                         height: 1.35,

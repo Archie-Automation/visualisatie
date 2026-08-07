@@ -98,7 +98,7 @@ class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen> {
       color: Colors.black.withValues(alpha: 0.94),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          padding: EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           child: Column(
             children: [
               if (ring != null)
@@ -110,19 +110,19 @@ class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen> {
                     letterSpacing: 1.4,
                   ),
                 ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               Text(
                 phase == IntercomSipPhase.ringing
                     ? 'INKOMENDE SIP-OPROEP'
                     : 'GESPREK',
-                style: const TextStyle(
+                style: TextStyle(
                   color: LuxeColors.brassGlow,
                   fontSize: 11,
                   letterSpacing: 2.6,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 12),
+              SizedBox(height: 12),
               Text(
                 remoteName,
                 textAlign: TextAlign.center,

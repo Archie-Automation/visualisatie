@@ -8,6 +8,7 @@ import '../../scene_api.dart';
 import '../../theme.dart';
 import '../responsive.dart';
 import '../scene_editor_sheet.dart';
+import 'device_tile_shell.dart';
 import 'scene_icons.dart';
 
 /// Horizontal strip of scene chips. Shown at the top of the dashboard
@@ -170,22 +171,28 @@ class _SceneChipState extends State<_SceneChip> {
 
   @override
   Widget build(BuildContext context) {
-    final fg = widget.dark ? Colors.white : LuxeColors.ink;
+    // `dark` = forced light-on-dark for special overlays; otherwise follow theme.
+    final forceDarkChrome = widget.dark;
+    final fg = forceDarkChrome ? Colors.white : LuxeColors.ink;
     final accentHex = widget.scene.color;
     final accent = accentHex != null
         ? _parseHex(accentHex) ?? LuxeColors.brass
         : LuxeColors.brass;
 
-    // Match _SystemChip / _SegmentChip: subtle press feedback only, no
-    // accent fill on activation.
-    final fillColor = widget.dark
+    final fillColor = forceDarkChrome
         ? Colors.white.withValues(alpha: _pressed ? 0.12 : 0.06)
-        : LuxeColors.surface.withValues(alpha: _pressed ? 0.95 : 0.82);
-    final borderColor = widget.dark
-        ? (_pressed
-            ? accent.withValues(alpha: 0.55)
-            : Colors.white.withValues(alpha: 0.08))
-        : (_pressed ? accent.withValues(alpha: 0.55) : LuxeColors.glassRim);
+        : LuxeChipChrome.fill(context, pressed: _pressed);
+    final borderColor = forceDarkChrome
+        ? LuxeBorders.solid(
+            _pressed
+                ? accent.withValues(alpha: 0.55)
+                : Colors.white.withValues(alpha: 0.18),
+            LuxeColors.cream,
+          )
+        : LuxeChipChrome.border(context, pressed: _pressed, accent: accent);
+    final iconBox = context.chipIconBox;
+    final iconSize = context.chipIconSize;
+    final iconRadius = context.chipIconRadius;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
@@ -198,32 +205,27 @@ class _SceneChipState extends State<_SceneChip> {
         scale: _pressed ? 0.92 : 1.0,
         duration: const Duration(milliseconds: 110),
         curve: Curves.easeOutCubic,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
+        child: LuxeRimBox(
           width: 118,
+          radius: 22,
+          rimWidth: _pressed ? 1.3 : 1.0,
+          rimColor: borderColor,
+          fillColor: fillColor,
+          shadows: forceDarkChrome
+              ? LuxeShadows.darkLift
+              : LuxeShadows.chip(context),
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(22),
-            color: fillColor,
-            border: Border.all(color: borderColor, width: _pressed ? 1.3 : 1),
-            boxShadow: widget.dark ? LuxeShadows.darkLift : LuxeShadows.soft,
-          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(9),
-                  color: accent.withValues(alpha: 0.15),
-                  border: Border.all(color: accent.withValues(alpha: 0.45)),
-                ),
+              LuxeAccentIconWell(
+                size: iconBox,
+                radius: iconRadius,
+                accent: accent,
                 child: Icon(
                   sceneIconFor(widget.scene.icon),
-                  size: 18,
+                  size: iconSize,
                   color: accent,
                 ),
               ),
@@ -254,20 +256,26 @@ class _AddSceneChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fg = dark ? Colors.white70 : LuxeColors.inkSoft;
+    final forceDark = dark;
+    final fg = forceDark ? Colors.white70 : LuxeColors.inkSoft;
+    final border = forceDark
+        ? LuxeBorders.solid(
+            Colors.white.withValues(alpha: 0.18),
+            LuxeColors.cream,
+          )
+        : LuxeChipChrome.border(context, pressed: false);
+    final fill = forceDark
+        ? Colors.white.withValues(alpha: 0.04)
+        : LuxeChipChrome.fill(context, pressed: false);
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: LuxeRimBox(
         width: 88,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(
-            color: dark
-                ? Colors.white.withValues(alpha: 0.18)
-                : LuxeColors.ink.withValues(alpha: 0.18),
-            style: BorderStyle.solid,
-          ),
-        ),
+        radius: 22,
+        rimWidth: 1,
+        rimColor: border,
+        fillColor: fill,
+        shadows: forceDark ? null : LuxeShadows.chip(context),
         child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,

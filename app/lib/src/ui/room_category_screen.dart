@@ -85,6 +85,23 @@ class RoomCategoryScreen extends ConsumerWidget {
               );
             }
 
+            if (categorySlug.startsWith('melding__')) {
+              final deviceId = categorySlug.substring('melding__'.length);
+              final device = foundRoom.devices
+                  .where((d) => d.id == deviceId)
+                  .firstOrNull;
+              if (device == null) {
+                return _InvalidCategoryBody(onBack: () => context.pop());
+              }
+              return _CategoryBody(
+                cfg: cfg,
+                floor: foundFloor,
+                room: foundRoom,
+                segment: RoomSegment.fromMelding(device),
+                onBack: () => context.pop(),
+              );
+            }
+
             return _InvalidCategoryBody(onBack: () => context.pop());
           },
         ),
@@ -204,7 +221,7 @@ class _CategoryBody extends ConsumerWidget {
             child: devices.isEmpty
                 ? Center(
                     child: Padding(
-                      padding: const EdgeInsets.all(32),
+                      padding: EdgeInsets.all(32),
                       child: Text(
                         'Geen apparaten in deze categorie.',
                         textAlign: TextAlign.center,

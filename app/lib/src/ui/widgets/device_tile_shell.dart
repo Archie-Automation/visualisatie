@@ -94,7 +94,45 @@ class DeviceCardBody extends StatelessWidget {
   }
 }
 
+/// Accent icon well (scene/system chips) — scherpe ondoorzichtige ring.
+class LuxeAccentIconWell extends StatelessWidget {
+  const LuxeAccentIconWell({
+    super.key,
+    required this.size,
+    required this.radius,
+    required this.accent,
+    required this.child,
+    this.rim = 1.25,
+  });
+
+  final double size;
+  final double radius;
+  final Color accent;
+  final Widget child;
+  final double rim;
+
+  @override
+  Widget build(BuildContext context) {
+    final fill = Color.alphaBlend(
+      accent.withValues(alpha: 0.22),
+      LuxeColors.surface,
+    );
+    return LuxeRimBox(
+      width: size,
+      height: size,
+      radius: radius,
+      rimWidth: rim,
+      rimColor: accent,
+      fillColor: fill,
+      child: Center(child: child),
+    );
+  }
+}
+
 /// Responsive 56×56 status-icoon linksboven.
+///
+/// Gouden/actieve rand via ondoorzichtige “ring” (outer fill + inner pad),
+/// niet via semi-transparante [Border.all] — die wordt brokkelig op Impeller.
 class DeviceTileIconBadge extends StatelessWidget {
   const DeviceTileIconBadge({
     super.key,
@@ -109,41 +147,50 @@ class DeviceTileIconBadge extends StatelessWidget {
   final bool active;
   final VoidCallback? onTap;
 
+  static const double _rim = 1.5;
+
   @override
   Widget build(BuildContext context) {
     final size = DeviceCardScale.iconBadgeSize(context);
-    final radius = BorderRadius.circular(DeviceCardScale.iconRadius(context));
-    final badge = SizedBox(
+    final outerR = DeviceCardScale.iconRadius(context);
+    final rimColor = active ? LuxeColors.brass : LuxeColors.line;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fillColor = active
+        ? Color.alphaBlend(
+            LuxeColors.brass.withValues(alpha: 0.14),
+            LuxeColors.surface,
+          )
+        : Color.alphaBlend(
+            LuxeColors.surfaceDim.withValues(alpha: isDark ? 0.7 : 0.45),
+            LuxeColors.surface,
+          );
+
+    final badge = LuxeRimBox(
       width: size,
       height: size,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: radius,
-          color: active
-              ? LuxeColors.brass.withValues(alpha: 0.14)
-              : LuxeColors.surfaceDim.withValues(alpha: 0.7),
-          border: Border.all(
-            color: active
-                ? LuxeColors.brass.withValues(alpha: 0.35)
-                : LuxeColors.line,
-          ),
-        ),
-        child: Center(
-          child: glyph ??
-              Icon(
-                icon,
-                color: active ? LuxeColors.brass : LuxeColors.ink,
-                size: DeviceCardScale.glyphSize(context),
-              ),
-        ),
+      radius: outerR,
+      rimWidth: _rim,
+      rimColor: rimColor,
+      fillColor: fillColor,
+      child: Center(
+        child: glyph ??
+            Icon(
+              icon,
+              color: active ? LuxeColors.brass : LuxeColors.ink,
+              size: DeviceCardScale.glyphSize(context),
+            ),
       ),
     );
     if (onTap == null) return badge;
     return Material(
       color: Colors.transparent,
-      borderRadius: radius,
+      borderRadius: BorderRadius.circular(outerR),
       clipBehavior: Clip.antiAlias,
-      child: InkWell(onTap: onTap, borderRadius: radius, child: badge),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(outerR),
+        child: badge,
+      ),
     );
   }
 }
@@ -174,26 +221,26 @@ class DeviceCardHeroValue extends StatelessWidget {
             Text(
               value,
               style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                    fontWeight: FontWeight.w200,
+                    fontWeight: FontWeight.w600,
                     fontSize: size,
                     height: 1,
                   ),
             ),
             if (unit != null)
               Padding(
-                padding: const EdgeInsets.only(top: 6, left: 2),
+                padding: EdgeInsets.only(top: 6, left: 2),
                 child: Text(
                   unit!,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         color: LuxeColors.inkSoft,
-                        fontWeight: FontWeight.w300,
+                        fontWeight: FontWeight.w600,
                       ),
                 ),
               ),
           ],
         ),
         if (subtitle != null) ...[
-          const SizedBox(height: 4),
+          SizedBox(height: 4),
           Text(
             subtitle!,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(

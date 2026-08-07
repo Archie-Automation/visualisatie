@@ -161,12 +161,12 @@ class _CameraPlayerState extends ConsumerState<CameraPlayer> {
                 ),
               )
             else if (_err != null)
-              const Center(
+              Center(
                 child: Icon(Icons.videocam_off_outlined,
                     color: Colors.white54, size: 32),
               )
             else
-              const Center(
+              Center(
                 child: SizedBox(
                   width: 22,
                   height: 22,

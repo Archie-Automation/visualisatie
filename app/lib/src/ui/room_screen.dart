@@ -9,6 +9,7 @@ import '../user_favorite_shortcuts.dart';
 import 'responsive.dart';
 import 'widgets/back_pill.dart';
 import 'widgets/device_widgets.dart';
+import 'widgets/honeycomb_pattern.dart';
 import 'widgets/luxe_backdrop.dart';
 import 'widgets/satel_room_sensors.dart';
 import 'widgets/scene_strip.dart';
@@ -120,7 +121,7 @@ class RoomScreen extends ConsumerWidget {
 }
 
 /* ─────────────────────────────────────────────────────────────────────────
-   Sticky room header — vaste hoogte, solide achtergrond, niets doorheen
+   Sticky room header — vaste hoogte, cover + honingraat-profiel
    ───────────────────────────────────────────────────────────────────────── */
 
 class _RoomStickyHeader extends SliverPersistentHeaderDelegate {
@@ -156,41 +157,28 @@ class _RoomStickyHeader extends SliverPersistentHeaderDelegate {
     final backSize = isPhone ? 44.0 : 48.0;
     final roomFont = isPhone ? 18.0 : 20.0;
 
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        decoration: BoxDecoration(
-          color: LuxeColors.surface.withValues(alpha: 0.82),
-          border: Border(
-            bottom: BorderSide(
-              color: LuxeColors.line.withValues(alpha: 0.18),
-              width: 0.5,
-            ),
-          ),
-          boxShadow: overlapsContent
-              ? [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : null,
-        ),
-        height: headerHeight,
-        child: SafeArea(
-          bottom: false,
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(isPhone ? 8 : 12, 0, isPhone ? 8 : 12, 10),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: BackPill(onTap: onBack),
-                ),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: (context.isPhone ? 44.0 : 48.0) + 8),
+    return StickyHeaderSurface(
+      height: headerHeight,
+      boxShadow: overlapsContent
+          ? [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 10,
+                offset: Offset(0, 2),
+              ),
+            ]
+          : null,
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(isPhone ? 8 : 12, 0, isPhone ? 8 : 12, 10),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              IgnorePointer(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                      horizontal: HeaderIconButton.size + 8),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -206,7 +194,7 @@ class _RoomStickyHeader extends SliverPersistentHeaderDelegate {
                           height: 1.3,
                         ),
                       ),
-                      const SizedBox(height: 3),
+                      SizedBox(height: 3),
                       Text(
                         room.name,
                         maxLines: 1,
@@ -221,50 +209,55 @@ class _RoomStickyHeader extends SliverPersistentHeaderDelegate {
                     ],
                   ),
                 ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Consumer(
-                  builder: (context, ref, _) {
-                    final fav = ref.watch(userFavoriteShortcutsProvider);
-                    final on = userHasRoomFavorite(fav, floor.id, room.id);
-                    return IconButton(
-                      tooltip: on
-                          ? 'Verwijder kamer uit favorieten'
-                          : 'Voeg kamer toe aan favorieten',
-                      iconSize: isPhone ? 24 : 26,
-                      padding: EdgeInsets.zero,
-                      constraints: BoxConstraints(
-                        minWidth: backSize,
-                        minHeight: backSize,
-                      ),
-                      icon: Icon(
-                        on
-                            ? Icons.star_rounded
-                            : Icons.star_outline_rounded,
-                        color: on ? LuxeColors.brass : LuxeColors.inkSoft,
-                      ),
-                      onPressed: () async {
-                        final was = on;
-                        await toggleUserFavoriteRoom(
-                            ref, cfg, floor.id, room.id);
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            behavior: SnackBarBehavior.floating,
-                            content: Text(
-                              was
-                                  ? 'Kamer verwijderd uit favorieten.'
-                                  : 'Kamer toegevoegd aan favorieten.',
-                            ),
+              ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Consumer(
+                builder: (context, ref, _) {
+                  final fav = ref.watch(userFavoriteShortcutsProvider);
+                  final on = userHasRoomFavorite(fav, floor.id, room.id);
+                  return IconButton(
+                    tooltip: on
+                        ? 'Verwijder kamer uit favorieten'
+                        : 'Voeg kamer toe aan favorieten',
+                    iconSize: isPhone ? 24 : 26,
+                    padding: EdgeInsets.zero,
+                    constraints: BoxConstraints(
+                      minWidth: backSize,
+                      minHeight: backSize,
+                    ),
+                    icon: Icon(
+                      on
+                          ? Icons.star_rounded
+                          : Icons.star_outline_rounded,
+                      color: on ? LuxeColors.brass : LuxeColors.inkSoft,
+                    ),
+                    onPressed: () async {
+                      final was = on;
+                      await toggleUserFavoriteRoom(
+                          ref, cfg, floor.id, room.id);
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          behavior: SnackBarBehavior.floating,
+                          content: Text(
+                            was
+                                ? 'Kamer verwijderd uit favorieten.'
+                                : 'Kamer toegevoegd aan favorieten.',
                           ),
-                        );
-                      },
-                    );
-                  },
-                  ),
+                        ),
+                      );
+                    },
+                  );
+                },
                 ),
-              ],
-            ),
+              ),
+              // Last = top for hit-testing — first tap must register.
+              Align(
+                alignment: Alignment.centerLeft,
+                child: BackPill(onTap: onBack),
+              ),
+            ],
           ),
         ),
       ),
@@ -316,7 +309,7 @@ class _FavDeviceWrap extends ConsumerWidget {
               );
             },
             child: Padding(
-              padding: const EdgeInsets.only(top: 8, right: 4),
+              padding: EdgeInsets.only(top: 8, right: 4),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(
@@ -344,7 +337,7 @@ class _FavDeviceWrap extends ConsumerWidget {
                           : LuxeColors.inkSoft
                               .withValues(alpha: 0.45),
                     ),
-                    const SizedBox(width: 5),
+                    SizedBox(width: 5),
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 180),
                       child: Text(

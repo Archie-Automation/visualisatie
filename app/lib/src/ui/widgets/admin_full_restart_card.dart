@@ -68,16 +68,16 @@ class _AdminFullRestartCardState extends ConsumerState<AdminFullRestartCard> {
   @override
   Widget build(BuildContext context) {
     return GlassCard(
-      padding: const EdgeInsets.fromLTRB(24, 22, 20, 22),
+      padding: EdgeInsets.fromLTRB(24, 22, 20, 22),
       radius: 28,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(Icons.admin_panel_settings_outlined,
+              Icon(Icons.admin_panel_settings_outlined,
                   color: LuxeColors.brassDeep, size: 22),
-              const SizedBox(width: 10),
+              SizedBox(width: 10),
               Text(
                 'BEHEERDER: HERSTART',
                 style: Theme.of(context).textTheme.labelLarge,
@@ -96,7 +96,7 @@ class _AdminFullRestartCardState extends ConsumerState<AdminFullRestartCard> {
             child: FilledButton.icon(
               style: FilledButton.styleFrom(
                 backgroundColor: LuxeColors.ink,
-                foregroundColor: Colors.white,
+                foregroundColor: LuxeColors.onInk,
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
               icon: _busy

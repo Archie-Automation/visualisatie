@@ -9,11 +9,21 @@ import {
   type AppVersionInfo
 } from "./version";
 
+/** Android APK attached to a GitHub Release (private-repo safe via API URL). */
+export interface GithubAndroidApkInfo {
+  id: number;
+  name: string;
+  sizeBytes: number;
+  /** GitHub API asset URL — requires Accept: application/octet-stream + token. */
+  apiUrl: string;
+}
+
 export interface GithubLatestInfo extends AppVersionInfo {
   tag: string;
   htmlUrl: string | null;
   source: "release" | "tag";
   checkedAt: string;
+  androidApk: GithubAndroidApkInfo | null;
 }
 
 type Cache = {
@@ -64,10 +74,32 @@ async function ghJson(url: string): Promise<{ ok: boolean; status: number; body:
   return { ok: res.ok, status: res.status, body };
 }
 
+function pickAndroidApk(assets: unknown): GithubAndroidApkInfo | null {
+  if (!Array.isArray(assets)) return null;
+  const apks: GithubAndroidApkInfo[] = [];
+  for (const item of assets) {
+    if (!item || typeof item !== "object") continue;
+    const a = item as Record<string, unknown>;
+    const name = typeof a.name === "string" ? a.name : "";
+    if (!name.toLowerCase().endsWith(".apk")) continue;
+    const id = typeof a.id === "number" ? a.id : Number(a.id);
+    const apiUrl = typeof a.url === "string" ? a.url : "";
+    const sizeBytes =
+      typeof a.size === "number" ? a.size : Number(a.size) || 0;
+    if (!Number.isFinite(id) || !apiUrl) continue;
+    apks.push({ id, name, sizeBytes, apiUrl });
+  }
+  if (apks.length === 0) return null;
+  const preferred =
+    apks.find((a) => /luxe|knx|app-release|release/i.test(a.name)) ?? apks[0];
+  return preferred;
+}
+
 function infoFromTag(
   tag: string,
   htmlUrl: string | null,
-  source: "release" | "tag"
+  source: "release" | "tag",
+  androidApk: GithubAndroidApkInfo | null = null
 ): GithubLatestInfo {
   const parsed = parseVersion(stripV(tag));
   return {
@@ -75,7 +107,8 @@ function infoFromTag(
     tag,
     htmlUrl,
     source,
-    checkedAt: new Date().toISOString()
+    checkedAt: new Date().toISOString(),
+    androidApk
   };
 }
 
@@ -93,7 +126,8 @@ async function fetchLatestUncached(): Promise<GithubLatestInfo | null> {
     const tag = typeof b.tag_name === "string" ? b.tag_name : "";
     if (tag) {
       const htmlUrl = typeof b.html_url === "string" ? b.html_url : null;
-      return infoFromTag(tag, htmlUrl, "release");
+      const androidApk = pickAndroidApk(b.assets);
+      return infoFromTag(tag, htmlUrl, "release", androidApk);
     }
   }
   if (rel.status !== 404) {
@@ -191,4 +225,44 @@ export function isUpdateAvailableOnGithub(
 ): boolean {
   if (!latest) return false;
   return compareVersion(appVersionInfo, latest) < 0;
+}
+
+/** Stream the latest release APK from GitHub (uses GITHUB_TOKEN for private repos). */
+export async function fetchAndroidApkFromGithub(): Promise<{
+  ok: true;
+  name: string;
+  sizeBytes: number;
+  body: ReadableStream<Uint8Array>;
+} | { ok: false; status: number; error: string }> {
+  const latest = await getGithubLatest();
+  const apk = latest?.androidApk;
+  if (!apk) {
+    return { ok: false, status: 404, error: "no_android_apk_on_latest_release" };
+  }
+
+  const res = await fetch(apk.apiUrl, {
+    headers: {
+      ...headers(),
+      Accept: "application/octet-stream"
+    },
+    redirect: "follow"
+  });
+  if (!res.ok || !res.body) {
+    logger.warn(
+      { status: res.status, assetId: apk.id, name: apk.name },
+      "GitHub APK-download mislukt"
+    );
+    return {
+      ok: false,
+      status: 502,
+      error: `github_apk_download_failed_${res.status}`
+    };
+  }
+
+  return {
+    ok: true,
+    name: apk.name,
+    sizeBytes: apk.sizeBytes,
+    body: res.body as ReadableStream<Uint8Array>
+  };
 }

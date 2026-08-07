@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -16,7 +16,7 @@ import 'media_search_sheet.dart';
 
 const _metadataRevealDelay = Duration(milliseconds: 2500);
 
-/// Houdt trackinfo even verborgen na start/overschakelen — RDS komt later binnen.
+/// Houdt trackinfo even verborgen na start/overschakelen â€” RDS komt later binnen.
 class _MediaMetadataGate extends StatefulWidget {
   const _MediaMetadataGate({
     required this.state,
@@ -41,7 +41,7 @@ class _MediaMetadataGateState extends State<_MediaMetadataGate> {
     super.initState();
     _wasActive = widget.state.transport.isActive;
     _lastUri = widget.state.currentUri;
-    // Al speelend bij openen — geen kunstmatige vertraging.
+    // Al speelend bij openen â€” geen kunstmatige vertraging.
     _reveal = _wasActive;
   }
 
@@ -164,7 +164,7 @@ class MediaTile extends ConsumerWidget {
             DeviceCardBody(
               child: LayoutBuilder(
               builder: (context, constraints) {
-                // Tablet: stapel transport + volume — horizontale rij past niet goed
+                // Tablet: stapel transport + volume â€” horizontale rij past niet goed
                 // en veroorzaakt overflow op grotere touch-displays.
                 final stacked = DeviceControlBar.useFullWidthRows(
                       context,
@@ -318,7 +318,7 @@ class MediaPlayerScreen extends ConsumerWidget {
       backgroundColor: LuxeColors.surfaceDark,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: Colors.white),
         title: Text(
           thisDevice?.name ?? state.brand.label,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -327,7 +327,7 @@ class MediaPlayerScreen extends ConsumerWidget {
               ),
         ),
         actions: [
-          // Zoekknop — bij Bluesound (BluOS stelt de gekoppelde diensten lokaal
+          // Zoekknop â€” bij Bluesound (BluOS stelt de gekoppelde diensten lokaal
           // beschikbaar) of zodra Spotify verbonden is (dan kan ook Sonos via
           // Spotify Connect doorzocht/afgespeeld worden). Sonos zonder Spotify
           // heeft alleen favorieten, dus daar blijft de knop weg.
@@ -351,7 +351,7 @@ class MediaPlayerScreen extends ConsumerWidget {
                 ),
               ),
             ),
-          // Koppelknop in de AppBar — ook zichtbaar bij gestopte speler
+          // Koppelknop in de AppBar â€” ook zichtbaar bij gestopte speler
           if (sameZones.isNotEmpty && thisDevice != null)
             Padding(
               padding: const EdgeInsets.only(right: 12),
@@ -394,7 +394,7 @@ class MediaPlayerScreen extends ConsumerWidget {
                       ),
                       if (state.groupRole == MediaGroupRole.coordinator &&
                           state.groupMemberIds.isNotEmpty) ...[
-                        const SizedBox(width: 4),
+                        SizedBox(width: 4),
                         Text(
                           '+${state.groupMemberIds.length}',
                           style: TextStyle(
@@ -405,7 +405,7 @@ class MediaPlayerScreen extends ConsumerWidget {
                           ),
                         ),
                       ] else if (state.groupRole == MediaGroupRole.member) ...[
-                        const SizedBox(width: 4),
+                        SizedBox(width: 4),
                         Text(
                           '+1',
                           style: TextStyle(
@@ -577,7 +577,7 @@ class _GroupStatusBar extends StatelessWidget {
     if (groupIds.isEmpty) return const SizedBox.shrink();
 
     return Padding(
-      padding: const EdgeInsets.only(top: 16),
+      padding: EdgeInsets.only(top: 16),
       child: Column(
         children: [
           Row(
@@ -604,7 +604,7 @@ class _GroupStatusBar extends StatelessWidget {
               final isThis = id == deviceId;
               return Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: isThis
                       ? LuxeColors.brass.withValues(alpha: 0.22)
@@ -654,7 +654,7 @@ class _Artwork extends StatelessWidget {
           gradient: LinearGradient(
             colors: [
               state.brand == MediaBrand.sonos
-                  ? const Color(0xFF2A2A33)
+                  ? Color(0xFF2A2A33)
                   : const Color(0xFF1F2A3A),
               Colors.black,
             ],
@@ -703,21 +703,33 @@ class _Artwork extends StatelessWidget {
       );
     }
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        borderRadius: borderRadius,
-        color: active
-            ? LuxeColors.brass.withValues(alpha: 0.14)
-            : LuxeColors.surfaceDim.withValues(alpha: 0.7),
-        border: Border.all(
-          color: active
-              ? LuxeColors.brass.withValues(alpha: 0.35)
-              : LuxeColors.line,
+    const rim = 1.5;
+    final outerR = radius;
+    final innerR = (outerR - rim).clamp(0.0, outerR);
+    final rimColor = active ? LuxeColors.brass : LuxeColors.line;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final fillColor = active
+        ? LuxeColors.brass.withValues(alpha: 0.14)
+        : LuxeColors.surfaceDim.withValues(alpha: isDark ? 0.7 : 0.45);
+
+    return SizedBox(
+      width: tileSize,
+      height: tileSize,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(outerR),
+          color: rimColor,
         ),
-      ),
-      child: ClipRRect(
-        borderRadius: borderRadius,
-        child: SizedBox.expand(child: child),
+        child: Padding(
+          padding: const EdgeInsets.all(rim),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(innerR),
+            child: ColoredBox(
+              color: fillColor,
+              child: SizedBox.expand(child: child),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -750,7 +762,7 @@ class _NowPlaying extends StatelessWidget {
             statusLine,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleLarge,
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: DeviceTileLayout.titleStatusGap),
           Text(
@@ -772,7 +784,7 @@ class _NowPlaying extends StatelessWidget {
           device.name,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.titleLarge,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
         ),
         if (statusLine.isNotEmpty) ...[
           const SizedBox(height: DeviceTileLayout.titleStatusGap),
@@ -826,7 +838,7 @@ class _PlayPauseButton extends StatelessWidget {
     return GestureDetector(
       onTap: !state.online ? null : (active ? onPause : onPlay),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
+        duration: Duration(milliseconds: 180),
         width: expand ? double.infinity : DeviceControlBar.buttonSize,
         height: DeviceControlBar.buttonSize,
         decoration: BoxDecoration(
@@ -841,7 +853,11 @@ class _PlayPauseButton extends StatelessWidget {
             ),
           ],
         ),
-        child: Icon(icon, color: Colors.white, size: 24),
+        child: Icon(
+          icon,
+          color: active ? LuxeColors.onInk : Colors.white,
+          size: 24,
+        ),
       ),
     );
   }
@@ -990,7 +1006,7 @@ class _VolumeSliderState extends State<_VolumeSlider> {
           onTap: widget.onToggleMute,
           behavior: HitTestBehavior.opaque,
           child: Padding(
-            padding: const EdgeInsets.all(6),
+            padding: EdgeInsets.all(6),
             child: Icon(
               muteIcon,
               color: widget.dark
@@ -1077,7 +1093,7 @@ class _BigPlayPause extends StatelessWidget {
       child: Container(
         width: 84,
         height: 84,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           borderRadius: BorderRadius.all(Radius.circular(22)),
           color: LuxeColors.brass,
           boxShadow: LuxeShadows.brassGlow,
@@ -1173,7 +1189,7 @@ class _PresetCardState extends State<_PresetCard> {
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
         scale: _pressed ? 0.93 : 1.0,
-        duration: const Duration(milliseconds: 100),
+        duration: Duration(milliseconds: 100),
         curve: Curves.easeOut,
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 100),
@@ -1277,10 +1293,10 @@ class _GroupButton extends StatelessWidget {
             size: DeviceControlIcons.size,
             color: LuxeColors.brass,
           ),
-          const SizedBox(height: 2),
+          SizedBox(height: 2),
           Text(
             '+$memberCount',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 9,
               fontWeight: FontWeight.w700,
               color: LuxeColors.brass,
@@ -1298,7 +1314,7 @@ class _GroupButton extends StatelessWidget {
 /// was tapped.  All other same-brand zones (playing or not) appear as
 /// checkboxes.  Checking adds them to the group; unchecking removes them.
 ///
-/// Special case — "coordinator handoff":
+/// Special case â€” "coordinator handoff":
 /// If the coordinator itself is unchecked while other zones are still checked,
 /// the first remaining checked zone becomes the new coordinator so music
 /// doesn't stop.
@@ -1353,7 +1369,7 @@ class _AudioGroupSheetState extends ConsumerState<_AudioGroupSheet> {
       // Special case: coordinator itself is being unchecked.
       if (zoneId == widget.coordinator.id) {
         setState(() => _checked = currentChecked);
-        // Coordinator leaves — Sonos hardware automatically promotes the first
+        // Coordinator leaves â€” Sonos hardware automatically promotes the first
         // remaining member. We only need to call groupLeave on the coordinator;
         // the backend/hardware handles the remaining zones.
         await widget.api.groupLeave(widget.coordinator.id);
@@ -1380,7 +1396,7 @@ class _AudioGroupSheetState extends ConsumerState<_AudioGroupSheet> {
     ];
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+      margin: EdgeInsets.fromLTRB(12, 0, 12, 12),
       decoration: BoxDecoration(
         color: LuxeColors.surface,
         borderRadius: BorderRadius.circular(28),
@@ -1389,7 +1405,7 @@ class _AudioGroupSheetState extends ConsumerState<_AudioGroupSheet> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const SizedBox(height: 8),
+          SizedBox(height: 8),
           Container(
             width: 36,
             height: 4,
@@ -1399,11 +1415,11 @@ class _AudioGroupSheetState extends ConsumerState<_AudioGroupSheet> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(24, 18, 24, 10),
+            padding: EdgeInsets.fromLTRB(24, 18, 24, 10),
             child: Row(
               children: [
                 Icon(Icons.link_rounded, color: LuxeColors.brass, size: 20),
-                const SizedBox(width: 10),
+                SizedBox(width: 10),
                 Text(
                   'Zones koppelen',
                   style: Theme.of(context)
@@ -1439,7 +1455,7 @@ class _AudioGroupSheetState extends ConsumerState<_AudioGroupSheet> {
                     ),
                   ),
                   if (isPlaying) ...[
-                    const SizedBox(width: 8),
+                    SizedBox(width: 8),
                     Icon(Icons.play_arrow_rounded,
                         size: 16, color: LuxeColors.brass),
                   ],

@@ -5,11 +5,20 @@ import 'package:go_router/go_router.dart';
 
 import '../api.dart';
 import '../camera_api.dart';
+import '../kiosk_system_ui.dart';
 import '../models.dart';
 import '../theme.dart';
 import 'widgets/camera_snapshot.dart';
 import 'widgets/camera_stream_body.dart';
 import 'widgets/luxe_backdrop.dart';
+
+void _restoreSystemUi() {
+  if (isAndroidKioskTarget) {
+    applyAndroidKioskSystemUi();
+  } else {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  }
+}
 
 /// All surveillance cameras: one main live stream and a thumbnail strip.
 class CamerasOverviewScreen extends ConsumerStatefulWidget {
@@ -47,8 +56,7 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
 
   @override
   void dispose() {
-    // Restore system UI when leaving the screen
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    _restoreSystemUi();
     super.dispose();
   }
 
@@ -57,11 +65,11 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
     final cfg = ref.watch(configProvider);
 
     return cfg.when(
-      loading: () => const Scaffold(
+      loading: () => Scaffold(
         body: Center(child: CircularProgressIndicator(color: LuxeColors.brass)),
       ),
       error: (e, _) => Scaffold(
-        appBar: AppBar(title: const Text("Camera's")),
+        appBar: AppBar(title: Text("Camera's")),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -98,7 +106,7 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
             if (isLandscape) {
               SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
             } else {
-              SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+              _restoreSystemUi();
             }
 
             if (isLandscape) {
@@ -106,7 +114,7 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
                 selId: selId,
                 deviceName: selectedDevice.name,
                 onBack: () {
-                  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+                  _restoreSystemUi();
                   context.pop();
                 },
               );
@@ -120,7 +128,7 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
                 backgroundColor: Colors.transparent,
                 elevation: 0,
                 leading: IconButton(
-                  icon: const Icon(Icons.arrow_back_rounded),
+                  icon: Icon(Icons.arrow_back_rounded),
                   onPressed: () => context.pop(),
                 ),
                 title: Text(
@@ -137,7 +145,7 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                         child: info.when(
-                          loading: () => const Center(
+                          loading: () => Center(
                             child: CircularProgressIndicator(
                                 color: LuxeColors.brass),
                           ),
@@ -165,7 +173,7 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.fromLTRB(8, 12, 8, 20),
+                      padding: EdgeInsets.fromLTRB(8, 12, 8, 20),
                       decoration: BoxDecoration(
                         color: LuxeColors.cream.withValues(alpha: 0.85),
                         border: Border(
@@ -231,7 +239,7 @@ class _FullscreenCameraView extends ConsumerWidget {
           // Camera stream vult het hele scherm
           info.when(
             loading: () =>
-                const Center(child: CircularProgressIndicator(color: LuxeColors.brass)),
+                Center(child: CircularProgressIndicator(color: LuxeColors.brass)),
             error: (e, _) => Center(
               child: Text('Kan stream niet laden:\n$e',
                   textAlign: TextAlign.center,
@@ -311,7 +319,7 @@ class _ThumbStripItem extends StatelessWidget {
           children: [
             Expanded(
               child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
+                duration: Duration(milliseconds: 200),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
@@ -333,7 +341,7 @@ class _ThumbStripItem extends StatelessWidget {
                     cameraId: device.id,
                     aspectRatio: 16 / 9,
                     fit: BoxFit.cover,
-                    refresh: const Duration(milliseconds: 1500),
+                    refresh: Duration(milliseconds: 1500),
                   ),
                 ),
               ),

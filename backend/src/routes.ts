@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { Readable } from "node:stream";
 import { Router } from "express";
 import { z } from "zod";
 import {
@@ -36,6 +37,7 @@ import type { SchedulerHandle } from "./scheduler";
 import type { Floor, HouseConfig, Scene, Schedule, User } from "./types";
 import { appVersionInfo } from "./version";
 import {
+  fetchAndroidApkFromGithub,
   getGithubLatest,
   isUpdateAvailableOnGithub
 } from "./githubLatest";
@@ -234,8 +236,9 @@ export function buildRouter(
 
   /** Publiek: laat zien of KNX/media bereikbaar zijn (geen auth). */
   /** Public: running version + optional newer GitHub release/tag. */
-  r.get("/version", async (_req, res) => {
-    const latest = await getGithubLatest();
+  r.get("/version", async (req, res) => {
+    const force = req.query.refresh === "1" || req.query.refresh === "true";
+    const latest = await getGithubLatest(force);
     const updateAvailable = isUpdateAvailableOnGithub(latest);
     res.json({
       version: appVersionInfo.version,
@@ -250,11 +253,45 @@ export function buildRouter(
             tag: latest.tag,
             htmlUrl: latest.htmlUrl,
             source: latest.source,
-            checkedAt: latest.checkedAt
+            checkedAt: latest.checkedAt,
+            androidApk: latest.androidApk
+              ? {
+                  available: true,
+                  name: latest.androidApk.name,
+                  sizeBytes: latest.androidApk.sizeBytes,
+                  downloadPath: "/api/app/android.apk"
+                }
+              : null
           }
         : null,
       updateAvailable
     });
+  });
+
+  /**
+   * Public: stream the latest Android APK from the GitHub Release asset.
+   * Uses GITHUB_TOKEN on the server so tablets never need a GitHub credential.
+   */
+  r.get("/app/android.apk", async (req, res) => {
+    const force = req.query.refresh === "1" || req.query.refresh === "true";
+    if (force) await getGithubLatest(true);
+    const result = await fetchAndroidApkFromGithub();
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error });
+      return;
+    }
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.android.package-archive"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="${result.name.replace(/"/g, "")}"`
+    );
+    if (result.sizeBytes > 0) {
+      res.setHeader("Content-Length", String(result.sizeBytes));
+    }
+    Readable.fromWeb(result.body).pipe(res);
   });
 
   r.get("/health", (_req, res) => {

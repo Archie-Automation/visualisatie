@@ -1,5 +1,3 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +11,8 @@ import '../models.dart';
 import '../schedule_api.dart';
 import '../software_version.dart';
 import '../theme.dart';
+import '../theme_mode.dart';
+import '../theme_auto_schedule.dart';
 import 'schedule_editor_sheet.dart';
 import 'widgets/glass_card.dart';
 import 'widgets/luxe_backdrop.dart';
@@ -43,6 +43,7 @@ class SettingsScreen extends ConsumerWidget {
                     parent: AlwaysScrollableScrollPhysics()),
                 slivers: [
                   SliverToBoxAdapter(child: _header(context, auth)),
+                  const SliverToBoxAdapter(child: _AppearanceSection()),
                   SliverToBoxAdapter(
                     child: _schedulesSection(
                       context,
@@ -68,7 +69,7 @@ class SettingsScreen extends ConsumerWidget {
   Widget _installerTile(BuildContext ctx, AuthState auth) {
     final locked = !auth.isAdmin;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
+      padding: EdgeInsets.fromLTRB(28, 8, 28, 8),
       child: GlassCard(
         padding: const EdgeInsets.fromLTRB(24, 20, 16, 20),
         radius: 28,
@@ -84,7 +85,7 @@ class SettingsScreen extends ConsumerWidget {
                   color: locked ? LuxeColors.inkSoft : LuxeColors.ink,
                   size: 22,
                 ),
-                const SizedBox(width: 10),
+                SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,7 +131,7 @@ class SettingsScreen extends ConsumerWidget {
     final uname = auth.username ?? '—';
     final rol = auth.effectiveRole ?? (auth.isAuthed ? 'onbekend' : '—');
     return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 24, 28, 20),
+      padding: EdgeInsets.fromLTRB(28, 24, 28, 20),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -169,8 +170,15 @@ class SettingsScreen extends ConsumerWidget {
     AsyncValue<List<Schedule>> schedAsync, {
     required bool canEditSchedules,
   }) {
+    final themeMode = ref.watch(themeModeProvider);
+    final showThemeSchedules =
+        isWallTabletThemeTarget && themeMode == ThemeMode.system;
+    final themeSched = ref.watch(themeAutoScheduleProvider);
+    final themeRows =
+        showThemeSchedules ? themeSched.asSchedules() : const <Schedule>[];
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 8, 28, 20),
+      padding: EdgeInsets.fromLTRB(28, 8, 28, 20),
       child: GlassCard(
         padding: const EdgeInsets.fromLTRB(24, 22, 16, 22),
         radius: 28,
@@ -192,8 +200,7 @@ class SettingsScreen extends ConsumerWidget {
               padding: const EdgeInsets.only(right: 8),
               child: Row(
                 children: [
-                  const Icon(Icons.schedule_outlined,
-                      color: LuxeColors.ink, size: 22),
+                  const Icon(Icons.schedule_outlined, size: 22),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -202,8 +209,12 @@ class SettingsScreen extends ConsumerWidget {
                         Text('TIJDSCHEMA\'S',
                             style: Theme.of(ctx).textTheme.labelLarge),
                         const SizedBox(height: 2),
-                        Text('Laat scenes of apparaten automatisch lopen.',
-                            style: Theme.of(ctx).textTheme.bodyMedium),
+                        Text(
+                          showThemeSchedules
+                              ? 'Scenes, apparaten en weergave (Auto) automatisch.'
+                              : 'Laat scenes of apparaten automatisch lopen.',
+                          style: Theme.of(ctx).textTheme.bodyMedium,
+                        ),
                       ],
                     ),
                   ),
@@ -213,7 +224,8 @@ class SettingsScreen extends ConsumerWidget {
                         : 'Geen rechten om te wijzigen',
                     icon: const Icon(Icons.add_rounded),
                     onPressed: canEditSchedules
-                        ? () => _openEditor(ctx, ref, cfg)
+                        ? () => _openEditor(ctx, ref, cfg,
+                            canEditHouse: true)
                         : null,
                   ),
                 ],
@@ -236,7 +248,8 @@ class SettingsScreen extends ConsumerWidget {
                 child: Text('Kon tijdschema\'s niet laden: $e'),
               ),
               data: (list) {
-                if (list.isEmpty) {
+                final display = [...themeRows, ...list];
+                if (display.isEmpty) {
                   return Padding(
                     padding: const EdgeInsets.fromLTRB(6, 4, 6, 8),
                     child: Text(
@@ -249,19 +262,41 @@ class SettingsScreen extends ConsumerWidget {
                 }
                 return Column(
                   children: [
-                    for (final s in list)
+                    for (final s in display)
                       _ScheduleRow(
                         schedule: s,
                         config: cfg,
-                        canEdit: canEditSchedules,
-                        onEdit: canEditSchedules
-                            ? () =>
-                                _openEditor(ctx, ref, cfg, initial: s)
-                            : () {},
+                        canEdit: isThemeScheduleId(s.id)
+                            ? true
+                            : canEditSchedules,
+                        locked: isThemeScheduleId(s.id),
+                        onEdit: () {
+                          if (isThemeScheduleId(s.id)) {
+                            _openEditor(ctx, ref, cfg,
+                                initial: s,
+                                canEditHouse: canEditSchedules);
+                            return;
+                          }
+                          if (!canEditSchedules) return;
+                          _openEditor(ctx, ref, cfg,
+                              initial: s, canEditHouse: true);
+                        },
                         onToggle: (enabled) async {
+                          if (isThemeScheduleId(s.id)) {
+                            final next = themeSched.mergeFromSchedules([
+                              s.copyWith(enabled: enabled),
+                            ]);
+                            await ref
+                                .read(themeAutoScheduleProvider.notifier)
+                                .save(next);
+                            return;
+                          }
+                          if (!canEditSchedules) return;
                           final next = [
                             for (final x in list)
-                              x.id == s.id ? x.copyWith(enabled: enabled) : x
+                              x.id == s.id
+                                  ? x.copyWith(enabled: enabled)
+                                  : x
                           ];
                           try {
                             await ref.read(scheduleApiProvider).save(next);
@@ -280,30 +315,35 @@ class SettingsScreen extends ConsumerWidget {
                             );
                           }
                         },
-                        onRun: () async {
-                          try {
-                            await ref.read(scheduleApiProvider).runNow(s.id);
-                            if (!ctx.mounted) return;
-                            ScaffoldMessenger.of(ctx).showSnackBar(
-                              SnackBar(
-                                behavior: SnackBarBehavior.floating,
-                                backgroundColor: LuxeColors.ink,
-                                shape: const StadiumBorder(),
-                                content: Text('${s.name} gestart'),
-                              ),
-                            );
-                          } catch (err) {
-                            if (!ctx.mounted) return;
-                            ScaffoldMessenger.of(ctx).showSnackBar(
-                              SnackBar(
-                                behavior: SnackBarBehavior.floating,
-                                backgroundColor: LuxeColors.danger,
-                                shape: const StadiumBorder(),
-                                content: Text('Mislukt: $err'),
-                              ),
-                            );
-                          }
-                        },
+                        onRun: isThemeScheduleId(s.id)
+                            ? null
+                            : () async {
+                                if (!canEditSchedules) return;
+                                try {
+                                  await ref
+                                      .read(scheduleApiProvider)
+                                      .runNow(s.id);
+                                  if (!ctx.mounted) return;
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                    SnackBar(
+                                      behavior: SnackBarBehavior.floating,
+                                      backgroundColor: LuxeColors.ink,
+                                      shape: const StadiumBorder(),
+                                      content: Text('${s.name} gestart'),
+                                    ),
+                                  );
+                                } catch (err) {
+                                  if (!ctx.mounted) return;
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                    SnackBar(
+                                      behavior: SnackBarBehavior.floating,
+                                      backgroundColor: LuxeColors.danger,
+                                      shape: const StadiumBorder(),
+                                      content: Text('Mislukt: $err'),
+                                    ),
+                                  );
+                                }
+                              },
                       ),
                   ],
                 );
@@ -320,17 +360,31 @@ class SettingsScreen extends ConsumerWidget {
     WidgetRef ref,
     HouseConfig cfg, {
     Schedule? initial,
+    bool canEditHouse = true,
   }) async {
-    final existing = ref.read(schedulesProvider).value ?? const [];
+    final existing =
+        canEditHouse ? (ref.read(schedulesProvider).value ?? []) : <Schedule>[];
+    final themeMode = ref.read(themeModeProvider);
+    final includeTheme =
+        isWallTabletThemeTarget && themeMode == ThemeMode.system;
+    final themeOnes = includeTheme
+        ? ref.read(themeAutoScheduleProvider).asSchedules()
+        : const <Schedule>[];
+    final lockedIds = {
+      for (final s in themeOnes) s.id,
+    };
+    final merged = [...themeOnes, ...existing];
     final saved = await showModalBottomSheet<List<Schedule>>(
       context: ctx,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (_) => ScheduleEditorSheet(
-        schedules: existing,
+        schedules: merged,
         config: cfg,
         initiallySelectedId: initial?.id,
+        lockedIds: lockedIds,
+        persistHouseSchedules: canEditHouse,
       ),
     );
     if (saved != null) {
@@ -404,9 +458,9 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.tablet_android_outlined,
+                    Icon(Icons.tablet_android_outlined,
                         color: LuxeColors.ink, size: 22),
-                    const SizedBox(width: 10),
+                    SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         'WANDTABLET',
@@ -480,11 +534,12 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Geen screensaver bij muziek'),
+                  title: const Text('Geen screensaver bij open media-speler'),
                   subtitle: Text(
                     settings.panelRoomId != null
-                        ? 'Screensaver uit zolang er muziek speelt in '
-                            '${settings.panelRoomName ?? 'de gekoppelde ruimte'}'
+                        ? 'Alleen geblokkeerd als de Sonos/Bluesound van '
+                            '${settings.panelRoomName ?? 'de gekoppelde ruimte'} '
+                            'fullscreen open staat én speelt'
                         : 'Kies eerst een ruimte om dit te activeren',
                   ),
                   value: settings.suppressScreensaverWhenMusicPlaying &&
@@ -519,7 +574,7 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                     style: Theme.of(context).textTheme.labelMedium),
                 const SizedBox(height: 8),
                 SegmentedButton<bool>(
-                  segments: const [
+                  segments: [
                     ButtonSegment(value: false, label: Text('Ruimte')),
                     ButtonSegment(value: true, label: Text('KNX GA')),
                   ],
@@ -756,7 +811,7 @@ class _SpotifySection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final statusAsync = ref.watch(spotifyStatusProvider);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(28, 8, 28, 20),
+      padding: EdgeInsets.fromLTRB(28, 8, 28, 20),
       child: GlassCard(
         padding: const EdgeInsets.fromLTRB(24, 22, 24, 22),
         radius: 28,
@@ -765,7 +820,7 @@ class _SpotifySection extends ConsumerWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.library_music_outlined,
+                Icon(Icons.library_music_outlined,
                     color: LuxeColors.ink, size: 22),
                 const SizedBox(width: 10),
                 Expanded(
@@ -815,7 +870,7 @@ class _SpotifySection extends ConsumerWidget {
     if (status.connected) {
       return Row(
         children: [
-          const Icon(Icons.check_circle_rounded,
+          Icon(Icons.check_circle_rounded,
               color: LuxeColors.brassDeep, size: 20),
           const SizedBox(width: 8),
           Expanded(
@@ -865,7 +920,7 @@ class _RedirectUriBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: LuxeColors.ink.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(10),
@@ -1008,20 +1063,22 @@ class _ScheduleRow extends StatelessWidget {
     required this.canEdit,
     required this.onEdit,
     required this.onToggle,
-    required this.onRun,
+    this.onRun,
+    this.locked = false,
   });
   final Schedule schedule;
   final HouseConfig config;
   final bool canEdit;
+  final bool locked;
   final VoidCallback onEdit;
   final ValueChanged<bool> onToggle;
-  final VoidCallback onRun;
+  final VoidCallback? onRun;
 
   @override
   Widget build(BuildContext context) {
     final s = schedule;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.symmetric(vertical: 4),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
         onTap: canEdit ? onEdit : null,
@@ -1048,14 +1105,27 @@ class _ScheduleRow extends StatelessWidget {
                 child: Icon(_triggerIcon(s.trigger),
                     color: LuxeColors.brassDeep, size: 18),
               ),
-              const SizedBox(width: 12),
+              SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      s.name,
-                      style: Theme.of(context).textTheme.titleMedium,
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            s.name,
+                            style: Theme.of(context).textTheme.titleMedium,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (locked) ...[
+                          const SizedBox(width: 6),
+                          Icon(Icons.lock_outline,
+                              size: 14, color: LuxeColors.inkSoft),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -1067,15 +1137,17 @@ class _ScheduleRow extends StatelessWidget {
                   ],
                 ),
               ),
-              IconButton(
-                tooltip:
-                    canEdit ? 'Nu uitvoeren' : 'Alleen zichtbaar — geen rechten',
-                icon: Icon(
-                  Icons.play_arrow_rounded,
-                  color: canEdit ? LuxeColors.ink : LuxeColors.inkSoft,
+              if (onRun != null)
+                IconButton(
+                  tooltip: canEdit
+                      ? 'Nu uitvoeren'
+                      : 'Alleen zichtbaar — geen rechten',
+                  icon: Icon(
+                    Icons.play_arrow_rounded,
+                    color: canEdit ? LuxeColors.ink : LuxeColors.inkSoft,
+                  ),
+                  onPressed: canEdit ? onRun : null,
                 ),
-                onPressed: canEdit ? onRun : null,
-              ),
               Switch.adaptive(
                 value: s.enabled,
                 onChanged: canEdit ? onToggle : null,
@@ -1122,6 +1194,9 @@ String describeTrigger(ScheduleTrigger t) {
 }
 
 String describeAction(ScheduleAction a, HouseConfig cfg) {
+  if (a is ScheduleThemeAction) {
+    return a.toLight ? 'Weergave: licht' : 'Weergave: donker';
+  }
   if (a is ScheduleSceneAction) {
     // Look up scene name across global + room scenes.
     final global = cfg.scenes.where((s) => s.id == a.sceneId).toList();
@@ -1139,13 +1214,85 @@ String describeAction(ScheduleAction a, HouseConfig cfg) {
   return '${a.actions.length} apparaten';
 }
 
+class _AppearanceSection extends ConsumerWidget {
+  const _AppearanceSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final mode = ref.watch(themeModeProvider);
+    final tabletHint = isWallTabletThemeTarget
+        ? 'Op de wandtablet volgt Auto het weergave-schema onder '
+            'Tijdschema\'s (standaard astro aan/uit).'
+        : 'Op de telefoon volgt Auto het systeem.';
+    return Padding(
+      padding: EdgeInsets.fromLTRB(28, 0, 28, 16),
+      child: GlassCard(
+        padding: const EdgeInsets.fromLTRB(24, 22, 24, 22),
+        radius: 28,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.palette_outlined, color: LuxeColors.ink, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('WEERGAVE',
+                          style: Theme.of(context).textTheme.labelLarge),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Licht, donker, of automatisch. $tabletHint',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: SegmentedButton<ThemeMode>(
+                segments: const [
+                  ButtonSegment(
+                    value: ThemeMode.light,
+                    label: Text('Licht'),
+                    icon: Icon(Icons.light_mode_outlined, size: 18),
+                  ),
+                  ButtonSegment(
+                    value: ThemeMode.dark,
+                    label: Text('Donker'),
+                    icon: Icon(Icons.dark_mode_outlined, size: 18),
+                  ),
+                  ButtonSegment(
+                    value: ThemeMode.system,
+                    label: Text('Auto'),
+                    icon: Icon(Icons.brightness_auto_outlined, size: 18),
+                  ),
+                ],
+                selected: {mode},
+                onSelectionChanged: (set) {
+                  ref.read(themeModeProvider.notifier).setMode(set.first);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _VersionFooter extends StatelessWidget {
   const _VersionFooter();
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
+      padding: EdgeInsets.only(bottom: 4),
       child: Center(
         child: Text(
           'versie $kAppVersion',
@@ -1166,29 +1313,21 @@ class _GlassBack extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
-        width: 48,
-        height: 48,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: LuxeShadows.soft,
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(14),
-                color: LuxeColors.surface.withValues(alpha: 0.7),
-                border: Border.all(color: LuxeColors.glassRim),
-              ),
-              child: const Icon(Icons.arrow_back_ios_new,
-                  size: 16, color: LuxeColors.ink),
-            ),
+        child: LuxeRimBox(
+          width: 48,
+          height: 48,
+          radius: 14,
+          rimWidth: 1,
+          rimColor: LuxeColors.glassRim,
+          fillColor: LuxeColors.surface.withValues(
+            alpha: Theme.of(context).brightness == Brightness.dark
+                ? 0.92
+                : LuxeChipChrome.lightFill(),
           ),
+          shadows: LuxeShadows.soft,
+          child: Icon(Icons.arrow_back_ios_new,
+              size: 16, color: LuxeColors.ink),
         ),
-      ),
     );
   }
 }

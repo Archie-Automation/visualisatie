@@ -36,7 +36,7 @@ Future<bool?> showHvacSwitchConfirmDialog(
             icon: Icons.warning_amber_rounded,
             title: 'Omschakelen naar $target',
           ),
-          const SizedBox(height: 14),
+          SizedBox(height: 14),
           Text(
             'Weet u zeker dat u wilt omschakelen naar $target?\n\n$notice',
             style: Theme.of(ctx).textTheme.bodyMedium,
@@ -51,7 +51,7 @@ Future<bool?> showHvacSwitchConfirmDialog(
                 onPressed: () => Navigator.of(ctx).pop(true),
                 style: FilledButton.styleFrom(
                   backgroundColor: LuxeColors.ink,
-                  foregroundColor: Colors.white,
+                  foregroundColor: LuxeColors.onInk,
                   shape: const StadiumBorder(),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 22,
@@ -188,7 +188,7 @@ class _PinDialogState extends State<_PinDialog> {
         mainAxisSize: MainAxisSize.min,
         children: [
           _DialogHeader(icon: Icons.lock_outline, title: title),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
           Text(
             message,
             style: Theme.of(context).textTheme.bodyMedium,
@@ -208,7 +208,7 @@ class _PinDialogState extends State<_PinDialog> {
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: _wrong
-                    ? const Color(0xFFFF4E4E).withValues(alpha: 0.45)
+                    ? Color(0xFFFF4E4E).withValues(alpha: 0.45)
                     : LuxeColors.line,
               ),
             ),
@@ -217,7 +217,7 @@ class _PinDialogState extends State<_PinDialog> {
               children: List.generate(4, (i) {
                 final filled = i < entered;
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  padding: EdgeInsets.symmetric(horizontal: 10),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
                     width: 14,
@@ -314,7 +314,7 @@ class _NumpadKeyState extends State<_NumpadKey> {
       onTapUp: (_) => setState(() => _pressed = false),
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 80),
+        duration: Duration(milliseconds: 80),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: _pressed
@@ -427,7 +427,7 @@ class _ConfirmButton extends StatelessWidget {
       onPressed: onTap,
       style: FilledButton.styleFrom(
         backgroundColor: LuxeColors.ink,
-        foregroundColor: Colors.white,
+        foregroundColor: LuxeColors.onInk,
         shape: const StadiumBorder(),
         padding:
             const EdgeInsets.symmetric(horizontal: 22, vertical: 12),

@@ -58,23 +58,23 @@ class _Banner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFF3D3428),
+      color: Color(0xFF3D3428),
       child: SafeArea(
         bottom: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           child: Row(
             children: [
-              const Icon(
+              Icon(
                 Icons.system_update_alt_rounded,
                 color: LuxeColors.brass,
                 size: 20,
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: 10),
               Expanded(
                 child: Text(
                   message,
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: LuxeColors.inkSoft,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -87,7 +87,7 @@ class _Banner extends StatelessWidget {
                   onPressed: onAction,
                   child: Text(
                     actionLabel!,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: LuxeColors.brass,
                       fontWeight: FontWeight.w700,
                     ),

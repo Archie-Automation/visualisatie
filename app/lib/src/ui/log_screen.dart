@@ -46,7 +46,7 @@ const List<_RangePreset> _presets = [
 ];
 
 /// Distinct, on-brand series colours for generic (custom) logs.
-const List<Color> _seriesColors = [
+List<Color> _seriesColors = [
   LuxeColors.brass,
   Color(0xFF4F86C6),
   Color(0xFF5BA98C),
@@ -60,7 +60,7 @@ const List<Color> _seriesColors = [
 /// The active heating/cooling state over time is shown in a separate colour
 /// band at the bottom (heat = orange, cool = blue).
 const Color _measuredColor = Color(0xFF2D241B);
-const Color _setpointColor = LuxeColors.brass;
+final Color _setpointColor = LuxeColors.brass;
 const Color _heatColor = Color(0xFFE07A3F);
 const Color _coolColor = Color(0xFF5BA7E0);
 
@@ -166,7 +166,7 @@ class _LogScreenState extends ConsumerState<LogScreen> {
                         selectedMs: _rangeMs,
                         onSelect: _setRange,
                       ),
-                      const SizedBox(height: 12),
+                      SizedBox(height: 12),
                       _PanBar(
                         rangeMs: _rangeMs,
                         atNow: atNow,
@@ -177,7 +177,7 @@ class _LogScreenState extends ConsumerState<LogScreen> {
                       const SizedBox(height: 16),
                       Expanded(
                         child: async.when(
-                          loading: () => const Center(
+                          loading: () => Center(
                             child: CircularProgressIndicator(
                                 color: LuxeColors.brass),
                           ),
@@ -185,7 +185,7 @@ class _LogScreenState extends ConsumerState<LogScreen> {
                             child: Text(
                               'Kan log niet laden:\n$e',
                               textAlign: TextAlign.center,
-                              style: const TextStyle(color: LuxeColors.inkSoft),
+                              style: TextStyle(color: LuxeColors.inkSoft),
                             ),
                           ),
                           data: (d) => _LogChartCard(
@@ -247,7 +247,7 @@ class _RangeChip extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
+        duration: Duration(milliseconds: 160),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
         decoration: BoxDecoration(
           color: selected
@@ -297,12 +297,12 @@ class _PanBar extends StatelessWidget {
           label: 'Eerder',
           onTap: onEarlier,
         ),
-        const Spacer(),
+        Spacer(),
         GestureDetector(
           onTap: atNow ? null : onNow,
           child: Opacity(
             opacity: atNow ? 0.4 : 1,
-            child: const Row(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.schedule_rounded,
@@ -349,10 +349,10 @@ class _PanButton extends StatelessWidget {
     final disabled = onTap == null;
     final content = <Widget>[
       Icon(icon, size: 20, color: LuxeColors.inkSoft),
-      const SizedBox(width: 2),
+      SizedBox(width: 2),
       Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           color: LuxeColors.inkSoft,
           fontWeight: FontWeight.w500,
           fontSize: 13,
@@ -393,14 +393,14 @@ class _LogChartCard extends StatelessWidget {
         (mode != null ||
             data.series.any((s) => s.role == 'mode' && s.points.isNotEmpty));
     return Container(
-      padding: const EdgeInsets.fromLTRB(14, 20, 18, 14),
+      padding: EdgeInsets.fromLTRB(14, 20, 18, 14),
       decoration: BoxDecoration(
         color: LuxeColors.surface.withValues(alpha: 0.72),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: LuxeColors.line),
       ),
       child: !_hasPoints
-          ? const Center(
+          ? Center(
               child: Text(
                 'Nog geen gegevens gelogd voor dit tijdsbereik.',
                 textAlign: TextAlign.center,
@@ -568,7 +568,7 @@ class _Chart extends StatelessWidget {
         // steps from Unix epoch (UTC), which drifts vs local midnight and
         // packs neighbouring labels like 12:00 + 14:00 on top of each other.
         baselineX: minX,
-        clipData: const FlClipData.all(),
+        clipData: FlClipData.all(),
         lineBarsData: bars,
         gridData: FlGridData(
           show: true,
@@ -577,9 +577,9 @@ class _Chart extends StatelessWidget {
           verticalInterval: xInterval <= 0 ? null : xInterval,
           checkToShowHorizontalLine: (v) => v >= dataFloor - 0.0001,
           getDrawingHorizontalLine: (_) =>
-              const FlLine(color: LuxeColors.line, strokeWidth: 1),
+              FlLine(color: LuxeColors.line, strokeWidth: 1),
           getDrawingVerticalLine: (_) =>
-              const FlLine(color: LuxeColors.lineSoft, strokeWidth: 1),
+              FlLine(color: LuxeColors.lineSoft, strokeWidth: 1),
         ),
         borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
@@ -601,10 +601,10 @@ class _Chart extends StatelessWidget {
                   return const SizedBox.shrink();
                 }
                 return Padding(
-                  padding: const EdgeInsets.only(right: 6),
+                  padding: EdgeInsets.only(right: 6),
                   child: Text(
                     value.toStringAsFixed(1),
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: LuxeColors.inkFaint,
                       fontSize: 11,
                     ),
@@ -629,10 +629,10 @@ class _Chart extends StatelessWidget {
                   return const SizedBox.shrink();
                 }
                 return Padding(
-                  padding: const EdgeInsets.only(top: 6),
+                  padding: EdgeInsets.only(top: 6),
                   child: Text(
                     _fmtAxis(value.toInt(), rangeMs),
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: LuxeColors.inkFaint,
                       fontSize: 11,
                     ),
@@ -719,10 +719,10 @@ class _BandLegendItem extends StatelessWidget {
             borderRadius: BorderRadius.circular(2),
           ),
         ),
-        const SizedBox(width: 7),
+        SizedBox(width: 7),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             color: LuxeColors.inkSoft,
             fontWeight: FontWeight.w500,
             fontSize: 13,
@@ -753,20 +753,20 @@ class _LegendItem extends StatelessWidget {
             borderRadius: BorderRadius.circular(2),
           ),
         ),
-        const SizedBox(width: 7),
+        SizedBox(width: 7),
         Text(
           series.label,
-          style: const TextStyle(
+          style: TextStyle(
             color: LuxeColors.ink,
             fontWeight: FontWeight.w500,
             fontSize: 13,
           ),
         ),
         if (last != null) ...[
-          const SizedBox(width: 6),
+          SizedBox(width: 6),
           Text(
             '${last.toStringAsFixed(1)}$unit',
-            style: const TextStyle(
+            style: TextStyle(
               color: LuxeColors.inkSoft,
               fontWeight: FontWeight.w600,
               fontSize: 13,

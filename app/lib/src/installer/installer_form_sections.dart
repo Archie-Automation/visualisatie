@@ -2663,7 +2663,7 @@ class _IconPickerField extends StatelessWidget {
         ? value!
         : _none;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: EdgeInsets.only(bottom: 10),
       child: DropdownButtonFormField<String>(
         value: current,
         decoration: InputDecoration(labelText: label, isDense: true),

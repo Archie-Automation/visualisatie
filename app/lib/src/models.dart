@@ -639,6 +639,11 @@ class CurrentUser {
 class HouseConfig {
   final String projectId;
   final String projectName;
+  /// IANA timezone from `project.timezone` (astro / schedules).
+  final String timezone;
+  /// Project geo for sunrise/sunset (`project.location`).
+  final double? locationLat;
+  final double? locationLon;
   final List<Floor> floors;
   /// KNX/Lutron devices NOT placed in any room. Visible in Systemen and
   /// favourites, but not in the room navigator.
@@ -653,6 +658,9 @@ class HouseConfig {
   const HouseConfig({
     required this.projectId,
     required this.projectName,
+    this.timezone = 'Europe/Amsterdam',
+    this.locationLat,
+    this.locationLon,
     required this.floors,
     this.globalDevices = const [],
     required this.cameras,
@@ -668,9 +676,13 @@ class HouseConfig {
         ? CurrentUser.fromJson(users.first as Map<String, dynamic>)
         : null;
     final project = (j['project'] as Map?) ?? const {};
+    final loc = project['location'] as Map?;
     return HouseConfig(
       projectId: (project['id'] as String?) ?? '',
       projectName: (project['name'] as String?) ?? '',
+      timezone: (project['timezone'] as String?) ?? 'Europe/Amsterdam',
+      locationLat: (loc?['lat'] as num?)?.toDouble(),
+      locationLon: (loc?['lon'] as num?)?.toDouble(),
       floors: ((j['floors'] as List?) ?? const [])
           .map((f) => Floor.fromJson(f as Map<String, dynamic>))
           .toList()
@@ -893,6 +905,9 @@ sealed class ScheduleAction {
     if (j['kind'] == 'scene') {
       return ScheduleSceneAction(sceneId: j['sceneId'] as String);
     }
+    if (j['kind'] == 'theme') {
+      return ScheduleThemeAction(toLight: j['toLight'] == true);
+    }
     final acts = ((j['actions'] as List?) ?? const [])
         .map((a) => SceneAction.fromJson(a as Map<String, dynamic>))
         .toList();
@@ -905,6 +920,14 @@ class ScheduleSceneAction extends ScheduleAction {
   const ScheduleSceneAction({required this.sceneId});
   @override
   Map<String, dynamic> toJson() => {'kind': 'scene', 'sceneId': sceneId};
+}
+
+/// Local tablet Auto theme edge — never persisted to house schedules API.
+class ScheduleThemeAction extends ScheduleAction {
+  final bool toLight;
+  const ScheduleThemeAction({required this.toLight});
+  @override
+  Map<String, dynamic> toJson() => {'kind': 'theme', 'toLight': toLight};
 }
 
 class ScheduleActionsAction extends ScheduleAction {

@@ -96,14 +96,14 @@ class CallService {
         handle: 'Intercom',
         type: 1, // 0 = audio, 1 = video
         duration: 45000,
-        missedCallNotification: const NotificationParams(
+        missedCallNotification: NotificationParams(
           showNotification: true,
           isShowCallback: false,
           subtitle: 'Gemist',
         ),
         extra: <String, dynamic>{'intercomId': ring.intercomId, 'ts': ring.ts},
         headers: <String, dynamic>{'platform': 'luxe-knx'},
-        android: const AndroidParams(
+        android: AndroidParams(
           isCustomNotification: true,
           isShowLogo: false,
           ringtonePath: 'system_ringtone_default',

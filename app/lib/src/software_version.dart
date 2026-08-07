@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
+import 'android_apk_updater.dart';
 import 'api.dart';
 
 /// App version embedded at build time via --dart-define=APP_VERSION=x.y.z+N.
@@ -69,6 +70,30 @@ class SoftwareVersionInfo {
   }
 }
 
+class GithubAndroidApkInfo {
+  const GithubAndroidApkInfo({
+    required this.available,
+    required this.name,
+    required this.sizeBytes,
+    required this.downloadPath,
+  });
+
+  final bool available;
+  final String name;
+  final int sizeBytes;
+  final String downloadPath;
+
+  factory GithubAndroidApkInfo.fromJson(Map<String, dynamic> j) {
+    return GithubAndroidApkInfo(
+      available: j['available'] == true,
+      name: (j['name'] as String?)?.trim() ?? 'update.apk',
+      sizeBytes: j['sizeBytes'] is num ? (j['sizeBytes'] as num).toInt() : 0,
+      downloadPath:
+          (j['downloadPath'] as String?)?.trim() ?? '/api/app/android.apk',
+    );
+  }
+}
+
 class GithubLatestInfo {
   const GithubLatestInfo({
     required this.version,
@@ -76,6 +101,7 @@ class GithubLatestInfo {
     required this.build,
     required this.tag,
     required this.htmlUrl,
+    this.androidApk,
   });
 
   final String version;
@@ -83,6 +109,7 @@ class GithubLatestInfo {
   final int? build;
   final String tag;
   final String? htmlUrl;
+  final GithubAndroidApkInfo? androidApk;
 
   SoftwareVersionInfo get asVersion => SoftwareVersionInfo(
         version: version,
@@ -92,12 +119,18 @@ class GithubLatestInfo {
 
   factory GithubLatestInfo.fromJson(Map<String, dynamic> j) {
     final base = SoftwareVersionInfo.fromJson(j);
+    GithubAndroidApkInfo? apk;
+    final rawApk = j['androidApk'];
+    if (rawApk is Map<String, dynamic>) {
+      apk = GithubAndroidApkInfo.fromJson(rawApk);
+    }
     return GithubLatestInfo(
       version: base.version,
       semver: base.semver,
       build: base.build,
       tag: (j['tag'] as String?)?.trim() ?? base.version,
       htmlUrl: (j['htmlUrl'] as String?)?.trim(),
+      androidApk: apk,
     );
   }
 }
@@ -109,6 +142,7 @@ class SoftwareVersionStatus {
     required this.latest,
     required this.updateAvailable,
     required this.clientStale,
+    required this.androidApkUpdateAvailable,
   });
 
   final SoftwareVersionInfo running;
@@ -116,6 +150,8 @@ class SoftwareVersionStatus {
   final bool updateAvailable;
   /// Client build older than what this server is serving (stale PWA cache).
   final bool clientStale;
+  /// Native Android: client older than GitHub latest AND an APK asset exists.
+  final bool androidApkUpdateAvailable;
 }
 
 /// Server software version status (null while loading / on error).
@@ -140,11 +176,19 @@ final softwareVersionStatusProvider =
     final client = SoftwareVersionInfo.parse(kAppVersion);
     final clientStale =
         kAppVersion != 'dev' && client.compareTo(running) < 0;
+    final apk = latest?.androidApk;
+    final androidApkUpdateAvailable = supportsAndroidApkUpdate &&
+        kAppVersion != 'dev' &&
+        latest != null &&
+        apk != null &&
+        apk.available &&
+        client.compareTo(latest.asVersion) < 0;
     return SoftwareVersionStatus(
       running: running,
       latest: latest,
       updateAvailable: updateAvailable,
       clientStale: clientStale,
+      androidApkUpdateAvailable: androidApkUpdateAvailable,
     );
   } catch (_) {
     return null;
@@ -158,12 +202,12 @@ final serverVersionProvider =
   return s?.running;
 });
 
-/// True when the user should see an update banner (stale PWA or newer on GitHub).
+/// True when the user should see an update banner (stale PWA, APK, or server).
 final softwareUpdateAvailableProvider = Provider.autoDispose<bool>((ref) {
   final async = ref.watch(softwareVersionStatusProvider);
   final s = async.asData?.value;
   if (s == null) return false;
-  return s.clientStale || s.updateAvailable;
+  return s.clientStale || s.androidApkUpdateAvailable || s.updateAvailable;
 });
 
 Future<void> openReleasePage(String? htmlUrl) async {
