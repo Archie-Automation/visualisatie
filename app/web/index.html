@@ -32,6 +32,14 @@
       margin: 0; padding: 0;
       width: 100%; height: 100%;
       background: #F5F0E8;
+      /* Reduce iOS Safari edge-swipe / overscroll stealing horizontal pans. */
+      overflow: hidden;
+      overscroll-behavior: none;
+      overscroll-behavior-x: none;
+    }
+    flt-glass-pane, flt-scene, flutter-view {
+      overscroll-behavior: none;
+      overscroll-behavior-x: none;
     }
     #flutter-loading {
       position: fixed;

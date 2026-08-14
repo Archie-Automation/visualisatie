@@ -30,6 +30,7 @@ import '../room_order.dart';
 import '../scene_order.dart';
 import '../system_order.dart';
 import '../system_category.dart';
+import 'app_nav.dart';
 import 'installer_nav.dart';
 
 /// Combined alarm state used for auto-navigation and chip display.
@@ -145,7 +146,7 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
         if (next == SatelPartitionState.entryDelay &&
             prev != SatelPartitionState.entryDelay) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) context.push('/alarm');
+            if (mounted) appOpen(context, '/alarm');
           });
         }
       },
@@ -189,8 +190,10 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
                 _FloorRoomsBlock(
                   floor: selectedFloor,
                   showTopBorder: false,
-                  onOpenRoom: (room) => context
-                      .push('/floor/${selectedFloor.id}/room/${room.id}'),
+                  onOpenRoom: (room) => appOpen(
+                        context,
+                        '/floor/${selectedFloor.id}/room/${room.id}',
+                      ),
                 ),
                 const SizedBox(height: 64),
               ],
@@ -237,7 +240,10 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
               child: _FloorRoomsBlock(
                 floor: selectedFloor,
                 onOpenRoom: (room) =>
-                    context.push('/floor/${selectedFloor.id}/room/${room.id}'),
+                    appOpen(
+                      context,
+                      '/floor/${selectedFloor.id}/room/${room.id}',
+                    ),
               ),
             ),
           const SliverToBoxAdapter(child: SizedBox(height: 64)),
@@ -897,7 +903,7 @@ Widget _header(
         ],
         _GlassIconButton(
           icon: Icons.settings_outlined,
-          onTap: () => context.push('/settings'),
+          onTap: () => appOpen(context, '/settings'),
         ),
         SizedBox(width: phone ? 8 : 10),
         _GlassIconButton(
@@ -1427,16 +1433,16 @@ class _SystemChipState extends ConsumerState<_SystemChip>
   void _open(BuildContext context) {
     final data = widget.data;
     if (data.name == 'Favorieten') {
-      context.push('/system/$kFavorietenSlug');
+      appOpen(context, '/system/$kFavorietenSlug');
       return;
     }
     if (data.name == 'Alarm') {
-      context.push('/alarm');
+      appOpen(context, '/alarm');
       return;
     }
     final sys = houseSystemByName(data.name);
     final route = sys?.routePath;
-    if (route != null) context.push(route);
+    if (route != null) appOpen(context, route);
   }
 
   /// Returns the count + worst urgency for active melding alerts.
@@ -1783,7 +1789,7 @@ class _HouseActivityHeaderButtons extends ConsumerWidget {
   void _openSystem(BuildContext context, String sysName) {
     final sys = houseSystemByName(sysName);
     final route = sys?.routePath;
-    if (route != null) context.push(route);
+    if (route != null) appOpen(context, route);
   }
 
   @override
@@ -1884,7 +1890,8 @@ class _RoomActivityBadges extends ConsumerWidget {
   static const _slotHeight = 36.0;
 
   void _openCategory(BuildContext context, String categorySlug) {
-    context.push(
+    appOpen(
+      context,
       '/floor/${floor.id}/room/${room.id}/category/$categorySlug',
     );
   }

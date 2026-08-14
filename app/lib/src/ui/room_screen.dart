@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../api.dart';
 import '../models.dart';
 import '../theme.dart';
 import '../user_favorite_shortcuts.dart';
+import 'app_nav.dart';
 import 'responsive.dart';
 import 'widgets/back_pill.dart';
 import 'widgets/device_widgets.dart';
@@ -61,7 +61,7 @@ class RoomScreen extends ConsumerWidget {
             room: room,
             cfg: cfg,
             headerHeight: context.roomStickyHeaderH,
-            onBack: () => context.pop(),
+            onBack: () => appBack(context),
           ),
         ),
 

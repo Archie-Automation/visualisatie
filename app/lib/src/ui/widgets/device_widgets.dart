@@ -3,7 +3,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../ac_mode_config.dart';
 import '../../api.dart';
@@ -16,6 +15,7 @@ import '../../models.dart';
 import '../../shading_subtype_glyph.dart';
 import '../../room_control_category.dart';
 import '../../theme.dart';
+import '../app_nav.dart';
 import '../responsive.dart';
 import 'camera_snapshot.dart';
 import 'confirm_dialog.dart';
@@ -2198,7 +2198,8 @@ class _ClimateTileState extends ConsumerState<ClimateTile> {
               children: [
                 DeviceTileIconBadge(
                   icon: Icons.thermostat_outlined,
-                  onTap: () => context.push(
+                  onTap: () => appOpen(
+                    context,
                     '/log/thermostat-${d.id}'
                     '?title=${Uri.encodeComponent(d.name)}'
                     '&mode=${isHeating ? 'heat' : 'cool'}',
@@ -2539,7 +2540,7 @@ class CameraTile extends ConsumerWidget {
     return GlassCard(
       padding: DeviceTileLayout.padding(context),
       radius: 26,
-      onTap: () => context.push('/camera/${device.id}'),
+      onTap: () => appOpen(context, '/camera/${device.id}'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -2592,7 +2593,7 @@ class IntercomTile extends ConsumerWidget {
     return GlassCard(
       padding: DeviceTileLayout.padding(context),
       radius: 26,
-      onTap: () => context.push('/intercom/${device.id}'),
+      onTap: () => appOpen(context, '/intercom/${device.id}'),
       shadows: LuxeShadows.brassGlow,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2609,7 +2610,7 @@ class IntercomTile extends ConsumerWidget {
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                 ),
                 FilledButton.tonal(
-                  onPressed: () => context.push('/intercom/${device.id}'),
+                  onPressed: () => appOpen(context, '/intercom/${device.id}'),
                   style: FilledButton.styleFrom(
                     backgroundColor: LuxeColors.ink,
                     foregroundColor: LuxeColors.onInk,

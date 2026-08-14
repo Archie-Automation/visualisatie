@@ -3,12 +3,12 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../api.dart';
 import '../camera_api.dart';
 import '../intercom/intercom_sip_providers.dart';
 import '../theme.dart';
+import 'app_nav.dart';
 import 'widgets/confirm_dialog.dart';
 import 'widgets/intercom_player.dart';
 import 'widgets/luxe_backdrop.dart';
@@ -125,7 +125,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
         leading: IconButton(
           icon: const Icon(Icons.close),
           tooltip: 'Sluiten',
-          onPressed: () => context.canPop() ? context.pop() : context.go('/'),
+          onPressed: () => appBack(context),
         ),
       ),
       body: LuxeBackdrop(
@@ -214,9 +214,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                               icon: Icons.call_end,
                               label: 'OPHANGEN',
                               color: LuxeColors.danger,
-                              onTap: () => context.canPop()
-                                  ? context.pop()
-                                  : context.go('/'),
+                              onTap: () => appBack(context),
                             ),
                             _TalkButton(
                               active: _talking,

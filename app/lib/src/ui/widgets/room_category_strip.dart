@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../room_control_category.dart';
 import '../../theme.dart';
+import '../app_nav.dart';
 import '../responsive.dart';
 import 'device_tile_shell.dart';
 import 'heater_icon.dart';
@@ -44,7 +44,8 @@ class RoomCategoryStrip extends StatelessWidget {
           final s = segments[i];
           return _SegmentChip(
             segment: s,
-            onTap: () => context.push(
+            onTap: () => appOpen(
+              context,
               '/floor/$floorId/room/$roomId/category/${s.slug}',
             ),
           );

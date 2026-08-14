@@ -1,11 +1,11 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../log_api.dart';
 import '../theme.dart';
+import 'app_nav.dart';
 import 'responsive.dart';
 import 'widgets/back_pill.dart';
 import 'widgets/function_screen_header.dart';
@@ -141,7 +141,7 @@ class _LogScreenState extends ConsumerState<LogScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             FunctionScreenHeader(
-              onBack: () => context.pop(),
+              onBack: () => appBack(context),
               title: title,
               trailing: HeaderIconButton(
                 icon: Icons.refresh_rounded,

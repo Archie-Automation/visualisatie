@@ -3,12 +3,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../api.dart';
 import '../../media_api.dart';
 import '../../models.dart';
 import '../../theme.dart';
+import '../app_nav.dart';
 import '../responsive.dart';
 import 'device_control_panel.dart';
 import 'device_tile_shell.dart';
@@ -125,7 +125,7 @@ class MediaTile extends ConsumerWidget {
             DeviceTileLayout.headerRow(
               context: context,
               leading: GestureDetector(
-                onTap: () => context.push('/media/${device.id}'),
+                onTap: () => appOpen(context, '/media/${device.id}'),
                 behavior: HitTestBehavior.opaque,
                 child: _Artwork(
                   state: state,
@@ -133,7 +133,7 @@ class MediaTile extends ConsumerWidget {
                 ),
               ),
               content: GestureDetector(
-                onTap: () => context.push('/media/${device.id}'),
+                onTap: () => appOpen(context, '/media/${device.id}'),
                 behavior: HitTestBehavior.opaque,
                 child: _MediaMetadataGate(
                   state: state,
