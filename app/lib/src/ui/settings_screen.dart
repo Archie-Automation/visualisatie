@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
@@ -13,6 +12,7 @@ import '../software_version.dart';
 import '../theme.dart';
 import '../theme_mode.dart';
 import '../theme_auto_schedule.dart';
+import 'app_nav.dart';
 import 'schedule_editor_sheet.dart';
 import 'widgets/glass_card.dart';
 import 'widgets/luxe_backdrop.dart';
@@ -120,11 +120,7 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   static void _popSettings(BuildContext context) {
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go('/');
-    }
+    appBack(context);
   }
 
   Widget _header(BuildContext ctx, AuthState auth) {

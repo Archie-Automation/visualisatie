@@ -6,11 +6,11 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../satel_api.dart';
 import '../../theme.dart';
 import '../alarm_screen.dart' show satelDeviceConfig;
+import '../app_nav.dart';
 
 class SatelRoomSensors extends ConsumerWidget {
   const SatelRoomSensors({super.key, required this.roomId});
@@ -28,7 +28,7 @@ class SatelRoomSensors extends ConsumerWidget {
     final anyViolated = zones.any((z) => z.violated);
 
     return GestureDetector(
-      onTap: () => context.push('/alarm'),
+      onTap: () => appOpen(context, '/alarm'),
       child: Container(
         margin: EdgeInsets.only(top: 4, bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),

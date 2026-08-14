@@ -3,10 +3,10 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../api.dart';
 import '../../theme.dart';
+import '../app_nav.dart';
 
 /// Sits above the whole app. When an `intercom.ring` event comes in over
 /// the bus WebSocket, slides in from the top, loops a haptic heartbeat and
@@ -150,7 +150,7 @@ class _Banner extends ConsumerWidget {
                   color: LuxeColors.brass,
                   onTap: () {
                     ref.read(intercomRingProvider.notifier).clear();
-                    context.push('/intercom/${ring.intercomId}');
+                    appOpen(context, '/intercom/${ring.intercomId}');
                   },
                 ),
               ],

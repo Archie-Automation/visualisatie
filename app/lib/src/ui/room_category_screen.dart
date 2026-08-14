@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../api.dart';
 import '../models.dart';
 import '../room_control_category.dart';
 import '../theme.dart';
 import '../user_favorite_shortcuts.dart';
+import 'app_nav.dart';
 import 'responsive.dart';
 import 'widgets/device_widgets.dart';
 import 'widgets/function_screen_header.dart';
@@ -50,8 +50,13 @@ class RoomCategoryScreen extends ConsumerWidget {
                 }
               }
             }
+            void backToRoom() => appBack(
+                  context,
+                  fallback: '/floor/$floorId/room/$roomId',
+                );
+
             if (foundFloor == null || foundRoom == null) {
-              return _InvalidCategoryBody(onBack: () => context.pop());
+              return _InvalidCategoryBody(onBack: backToRoom);
             }
 
             // Resolve slug: fixed category OR universal__<deviceId>.
@@ -64,7 +69,7 @@ class RoomCategoryScreen extends ConsumerWidget {
                 floor: foundFloor,
                 room: foundRoom,
                 segment: RoomSegment.fromCategory(category, devices),
-                onBack: () => context.pop(),
+                onBack: backToRoom,
               );
             }
 
@@ -74,14 +79,14 @@ class RoomCategoryScreen extends ConsumerWidget {
                   .where((d) => d.id == deviceId)
                   .firstOrNull;
               if (device == null) {
-                return _InvalidCategoryBody(onBack: () => context.pop());
+                return _InvalidCategoryBody(onBack: backToRoom);
               }
               return _CategoryBody(
                 cfg: cfg,
                 floor: foundFloor,
                 room: foundRoom,
                 segment: RoomSegment.fromUniversal(device),
-                onBack: () => context.pop(),
+                onBack: backToRoom,
               );
             }
 
@@ -91,18 +96,18 @@ class RoomCategoryScreen extends ConsumerWidget {
                   .where((d) => d.id == deviceId)
                   .firstOrNull;
               if (device == null) {
-                return _InvalidCategoryBody(onBack: () => context.pop());
+                return _InvalidCategoryBody(onBack: backToRoom);
               }
               return _CategoryBody(
                 cfg: cfg,
                 floor: foundFloor,
                 room: foundRoom,
                 segment: RoomSegment.fromMelding(device),
-                onBack: () => context.pop(),
+                onBack: backToRoom,
               );
             }
 
-            return _InvalidCategoryBody(onBack: () => context.pop());
+            return _InvalidCategoryBody(onBack: backToRoom);
           },
         ),
       ),

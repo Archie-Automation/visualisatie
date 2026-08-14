@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api.dart';
 import '../satel_api.dart';
 import '../theme.dart';
+import 'app_nav.dart';
 import 'responsive.dart';
 import 'widgets/back_pill.dart';
 import 'widgets/luxe_backdrop.dart';
@@ -193,7 +194,7 @@ class _AlarmBodyState extends ConsumerState<_AlarmBody> {
 
     return Column(
       children: [
-        _AlarmHeader(onBack: () => Navigator.of(context).maybePop()),
+        _AlarmHeader(onBack: () => appBack(context)),
         Expanded(
           child: SingleChildScrollView(
             padding: EdgeInsets.symmetric(horizontal: hp),

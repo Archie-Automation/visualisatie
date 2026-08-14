@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../api.dart';
 import '../media_api.dart';
@@ -9,6 +8,7 @@ import '../room_control_category.dart';
 import '../system_category.dart';
 import '../theme.dart';
 import '../user_favorite_shortcuts.dart';
+import 'app_nav.dart';
 import 'responsive.dart';
 import 'widgets/device_widgets.dart';
 import 'widgets/function_screen_header.dart';
@@ -31,11 +31,11 @@ class SystemScreen extends ConsumerWidget {
           error: (e, _) => Center(child: Text('$e')),
           data: (cfg) {
             if (slug == kFavorietenSlug) {
-              return _FavorietenBody(cfg: cfg, onBack: () => context.pop());
+              return _FavorietenBody(cfg: cfg, onBack: () => appBack(context));
             }
             final system = houseSystemBySlug(slug);
             if (system == null) {
-              return _InvalidBody(onBack: () => context.pop());
+              return _InvalidBody(onBack: () => appBack(context));
             }
             final devices = devicesForHouseSystem(cfg, system);
             return _SystemDevicesBody(
@@ -44,7 +44,7 @@ class SystemScreen extends ConsumerWidget {
               title: system.name,
               icon: system.icon,
               devices: devices,
-              onBack: () => context.pop(),
+              onBack: () => appBack(context),
             );
           },
         ),
@@ -316,7 +316,7 @@ class _FavoriteShortcutRow extends StatelessWidget {
     return GlassCard(
       radius: 20,
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      onTap: () => context.push(path),
+      onTap: () => appOpen(context, path),
       child: Row(
         children: [
           Icon(

@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 
 import '../api.dart';
 import '../camera_api.dart';
 import '../kiosk_system_ui.dart';
 import '../models.dart';
 import '../theme.dart';
+import 'app_nav.dart';
 import 'widgets/camera_snapshot.dart';
 import 'widgets/camera_stream_body.dart';
 import 'widgets/luxe_backdrop.dart';
@@ -115,7 +115,7 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
                 deviceName: selectedDevice.name,
                 onBack: () {
                   _restoreSystemUi();
-                  context.pop();
+                  appBack(context);
                 },
               );
             }
@@ -129,7 +129,7 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
                 elevation: 0,
                 leading: IconButton(
                   icon: Icon(Icons.arrow_back_rounded),
-                  onPressed: () => context.pop(),
+                  onPressed: () => appBack(context),
                 ),
                 title: Text(
                   selectedDevice.name,
