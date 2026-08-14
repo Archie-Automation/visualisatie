@@ -80,6 +80,16 @@
     </div>
   </div>
 
+  <script>
+    // Before Flutter loads: turn history.pushState into replaceState so iOS
+    // Safari edge-swipe cannot walk a stack of in-app routes.
+    (function () {
+      var replace = history.replaceState.bind(history);
+      history.pushState = function (state, title, url) {
+        return replace(state, title, url);
+      };
+    })();
+  </script>
   <script src="flutter_bootstrap.js" async></script>
   <script>
     // Verberg de HTML-splash zodra Flutter het overneemt
