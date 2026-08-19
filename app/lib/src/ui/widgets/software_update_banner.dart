@@ -2,24 +2,74 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../android_apk_updater.dart';
 import '../../software_version.dart';
 import '../../theme.dart';
 import 'reload_app_stub.dart'
     if (dart.library.html) 'reload_app_web.dart' as reload;
 
-/// Banner: stale PWA (reload) and/or newer release on GitHub (update server).
-class SoftwareUpdateBanner extends ConsumerWidget {
+/// Banner: stale PWA (reload), Android APK install, or newer GitHub release.
+class SoftwareUpdateBanner extends ConsumerStatefulWidget {
   const SoftwareUpdateBanner({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SoftwareUpdateBanner> createState() =>
+      _SoftwareUpdateBannerState();
+}
+
+class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
+  bool _installing = false;
+  double? _progress;
+  String? _error;
+
+  Future<void> _installApk(GithubAndroidApkInfo? apk) async {
+    if (_installing) return;
+    setState(() {
+      _installing = true;
+      _progress = 0;
+      _error = null;
+    });
+    final result = await downloadAndInstallAndroidApk(
+      fileName: apk?.name,
+      onProgress: (p) {
+        if (mounted) setState(() => _progress = p);
+      },
+    );
+    if (!mounted) return;
+    setState(() {
+      _installing = false;
+      _progress = result.ok ? 1 : null;
+      _error = result.ok ? null : _apkInstallErrorMessage(result.error);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final outdated = ref.watch(softwareUpdateAvailableProvider);
     if (!outdated) return const SizedBox.shrink();
 
     final status = ref.watch(softwareVersionStatusProvider).asData?.value;
     if (status == null) return const SizedBox.shrink();
 
-    // Prefer reload when the page itself is stale; else GitHub update notice.
+    // Native tablet: APK install beats the web-only "Vernieuwen" path.
+    if (status.androidApkUpdateAvailable) {
+      final latest = status.latest;
+      final ver = latest?.tag ?? latest?.version ?? '';
+      final message = _error ??
+          (_installing
+              ? 'App-update downloaden… Bevestig daarna de installatie.'
+              : (ver.isEmpty
+                  ? 'Nieuwe app-versie beschikbaar.'
+                  : 'Nieuwe app-versie ($ver) beschikbaar.'));
+      return _Banner(
+        message: message,
+        actionLabel: _installing ? null : 'Installeren',
+        onAction:
+            _installing ? null : () => _installApk(latest?.androidApk),
+        progress: _installing ? (_progress ?? 0) : null,
+      );
+    }
+
     if (status.clientStale) {
       return _Banner(
         message: status.running.version.isEmpty
@@ -44,16 +94,36 @@ class SoftwareUpdateBanner extends ConsumerWidget {
   }
 }
 
+String _apkInstallErrorMessage(String? code) {
+  switch (code) {
+    case 'install_permission_denied':
+      return 'Sta “apps uit onbekende bronnen” toe voor Luxe KNX en tik opnieuw op Installeren.';
+    case 'apk_too_small':
+    case 'apk_missing':
+      return 'De gedownloade APK is ongeldig. Controleer of de GitHub Release een .apk heeft.';
+    case 'install_intent_failed':
+    case 'install_failed':
+      return 'Android kon de installatie niet starten.';
+    default:
+      if (code != null && code.startsWith('download_http_')) {
+        return 'Download mislukt ($code). Staat er een .apk op de GitHub Release?';
+      }
+      return 'Update mislukt${code == null || code.isEmpty ? '.' : ': $code'}';
+  }
+}
+
 class _Banner extends StatelessWidget {
   const _Banner({
     required this.message,
     this.actionLabel,
     this.onAction,
+    this.progress,
   });
 
   final String message;
   final String? actionLabel;
   final VoidCallback? onAction;
+  final double? progress;
 
   @override
   Widget build(BuildContext context) {
@@ -63,36 +133,53 @@ class _Banner extends StatelessWidget {
         bottom: false,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.system_update_alt_rounded,
-                color: LuxeColors.brass,
-                size: 20,
-              ),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  message,
-                  style: TextStyle(
-                    color: LuxeColors.inkSoft,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    height: 1.3,
+              Row(
+                children: [
+                  Icon(
+                    Icons.system_update_alt_rounded,
+                    color: LuxeColors.brass,
+                    size: 20,
                   ),
-                ),
-              ),
-              if (actionLabel != null && onAction != null)
-                TextButton(
-                  onPressed: onAction,
-                  child: Text(
-                    actionLabel!,
-                    style: TextStyle(
-                      color: LuxeColors.brass,
-                      fontWeight: FontWeight.w700,
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      message,
+                      style: TextStyle(
+                        color: LuxeColors.inkSoft,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        height: 1.3,
+                      ),
                     ),
                   ),
+                  if (actionLabel != null && onAction != null)
+                    TextButton(
+                      onPressed: onAction,
+                      child: Text(
+                        actionLabel!,
+                        style: TextStyle(
+                          color: LuxeColors.brass,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              if (progress != null) ...[
+                SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: LinearProgressIndicator(
+                    value: progress! > 0 && progress! < 1 ? progress : null,
+                    minHeight: 3,
+                    color: LuxeColors.brass,
+                    backgroundColor: LuxeColors.lineSoft,
+                  ),
                 ),
+              ],
             ],
           ),
         ),
