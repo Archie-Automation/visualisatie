@@ -685,8 +685,9 @@ class _Artwork extends StatelessWidget {
       child = Image.network(
         art,
         fit: BoxFit.cover,
+        gaplessPlayback: true,
+        filterQuality: FilterQuality.low,
         errorBuilder: (_, __, ___) => _placeholder(),
-        loadingBuilder: (ctx, ch, prog) => prog == null ? ch : _placeholder(),
       );
     } else {
       child = _placeholder();
@@ -1175,9 +1176,9 @@ class _PresetCardState extends State<_PresetCard> {
               width: 52,
               height: 52,
               fit: BoxFit.cover,
+              gaplessPlayback: true,
+              filterQuality: FilterQuality.low,
               errorBuilder: (_, __, ___) => _placeholder,
-              loadingBuilder: (_, child, prog) =>
-                  prog == null ? child : _placeholder,
             )
           : _placeholder,
     );

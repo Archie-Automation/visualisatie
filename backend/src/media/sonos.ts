@@ -255,32 +255,17 @@ export class SonosDriver {
           : `${sonosBase}${rawArt.startsWith("/") ? "" : "/"}${rawArt}`
         : undefined;
       // Proxy all Sonos image URLs through the backend to avoid CORS in browsers.
-      let albumArt = rawAbsArt
-        ? proxyArt(rawAbsArt)
-        : undefined;
-
-      // If no art was provided by the track, try Sonos's built-in /getaa endpoint.
-      // Only do this for Sonos-service/TuneIn streams where Sonos has the logo cached.
-      // Skip for group-member URIs (x-rincon:) and for direct HTTP/AAC streams —
-      // those return 0 bytes from /getaa, which pollutes the URL with a dead link
-      // and prevents the Flutter app's preset-name fallback from working.
-      const isGroupMemberUri = track.uri
-        ? /^x-rincon:|^x-rincon-stream:/i.test(track.uri)
-        : false;
-      const isSonosServiceUri = track.uri
-        ? /^x-sonosapi-stream:|^x-sonos-spotify:|^x-sonosapi-hls-static:|^x-sonos-http:/i.test(track.uri)
-        : false;
-      if (!albumArt && track.uri && transport !== "stopped" && !isGroupMemberUri && isSonosServiceUri) {
-        albumArt = proxyArt(
-          `${sonosBase}/getaa?s=1&u=${encodeURIComponent(track.uri)}`
-        );
-      }
+      // Do not speculate /getaa — empty or hanging responses block preset-art
+      // fallback in the client (albumArt wins over preset matching).
+      let albumArt =
+        transport === "stopped" || !rawAbsArt
+          ? undefined
+          : proxyArt(rawAbsArt);
 
       if (transport === "stopped") {
         title = undefined;
         artist = undefined;
         album = undefined;
-        albumArt = undefined;
       } else if (transport === "buffering") {
         title = undefined;
         artist = undefined;

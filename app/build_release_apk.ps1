@@ -4,7 +4,7 @@
 #   .\build_release_apk.ps1 -ApiBase http://192.168.1.50:4000
 
 param(
-    [string]$ApiBase = "http://192.168.1.20:4000"
+    [string]$ApiBase = "http://192.168.1.50:4000"
 )
 
 $ErrorActionPreference = "Stop"

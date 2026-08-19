@@ -223,6 +223,45 @@ function parseIntRange(
   return Math.min(max, Math.max(min, Math.floor(n)));
 }
 
+/** Sonos/TuneIn sometimes omit or mangle Content-Type; sniff magic bytes. */
+function sniffImageContentType(
+  buf: ArrayBuffer,
+  declared: string
+): string | null {
+  const ct = declared.split(";")[0]?.trim().toLowerCase() ?? "";
+  if (ct.startsWith("image/")) return ct;
+  const u = new Uint8Array(buf);
+  if (u.length >= 3 && u[0] === 0xff && u[1] === 0xd8 && u[2] === 0xff) {
+    return "image/jpeg";
+  }
+  if (
+    u.length >= 8 &&
+    u[0] === 0x89 &&
+    u[1] === 0x50 &&
+    u[2] === 0x4e &&
+    u[3] === 0x47
+  ) {
+    return "image/png";
+  }
+  if (
+    u.length >= 12 &&
+    u[0] === 0x52 &&
+    u[1] === 0x49 &&
+    u[2] === 0x46 &&
+    u[3] === 0x46 &&
+    u[8] === 0x57 &&
+    u[9] === 0x45 &&
+    u[10] === 0x42 &&
+    u[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+  if (u.length >= 6 && u[0] === 0x47 && u[1] === 0x49 && u[2] === 0x46) {
+    return "image/gif";
+  }
+  return null;
+}
+
 export function buildRouter(
   bus: KnxBus,
   ws: WsHub,
@@ -326,16 +365,23 @@ export function buildRouter(
       return res.status(400).send("bad url");
     }
     try {
-      const upstream = await fetch(u);
+      const upstream = await fetch(u, {
+        signal: AbortSignal.timeout(4000),
+        headers: { "User-Agent": "Linux UPnP/1.0 Sonos/80.0-00000" }
+      });
       if (!upstream.ok) {
         return res.status(404).send("not found");
       }
       const ct = upstream.headers.get("content-type") ?? "";
       const buf = await upstream.arrayBuffer();
-      if (buf.byteLength === 0 || !ct.startsWith("image/")) {
+      if (buf.byteLength === 0 || buf.byteLength > 2_000_000) {
         return res.status(404).send("no image");
       }
-      res.setHeader("Content-Type", ct);
+      const sniffed = sniffImageContentType(buf, ct);
+      if (!sniffed) {
+        return res.status(404).send("no image");
+      }
+      res.setHeader("Content-Type", sniffed);
       res.setHeader("Cache-Control", "public, max-age=3600");
       res.send(Buffer.from(buf));
     } catch {
