@@ -146,6 +146,57 @@ fi
 
 $DOCKER compose --env-file .env up -d --build
 
+# ── Update-agent (server bijwerken vanaf de tablet) ─────────────────────────
+install_update_agent() {
+  agent="$ROOT/docker/update-agent.sh"
+  if [ ! -f "$agent" ]; then
+    warn "update-agent.sh ontbreekt — tablet-update is niet beschikbaar"
+    return
+  fi
+  chmod +x "$agent" || true
+  if ! command -v systemctl >/dev/null 2>&1; then
+    warn "systemctl ontbreekt — update-agent niet als service gezet"
+    return
+  fi
+  if ! command -v sudo >/dev/null 2>&1 && [ "$(id -u)" -ne 0 ]; then
+    warn "Geen sudo — update-agent niet als service gezet"
+    return
+  fi
+  SUDO=""
+  if [ "$(id -u)" -ne 0 ]; then
+    SUDO="sudo"
+  fi
+  owner="$(stat -c '%U' "$ROOT" 2>/dev/null || echo root)"
+  extra_groups=""
+  if getent group docker >/dev/null 2>&1; then
+    extra_groups="SupplementaryGroups=docker"
+  fi
+  unit=/etc/systemd/system/archie-os-update-agent.service
+  $SUDO tee "$unit" >/dev/null <<EOF
+[Unit]
+Description=Archie OS GitHub update agent
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$owner
+$extra_groups
+WorkingDirectory=$ROOT
+Environment=HOME=$(getent passwd "$owner" 2>/dev/null | cut -d: -f6 || echo /root)
+ExecStart=/bin/sh $agent
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  $SUDO systemctl daemon-reload
+  $SUDO systemctl enable --now archie-os-update-agent.service
+  ok "Update-agent actief (server bijwerken vanaf de tablet, als admin)"
+}
+install_update_agent
+
 bold "=== Klaar ==="
 echo ""
 echo "  Open op telefoon of PC (zelfde wifi als de NUC):"
@@ -167,6 +218,6 @@ echo "  Controleren of alles draait:"
 echo "      curl -s http://127.0.0.1:4000/api/health"
 echo "      curl -s http://127.0.0.1:4000/api/version"
 echo ""
-echo "  Later updaten (nieuwe versie op deze machine):"
+echo "  Later updaten: in de app (admin) Server bijwerken, of:"
 echo "      cd docker && ./install.sh"
 echo ""

@@ -41,6 +41,7 @@ import {
   getGithubLatest,
   isUpdateAvailableOnGithub
 } from "./githubLatest";
+import { readServerUpdateStatus, requestServerUpdate } from "./serverUpdate";
 import {
   cameraPath,
   collectCameras,
@@ -279,6 +280,7 @@ export function buildRouter(
     const force = req.query.refresh === "1" || req.query.refresh === "true";
     const latest = await getGithubLatest(force);
     const updateAvailable = isUpdateAvailableOnGithub(latest);
+    const serverUpdate = readServerUpdateStatus();
     res.json({
       version: appVersionInfo.version,
       semver: appVersionInfo.semver,
@@ -303,7 +305,12 @@ export function buildRouter(
               : null
           }
         : null,
-      updateAvailable
+      updateAvailable,
+      serverUpdate: {
+        agentReady: serverUpdate.agentReady,
+        state: serverUpdate.state,
+        message: serverUpdate.message
+      }
     });
   });
 
@@ -462,6 +469,22 @@ export function buildRouter(
     res.on("finish", () => {
       scheduleAdminProcessRestart();
     });
+  });
+
+  r.get("/admin/update", requireAuth, requireAdmin, (_req, res) => {
+    res.json(readServerUpdateStatus());
+  });
+
+  r.post("/admin/update", requireAuth, requireAdmin, (req: AuthedRequest, res) => {
+    const result = requestServerUpdate(req.user?.username || "admin");
+    if (!result.ok) {
+      res.status(result.status).json({
+        error: result.error,
+        message: result.message
+      });
+      return;
+    }
+    res.json({ ok: true, ...result.status });
   });
 
   r.get("/installer/house", requireAuth, requireAdmin, (_req, res) => {
