@@ -92,6 +92,9 @@ class MainActivity : FlutterActivity(), SensorEventListener {
                         result.error("install_failed", e.message, null)
                     }
                 }
+                "appVersion" -> {
+                    result.success(currentAppVersion())
+                }
                 else -> result.notImplemented()
             }
         }
@@ -127,6 +130,20 @@ class MainActivity : FlutterActivity(), SensorEventListener {
         }
         startActivity(intent)
         return true
+    }
+
+    private fun currentAppVersion(): Map<String, Any> {
+        val p = packageManager.getPackageInfo(packageName, 0)
+        val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            p.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            p.versionCode.toLong()
+        }
+        return mapOf(
+            "versionName" to (p.versionName ?: ""),
+            "versionCode" to code,
+        )
     }
 
     private fun wakeScreen() {

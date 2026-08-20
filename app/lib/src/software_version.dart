@@ -164,6 +164,7 @@ class SoftwareVersionStatus {
     required this.clientStale,
     required this.androidApkUpdateAvailable,
     this.serverUpdate,
+    this.clientVersion,
   });
 
   final SoftwareVersionInfo running;
@@ -174,6 +175,8 @@ class SoftwareVersionStatus {
   /// Native Android: client older than GitHub latest AND an APK asset exists.
   final bool androidApkUpdateAvailable;
   final ServerUpdateSnapshot? serverUpdate;
+  /// Installed app version used for APK comparison (package or dart-define).
+  final SoftwareVersionInfo? clientVersion;
 }
 
 /// Server software version status (null while loading / on error).
@@ -200,12 +203,18 @@ final softwareVersionStatusProvider =
     if (rawSu is Map<String, dynamic>) {
       serverUpdate = ServerUpdateSnapshot.fromJson(rawSu);
     }
-    final client = SoftwareVersionInfo.parse(kAppVersion);
-    final clientStale =
-        kAppVersion != 'dev' && client.compareTo(running) < 0;
+    final installed = await readInstalledAndroidVersion();
+    final clientRaw = (installed != null && installed.isNotEmpty)
+        ? installed
+        : (kAppVersion == 'dev' && supportsAndroidApkUpdate
+            ? '0.0.0+0'
+            : kAppVersion);
+    final client = SoftwareVersionInfo.parse(clientRaw);
+    final clientStale = clientRaw != 'dev' &&
+        client.version != '0.0.0+0' &&
+        client.compareTo(running) < 0;
     final apk = latest?.androidApk;
     final androidApkUpdateAvailable = supportsAndroidApkUpdate &&
-        kAppVersion != 'dev' &&
         latest != null &&
         apk != null &&
         apk.available &&
@@ -217,6 +226,7 @@ final softwareVersionStatusProvider =
       clientStale: clientStale,
       androidApkUpdateAvailable: androidApkUpdateAvailable,
       serverUpdate: serverUpdate,
+      clientVersion: client,
     );
   } catch (_) {
     return null;

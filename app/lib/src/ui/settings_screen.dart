@@ -1305,7 +1305,7 @@ class _VersionFooter extends ConsumerWidget {
     final auth = ref.watch(authProvider);
     final status = ref.watch(softwareVersionStatusProvider).asData?.value;
     final server = status?.running.version;
-    final app = kAppVersion;
+    final app = status?.clientVersion?.version ?? kAppVersion;
     final line = auth.isAdmin && server != null && server.isNotEmpty
         ? 'app $app · server $server'
         : 'versie $app';
