@@ -338,20 +338,28 @@ class _FavDeviceWrap extends ConsumerWidget {
                           : LuxeColors.inkSoft,
                     ),
                     const SizedBox(width: 7),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 180),
-                      child: Text(
-                        isFav ? 'Favoriet' : 'Toevoegen',
-                        key: ValueKey(isFav),
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: isFav
-                              ? LuxeColors.brass
-                              : LuxeColors.inkSoft,
-                          letterSpacing: 0.3,
+                    Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        ExcludeSemantics(
+                          child: Text(
+                            'Toevoegen',
+                            style: _favPillLabelStyle(Colors.transparent),
+                          ),
                         ),
-                      ),
+                        ExcludeSemantics(
+                          child: Text(
+                            'Favoriet',
+                            style: _favPillLabelStyle(Colors.transparent),
+                          ),
+                        ),
+                        Text(
+                          isFav ? 'Favoriet' : 'Toevoegen',
+                          style: _favPillLabelStyle(
+                            isFav ? LuxeColors.brass : LuxeColors.inkSoft,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -363,3 +371,11 @@ class _FavDeviceWrap extends ConsumerWidget {
     );
   }
 }
+
+TextStyle _favPillLabelStyle(Color color) => TextStyle(
+      fontSize: 13,
+      fontWeight: FontWeight.w600,
+      color: color,
+      letterSpacing: 0.3,
+      height: 1.2,
+    );
