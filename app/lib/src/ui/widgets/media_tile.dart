@@ -286,15 +286,120 @@ class MediaTile extends ConsumerWidget {
 /*  Full-screen player                                                   */
 /* --------------------------------------------------------------------- */
 
-class MediaPlayerScreen extends ConsumerWidget {
+class MediaPlayerScreen extends ConsumerStatefulWidget {
   const MediaPlayerScreen({super.key, required this.deviceId});
   final String deviceId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<MediaPlayerScreen> createState() => _MediaPlayerScreenState();
+}
+
+class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
+  static const _pendingMin = Duration(milliseconds: 700);
+  static const _pendingMax = Duration(seconds: 8);
+
+  MediaPreset? _pendingPreset;
+  String? _uriWhenQueued;
+  DateTime? _pendingSince;
+  Timer? _pendingTimer;
+  Timer? _pendingMinTimer;
+
+  String get deviceId => widget.deviceId;
+
+  @override
+  void dispose() {
+    _pendingTimer?.cancel();
+    _pendingMinTimer?.cancel();
+    super.dispose();
+  }
+
+  void _clearPending() {
+    _pendingTimer?.cancel();
+    _pendingMinTimer?.cancel();
+    _pendingTimer = null;
+    _pendingMinTimer = null;
+    if (_pendingPreset == null) return;
+    setState(() {
+      _pendingPreset = null;
+      _uriWhenQueued = null;
+      _pendingSince = null;
+    });
+  }
+
+  bool _presetLooksLive(MediaState state, MediaPreset p) {
+    final uri = state.currentUri ?? '';
+    if (p.uri != null && p.uri!.isNotEmpty && uri == p.uri) return true;
+    if (_uriWhenQueued != null &&
+        uri.isNotEmpty &&
+        uri != _uriWhenQueued) {
+      return true;
+    }
+    final name = p.name.toLowerCase().trim();
+    if (name.isEmpty) return false;
+    final title = state.cleanTitle?.toLowerCase().trim();
+    if (title == name) return true;
+    final source = state.source?.toLowerCase() ?? '';
+    return source.contains(name);
+  }
+
+  void _syncPending(MediaState state) {
+    final p = _pendingPreset;
+    final since = _pendingSince;
+    if (p == null || since == null) return;
+    if (DateTime.now().difference(since) < _pendingMin) return;
+    if (!_presetLooksLive(state, p)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final live = ref.read(mediaStateProvider)[deviceId] ?? state;
+      final still = _pendingPreset;
+      final t0 = _pendingSince;
+      if (still == null || t0 == null) return;
+      if (DateTime.now().difference(t0) < _pendingMin) return;
+      if (_presetLooksLive(live, still)) _clearPending();
+    });
+  }
+
+  Future<void> _playPreset(MediaPreset p, MediaState state) async {
+    if (_pendingPreset != null) return;
+    setState(() {
+      _pendingPreset = p;
+      _uriWhenQueued = state.currentUri;
+      _pendingSince = DateTime.now();
+    });
+    _pendingTimer?.cancel();
+    _pendingMinTimer?.cancel();
+    _pendingTimer = Timer(_pendingMax, () {
+      if (mounted) _clearPending();
+    });
+    _pendingMinTimer = Timer(_pendingMin, () {
+      if (!mounted) return;
+      final live = ref.read(mediaStateProvider)[deviceId];
+      final p = _pendingPreset;
+      if (live != null && p != null && _presetLooksLive(live, p)) {
+        _clearPending();
+      }
+    });
+    try {
+      await ref.read(mediaApiProvider).playPreset(deviceId, p);
+    } catch (_) {
+      if (mounted) _clearPending();
+    }
+  }
+
+  String? _presetArtUrl(MediaPreset? p) {
+    final raw = p?.image;
+    if (raw == null || raw.isEmpty) return null;
+    if (raw.startsWith('/')) return '$apiBase$raw';
+    return raw;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(mediaStateProvider)[deviceId] ??
         MediaState.offline(deviceId);
     final api = ref.read(mediaApiProvider);
+    _syncPending(state);
+    final pending = _pendingPreset;
     final active = state.online && state.transport.isActive;
     final cfg = ref.watch(configProvider).value;
 
@@ -420,14 +525,26 @@ class MediaPlayerScreen extends ConsumerWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    _Artwork(state: state, size: artSize, hero: true),
+                    _Artwork(
+                      state: state,
+                      size: artSize,
+                      hero: true,
+                      artOverride: _presetArtUrl(pending),
+                    ),
                     SizedBox(height: titleGap),
                     _MediaMetadataGate(
                       state: state,
-                      builder: (ctx, reveal) => Column(
+                      builder: (ctx, reveal) {
+                        final title = pending != null
+                            ? pending.name
+                            : state.headline(revealMetadata: reveal);
+                        final meta = pending != null
+                            ? 'Starten…'
+                            : state.metaLine(revealMetadata: reveal);
+                        return Column(
                         children: [
                           Text(
-                            state.headline(revealMetadata: reveal),
+                            title,
                             textAlign: TextAlign.center,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -441,7 +558,7 @@ class MediaPlayerScreen extends ConsumerWidget {
                           ),
                           const SizedBox(height: 6),
                           Text(
-                            state.metaLine(revealMetadata: reveal),
+                            meta,
                             textAlign: TextAlign.center,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
@@ -451,7 +568,8 @@ class MediaPlayerScreen extends ConsumerWidget {
                                     ),
                           ),
                         ],
-                      ),
+                      );
+                      },
                     ),
                     if (state.groupRole.isGrouped && cfg != null)
                       _GroupStatusBar(
@@ -504,7 +622,8 @@ class MediaPlayerScreen extends ConsumerWidget {
                       SizedBox(height: sectionGap),
                       _Presets(
                         presets: state.presets,
-                        onTap: (p) => api.playPreset(deviceId, p),
+                        pendingId: pending?.id,
+                        onTap: (p) => _playPreset(p, state),
                       ),
                     ],
                     SizedBox(height: sectionGap),
@@ -620,11 +739,13 @@ class _Artwork extends StatelessWidget {
     this.size,
     this.hero = false,
     this.active = false,
+    this.artOverride,
   });
   final MediaState state;
   final double? size;
   final bool hero;
   final bool active;
+  final String? artOverride;
 
   Widget _placeholder() => DecoratedBox(
         decoration: BoxDecoration(
@@ -655,7 +776,9 @@ class _Artwork extends StatelessWidget {
     final tileSize = size ?? DeviceControlBar.tileIconSize;
     final radius = hero ? 28.0 : DeviceControlBar.tileIconRadius;
     final borderRadius = BorderRadius.circular(radius);
-    final art = state.effectiveArt;
+    final art = (artOverride != null && artOverride!.isNotEmpty)
+        ? artOverride
+        : state.effectiveArt;
 
     Widget child;
     if (art != null && art.isNotEmpty) {
@@ -1152,9 +1275,14 @@ class _BigPlayPause extends StatelessWidget {
 }
 
 class _Presets extends StatelessWidget {
-  const _Presets({required this.presets, required this.onTap});
+  const _Presets({
+    required this.presets,
+    required this.onTap,
+    this.pendingId,
+  });
   final List<MediaPreset> presets;
   final ValueChanged<MediaPreset> onTap;
+  final String? pendingId;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -1175,6 +1303,8 @@ class _Presets extends StatelessWidget {
               separatorBuilder: (_, __) => const SizedBox(width: 12),
               itemBuilder: (_, i) => _PresetCard(
                 preset: presets[i],
+                loading: pendingId == presets[i].id,
+                dimmed: pendingId != null && pendingId != presets[i].id,
                 onTap: () => onTap(presets[i]),
               ),
             ),
@@ -1184,9 +1314,16 @@ class _Presets extends StatelessWidget {
 }
 
 class _PresetCard extends StatefulWidget {
-  const _PresetCard({required this.preset, required this.onTap});
+  const _PresetCard({
+    required this.preset,
+    required this.onTap,
+    this.loading = false,
+    this.dimmed = false,
+  });
   final MediaPreset preset;
   final VoidCallback onTap;
+  final bool loading;
+  final bool dimmed;
 
   @override
   State<_PresetCard> createState() => _PresetCardState();
@@ -1214,41 +1351,68 @@ class _PresetCardState extends State<_PresetCard> {
     final img = (rawImg != null && rawImg.startsWith('/'))
         ? '$apiBase$rawImg'
         : rawImg;
+    final highlighted = widget.loading || _pressed;
     final Widget artwork = ClipRRect(
       borderRadius: BorderRadius.circular(10),
-      child: img != null && img.isNotEmpty
-          ? Image.network(
-              img,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          img != null && img.isNotEmpty
+              ? Image.network(
+                  img,
+                  width: 52,
+                  height: 52,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  filterQuality: FilterQuality.low,
+                  errorBuilder: (_, __, ___) => _placeholder,
+                )
+              : _placeholder,
+          if (widget.loading)
+            Container(
               width: 52,
               height: 52,
-              fit: BoxFit.cover,
-              gaplessPlayback: true,
-              filterQuality: FilterQuality.low,
-              errorBuilder: (_, __, ___) => _placeholder,
-            )
-          : _placeholder,
+              color: Colors.black45,
+              child: const Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.2,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
 
     return GestureDetector(
-      onTap: widget.onTap,
-      onTapDown: (_) => setState(() => _pressed = true),
+      onTap: widget.dimmed ? null : widget.onTap,
+      onTapDown: widget.dimmed || widget.loading
+          ? null
+          : (_) => setState(() => _pressed = true),
       onTapUp: (_) => setState(() => _pressed = false),
       onTapCancel: () => setState(() => _pressed = false),
       child: AnimatedScale(
         scale: _pressed ? 0.93 : 1.0,
         duration: Duration(milliseconds: 100),
         curve: Curves.easeOut,
-        child: AnimatedContainer(
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 120),
+          opacity: widget.dimmed ? 0.45 : 1,
+          child: AnimatedContainer(
           duration: const Duration(milliseconds: 100),
           width: 180,
           padding: const EdgeInsets.all(10),
           decoration: BoxDecoration(
-            color: _pressed
+            color: highlighted
                 ? LuxeColors.brass.withValues(alpha: 0.18)
                 : LuxeColors.surfaceDarkElev,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: _pressed
+              color: highlighted
                   ? LuxeColors.brass.withValues(alpha: 0.55)
                   : Colors.white12,
             ),
@@ -1270,6 +1434,7 @@ class _PresetCardState extends State<_PresetCard> {
               ),
             ],
           ),
+        ),
         ),
       ),
     );
