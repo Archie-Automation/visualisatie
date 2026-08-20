@@ -1,6 +1,6 @@
 # Production image: Flutter web UI + Node API + go2rtc + ffmpeg.
 # Build from repo root:
-#   docker build -f docker/Dockerfile -t luxe-knx-stack:latest .
+#   docker build -f docker/Dockerfile -t archie-os-stack:latest .
 #
 # Or via compose from docker/: docker compose up -d --build
 

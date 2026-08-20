@@ -1,4 +1,4 @@
-# Eén stack: Flutter web UI + Luxe KNX API + go2rtc.
+# Eén stack: Flutter web UI + Archie OS API + go2rtc.
 # Installatie:  ./install.sh
 #
 # Vereist: docker/.env (zie .env.example). Ontbrekende house.json wordt
@@ -9,8 +9,8 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    image: luxe-knx-stack:latest
-    container_name: luxe-knx-stack
+    image: archie-os-stack:latest
+    container_name: archie-os-stack
     restart: unless-stopped
     network_mode: host
     environment:

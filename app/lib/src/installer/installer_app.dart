@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:luxe_knx/l10n/app_localizations.dart';
+import 'package:archie_os/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -23,15 +23,15 @@ class _InstallerRouterRefresh extends ChangeNotifier {
   }
 }
 
-class LuxeKnxInstallerApp extends ConsumerStatefulWidget {
-  const LuxeKnxInstallerApp({super.key});
+class ArchieOsInstallerApp extends ConsumerStatefulWidget {
+  const ArchieOsInstallerApp({super.key});
 
   @override
-  ConsumerState<LuxeKnxInstallerApp> createState() =>
-      _LuxeKnxInstallerAppState();
+  ConsumerState<ArchieOsInstallerApp> createState() =>
+      _ArchieOsInstallerAppState();
 }
 
-class _LuxeKnxInstallerAppState extends ConsumerState<LuxeKnxInstallerApp> {
+class _ArchieOsInstallerAppState extends ConsumerState<ArchieOsInstallerApp> {
   late final GoRouter _router;
   late final _InstallerRouterRefresh _refresh;
 
@@ -71,7 +71,7 @@ class _LuxeKnxInstallerAppState extends ConsumerState<LuxeKnxInstallerApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'Luxe KNX Installateur',
+      title: 'Archie OS Installateur',
       theme: buildLuxeTheme(),
       debugShowCheckedModeBanner: false,
       localizationsDelegates: AppLocalizations.localizationsDelegates,

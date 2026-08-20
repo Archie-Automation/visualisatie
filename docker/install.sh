@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Luxe KNX — installatie voor NUC / Proxmox (Ubuntu-VM)
+# Archie OS — installatie voor NUC / Proxmox (Ubuntu-VM)
 # Bedoeld voor iemand zonder programmeerkennis: antwoorden met Enter / j / n.
 set -eu
 cd "$(dirname "$0")"
@@ -40,7 +40,7 @@ random_secret() {
   fi
 }
 
-bold "=== Luxe KNX installatie ==="
+bold "=== Archie OS installatie ==="
 echo "Deze wizard zet de smart-home software klaar op deze computer."
 echo "Eerste keer: bouw kan 10–20 minuten duren. Even laten staan."
 echo ""

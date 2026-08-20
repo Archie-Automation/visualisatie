@@ -1,6 +1,6 @@
 # Device types
 
-An overview of every device type supported by the Luxe KNX backend,
+An overview of every device type supported by the Archie OS backend,
 with the KNX roles it speaks and the UI widget that renders it.
 
 ## Core types

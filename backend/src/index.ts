@@ -106,10 +106,10 @@ function main() {
         .send(
           `<!DOCTYPE html><html lang="nl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Luxe KNX</title>
+<title>Archie OS</title>
 <style>body{font-family:system-ui;max-width:36rem;margin:2rem auto;padding:0 1rem;line-height:1.6}</style>
 </head><body>
-<h2>Luxe KNX — API actief</h2>
+<h2>Archie OS — API actief</h2>
 <p>De Flutter-app is nog niet gebouwd. Voer het volgende uit om de web-app klaar te maken:</p>
 <pre style="background:#f4f4f4;padding:1rem;border-radius:6px">npm run build:web</pre>
 <p>Daarna is de app beschikbaar op <strong>http://&lt;server&gt;:4000/</strong></p>

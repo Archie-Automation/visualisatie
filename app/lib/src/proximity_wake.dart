@@ -8,8 +8,8 @@ import 'package:flutter/services.dart';
 class ProximityWake {
   ProximityWake._();
 
-  static const _events = EventChannel('luxe_knx/proximity_events');
-  static const _methods = MethodChannel('luxe_knx/proximity');
+  static const _events = EventChannel('archie_os/proximity_events');
+  static const _methods = MethodChannel('archie_os/proximity');
 
   static StreamSubscription<dynamic>? _sub;
   static final _nearController = StreamController<void>.broadcast();

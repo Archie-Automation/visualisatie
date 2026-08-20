@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Luxe KNX House Configuration",
+  "title": "Archie OS House Configuration",
   "type": "object",
   "required": ["project", "floors"],
   "properties": {

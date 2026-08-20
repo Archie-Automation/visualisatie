@@ -97,7 +97,7 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
 String _apkInstallErrorMessage(String? code) {
   switch (code) {
     case 'install_permission_denied':
-      return 'Sta “apps uit onbekende bronnen” toe voor Luxe KNX en tik opnieuw op Installeren.';
+      return 'Sta “apps uit onbekende bronnen” toe voor Archie OS en tik opnieuw op Installeren.';
     case 'apk_too_small':
     case 'apk_missing':
       return 'De gedownloade APK is ongeldig. Controleer of de GitHub Release een .apk heeft.';

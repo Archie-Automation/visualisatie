@@ -5,7 +5,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.luxe_knx"
+    namespace = "com.example.archie_os"
     // file_picker / flutter_plugin_android_lifecycle require API 36+.
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
@@ -17,7 +17,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.luxe_knx"
+        applicationId = "com.example.archie_os"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion

@@ -1,5 +1,5 @@
-name: luxe_knx
-description: Luxe KNX Smart Home client.
+name: archie_os
+description: Archie OS Smart Home client.
 publish_to: "none"
 version: 0.2.0+161
 

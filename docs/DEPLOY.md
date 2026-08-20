@@ -1,6 +1,6 @@
 # Installatie op Proxmox (NUC) — zonder programmeerkennis
 
-Doel: de Luxe KNX-app draait op een **Ubuntu-VM in Proxmox**. Op telefoon/PC open je daarna een website-adres. Geen App Store nodig.
+Doel: de Archie OS-app draait op een **Ubuntu-VM in Proxmox**. Op telefoon/PC open je daarna een website-adres. Geen App Store nodig.
 
 **Proxmox `:8006` is niet de app** — dat is alleen de Proxmox-beheerpagina. De app luistert op poort **4000** van de Ubuntu-VM (`http://<vm-ip>:4000`).
 
@@ -133,9 +133,9 @@ De native app update **niet** door alleen code te pushen. Je hebt een **GitHub R
    .\build_release_apk.ps1 -ApiBase http://192.168.x.x:4000
    ```
    (`ApiBase` is alleen de *default*; in de app kun je het serveradres op het loginscherm (of splash) wijzigen.)
-3. Maak op GitHub een **Release** (tag bv. `v0.3.0`) en upload `build/app/outputs/flutter-apk/app-release.apk` (of hernoem naar `luxe-knx.apk`).  
+3. Maak op GitHub een **Release** (tag bv. `v0.3.0`) en upload `build/app/outputs/flutter-apk/app-release.apk` (of hernoem naar `archie-os.apk`).  
 4. Op de NUC: `git pull` + `./installeer.sh` (backend/web moeten ook mee).  
-5. Op de tablet: banner **Installeren** → één keer bevestigen in het Android-scherm. Toestaan: “apps uit onbekende bronnen” voor Luxe KNX.
+5. Op de tablet: banner **Installeren** → één keer bevestigen in het Android-scherm. Toestaan: “apps uit onbekende bronnen” voor Archie OS.
 
 Bij een **ander subnet / nieuw VM-IP**: open de app → vul op login (of splash) het nieuwe `http://…:4000` in — geen nieuwe APK nodig.
 
@@ -175,7 +175,7 @@ git pull          # of nieuwe ZIP uitpakken over de map (house.json niet wissen)
 | Pagina niet bereikbaar | VM-IP / Proxmox-bridge / zelfde LAN |
 | Geen GitHub-melding | Release/tag aangemaakt? Repo publiek of `GITHUB_TOKEN`? Internet vanaf VM? |
 | Tablet: geen **Installeren** | Release heeft `.apk`-asset? `latest.androidApk` in `/api/version`? App gebouwd met `--dart-define=APP_VERSION=…` (niet `dev`)? |
-| Tablet: installatie geweigerd | “Onbekende apps installeren” toestaan voor Luxe KNX; zelfde signing als vorige APK |
+| Tablet: installatie geweigerd | “Onbekende apps installeren” toestaan voor Archie OS; zelfde signing als vorige APK |
 | Leeg scherm / oude app | Tab sluiten of banner **Vernieuwen** |
 | KNX werkt niet | Installer: gateway-IP, KNX aanzetten (leeg huis start met KNX uit) |
 

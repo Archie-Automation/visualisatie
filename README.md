@@ -1,4 +1,4 @@
-# Luxe KNX Smart Home Ecosystem
+# Archie OS Smart Home Ecosystem
 
 A high-end, custom Smart Home platform for KNX installations with a Node.js backend running on an Intel NUC (Proxmox/Docker) and a Flutter client for iOS & Android.
 
