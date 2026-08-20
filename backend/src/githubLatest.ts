@@ -91,7 +91,8 @@ function pickAndroidApk(assets: unknown): GithubAndroidApkInfo | null {
   }
   if (apks.length === 0) return null;
   const preferred =
-    apks.find((a) => /luxe|knx|app-release|release/i.test(a.name)) ?? apks[0];
+    apks.find((a) => /archie|luxe|knx|app-release|release/i.test(a.name)) ??
+    apks[0];
   return preferred;
 }
 

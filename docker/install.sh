@@ -134,6 +134,16 @@ bold "Software bouwen en starten…"
 echo "Dit kan de eerste keer lang duren. Niet afbreken."
 echo ""
 
+# Oude Luxe KNX-container/image (vóór hernoeming naar Archie OS) weghalen.
+if $DOCKER ps -a --format '{{.Names}}' 2>/dev/null | grep -qx 'luxe-knx-stack'; then
+  $DOCKER rm -f luxe-knx-stack >/dev/null 2>&1 || true
+  ok "Oude container luxe-knx-stack verwijderd"
+fi
+if $DOCKER image inspect luxe-knx-stack:latest >/dev/null 2>&1; then
+  $DOCKER image rm luxe-knx-stack:latest >/dev/null 2>&1 || true
+  ok "Oude image luxe-knx-stack:latest verwijderd"
+fi
+
 $DOCKER compose --env-file .env up -d --build
 
 bold "=== Klaar ==="

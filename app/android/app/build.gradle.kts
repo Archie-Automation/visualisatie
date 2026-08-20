@@ -17,7 +17,8 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.archie_os"
+        // Install-id blijft luxe_knx: bestaande tablets krijgen Archie OS als update, niet als tweede app.
+        applicationId = "com.example.luxe_knx"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
