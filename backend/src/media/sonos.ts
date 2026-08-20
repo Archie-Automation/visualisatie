@@ -631,7 +631,19 @@ function clamp(n: number, min: number, max: number): number {
  *  through the backend sidesteps this completely. */
 function proxyArt(url: string): string {
   if (!url) return url;
-  return `/api/media-art?u=${encodeURIComponent(url)}`;
+  return `/api/media-art?u=${encodeURIComponent(preferLargeSonosArt(url))}`;
+}
+
+/** Sonos `/getaa` without `s=1` is a tiny thumbnail; request the large variant. */
+function preferLargeSonosArt(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (!/\/getaa$/i.test(parsed.pathname)) return url;
+    parsed.searchParams.set("s", "1");
+    return parsed.toString();
+  } catch {
+    return url;
+  }
 }
 
 /** `sonos` hands us verbose axios errors; strip them down to a readable
