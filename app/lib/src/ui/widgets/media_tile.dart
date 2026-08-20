@@ -744,18 +744,17 @@ class _GroupStatusBar extends StatelessWidget {
 const _presetArtSize = 64.0;
 
 /// Decode at ≥2× so cheap 1.0-density PoE panels don't show blocky upscales.
+/// Always [BoxFit.contain] so non-square logos (NPO 2) stay intact.
 class _SharpNetworkArt extends StatelessWidget {
   const _SharpNetworkArt({
     required this.url,
     required this.size,
     required this.errorBuilder,
-    this.fit = BoxFit.cover,
     this.imageKey,
   });
 
   final String url;
   final double size;
-  final BoxFit fit;
   final ImageErrorWidgetBuilder errorBuilder;
   final Key? imageKey;
 
@@ -763,19 +762,22 @@ class _SharpNetworkArt extends StatelessWidget {
   Widget build(BuildContext context) {
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final px = (size * math.max(dpr, 2.0)).round().clamp(64, 1024);
-    return Image.network(
-      url,
-      key: imageKey,
-      width: size,
-      height: size,
-      fit: fit,
-      gaplessPlayback: true,
-      filterQuality: FilterQuality.high,
-      isAntiAlias: true,
-      // Only one cache dimension — setting both stretches non-square logos
-      // (NPO 2 diamonds) into the square thumb.
-      cacheWidth: px,
-      errorBuilder: errorBuilder,
+    return ColoredBox(
+      color: const Color(0xFF141414),
+      child: Image.network(
+        url,
+        key: imageKey,
+        width: size,
+        height: size,
+        fit: BoxFit.contain,
+        alignment: Alignment.center,
+        gaplessPlayback: true,
+        filterQuality: FilterQuality.high,
+        isAntiAlias: true,
+        // Only one cache dimension — setting both stretches non-square logos.
+        cacheWidth: px,
+        errorBuilder: errorBuilder,
+      ),
     );
   }
 }
@@ -1431,14 +1433,10 @@ class _PresetCardState extends State<_PresetCard> {
         alignment: Alignment.center,
         children: [
           img != null && img.isNotEmpty
-              ? ColoredBox(
-                  color: const Color(0xFF141414),
-                  child: _SharpNetworkArt(
-                    url: img,
-                    size: _presetArtSize,
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => _placeholder,
-                  ),
+              ? _SharpNetworkArt(
+                  url: img,
+                  size: _presetArtSize,
+                  errorBuilder: (_, __, ___) => _placeholder,
                 )
               : _placeholder,
           if (widget.loading)

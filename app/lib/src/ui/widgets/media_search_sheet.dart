@@ -352,16 +352,20 @@ class _ResultRow extends StatelessWidget {
     final Widget art = ClipRRect(
       borderRadius: BorderRadius.circular(8),
       child: img != null && img.isNotEmpty
-          ? Image.network(
-              img,
-              width: 46,
-              height: 46,
-              fit: BoxFit.contain,
-              gaplessPlayback: true,
-              filterQuality: FilterQuality.high,
-              isAntiAlias: true,
-              cacheWidth: 128,
-              errorBuilder: (_, __, ___) => _placeholder,
+          ? ColoredBox(
+              color: const Color(0xFF141414),
+              child: Image.network(
+                img,
+                width: 46,
+                height: 46,
+                fit: BoxFit.contain,
+                alignment: Alignment.center,
+                gaplessPlayback: true,
+                filterQuality: FilterQuality.high,
+                isAntiAlias: true,
+                cacheWidth: 128,
+                errorBuilder: (_, __, ___) => _placeholder,
+              ),
             )
           : _placeholder,
     );
