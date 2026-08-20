@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../api.dart';
-import '../fireplace_status.dart';
+import '../device_activity.dart';
 import '../fireplace_virtual.dart';
 import '../idle_reset.dart';
 import '../media_api.dart';
@@ -1789,7 +1789,7 @@ class _HouseActivityHeaderButtons extends ConsumerWidget {
   void _openSystem(BuildContext context, String sysName) {
     final sys = houseSystemByName(sysName);
     final route = sys?.routePath;
-    if (route != null) appOpen(context, route);
+    if (route != null) appOpen(context, '$route?active=1');
   }
 
   @override
@@ -1809,18 +1809,17 @@ class _HouseActivityHeaderButtons extends ConsumerWidget {
     var mediaPlaying = false;
 
     for (final d in cfg.allDevices) {
-      if (!lightsOn && _RoomActivityBadges._isLightOn(d, bus)) lightsOn = true;
-      if (!heaterOn && _RoomActivityBadges._isHeaterActive(d, bus)) {
+      if (!lightsOn && deviceLightIsOn(d, bus.values)) lightsOn = true;
+      if (!heaterOn && deviceHeaterIsActive(d, bus.values)) {
         heaterOn = true;
       }
       if (!fireplaceOn &&
-          _RoomActivityBadges._isFireplaceOn(d, bus, fireplaceVirtual)) {
+          deviceFireplaceIsOn(d, bus.values, fireplaceVirtual)) {
         fireplaceOn = true;
       }
-      if (!acOn && _RoomActivityBadges._isAcOn(d, bus)) acOn = true;
-      if (!mediaPlaying && d.type.isMedia) {
-        final ms = mediaStates[d.id];
-        if (ms != null && ms.transport.isActive) mediaPlaying = true;
+      if (!acOn && deviceAcIsOn(d, bus.values)) acOn = true;
+      if (!mediaPlaying && deviceMediaIsPlaying(d, mediaStates)) {
+        mediaPlaying = true;
       }
       if (lightsOn && heaterOn && fireplaceOn && acOn && mediaPlaying) break;
     }
@@ -1896,77 +1895,6 @@ class _RoomActivityBadges extends ConsumerWidget {
     );
   }
 
-  static bool _isLightOn(Device d, BusState bus) {
-    switch (d.type) {
-      case DeviceType.lightSwitch:
-      case DeviceType.lightDimmer:
-        final swGa = d.ga['switch_status'] ?? d.ga['switch'];
-        if (swGa == null) return false;
-        final v = bus.values[swGa];
-        return v == true || v == 1;
-      case DeviceType.rgbwWw:
-        final ga = d.ga['on'];
-        if (ga == null) return false;
-        final v = bus.values[ga];
-        return v == true || v == 1;
-      default:
-        return false;
-    }
-  }
-
-  static bool _isHeaterActive(Device d, BusState bus) {
-    if (d.type != DeviceType.universal) return false;
-    final cfg = d.raw['universal'] as Map<String, dynamic>?;
-    if (cfg == null) return false;
-    if ((cfg['icon'] as String?) != 'heater') return false;
-    final buttons =
-        (cfg['buttons'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    for (final b in buttons) {
-      final ga = b['statusGa'] as String?;
-      if (ga == null) continue;
-      final v = bus.values[ga];
-      if (v == true || v == 1) return true;
-    }
-    return false;
-  }
-
-  static bool _isFireplaceOn(
-    Device d,
-    BusState bus,
-    Map<String, bool> fireplaceVirtual,
-  ) {
-    if (d.type != DeviceType.fireplace) return false;
-    final cfg = d.raw['fireplace'] as Map<String, dynamic>?;
-    if (cfg == null) return false;
-    final workingOn = fireplaceWorkingOn(cfg, bus.values);
-    if (workingOn != null) return workingOn;
-    final onOff = cfg['onOff'];
-    if (onOff is! Map) return false;
-    final ga = (onOff['statusGa'] ?? onOff['ga']) as String?;
-    if (ga == null) return false;
-    final busOn = bus.values[ga] == true || bus.values[ga] == 1;
-    final discreteMode =
-        cfg['controlMode'] == 'discrete' && cfg['discreteLevel'] != null;
-    return FireplaceVirtualStore.resolveOn(
-      discreteMode: discreteMode,
-      virtual: fireplaceVirtual,
-      deviceId: d.id,
-      busOn: busOn,
-    );
-  }
-
-  static bool _isAcOn(Device d, BusState bus) {
-    if (d.type != DeviceType.ac) return false;
-    final cfg = d.raw['ac'] as Map<String, dynamic>?;
-    if (cfg == null) return false;
-    final onOff = cfg['onOff'];
-    if (onOff is! Map) return false;
-    final ga = (onOff['statusGa'] ?? onOff['ga']) as String?;
-    if (ga == null) return false;
-    final v = bus.values[ga];
-    return v == true || v == 1;
-  }
-
   /// Returns true/false/garage for open window or door melding-items.
   /// Melding-items with category 'window', 'door', or 'garage_door' trigger this.
   static ({bool window, bool door, bool garageDoor}) _openings(
@@ -2016,15 +1944,17 @@ class _RoomActivityBadges extends ConsumerWidget {
     Device? meldingGarage;
 
     for (final d in room.devices) {
-      if (!lightsOn && _isLightOn(d, bus)) lightsOn = true;
-      if (!fireplaceOn && _isFireplaceOn(d, bus, fireplaceVirtual)) {
+      if (!lightsOn && deviceLightIsOn(d, bus.values)) lightsOn = true;
+      if (!fireplaceOn &&
+          deviceFireplaceIsOn(d, bus.values, fireplaceVirtual)) {
         fireplaceOn = true;
       }
-      if (activeHeater == null && _isHeaterActive(d, bus)) activeHeater = d;
-      if (activeAc == null && _isAcOn(d, bus)) activeAc = d;
-      if (!mediaPlaying && d.type.isMedia) {
-        final ms = mediaStates[d.id];
-        if (ms != null && ms.transport.isActive) mediaPlaying = true;
+      if (activeHeater == null && deviceHeaterIsActive(d, bus.values)) {
+        activeHeater = d;
+      }
+      if (activeAc == null && deviceAcIsOn(d, bus.values)) activeAc = d;
+      if (!mediaPlaying && deviceMediaIsPlaying(d, mediaStates)) {
+        mediaPlaying = true;
       }
       if (d.type == DeviceType.melding) {
         final o = _openings(d, bus);

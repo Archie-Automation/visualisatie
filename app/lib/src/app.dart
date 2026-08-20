@@ -141,7 +141,10 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
         GoRoute(
           path: '/system/:slug',
           pageBuilder: (_, s) => CustomTransitionPage(
-            child: SystemScreen(slug: s.pathParameters['slug']!),
+            child: SystemScreen(
+              slug: s.pathParameters['slug']!,
+              activeOnly: s.uri.queryParameters['active'] == '1',
+            ),
             transitionDuration: const Duration(milliseconds: 300),
             reverseTransitionDuration: const Duration(milliseconds: 240),
             transitionsBuilder: (_, anim, __, child) {

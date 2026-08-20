@@ -12,10 +12,25 @@ import '../app_nav.dart';
 import '../responsive.dart';
 import 'device_control_panel.dart';
 import 'device_tile_shell.dart';
+import 'glass_card.dart';
 import 'media_search_sheet.dart';
 
 const _metadataRevealDelay = Duration(milliseconds: 2500);
 const _playerCtlSize = 60.0;
+
+/// Same face as the dashboard project name (Archie): Lexend Deca extra-light.
+TextStyle? _archieNowPlayingStyle(
+  BuildContext context, {
+  required double fontSize,
+  Color? color,
+  double? height,
+}) {
+  return Theme.of(context).textTheme.displayLarge?.copyWith(
+        fontSize: fontSize,
+        color: color,
+        height: height,
+      );
+}
 
 /// Houdt trackinfo even verborgen na start/overschakelen â€” RDS komt later binnen.
 class _MediaMetadataGate extends StatefulWidget {
@@ -221,6 +236,7 @@ class MediaTile extends ConsumerWidget {
                           value: (state.volume ?? 0).toDouble(),
                           muted: state.muted ?? false,
                           roomy: true,
+                          caption: state.groupRole.isGrouped ? device.name : null,
                           onChanged: state.online
                               ? (v) => api.setVolume(device.id, v.round())
                               : null,
@@ -260,6 +276,8 @@ class MediaTile extends ConsumerWidget {
                       child: _VolumeSlider(
                         value: (state.volume ?? 0).toDouble(),
                         muted: state.muted ?? false,
+                        caption:
+                            state.groupRole.isGrouped ? device.name : null,
                         onChanged: state.online
                             ? (v) => api.setVolume(device.id, v.round())
                             : null,
@@ -556,13 +574,11 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                             textAlign: TextAlign.center,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineMedium
-                                ?.copyWith(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.w500,
-                                ),
+                            style: _archieNowPlayingStyle(
+                              context,
+                              fontSize: tight ? 26 : 32,
+                              color: Colors.white,
+                            ),
                           ),
                           const SizedBox(height: 6),
                           Text(
@@ -579,12 +595,6 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                       );
                       },
                     ),
-                    if (state.groupRole.isGrouped && cfg != null)
-                      _GroupStatusBar(
-                        state: state,
-                        cfg: cfg,
-                        deviceId: deviceId,
-                      ),
                     SizedBox(height: sectionGap),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -613,19 +623,29 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                       ],
                     ),
                     SizedBox(height: sectionGap),
-                    _VolumeSlider.dark(
-                      value: (state.volume ?? 0).toDouble(),
-                      muted: state.muted ?? false,
-                      onChanged: state.online
-                          ? (v) => api.setVolume(deviceId, v.round())
-                          : null,
-                      onToggleMute: state.online
-                          ? () => api.setMuted(
-                                deviceId,
-                                !(state.muted ?? false),
-                              )
-                          : null,
-                    ),
+                    if (state.groupRole.isGrouped)
+                      _GroupedPlayerVolumes(
+                        deviceId: deviceId,
+                        state: state,
+                        cfg: cfg,
+                        api: api,
+                        online: state.online,
+                        all: ref.watch(mediaStateProvider),
+                      )
+                    else
+                      _VolumeSlider.dark(
+                        value: (state.volume ?? 0).toDouble(),
+                        muted: state.muted ?? false,
+                        onChanged: state.online
+                            ? (v) => api.setVolume(deviceId, v.round())
+                            : null,
+                        onToggleMute: state.online
+                            ? () => api.setMuted(
+                                  deviceId,
+                                  !(state.muted ?? false),
+                                )
+                            : null,
+                      ),
                     if (state.presets.isNotEmpty) ...[
                       SizedBox(height: sectionGap),
                       _Presets(
@@ -646,93 +666,77 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
   }
 }
 
-/// Shows the current group as a row of zone-name chips below the track info.
-class _GroupStatusBar extends StatelessWidget {
-  const _GroupStatusBar({
+/// Groepslider (schaalt alle zones) plus een slider per gekoppelde zone.
+class _GroupedPlayerVolumes extends StatelessWidget {
+  const _GroupedPlayerVolumes({
+    required this.deviceId,
     required this.state,
     required this.cfg,
-    required this.deviceId,
+    required this.api,
+    required this.online,
+    required this.all,
   });
-  final MediaState state;
-  final HouseConfig cfg;
+
   final String deviceId;
+  final MediaState state;
+  final HouseConfig? cfg;
+  final MediaApi api;
+  final bool online;
+  final Map<String, MediaState> all;
 
   String _nameFor(String id) {
-    for (final d in cfg.allDevices) {
-      if (d.id == id) return d.name;
+    if (cfg != null) {
+      for (final d in cfg!.allDevices) {
+        if (d.id == id) return d.name;
+      }
     }
     return id;
   }
 
   @override
   Widget build(BuildContext context) {
-    // Collect all IDs that are in the group (coordinator + members).
-    final groupIds = <String>[];
-    if (state.groupRole == MediaGroupRole.coordinator) {
-      groupIds.add(deviceId);
-      groupIds.addAll(state.groupMemberIds);
-    } else if (state.groupRole == MediaGroupRole.member) {
-      if (state.groupCoordinatorId != null) {
-        groupIds.add(state.groupCoordinatorId!);
+    final ids = mediaGroupDeviceIds(state, deviceId, all);
+    final groupMuted =
+        ids.isNotEmpty && ids.every((id) => all[id]?.muted == true);
+    var groupVol = state.groupVolume ?? 0;
+    if (state.groupVolume == null) {
+      for (final id in ids) {
+        final v = all[id]?.volume ?? 0;
+        if (v > groupVol) groupVol = v;
       }
-      groupIds.add(deviceId);
     }
 
-    if (groupIds.isEmpty) return const SizedBox.shrink();
-
-    return Padding(
-      padding: EdgeInsets.only(top: 16),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.link_rounded,
-                  size: 14, color: LuxeColors.brass.withValues(alpha: 0.8)),
-              const SizedBox(width: 6),
-              Text(
-                'Gekoppeld met',
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: Colors.white54,
-                      letterSpacing: 0.3,
-                    ),
-              ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _VolumeSlider.dark(
+          caption: 'GROEP',
+          value: groupVol.toDouble(),
+          muted: groupMuted,
+          onChanged:
+              online ? (v) => api.setGroupVolume(deviceId, v.round()) : null,
+          onToggleMute: online
+              ? () {
+                  for (final id in ids) {
+                    api.setMuted(id, !groupMuted);
+                  }
+                }
+              : null,
+        ),
+        const SizedBox(height: 14),
+        for (final id in ids) ...[
+          _VolumeSlider.dark(
+            caption: _nameFor(id),
+            value: (all[id]?.volume ?? 0).toDouble(),
+            muted: all[id]?.muted ?? false,
+            onChanged: online ? (v) => api.setVolume(id, v.round()) : null,
+            onToggleMute: online
+                ? () => api.setMuted(id, !(all[id]?.muted ?? false))
+                : null,
           ),
           const SizedBox(height: 8),
-          Wrap(
-            alignment: WrapAlignment.center,
-            spacing: 8,
-            runSpacing: 6,
-            children: groupIds.map((id) {
-              final isThis = id == deviceId;
-              return Container(
-                padding:
-                    EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: isThis
-                      ? LuxeColors.brass.withValues(alpha: 0.22)
-                      : Colors.white.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: isThis
-                        ? LuxeColors.brass.withValues(alpha: 0.5)
-                        : Colors.white24,
-                  ),
-                ),
-                child: Text(
-                  _nameFor(id),
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: isThis ? LuxeColors.brass : Colors.white70,
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
         ],
-      ),
+      ],
     );
   }
 }
@@ -939,7 +943,7 @@ class _NowPlaying extends StatelessWidget {
             statusLine,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            style: _archieNowPlayingStyle(context, fontSize: 20, height: 1.15),
           ),
           const SizedBox(height: DeviceTileLayout.titleStatusGap),
           Text(
@@ -969,7 +973,12 @@ class _NowPlaying extends StatelessWidget {
             statusLine,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.bodyMedium,
+            style: _archieNowPlayingStyle(
+              context,
+              fontSize: 16,
+              color: LuxeColors.inkSoft,
+              height: 1.2,
+            ),
           ),
         ],
       ],
@@ -995,7 +1004,7 @@ class _ControlButton extends StatelessWidget {
       );
 }
 
-class _PlayPauseButton extends StatelessWidget {
+class _PlayPauseButton extends StatefulWidget {
   const _PlayPauseButton({
     required this.active,
     required this.state,
@@ -1010,32 +1019,55 @@ class _PlayPauseButton extends StatelessWidget {
   final bool expand;
 
   @override
+  State<_PlayPauseButton> createState() => _PlayPauseButtonState();
+}
+
+class _PlayPauseButtonState extends State<_PlayPauseButton> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    final icon = active ? Icons.pause_rounded : Icons.play_arrow_rounded;
-    return GestureDetector(
-      onTap: !state.online ? null : (active ? onPause : onPlay),
-      child: AnimatedContainer(
-        duration: Duration(milliseconds: 180),
-        width: expand ? double.infinity : DeviceControlBar.buttonSize,
-        height: DeviceControlBar.buttonSize,
-        decoration: BoxDecoration(
-          borderRadius:
-              BorderRadius.circular(DeviceControlBar.buttonRadius),
-          color: active ? LuxeColors.ink : LuxeColors.brass,
-          boxShadow: const [
+    final icon = widget.active ? Icons.pause_rounded : Icons.play_arrow_rounded;
+    final enabled = widget.state.online;
+    final fill = widget.active ? LuxeColors.ink : LuxeColors.brass;
+    final lit = _pressed
+        ? Color.alphaBlend(Colors.white.withValues(alpha: 0.22), fill)
+        : fill;
+
+    final surface = AnimatedContainer(
+      duration: const Duration(milliseconds: 90),
+      width: widget.expand ? double.infinity : DeviceControlBar.buttonSize,
+      height: DeviceControlBar.buttonSize,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(DeviceControlBar.buttonRadius),
+        color: lit,
+        boxShadow: [
+          if (_pressed)
             BoxShadow(
-              color: Color(0x08000000),
+              color: LuxeColors.brass.withValues(alpha: 0.40),
               blurRadius: 12,
-              offset: Offset(0, 3),
+              offset: Offset.zero,
             ),
-          ],
-        ),
-        child: Icon(
-          icon,
-          color: active ? LuxeColors.onInk : Colors.white,
-          size: 24,
-        ),
+          const BoxShadow(
+            color: Color(0x08000000),
+            blurRadius: 12,
+            offset: Offset(0, 3),
+          ),
+        ],
       ),
+      child: Icon(
+        icon,
+        color: widget.active ? LuxeColors.onInk : Colors.white,
+        size: 24,
+      ),
+    );
+
+    if (!enabled) return surface;
+    return PressScale(
+      onTap: widget.active ? widget.onPause : widget.onPlay,
+      radius: DeviceControlBar.buttonRadius,
+      onPressedChanged: (v) => setState(() => _pressed = v),
+      child: surface,
     );
   }
 }
@@ -1048,6 +1080,7 @@ class _VolumeSlider extends StatefulWidget {
     required this.onToggleMute,
     this.roomy = false,
     this.dark = false,
+    this.caption,
   });
 
   const _VolumeSlider.dark({
@@ -1055,6 +1088,7 @@ class _VolumeSlider extends StatefulWidget {
     required this.muted,
     required this.onChanged,
     required this.onToggleMute,
+    this.caption,
   })  : roomy = false,
         dark = true;
 
@@ -1064,6 +1098,7 @@ class _VolumeSlider extends StatefulWidget {
   final VoidCallback? onToggleMute;
   final bool roomy;
   final bool dark;
+  final String? caption;
 
   @override
   State<_VolumeSlider> createState() => _VolumeSliderState();
@@ -1177,7 +1212,7 @@ class _VolumeSliderState extends State<_VolumeSlider> {
             thumbShape: RoundSliderThumbShape(enabledThumbRadius: thumbRadius),
           );
 
-    return Row(
+    final row = Row(
       children: [
         GestureDetector(
           onTap: widget.onToggleMute,
@@ -1219,12 +1254,32 @@ class _VolumeSliderState extends State<_VolumeSlider> {
         ],
       ],
     );
+
+    final caption = widget.caption?.trim();
+    if (caption == null || caption.isEmpty) return row;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 8, bottom: 2),
+          child: Text(
+            caption,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: widget.dark ? Colors.white54 : LuxeColors.inkSoft,
+                  letterSpacing: 0.8,
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+        ),
+        row,
+      ],
+    );
   }
 }
 
 /* ---------------------- Dark-mode full-screen bits -------------------- */
 
-class _DarkCtl extends StatelessWidget {
+class _DarkCtl extends StatefulWidget {
   const _DarkCtl({
     required this.icon,
     required this.onTap,
@@ -1237,31 +1292,66 @@ class _DarkCtl extends StatelessWidget {
   final bool accent;
 
   @override
-  Widget build(BuildContext context) => GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(size * 0.28),
-            color: accent
-                ? LuxeColors.brass.withValues(alpha: 0.2)
-                : LuxeColors.surfaceDarkElev,
-            border: Border.all(
-              color: accent
-                  ? LuxeColors.brass.withValues(alpha: 0.5)
-                  : Colors.white12,
-            ),
-          ),
-          child: Icon(
-            icon,
-            color: onTap == null
-                ? Colors.white24
-                : (accent ? LuxeColors.brass : Colors.white),
-            size: size * 0.44,
-          ),
-        ),
-      );
+  State<_DarkCtl> createState() => _DarkCtlState();
+}
+
+class _DarkCtlState extends State<_DarkCtl> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final disabled = widget.onTap == null;
+    final lit = _pressed && !disabled;
+    final fill = lit
+        ? Color.alphaBlend(
+            LuxeColors.brass.withValues(alpha: 0.28),
+            LuxeColors.surfaceDarkElev,
+          )
+        : widget.accent
+            ? LuxeColors.brass.withValues(alpha: 0.2)
+            : LuxeColors.surfaceDarkElev;
+    final rim = lit
+        ? LuxeColors.brass.withValues(alpha: 0.7)
+        : widget.accent
+            ? LuxeColors.brass.withValues(alpha: 0.5)
+            : Colors.white12;
+    final iconColor = disabled
+        ? Colors.white24
+        : (lit || widget.accent ? LuxeColors.brass : Colors.white);
+
+    final surface = AnimatedContainer(
+      duration: const Duration(milliseconds: 90),
+      width: widget.size,
+      height: widget.size,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(widget.size * 0.28),
+        color: fill,
+        border: Border.all(color: rim),
+        boxShadow: lit
+            ? [
+                BoxShadow(
+                  color: LuxeColors.brass.withValues(alpha: 0.40),
+                  blurRadius: 12,
+                  offset: Offset.zero,
+                ),
+              ]
+            : null,
+      ),
+      child: Icon(
+        widget.icon,
+        color: iconColor,
+        size: widget.size * 0.44,
+      ),
+    );
+
+    if (disabled) return surface;
+    return PressScale(
+      onTap: widget.onTap!,
+      radius: widget.size * 0.28,
+      onPressedChanged: (v) => setState(() => _pressed = v),
+      child: surface,
+    );
+  }
 }
 
 class _PlayerGroupCtl extends StatelessWidget {
@@ -1318,7 +1408,7 @@ class _PlayerGroupCtl extends StatelessWidget {
   }
 }
 
-class _BigPlayPause extends StatelessWidget {
+class _BigPlayPause extends StatefulWidget {
   const _BigPlayPause({
     required this.active,
     required this.state,
@@ -1331,20 +1421,46 @@ class _BigPlayPause extends StatelessWidget {
   final VoidCallback onPause;
 
   @override
+  State<_BigPlayPause> createState() => _BigPlayPauseState();
+}
+
+class _BigPlayPauseState extends State<_BigPlayPause> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    final icon = active ? Icons.pause_rounded : Icons.play_arrow_rounded;
-    return GestureDetector(
-      onTap: !state.online ? null : (active ? onPause : onPlay),
-      child: Container(
-        width: 84,
-        height: 84,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.all(Radius.circular(22)),
-          color: LuxeColors.brass,
-          boxShadow: LuxeShadows.brassGlow,
-        ),
-        child: Icon(icon, color: Colors.white, size: 42),
+    final icon = widget.active ? Icons.pause_rounded : Icons.play_arrow_rounded;
+    final enabled = widget.state.online;
+    final fill = _pressed
+        ? Color.alphaBlend(Colors.white.withValues(alpha: 0.22), LuxeColors.brass)
+        : LuxeColors.brass;
+
+    final surface = AnimatedContainer(
+      duration: const Duration(milliseconds: 90),
+      width: 84,
+      height: 84,
+      decoration: BoxDecoration(
+        borderRadius: const BorderRadius.all(Radius.circular(22)),
+        color: fill,
+        boxShadow: [
+          if (_pressed)
+            BoxShadow(
+              color: LuxeColors.brass.withValues(alpha: 0.55),
+              blurRadius: 18,
+              offset: Offset.zero,
+            ),
+          ...LuxeShadows.brassGlow,
+        ],
       ),
+      child: Icon(icon, color: Colors.white, size: 42),
+    );
+
+    if (!enabled) return surface;
+    return PressScale(
+      onTap: widget.active ? widget.onPause : widget.onPlay,
+      radius: 22,
+      onPressedChanged: (v) => setState(() => _pressed = v),
+      child: surface,
     );
   }
 }

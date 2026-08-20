@@ -2367,8 +2367,10 @@ class _HvacModeButtonState extends State<_HvacModeButton> {
           alignment: Alignment.center,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(radius),
-            color: widget.color.withValues(alpha: 0.12),
-            border: Border.all(color: widget.color.withValues(alpha: 0.45)),
+            color: widget.color.withValues(alpha: _pressed ? 0.22 : 0.12),
+            border: Border.all(
+              color: widget.color.withValues(alpha: _pressed ? 0.75 : 0.45),
+            ),
           ),
           child: glyph,
         ),

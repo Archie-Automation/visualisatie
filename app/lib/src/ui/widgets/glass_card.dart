@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart'
@@ -203,11 +204,28 @@ class PressScale extends StatefulWidget {
 
 class _PressScaleState extends State<PressScale> {
   bool _pressed = false;
+  Timer? _release;
+
+  @override
+  void dispose() {
+    _release?.cancel();
+    super.dispose();
+  }
 
   void _setPressed(bool value) {
-    if (_pressed == value) return;
-    setState(() => _pressed = value);
-    widget.onPressedChanged?.call(value);
+    _release?.cancel();
+    if (value) {
+      if (_pressed) return;
+      setState(() => _pressed = true);
+      widget.onPressedChanged?.call(true);
+      return;
+    }
+    // Keep the press flash visible on short taps (wall tablets).
+    _release = Timer(const Duration(milliseconds: 90), () {
+      if (!mounted || !_pressed) return;
+      setState(() => _pressed = false);
+      widget.onPressedChanged?.call(false);
+    });
   }
 
   @override

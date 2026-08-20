@@ -115,7 +115,7 @@ class _DeviceControlSquareState extends State<DeviceControlSquare> {
             widget.icon,
             size: DeviceControlIcons.size,
             color: DeviceControlIcons.color(
-              active: widget.active,
+              active: widget.active || _pressed,
               disabled: disabled,
             ),
           ),
@@ -173,18 +173,17 @@ class DeviceControlButtonSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const rimW = 1.25;
-    final base = LuxeChipChrome.fill(context, pressed: pressed);
-    final fill = active
-        ? Color.alphaBlend(
-            LuxeColors.brass.withValues(alpha: 0.22),
-            base,
-          )
-        : base;
-    final rim = active
-        ? LuxeColors.brass
-        : locked
-            ? LuxeBorders.solid(LuxeColors.inkSoft.withValues(alpha: 0.45))
-            : LuxeBorders.solid(LuxeColors.ink.withValues(alpha: 0.22));
+    final fill = DeviceControlBar.buttonFill(
+      context,
+      active: active,
+      pressed: pressed,
+    );
+    final rim = DeviceControlBar.buttonRim(
+      context,
+      active: active,
+      pressed: pressed,
+      locked: locked,
+    );
 
     final body = constraints != null
         ? ConstrainedBox(constraints: constraints!, child: child)
@@ -196,7 +195,7 @@ class DeviceControlButtonSurface extends StatelessWidget {
       rimWidth: rimW,
       rimColor: rim,
       fillColor: fill,
-      shadows: DeviceControlBar.buttonShadows(active: active),
+      shadows: DeviceControlBar.buttonShadows(active: active, pressed: pressed),
       padding: padding,
       child: body,
     );
@@ -840,26 +839,58 @@ class DeviceControlBar {
     return w;
   }
 
+  static Color buttonFill(
+    BuildContext context, {
+    required bool active,
+    required bool pressed,
+  }) {
+    final base = LuxeChipChrome.fill(context, pressed: pressed);
+    var fill = active
+        ? Color.alphaBlend(
+            LuxeColors.brass.withValues(alpha: 0.22),
+            base,
+          )
+        : base;
+    if (pressed) {
+      fill = Color.alphaBlend(
+        LuxeColors.brass.withValues(alpha: active ? 0.20 : 0.18),
+        fill,
+      );
+    }
+    return fill;
+  }
+
+  static Color buttonRim(
+    BuildContext context, {
+    required bool active,
+    required bool pressed,
+    bool locked = false,
+  }) {
+    if (pressed) {
+      return LuxeBorders.solid(
+        LuxeColors.brass.withValues(alpha: active ? 1.0 : 0.55),
+      );
+    }
+    if (active) return LuxeColors.brass;
+    if (locked) {
+      return LuxeBorders.solid(LuxeColors.inkSoft.withValues(alpha: 0.45));
+    }
+    return LuxeBorders.solid(LuxeColors.ink.withValues(alpha: 0.22));
+  }
+
   static BoxDecoration buttonDecoration(
     BuildContext context, {
     bool active = false,
     bool pressed = false,
     bool locked = false,
   }) {
-    final base = LuxeChipChrome.fill(context, pressed: pressed);
-    final fill = active
-        ? Color.alphaBlend(
-            LuxeColors.brass.withValues(alpha: 0.22),
-            base,
-          )
-        : base;
-    final border = active
-        ? LuxeBorders.solid(LuxeColors.brass.withValues(alpha: 0.85), fill)
-        : locked
-            ? LuxeBorders.solid(
-                LuxeColors.inkSoft.withValues(alpha: 0.45), fill)
-            : LuxeBorders.solid(
-                LuxeColors.ink.withValues(alpha: 0.22), fill);
+    final fill = buttonFill(context, active: active, pressed: pressed);
+    final border = buttonRim(
+      context,
+      active: active,
+      pressed: pressed,
+      locked: locked,
+    );
     return BoxDecoration(
       color: fill,
       borderRadius: BorderRadius.circular(buttonRadius),
@@ -867,8 +898,23 @@ class DeviceControlBar {
     );
   }
 
-  static List<BoxShadow> buttonShadows({bool active = false}) =>
-      active ? LuxeShadows.brassGlow : LuxeShadows.controlButton;
+  static List<BoxShadow> buttonShadows({
+    bool active = false,
+    bool pressed = false,
+  }) {
+    if (pressed) {
+      return [
+        BoxShadow(
+          color: LuxeColors.brass.withValues(alpha: 0.38),
+          blurRadius: 12,
+          spreadRadius: 0,
+          offset: Offset.zero,
+        ),
+        ...LuxeShadows.controlButton,
+      ];
+    }
+    return active ? LuxeShadows.brassGlow : LuxeShadows.controlButton;
+  }
 
   static List<List<DeviceControlItem>> chunk(
     List<DeviceControlItem> items, {
