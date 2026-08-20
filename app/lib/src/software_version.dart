@@ -135,6 +135,26 @@ class GithubLatestInfo {
   }
 }
 
+class ServerUpdateSnapshot {
+  const ServerUpdateSnapshot({
+    required this.agentReady,
+    required this.state,
+    this.message = '',
+  });
+
+  final bool agentReady;
+  final String state;
+  final String message;
+
+  factory ServerUpdateSnapshot.fromJson(Map<String, dynamic> j) {
+    return ServerUpdateSnapshot(
+      agentReady: j['agentReady'] == true,
+      state: (j['state'] as String?)?.trim() ?? 'idle',
+      message: (j['message'] as String?)?.trim() ?? '',
+    );
+  }
+}
+
 /// Full payload from GET /api/version.
 class SoftwareVersionStatus {
   const SoftwareVersionStatus({
@@ -143,6 +163,7 @@ class SoftwareVersionStatus {
     required this.updateAvailable,
     required this.clientStale,
     required this.androidApkUpdateAvailable,
+    this.serverUpdate,
   });
 
   final SoftwareVersionInfo running;
@@ -152,6 +173,7 @@ class SoftwareVersionStatus {
   final bool clientStale;
   /// Native Android: client older than GitHub latest AND an APK asset exists.
   final bool androidApkUpdateAvailable;
+  final ServerUpdateSnapshot? serverUpdate;
 }
 
 /// Server software version status (null while loading / on error).
@@ -173,6 +195,11 @@ final softwareVersionStatusProvider =
       latest = GithubLatestInfo.fromJson(rawLatest);
     }
     final updateAvailable = body['updateAvailable'] == true;
+    ServerUpdateSnapshot? serverUpdate;
+    final rawSu = body['serverUpdate'];
+    if (rawSu is Map<String, dynamic>) {
+      serverUpdate = ServerUpdateSnapshot.fromJson(rawSu);
+    }
     final client = SoftwareVersionInfo.parse(kAppVersion);
     final clientStale =
         kAppVersion != 'dev' && client.compareTo(running) < 0;
@@ -189,6 +216,7 @@ final softwareVersionStatusProvider =
       updateAvailable: updateAvailable,
       clientStale: clientStale,
       androidApkUpdateAvailable: androidApkUpdateAvailable,
+      serverUpdate: serverUpdate,
     );
   } catch (_) {
     return null;

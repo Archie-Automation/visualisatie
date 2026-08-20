@@ -24,6 +24,13 @@ app/pubspec.lock
 backend/.env
 docker/.env
 
+# Runtime update-agent files
+docker/data/update-request.json
+docker/data/update-status.json
+docker/data/update-agent.log
+docker/data/update.lock/
+docker/data/*.update-bak
+
 # KNX project exports (contain real customer group addresses / PII)
 *-group-addresses.xml
 duits.xml

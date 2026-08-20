@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../android_apk_updater.dart';
+import '../../api.dart';
+import '../../full_app_restart.dart';
+import '../../server_update.dart';
 import '../../software_version.dart';
 import '../../theme.dart';
 import 'reload_app_stub.dart'
@@ -19,8 +22,10 @@ class SoftwareUpdateBanner extends ConsumerStatefulWidget {
 
 class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
   bool _installing = false;
+  bool _serverUpdating = false;
   double? _progress;
   String? _error;
+  String? _serverProgress;
 
   Future<void> _installApk(GithubAndroidApkInfo? apk) async {
     if (_installing) return;
@@ -43,12 +48,57 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
     });
   }
 
+  Future<void> _updateServer() async {
+    if (_serverUpdating) return;
+    final token = ref.read(authProvider).token;
+    if (token == null) return;
+    setState(() {
+      _serverUpdating = true;
+      _serverProgress = 'Update starten…';
+      _error = null;
+    });
+    try {
+      await postServerUpdate(token);
+      final result = await waitForServerUpdate(
+        token: token,
+        onMessage: (m) {
+          if (mounted) setState(() => _serverProgress = m);
+        },
+      );
+      if (result.isError) {
+        throw StateError(
+          result.message.isEmpty ? 'Update mislukt.' : result.message,
+        );
+      }
+      await waitForBackendOnline(timeout: const Duration(minutes: 3));
+      ref.invalidate(softwareVersionStatusProvider);
+      if (!mounted) return;
+      await fullAppRemountOrReload();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _serverUpdating = false;
+        _error = e.toString().replaceFirst('Bad state: ', '');
+      });
+      return;
+    }
+    if (mounted) setState(() => _serverUpdating = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     final outdated = ref.watch(softwareUpdateAvailableProvider);
-    if (!outdated) return const SizedBox.shrink();
-
     final status = ref.watch(softwareVersionStatusProvider).asData?.value;
+    final admin = ref.watch(authProvider).isAdmin;
+
+    if (_serverUpdating) {
+      return _Banner(
+        message: _serverProgress ?? 'Server bijwerken…',
+        progress: 0,
+      );
+    }
+
+    if (!outdated) return const SizedBox.shrink();
     if (status == null) return const SizedBox.shrink();
 
     // Native tablet: APK install beats the web-only "Vernieuwen" path.
@@ -82,10 +132,32 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
 
     final latest = status.latest;
     final ver = latest?.tag ?? latest?.version ?? '';
+    final agentReady = status.serverUpdate?.agentReady == true;
+    if (admin && agentReady) {
+      return _Banner(
+        message: _error ??
+            (ver.isEmpty
+                ? 'Nieuwe serverversie op GitHub. Bijwerken duurt 10–20 minuten.'
+                : 'Nieuwe serverversie ($ver). Bijwerken duurt 10–20 minuten.'),
+        actionLabel: 'Server bijwerken',
+        onAction: _updateServer,
+      );
+    }
+    if (admin) {
+      return _Banner(
+        message: ver.isEmpty
+            ? 'Nieuwe versie op GitHub. Eenmalig op de NUC: sudo bash docker/install.sh. Daarna vanaf de tablet.'
+            : 'Nieuwe versie ($ver). Eenmalig op de NUC: sudo bash docker/install.sh. Daarna vanaf de tablet.',
+        actionLabel: latest?.htmlUrl != null ? 'Bekijken' : null,
+        onAction: latest?.htmlUrl != null
+            ? () => openReleasePage(latest!.htmlUrl)
+            : null,
+      );
+    }
     return _Banner(
       message: ver.isEmpty
-          ? 'Er is een nieuwere versie op GitHub. Update de server (./installeer.sh).'
-          : 'Nieuwe versie op GitHub ($ver). Update de server met ./installeer.sh.',
+          ? 'Er is een nieuwere versie op GitHub. Vraag de beheerder de server bij te werken.'
+          : 'Nieuwe versie op GitHub ($ver). Vraag de beheerder de server bij te werken.',
       actionLabel: latest?.htmlUrl != null ? 'Bekijken' : null,
       onAction: latest?.htmlUrl != null
           ? () => openReleasePage(latest!.htmlUrl)

@@ -34,6 +34,7 @@ import '../satel_api.dart'
 import '../shading_subtype_glyph.dart';
 import '../theme.dart';
 import '../ui/widgets/admin_full_restart_card.dart';
+import '../ui/widgets/admin_server_update_card.dart';
 import 'installer_api.dart';
 import 'installer_auth.dart';
 import 'installer_form_sections.dart';
@@ -2797,6 +2798,8 @@ class _ProjectForm extends ConsumerWidget {
         _BoundStrField('lon', locMap, onChanged, number: true),
         if (showRestart) ...[
           const SizedBox(height: 28),
+          const AdminServerUpdateCard(),
+          const SizedBox(height: 16),
           const AdminFullRestartCard(),
         ],
       ],

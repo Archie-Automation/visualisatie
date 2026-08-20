@@ -16,6 +16,7 @@ import 'app_nav.dart';
 import 'schedule_editor_sheet.dart';
 import 'widgets/glass_card.dart';
 import 'widgets/luxe_backdrop.dart';
+import 'widgets/admin_server_update_card.dart';
 import 'installer_nav.dart';
 
 /// Customer-facing settings screen: time / astro schedules.
@@ -55,6 +56,8 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                   const SliverToBoxAdapter(child: _DisplayPanelSection()),
                   const SliverToBoxAdapter(child: _SpotifySection()),
+                  if (auth.isAdmin)
+                    const SliverToBoxAdapter(child: _ServerUpdateSection()),
                   const SliverToBoxAdapter(child: _VersionFooter()),
                   const SliverToBoxAdapter(child: SizedBox(height: 48)),
                 ],
@@ -1278,6 +1281,18 @@ class _AppearanceSection extends ConsumerWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ServerUpdateSection extends StatelessWidget {
+  const _ServerUpdateSection();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(28, 8, 28, 8),
+      child: AdminServerUpdateCard(),
     );
   }
 }
