@@ -749,11 +749,13 @@ class _SharpNetworkArt extends StatelessWidget {
     required this.url,
     required this.size,
     required this.errorBuilder,
+    this.fit = BoxFit.cover,
     this.imageKey,
   });
 
   final String url;
   final double size;
+  final BoxFit fit;
   final ImageErrorWidgetBuilder errorBuilder;
   final Key? imageKey;
 
@@ -766,12 +768,13 @@ class _SharpNetworkArt extends StatelessWidget {
       key: imageKey,
       width: size,
       height: size,
-      fit: BoxFit.cover,
+      fit: fit,
       gaplessPlayback: true,
       filterQuality: FilterQuality.high,
       isAntiAlias: true,
+      // Only one cache dimension — setting both stretches non-square logos
+      // (NPO 2 diamonds) into the square thumb.
       cacheWidth: px,
-      cacheHeight: px,
       errorBuilder: errorBuilder,
     );
   }
@@ -1428,10 +1431,14 @@ class _PresetCardState extends State<_PresetCard> {
         alignment: Alignment.center,
         children: [
           img != null && img.isNotEmpty
-              ? _SharpNetworkArt(
-                  url: img,
-                  size: _presetArtSize,
-                  errorBuilder: (_, __, ___) => _placeholder,
+              ? ColoredBox(
+                  color: const Color(0xFF141414),
+                  child: _SharpNetworkArt(
+                    url: img,
+                    size: _presetArtSize,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => _placeholder,
+                  ),
                 )
               : _placeholder,
           if (widget.loading)

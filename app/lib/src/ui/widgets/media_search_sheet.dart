@@ -356,12 +356,11 @@ class _ResultRow extends StatelessWidget {
               img,
               width: 46,
               height: 46,
-              fit: BoxFit.cover,
+              fit: BoxFit.contain,
               gaplessPlayback: true,
               filterQuality: FilterQuality.high,
               isAntiAlias: true,
               cacheWidth: 128,
-              cacheHeight: 128,
               errorBuilder: (_, __, ___) => _placeholder,
             )
           : _placeholder,
