@@ -770,14 +770,15 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   Future<void> _importKnx() async {
     final token = _currentToken();
     if (token == null) return;
-    final picked = await FilePicker.platform.pickFiles(
+    final picked = await FilePicker.pickFile(
       type: FileType.custom,
       allowedExtensions: ['xml'],
-      withData: true,
     );
-    if (picked == null || picked.files.isEmpty) return;
-    final bytes = picked.files.first.bytes;
-    if (bytes == null) {
+    if (picked == null) return;
+    Uint8List bytes;
+    try {
+      bytes = await picked.readAsBytes();
+    } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Kon het bestand niet lezen.')),

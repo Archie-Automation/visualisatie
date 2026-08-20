@@ -348,6 +348,8 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
     if (p == null || since == null) return;
     if (DateTime.now().difference(since) < _pendingMin) return;
     if (!_presetLooksLive(state, p)) return;
+    // Keep the preset cover on screen until the live state has art,
+    // otherwise the player flashes the speaker placeholder.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final live = ref.read(mediaStateProvider)[deviceId] ?? state;
@@ -355,7 +357,9 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
       final t0 = _pendingSince;
       if (still == null || t0 == null) return;
       if (DateTime.now().difference(t0) < _pendingMin) return;
-      if (_presetLooksLive(live, still)) _clearPending();
+      if (!_presetLooksLive(live, still)) return;
+      if (live.effectiveArt == null || live.effectiveArt!.isEmpty) return;
+      _clearPending();
     });
   }
 
@@ -375,7 +379,11 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
       if (!mounted) return;
       final live = ref.read(mediaStateProvider)[deviceId];
       final p = _pendingPreset;
-      if (live != null && p != null && _presetLooksLive(live, p)) {
+      if (live != null &&
+          p != null &&
+          _presetLooksLive(live, p) &&
+          live.effectiveArt != null &&
+          live.effectiveArt!.isNotEmpty) {
         _clearPending();
       }
     });
@@ -733,7 +741,7 @@ class _GroupStatusBar extends StatelessWidget {
 /*  Bits                                                                 */
 /* --------------------------------------------------------------------- */
 
-class _Artwork extends StatelessWidget {
+class _Artwork extends StatefulWidget {
   const _Artwork({
     required this.state,
     this.size,
@@ -747,11 +755,41 @@ class _Artwork extends StatelessWidget {
   final bool active;
   final String? artOverride;
 
+  @override
+  State<_Artwork> createState() => _ArtworkState();
+}
+
+class _ArtworkState extends State<_Artwork> {
+  String? _stickyArt;
+
+  String? get _incomingArt {
+    final override = widget.artOverride;
+    if (override != null && override.isNotEmpty) return override;
+    return widget.state.effectiveArt;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _stickyArt = _incomingArt;
+  }
+
+  @override
+  void didUpdateWidget(_Artwork oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final next = _incomingArt;
+    if (next != null && next.isNotEmpty) {
+      _stickyArt = next;
+    } else if (widget.state.transport == MediaTransport.stopped) {
+      _stickyArt = null;
+    }
+  }
+
   Widget _placeholder() => DecoratedBox(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              state.brand == MediaBrand.sonos
+              widget.state.brand == MediaBrand.sonos
                   ? Color(0xFF2A2A33)
                   : const Color(0xFF1F2A3A),
               Colors.black,
@@ -762,10 +800,10 @@ class _Artwork extends StatelessWidget {
         ),
         child: Center(
           child: Icon(
-            state.brand == MediaBrand.sonos
+            widget.state.brand == MediaBrand.sonos
                 ? Icons.speaker_rounded
                 : Icons.music_note_rounded,
-            color: active ? LuxeColors.brass : Colors.white24,
+            color: widget.active ? LuxeColors.brass : Colors.white24,
             size: DeviceControlBar.tileGlyphSize,
           ),
         ),
@@ -773,12 +811,10 @@ class _Artwork extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tileSize = size ?? DeviceControlBar.tileIconSize;
-    final radius = hero ? 28.0 : DeviceControlBar.tileIconRadius;
+    final tileSize = widget.size ?? DeviceControlBar.tileIconSize;
+    final radius = widget.hero ? 28.0 : DeviceControlBar.tileIconRadius;
     final borderRadius = BorderRadius.circular(radius);
-    final art = (artOverride != null && artOverride!.isNotEmpty)
-        ? artOverride
-        : state.effectiveArt;
+    final art = _incomingArt ?? _stickyArt;
 
     Widget child;
     if (art != null && art.isNotEmpty) {
@@ -794,7 +830,7 @@ class _Artwork extends StatelessWidget {
       child = _placeholder();
     }
 
-    if (hero) {
+    if (widget.hero) {
       return ClipRRect(
         borderRadius: borderRadius,
         child: SizedBox(
@@ -808,9 +844,9 @@ class _Artwork extends StatelessWidget {
     const rim = 1.5;
     final outerR = radius;
     final innerR = (outerR - rim).clamp(0.0, outerR);
-    final rimColor = active ? LuxeColors.brass : LuxeColors.line;
+    final rimColor = widget.active ? LuxeColors.brass : LuxeColors.line;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final fillColor = active
+    final fillColor = widget.active
         ? LuxeColors.brass.withValues(alpha: 0.14)
         : LuxeColors.surfaceDim.withValues(alpha: isDark ? 0.7 : 0.45);
 

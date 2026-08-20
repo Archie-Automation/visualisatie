@@ -7,7 +7,7 @@
 // once per day per entry. That matches the user-facing mental model
 // ("every weekday at sunset") and keeps the engine tiny.
 
-import SunCalc from "suncalc";
+import * as SunCalc from "suncalc";
 import { logger } from "./logger";
 import { findScene, getConfig, updateConfig } from "./config";
 import { runScene } from "./scenes";
@@ -208,13 +208,13 @@ function sunEvent(
   event: "sunrise" | "sunset",
   loc: { lat: number; lon: number }
 ): Date | null {
-  // `day` is anchored to local midnight (may live in a previous UTC day
-  // depending on the tz offset). SunCalc resolves events per UTC-day,
-  // so probe at local noon to consistently hit the intended local day.
+  // `day` is local midnight and may still be the previous UTC date.
+  // SunCalc v2 uses the UTC solar day of the input, so probe at local noon.
   const probe = new Date(day.getTime() + 12 * 60 * 60 * 1000);
   const times = SunCalc.getTimes(probe, loc.lat, loc.lon);
   const out = event === "sunrise" ? times.sunrise : times.sunset;
-  if (!out || Number.isNaN(out.getTime())) return null;
+  if (!out) return null;
+  if (out instanceof Date && Number.isNaN(out.getTime())) return null;
   return out;
 }
 

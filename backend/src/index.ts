@@ -1,4 +1,5 @@
-import "dotenv/config";
+import dotenv from "dotenv";
+dotenv.config({ quiet: true });
 import http from "node:http";
 import path from "node:path";
 import fs from "node:fs";
