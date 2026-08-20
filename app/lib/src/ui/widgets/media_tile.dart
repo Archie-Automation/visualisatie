@@ -666,8 +666,8 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
   }
 }
 
-/// Groepslider (schaalt alle zones) plus een slider per gekoppelde zone.
-class _GroupedPlayerVolumes extends StatelessWidget {
+/// Groepslider altijd zichtbaar; per-zone sliders inklapbaar (standaard dicht).
+class _GroupedPlayerVolumes extends StatefulWidget {
   const _GroupedPlayerVolumes({
     required this.deviceId,
     required this.state,
@@ -684,9 +684,17 @@ class _GroupedPlayerVolumes extends StatelessWidget {
   final bool online;
   final Map<String, MediaState> all;
 
+  @override
+  State<_GroupedPlayerVolumes> createState() => _GroupedPlayerVolumesState();
+}
+
+class _GroupedPlayerVolumesState extends State<_GroupedPlayerVolumes> {
+  bool _zonesOpen = false;
+
   String _nameFor(String id) {
+    final cfg = widget.cfg;
     if (cfg != null) {
-      for (final d in cfg!.allDevices) {
+      for (final d in cfg.allDevices) {
         if (d.id == id) return d.name;
       }
     }
@@ -695,6 +703,11 @@ class _GroupedPlayerVolumes extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final deviceId = widget.deviceId;
+    final state = widget.state;
+    final api = widget.api;
+    final online = widget.online;
+    final all = widget.all;
     final ids = mediaGroupDeviceIds(state, deviceId, all);
     final groupMuted =
         ids.isNotEmpty && ids.every((id) => all[id]?.muted == true);
@@ -705,6 +718,12 @@ class _GroupedPlayerVolumes extends StatelessWidget {
         if (v > groupVol) groupVol = v;
       }
     }
+    final showZones = ids.length > 1;
+    final captionStyle = Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: Colors.white54,
+          letterSpacing: 0.8,
+          fontWeight: FontWeight.w600,
+        );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -723,18 +742,48 @@ class _GroupedPlayerVolumes extends StatelessWidget {
                 }
               : null,
         ),
-        const SizedBox(height: 14),
-        for (final id in ids) ...[
-          _VolumeSlider.dark(
-            caption: _nameFor(id),
-            value: (all[id]?.volume ?? 0).toDouble(),
-            muted: all[id]?.muted ?? false,
-            onChanged: online ? (v) => api.setVolume(id, v.round()) : null,
-            onToggleMute: online
-                ? () => api.setMuted(id, !(all[id]?.muted ?? false))
-                : null,
+        if (showZones) ...[
+          const SizedBox(height: 6),
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _zonesOpen = !_zonesOpen),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _zonesOpen
+                          ? 'ZONES'
+                          : 'ZONES · ${ids.length}',
+                      style: captionStyle,
+                    ),
+                  ),
+                  Icon(
+                    _zonesOpen
+                        ? Icons.expand_less_rounded
+                        : Icons.expand_more_rounded,
+                    color: Colors.white54,
+                    size: 22,
+                  ),
+                ],
+              ),
+            ),
           ),
-          const SizedBox(height: 8),
+          if (_zonesOpen) ...[
+            for (final id in ids) ...[
+              _VolumeSlider.dark(
+                caption: _nameFor(id),
+                value: (all[id]?.volume ?? 0).toDouble(),
+                muted: all[id]?.muted ?? false,
+                onChanged: online ? (v) => api.setVolume(id, v.round()) : null,
+                onToggleMute: online
+                    ? () => api.setMuted(id, !(all[id]?.muted ?? false))
+                    : null,
+              ),
+              const SizedBox(height: 8),
+            ],
+          ],
         ],
       ],
     );
