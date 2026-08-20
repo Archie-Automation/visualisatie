@@ -15,6 +15,27 @@ const _installChannel = MethodChannel('archie_os/apk_install');
 bool get supportsAndroidApkUpdate =>
     !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
+/// pubspec version baked into the APK (`versionName` + `versionCode`).
+/// Independent of `--dart-define=APP_VERSION`; `dev` dart-defines still update.
+Future<String?> readInstalledAndroidVersion() async {
+  if (!supportsAndroidApkUpdate) return null;
+  try {
+    final raw = await _installChannel.invokeMethod<dynamic>('appVersion');
+    if (raw is! Map) return null;
+    final name = '${raw['versionName'] ?? ''}'.trim();
+    final codeRaw = raw['versionCode'];
+    final code = codeRaw is num ? codeRaw.toInt() : int.tryParse('$codeRaw');
+    if (name.contains('+')) return name;
+    if (name.isEmpty) {
+      return code != null ? '0.0.0+$code' : null;
+    }
+    if (code == null) return name;
+    return '$name+$code';
+  } catch (_) {
+    return null;
+  }
+}
+
 class AndroidApkInstallResult {
   const AndroidApkInstallResult._(this.ok, {this.error});
 
