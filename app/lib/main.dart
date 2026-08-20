@@ -16,7 +16,7 @@ Future<void> main() async {
       builder: (context, epoch, _) {
         return ProviderScope(
           key: ValueKey<int>(epoch),
-          child: const LuxeKnxApp(),
+          child: const ArchieOsApp(),
         );
       },
     ),

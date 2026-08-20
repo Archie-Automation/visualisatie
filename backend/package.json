@@ -2,7 +2,7 @@
   "name": "knx-backend",
   "version": "0.2.0",
   "private": true,
-  "description": "Luxe KNX Smart Home backend (Node.js + TypeScript).",
+  "description": "Archie OS Smart Home backend (Node.js + TypeScript).",
   "main": "dist/index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",

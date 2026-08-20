@@ -9,7 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'api.dart';
 
-const _installChannel = MethodChannel('luxe_knx/apk_install');
+const _installChannel = MethodChannel('archie_os/apk_install');
 
 /// Whether this build can offer in-app APK install from the NUC proxy.
 bool get supportsAndroidApkUpdate =>
@@ -61,7 +61,7 @@ Future<AndroidApkInstallResult> downloadAndInstallAndroidApk({
     final total = response.contentLength ?? 0;
     final dir = await getTemporaryDirectory();
     final safeName = (fileName == null || fileName.trim().isEmpty)
-        ? 'luxe-knx-update.apk'
+        ? 'archie-os-update.apk'
         : p.basename(fileName);
     final file = File(p.join(dir.path, safeName));
     final sink = file.openWrite();

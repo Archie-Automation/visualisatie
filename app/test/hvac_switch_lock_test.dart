@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:luxe_knx/src/hvac_switch_lock.dart';
+import 'package:archie_os/src/hvac_switch_lock.dart';
 
 void main() {
   group('HvacLockStore.formatRemaining', () {

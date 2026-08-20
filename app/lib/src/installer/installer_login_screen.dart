@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:luxe_knx/l10n/app_localizations.dart';
+import 'package:archie_os/l10n/app_localizations.dart';
 
 import '../theme.dart';
 import 'installer_auth.dart';
@@ -90,7 +90,7 @@ class _InstallerLoginScreenState extends ConsumerState<InstallerLoginScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Text(
-                        'LUXE KNX',
+                        'ARCHIE OS',
                         style: Theme.of(context).textTheme.labelLarge,
                       ),
                       const SizedBox(height: 8),

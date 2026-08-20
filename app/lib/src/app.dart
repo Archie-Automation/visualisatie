@@ -1,6 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:luxe_knx/l10n/app_localizations.dart';
+import 'package:archie_os/l10n/app_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -31,14 +31,14 @@ import 'ui/widgets/satel_entry_delay_layer.dart';
 import 'ui/widgets/software_update_banner.dart';
 import 'software_version.dart';
 
-class LuxeKnxApp extends ConsumerStatefulWidget {
-  const LuxeKnxApp({super.key});
+class ArchieOsApp extends ConsumerStatefulWidget {
+  const ArchieOsApp({super.key});
 
   @override
-  ConsumerState<LuxeKnxApp> createState() => _LuxeKnxAppState();
+  ConsumerState<ArchieOsApp> createState() => _ArchieOsAppState();
 }
 
-class _LuxeKnxAppState extends ConsumerState<LuxeKnxApp>
+class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
     with WidgetsBindingObserver {
   late final GoRouter _router;
   late final _RouterRefresh _routerRefresh;
@@ -250,7 +250,7 @@ class _LuxeKnxAppState extends ConsumerState<LuxeKnxApp>
     final themeMode = ref.watch(effectiveThemeModeProvider);
 
     return MaterialApp.router(
-      title: 'Luxe KNX',
+      title: 'Archie OS',
       theme: buildLuxeTheme(Brightness.light),
       darkTheme: buildLuxeTheme(Brightness.dark),
       themeMode: themeMode,

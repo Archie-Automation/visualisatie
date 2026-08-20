@@ -59,7 +59,7 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
           (authUser != null && authUser.isNotEmpty) ? authUser : null
       ..displayName =
           (displayName != null && displayName.isNotEmpty) ? displayName : 'Intercom'
-      ..userAgent = 'LuxeKNX-Intercom'
+      ..userAgent = 'ArchieOS-Intercom'
       ..register = true;
 
     await start(settings);

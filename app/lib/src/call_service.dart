@@ -91,7 +91,7 @@ class CallService {
       final params = CallKitParams(
         id: callId,
         nameCaller: ring.name,
-        appName: 'Luxe KNX',
+        appName: 'Archie OS',
         avatar: '',
         handle: 'Intercom',
         type: 1, // 0 = audio, 1 = video
@@ -102,7 +102,7 @@ class CallService {
           subtitle: 'Gemist',
         ),
         extra: <String, dynamic>{'intercomId': ring.intercomId, 'ts': ring.ts},
-        headers: <String, dynamic>{'platform': 'luxe-knx'},
+        headers: <String, dynamic>{'platform': 'archie-os'},
         android: AndroidParams(
           isCustomNotification: true,
           isShowLogo: false,

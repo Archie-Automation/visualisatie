@@ -51,7 +51,7 @@ function githubToken(): string | undefined {
 function headers(): Record<string, string> {
   const h: Record<string, string> = {
     Accept: "application/vnd.github+json",
-    "User-Agent": "luxe-knx-version-check",
+    "User-Agent": "archie-os-version-check",
     "X-GitHub-Api-Version": "2022-11-28"
   };
   const token = githubToken();

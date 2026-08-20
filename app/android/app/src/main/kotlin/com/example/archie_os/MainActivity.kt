@@ -1,4 +1,4 @@
-package com.example.luxe_knx
+package com.example.archie_os
 
 import android.content.Context
 import android.content.Intent
@@ -49,7 +49,7 @@ class MainActivity : FlutterActivity(), SensorEventListener {
 
         EventChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            "luxe_knx/proximity_events",
+            "archie_os/proximity_events",
         ).setStreamHandler(object : EventChannel.StreamHandler {
             override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
                 proximityEvents = events
@@ -64,7 +64,7 @@ class MainActivity : FlutterActivity(), SensorEventListener {
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            "luxe_knx/proximity",
+            "archie_os/proximity",
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "wakeScreen" -> {
@@ -77,7 +77,7 @@ class MainActivity : FlutterActivity(), SensorEventListener {
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
-            "luxe_knx/apk_install",
+            "archie_os/apk_install",
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "installApk" -> {
@@ -155,7 +155,7 @@ class MainActivity : FlutterActivity(), SensorEventListener {
             PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
                 PowerManager.ACQUIRE_CAUSES_WAKEUP or
                 PowerManager.ON_AFTER_RELEASE,
-            "luxe_knx:wake",
+            "archie_os:wake",
         )
         wl.setReferenceCounted(false)
         // Timeout-release — niet meteen release() (dat annuleerde de wake).
