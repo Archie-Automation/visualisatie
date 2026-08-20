@@ -94,7 +94,7 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
     final agentReady = su?.agentReady == true;
     final newer = status?.updateAvailable == true;
     final latest = status?.latest?.tag ?? status?.latest?.version;
-    final running = status?.running.version ?? kAppVersion;
+    final running = status?.running.version;
 
     String body;
     if (_error != null) {
@@ -107,12 +107,11 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
           'Daarna kun je vanaf deze app bijwerken.';
     } else if (newer) {
       body = latest == null
-          ? 'Er staat een nieuwere versie op GitHub. Nu draait $running.'
-          : 'GitHub heeft $latest. Deze server draait $running.';
+          ? 'Er staat een nieuwere versie op GitHub.'
+          : 'GitHub heeft $latest.';
     } else {
       body =
-          'Deze server draait $running en is gelijk met GitHub. '
-          'Je kunt toch opnieuw bouwen als iets vastzit.';
+          'Gelijk met GitHub. Je kunt toch opnieuw bouwen als iets vastzit.';
     }
 
     return GlassCard(
@@ -132,7 +131,25 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 14),
+          Text('SERVERVERSIE', style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 4),
+          Text(
+            running == null || running.isEmpty ? '…' : running,
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          if (newer && latest != null && latest.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text('GITHUB', style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 4),
+            Text(
+              latest,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: LuxeColors.brassDeep,
+                  ),
+            ),
+          ],
+          const SizedBox(height: 12),
           Text(body, style: Theme.of(context).textTheme.bodyMedium),
           const SizedBox(height: 16),
           SizedBox(

@@ -1297,16 +1297,23 @@ class _ServerUpdateSection extends StatelessWidget {
   }
 }
 
-class _VersionFooter extends StatelessWidget {
+class _VersionFooter extends ConsumerWidget {
   const _VersionFooter();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authProvider);
+    final status = ref.watch(softwareVersionStatusProvider).asData?.value;
+    final server = status?.running.version;
+    final app = kAppVersion;
+    final line = auth.isAdmin && server != null && server.isNotEmpty
+        ? 'app $app · server $server'
+        : 'versie $app';
     return Padding(
-      padding: EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Center(
         child: Text(
-          'versie $kAppVersion',
+          line,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: LuxeColors.inkSoft.withValues(alpha: 0.45),
                 fontSize: 11,
