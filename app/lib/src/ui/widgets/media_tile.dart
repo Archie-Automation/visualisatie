@@ -15,6 +15,7 @@ import 'device_tile_shell.dart';
 import 'media_search_sheet.dart';
 
 const _metadataRevealDelay = Duration(milliseconds: 2500);
+const _playerCtlSize = 60.0;
 
 /// Houdt trackinfo even verborgen na start/overschakelen â€” RDS komt later binnen.
 class _MediaMetadataGate extends StatefulWidget {
@@ -314,17 +315,39 @@ class MediaPlayerScreen extends ConsumerWidget {
       }
     }
 
+    String backFallback = '/';
+    if (cfg != null) {
+      final floor = cfg.floorForDevice(deviceId);
+      final room = cfg.roomForDevice(deviceId);
+      if (floor != null && room != null) {
+        backFallback = '/floor/${floor.id}/room/${room.id}';
+      }
+    }
+
     return Scaffold(
       backgroundColor: LuxeColors.surfaceDark,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        iconTheme: IconThemeData(color: Colors.white),
+        automaticallyImplyLeading: false,
+        toolbarHeight: _playerCtlSize + 16,
+        leadingWidth: _playerCtlSize + 20,
+        iconTheme: const IconThemeData(color: Colors.white),
         title: Text(
           thisDevice?.name ?? state.brand.label,
           style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 color: Colors.white,
                 fontWeight: FontWeight.w600,
               ),
+        ),
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: Center(
+            child: _DarkCtl(
+              icon: Icons.arrow_back_ios_new_rounded,
+              size: _playerCtlSize,
+              onTap: () => appBack(context, fallback: backFallback),
+            ),
+          ),
         ),
         actions: [
           // Zoekknop â€” bij Bluesound (BluOS stelt de gekoppelde diensten lokaal
@@ -351,72 +374,26 @@ class MediaPlayerScreen extends ConsumerWidget {
                 ),
               ),
             ),
-          // Koppelknop in de AppBar â€” ook zichtbaar bij gestopte speler
+          // Koppelknop in de AppBar — ook zichtbaar bij gestopte speler
           if (sameZones.isNotEmpty && thisDevice != null)
             Padding(
               padding: const EdgeInsets.only(right: 12),
-              child: GestureDetector(
-                onTap: () => showModalBottomSheet<void>(
-                  context: context,
-                  isScrollControlled: true,
-                  useSafeArea: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (_) => _AudioGroupSheet(
-                    coordinator: thisDevice!,
-                    allSameZones: sameZones,
-                    api: api,
-                  ),
-                ),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: state.groupRole.isGrouped
-                        ? LuxeColors.brass.withValues(alpha: 0.2)
-                        : Colors.white.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: state.groupRole.isGrouped
-                          ? LuxeColors.brass.withValues(alpha: 0.5)
-                          : Colors.white24,
+              child: Center(
+                child: _PlayerGroupCtl(
+                  grouped: state.groupRole.isGrouped,
+                  extraCount: state.groupRole == MediaGroupRole.coordinator
+                      ? state.groupMemberIds.length
+                      : (state.groupRole == MediaGroupRole.member ? 1 : 0),
+                  onTap: () => showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    useSafeArea: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (_) => _AudioGroupSheet(
+                      coordinator: thisDevice!,
+                      allSameZones: sameZones,
+                      api: api,
                     ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        state.groupRole.isGrouped
-                            ? Icons.link_rounded
-                            : Icons.link_off_rounded,
-                        size: context.isPhone ? 16 : 21,
-                        color: state.groupRole.isGrouped
-                            ? LuxeColors.brass
-                            : Colors.white60,
-                      ),
-                      if (state.groupRole == MediaGroupRole.coordinator &&
-                          state.groupMemberIds.isNotEmpty) ...[
-                        SizedBox(width: 4),
-                        Text(
-                          '+${state.groupMemberIds.length}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: LuxeColors.brass,
-                            height: 1,
-                          ),
-                        ),
-                      ] else if (state.groupRole == MediaGroupRole.member) ...[
-                        SizedBox(width: 4),
-                        Text(
-                          '+1',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: LuxeColors.brass,
-                            height: 1,
-                          ),
-                        ),
-                      ],
-                    ],
                   ),
                 ),
               ),
@@ -488,7 +465,7 @@ class MediaPlayerScreen extends ConsumerWidget {
                       children: [
                         _DarkCtl(
                           icon: DeviceControlIcons.skipPrevious,
-                          size: 60,
+                          size: _playerCtlSize,
                           onTap: state.online
                               ? () => api.previous(deviceId)
                               : null,
@@ -503,7 +480,7 @@ class MediaPlayerScreen extends ConsumerWidget {
                         const SizedBox(width: 20),
                         _DarkCtl(
                           icon: DeviceControlIcons.skipNext,
-                          size: 60,
+                          size: _playerCtlSize,
                           onTap:
                               state.online ? () => api.next(deviceId) : null,
                         ),
@@ -684,6 +661,7 @@ class _Artwork extends StatelessWidget {
     if (art != null && art.isNotEmpty) {
       child = Image.network(
         art,
+        key: ValueKey(art),
         fit: BoxFit.cover,
         gaplessPlayback: true,
         filterQuality: FilterQuality.low,
@@ -1049,10 +1027,16 @@ class _VolumeSliderState extends State<_VolumeSlider> {
 /* ---------------------- Dark-mode full-screen bits -------------------- */
 
 class _DarkCtl extends StatelessWidget {
-  const _DarkCtl({required this.icon, required this.onTap, required this.size});
+  const _DarkCtl({
+    required this.icon,
+    required this.onTap,
+    required this.size,
+    this.accent = false,
+  });
   final IconData icon;
   final VoidCallback? onTap;
   final double size;
+  final bool accent;
 
   @override
   Widget build(BuildContext context) => GestureDetector(
@@ -1062,16 +1046,78 @@ class _DarkCtl extends StatelessWidget {
           height: size,
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(size * 0.28),
-            color: LuxeColors.surfaceDarkElev,
-            border: Border.all(color: Colors.white12),
+            color: accent
+                ? LuxeColors.brass.withValues(alpha: 0.2)
+                : LuxeColors.surfaceDarkElev,
+            border: Border.all(
+              color: accent
+                  ? LuxeColors.brass.withValues(alpha: 0.5)
+                  : Colors.white12,
+            ),
           ),
           child: Icon(
             icon,
-            color: onTap == null ? Colors.white24 : Colors.white,
+            color: onTap == null
+                ? Colors.white24
+                : (accent ? LuxeColors.brass : Colors.white),
             size: size * 0.44,
           ),
         ),
       );
+}
+
+class _PlayerGroupCtl extends StatelessWidget {
+  const _PlayerGroupCtl({
+    required this.grouped,
+    required this.extraCount,
+    required this.onTap,
+  });
+
+  final bool grouped;
+  final int extraCount;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final ctl = _DarkCtl(
+      icon: grouped ? Icons.link_rounded : Icons.link_off_rounded,
+      size: _playerCtlSize,
+      accent: grouped,
+      onTap: onTap,
+    );
+    if (extraCount <= 0) return ctl;
+
+    return SizedBox(
+      width: _playerCtlSize,
+      height: _playerCtlSize,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          ctl,
+          Positioned(
+            right: -2,
+            top: -2,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: LuxeColors.brass,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                '+$extraCount',
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                  height: 1.2,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _BigPlayPause extends StatelessWidget {

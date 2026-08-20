@@ -382,7 +382,11 @@ export function buildRouter(
         return res.status(404).send("no image");
       }
       res.setHeader("Content-Type", sniffed);
-      res.setHeader("Cache-Control", "public, max-age=3600");
+      const isSonosGetaa = /\/getaa(?:\?|$)/i.test(u);
+      res.setHeader(
+        "Cache-Control",
+        isSonosGetaa ? "no-cache" : "public, max-age=3600"
+      );
       res.send(Buffer.from(buf));
     } catch {
       res.status(502).send("upstream error");

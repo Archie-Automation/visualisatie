@@ -258,7 +258,7 @@ export class SonosDriver {
       // Do not speculate /getaa — empty or hanging responses block preset-art
       // fallback in the client (albumArt wins over preset matching).
       let albumArt =
-        transport === "stopped" || !rawAbsArt
+        transport === "stopped" || transport === "buffering" || !rawAbsArt
           ? undefined
           : proxyArt(rawAbsArt);
 

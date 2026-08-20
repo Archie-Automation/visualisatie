@@ -66,7 +66,10 @@ export class BluesoundDriver {
         title,
         artist,
         album,
-        albumArt: resolveImage(this.base, text(xml, "image")),
+        albumArt:
+          transport === "stopped" || transport === "buffering"
+            ? undefined
+            : resolveImage(this.base, text(xml, "image")),
         source: text(xml, "service") ?? text(xml, "inputId"),
         volume,
         muted,
