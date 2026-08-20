@@ -748,7 +748,7 @@ class _GroupedPlayerVolumesState extends State<_GroupedPlayerVolumes> {
             behavior: HitTestBehavior.opaque,
             onTap: () => setState(() => _zonesOpen = !_zonesOpen),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(8, 8, 4, 8),
+              padding: const EdgeInsets.fromLTRB(8, 10, 0, 10),
               child: Row(
                 children: [
                   Expanded(
@@ -763,8 +763,8 @@ class _GroupedPlayerVolumesState extends State<_GroupedPlayerVolumes> {
                     _zonesOpen
                         ? Icons.expand_less_rounded
                         : Icons.expand_more_rounded,
-                    color: Colors.white54,
-                    size: 22,
+                    color: Colors.white70,
+                    size: 36,
                   ),
                 ],
               ),
