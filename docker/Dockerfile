@@ -22,7 +22,9 @@ RUN VERSION="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | tr -d '\r')" \
 FROM node:20-alpine AS backend-build
 WORKDIR /app
 COPY backend/package*.json backend/tsconfig.json ./
-RUN npm ci
+# better-sqlite3 has no musl prebuild for current Node 20 — compile it.
+RUN apk add --no-cache python3 make g++ \
+  && npm ci
 COPY backend/src ./src
 RUN npm run build
 
@@ -45,7 +47,9 @@ RUN apk add --no-cache ffmpeg tini \
 COPY --from=alexxit/go2rtc:latest /usr/local/bin/go2rtc /usr/local/bin/go2rtc
 
 COPY backend/package*.json ./
-RUN npm ci --omit=dev
+RUN apk add --no-cache python3 make g++ \
+  && npm ci --omit=dev \
+  && apk del python3 make g++
 COPY --from=backend-build /app/dist ./dist
 COPY --from=flutter /src/app/build/web /app/web
 COPY --from=flutter /tmp/app_version.txt /app/APP_VERSION

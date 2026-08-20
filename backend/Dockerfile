@@ -6,7 +6,9 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json tsconfig.json ./
-RUN npm ci
+# better-sqlite3 has no musl prebuild for current Node 20 — compile it.
+RUN apk add --no-cache python3 make g++ \
+  && npm ci
 COPY src ./src
 RUN npm run build
 
@@ -21,7 +23,9 @@ RUN apk add --no-cache ffmpeg tini
 COPY --from=alexxit/go2rtc:latest /usr/local/bin/go2rtc /usr/local/bin/go2rtc
 
 COPY package*.json ./
-RUN npm ci --omit=dev
+RUN apk add --no-cache python3 make g++ \
+  && npm ci --omit=dev \
+  && apk del python3 make g++
 COPY --from=build /app/dist ./dist
 
 RUN mkdir -p /media
