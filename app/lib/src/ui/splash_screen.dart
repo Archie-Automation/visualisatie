@@ -33,7 +33,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   bool _savingServer = false;
   Timer? _retryTimer;
 
-  static const String _logoAsset = 'assets/images/logo.png';
+  static const String _logoAsset = 'assets/images/app_icon.png';
 
   @override
   void initState() {
@@ -143,11 +143,14 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                           child: child,
                         );
                       },
-                      child: Image.asset(
-                        _logoAsset,
-                        width: 120,
-                        height: 120,
-                        fit: BoxFit.contain,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(28),
+                        child: Image.asset(
+                          _logoAsset,
+                          width: 128,
+                          height: 128,
+                          fit: BoxFit.cover,
+                        ),
                       ),
                     ),
                     if (_showServerField) ...[
