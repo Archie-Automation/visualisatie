@@ -187,10 +187,16 @@ class MediaState {
   /// Returns the best available artwork URL, resolving relative proxy paths.
   /// Falls back to a matching preset image when the track has no art
   /// (common for internet radio stations).
+  ///
+  /// Sonos `/getaa` URLs stay identical while the pixels change; append a
+  /// cache-buster from the current track identity so [Image.network] reloads.
   String? get effectiveArt {
-    final art = _resolveArtUrl(albumArt) ??
-        _presetFallbackArt;
-    return art;
+    final art = _resolveArtUrl(albumArt) ?? _presetFallbackArt;
+    if (art == null || art.isEmpty) return null;
+    if (!art.contains('getaa')) return art;
+    final tag = '${title ?? ''}|${artist ?? ''}|${currentUri ?? ''}';
+    final sep = art.contains('?') ? '&' : '?';
+    return '$art${sep}v=${tag.hashCode}';
   }
 
   String? get _presetFallbackArt {
@@ -217,13 +223,12 @@ class MediaState {
       }
     }
 
-    // 3. Title match — check if the playing song title contains a preset name.
-    //    Less reliable but helps for direct streams with ICY metadata.
+    // 3. Exact title match — ICY metadata sometimes *is* the station name.
     if (title != null && title!.isNotEmpty) {
+      final tLower = title!.toLowerCase().trim();
       for (final p in presets) {
         if (p.image == null) continue;
-        final pName = p.name.toLowerCase();
-        if (pName.isNotEmpty && title!.toLowerCase().contains(pName)) {
+        if (p.name.isNotEmpty && tLower == p.name.toLowerCase().trim()) {
           return _resolveArtUrl(p.image);
         }
       }

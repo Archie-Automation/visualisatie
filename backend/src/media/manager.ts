@@ -28,6 +28,10 @@ const PRESETS_INTERVAL_MS = 60_000;
 
 type AnyDriver = SonosDriver | BluesoundDriver;
 
+/** Artwork remembered for a specific content URI so radio/station
+ *  switches don't keep the previous track's cover. */
+type CachedArt = { uri: string; art: string };
+
 export class MediaManager extends EventEmitter {
   private drivers = new Map<string, AnyDriver>();
   private states = new Map<string, MediaState>();
@@ -35,9 +39,8 @@ export class MediaManager extends EventEmitter {
   private presetsTimer: NodeJS.Timeout | null = null;
   /** In-memory group map: memberId → coordinatorId */
   private groupMap = new Map<string, string>();
-  /** Last-played preset image per device — used as albumArt fallback for
-   *  radio streams that don't carry their own artwork. */
-  private lastPresetArt = new Map<string, string>();
+  /** Last-known artwork per device, keyed to the content URI it belonged to. */
+  private lastPresetArt = new Map<string, CachedArt>();
   /** Sonos UUID → deviceId map, built lazily from device descriptions. */
   private sonosUuidToId = new Map<string, string>();
   /** Track which device IDs have already had their UUID fetched. */
@@ -166,13 +169,13 @@ export class MediaManager extends EventEmitter {
         const candidates = await drv.spotifyTargetCandidates();
         await spotify.playOnDevice(candidates, ref);
       }
-      if (meta?.image) this.lastPresetArt.set(id, meta.image);
+      if (meta?.image) this.lastPresetArt.set(id, { uri: ref, art: meta.image });
       setTimeout(() => void this.pollOne(drv), 1200);
       return;
     }
 
     // Cache the artwork so the tile doesn't go blank while the stream starts.
-    if (meta?.image) this.lastPresetArt.set(id, meta.image);
+    if (meta?.image) this.lastPresetArt.set(id, { uri: ref, art: meta.image });
     await drv.playRef(ref);
     setTimeout(() => void this.pollOne(drv), 400);
   }
@@ -389,7 +392,10 @@ export class MediaManager extends EventEmitter {
         const currentPresets = this.states.get(id)?.presets ?? [];
         const matchedPreset = currentPresets.find((p) => p.id === cmd.presetId);
         if (matchedPreset?.image) {
-          this.lastPresetArt.set(id, matchedPreset.image);
+          this.lastPresetArt.set(id, {
+            uri: matchedPreset.uri ?? cmd.uri ?? "",
+            art: matchedPreset.image
+          });
         }
         await drv.playPreset(cmd.presetId, cmd.uri);
         break;
@@ -402,36 +408,71 @@ export class MediaManager extends EventEmitter {
 
   /* ---------------------------- internal -------------------------- */
 
+  /** Fill / cache albumArt without carrying a previous track's cover onto
+   *  a new radio station (or any other URI). */
+  private _applyArtwork(
+    id: string,
+    prev: MediaState | undefined,
+    next: MediaState
+  ): void {
+    if (next.transport === "stopped") {
+      this.lastPresetArt.delete(id);
+      next.albumArt = undefined;
+      return;
+    }
+
+    const uri = next.currentUri ?? "";
+
+    // Buffering still often reports the previous track's /getaa URL.
+    if (next.transport === "buffering") {
+      next.albumArt = undefined;
+      const presetArt = matchPresetArt(next);
+      if (presetArt) {
+        next.albumArt = presetArt;
+      } else {
+        const cached = this.lastPresetArt.get(id);
+        if (cached?.art) next.albumArt = cached.art;
+      }
+      return;
+    }
+
+    // Same art URL on a different URI is leftover from the previous source.
+    if (
+      next.albumArt &&
+      prev?.currentUri &&
+      uri !== prev.currentUri &&
+      next.albumArt === prev.albumArt
+    ) {
+      next.albumArt = undefined;
+    }
+
+    if (next.albumArt) {
+      this.lastPresetArt.set(id, { uri, art: next.albumArt });
+      return;
+    }
+
+    const presetArt = matchPresetArt(next);
+    if (presetArt) {
+      next.albumArt = presetArt;
+      this.lastPresetArt.set(id, { uri, art: presetArt });
+      return;
+    }
+
+    const cached = this.lastPresetArt.get(id);
+    if (cached?.art && cached.uri === uri) {
+      next.albumArt = cached.art;
+    } else {
+      this.lastPresetArt.delete(id);
+    }
+  }
+
   private async pollOne(drv: AnyDriver): Promise<void> {
     try {
       const prev = this.states.get(drv.deviceId);
       const next = await drv.poll();
       // Preserve presets across polls — they change rarely.
       if (prev?.presets && !next.presets) next.presets = prev.presets;
-      // Art preservation strategy:
-      //  1. Sonos returned real albumArt → use it and cache it as "last known good".
-      //  2. Sonos returned no albumArt but device is playing → use last known good
-      //     (prevents flicker between songs and survives backend restarts).
-      //  3. Device stopped → clear cache so stale art doesn't reappear.
-      if (next.transport !== "stopped") {
-        if (next.albumArt) {
-          // Cache real art immediately so it survives brief poll gaps.
-          this.lastPresetArt.set(drv.deviceId, next.albumArt);
-        } else {
-          const cached = this.lastPresetArt.get(drv.deviceId);
-          if (cached) {
-            next.albumArt = cached;
-          } else {
-            const presetArt = matchPresetArt(next);
-            if (presetArt) {
-              next.albumArt = presetArt;
-              this.lastPresetArt.set(drv.deviceId, presetArt);
-            }
-          }
-        }
-      } else {
-        this.lastPresetArt.delete(drv.deviceId);
-      }
+      this._applyArtwork(drv.deviceId, prev, next);
       // Preserve group state — groupRole/members come from groupMap, not the device API.
       this._applyGroupFields(drv.deviceId, next);
       this.states.set(drv.deviceId, next);
@@ -532,9 +573,11 @@ function matchPresetArt(state: MediaState): string | undefined {
     }
   }
   if (state.title) {
-    const tLower = state.title.toLowerCase();
+    const tLower = state.title.toLowerCase().trim();
     for (const p of presets) {
-      if (p.image && p.name && tLower.includes(p.name.toLowerCase())) return p.image;
+      if (p.image && p.name && tLower === p.name.toLowerCase().trim()) {
+        return p.image;
+      }
     }
   }
   return undefined;
@@ -552,6 +595,7 @@ function shallowEqual(a: MediaState | undefined, b: MediaState): boolean {
     a.album === b.album &&
     a.albumArt === b.albumArt &&
     a.source === b.source &&
+    a.currentUri === b.currentUri &&
     a.volume === b.volume &&
     a.muted === b.muted &&
     a.groupRole === b.groupRole &&
