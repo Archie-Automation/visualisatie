@@ -112,6 +112,27 @@ enum MediaGroupRole {
   bool get isGrouped => this == coordinator || this == member;
 }
 
+/// Coordinator first, then members. Works from a member tile via the coordinator state.
+List<String> mediaGroupDeviceIds(
+  MediaState state,
+  String deviceId, [
+  Map<String, MediaState>? all,
+]) {
+  if (state.groupRole == MediaGroupRole.coordinator) {
+    return [deviceId, ...state.groupMemberIds];
+  }
+  if (state.groupRole == MediaGroupRole.member) {
+    final coordId = state.groupCoordinatorId;
+    if (coordId == null) return [deviceId];
+    final coord = all?[coordId];
+    if (coord != null && coord.groupMemberIds.isNotEmpty) {
+      return [coordId, ...coord.groupMemberIds];
+    }
+    return [coordId, deviceId];
+  }
+  return [deviceId];
+}
+
 enum MediaBrand {
   sonos,
   bluesound;
@@ -161,6 +182,7 @@ class MediaState {
   final MediaGroupRole groupRole;
   final List<String> groupMemberIds;
   final String? groupCoordinatorId;
+  final int? groupVolume;
   final String? currentUri;
 
   const MediaState({
@@ -181,6 +203,7 @@ class MediaState {
     this.groupRole = MediaGroupRole.standalone,
     this.groupMemberIds = const [],
     this.groupCoordinatorId,
+    this.groupVolume,
     this.currentUri,
   });
 
@@ -266,6 +289,7 @@ class MediaState {
         groupMemberIds: ((j['groupMemberIds'] as List?) ?? const [])
             .cast<String>(),
         groupCoordinatorId: j['groupCoordinatorId'] as String?,
+        groupVolume: (j['groupVolume'] as num?)?.toInt(),
         currentUri: j['currentUri'] as String?,
       );
 
@@ -277,7 +301,7 @@ class MediaState {
         transport: MediaTransport.stopped,
       );
 
-  MediaState copyWith({int? volume, bool? muted}) => MediaState(
+  MediaState copyWith({int? volume, bool? muted, int? groupVolume}) => MediaState(
         deviceId: deviceId,
         brand: brand,
         online: online,
@@ -295,6 +319,7 @@ class MediaState {
         groupRole: groupRole,
         groupMemberIds: groupMemberIds,
         groupCoordinatorId: groupCoordinatorId,
+        groupVolume: groupVolume ?? this.groupVolume,
         currentUri: currentUri,
       );
 }
@@ -326,7 +351,40 @@ class MediaStateStore extends Notifier<Map<String, MediaState>> {
       volume: v,
       until: DateTime.now().add(_volumeHoldDuration),
     );
-    state = {...state, deviceId: cur.copyWith(volume: v)};
+    final patched = cur.copyWith(volume: v);
+    final next = {...state, deviceId: patched};
+    _stampGroupVolume(next, deviceId);
+    state = next;
+  }
+
+  void patchGroupVolumes(Map<String, int> volumes, int groupVolume) {
+    if (volumes.isEmpty) return;
+    final next = {...state};
+    final until = DateTime.now().add(_volumeHoldDuration);
+    for (final e in volumes.entries) {
+      final cur = next[e.key];
+      if (cur == null) continue;
+      final v = e.value.clamp(0, 100);
+      _volumeHolds[e.key] = (volume: v, until: until);
+      next[e.key] = cur.copyWith(volume: v, groupVolume: groupVolume);
+    }
+    state = next;
+  }
+
+  void _stampGroupVolume(Map<String, MediaState> map, String deviceId) {
+    final cur = map[deviceId];
+    if (cur == null || !cur.groupRole.isGrouped) return;
+    final ids = mediaGroupDeviceIds(cur, deviceId, map);
+    var max = 0;
+    for (final id in ids) {
+      final v = map[id]?.volume ?? 0;
+      if (v > max) max = v;
+    }
+    for (final id in ids) {
+      final s = map[id];
+      if (s == null || s.groupVolume == max) continue;
+      map[id] = s.copyWith(groupVolume: max);
+    }
   }
 
   void update(MediaState s) {
@@ -345,6 +403,9 @@ class MediaStateStore extends Notifier<Map<String, MediaState>> {
       }
     }
     state = {...state, next.deviceId: next};
+    final map = {...state};
+    _stampGroupVolume(map, next.deviceId);
+    state = map;
   }
 
   MediaState? get(String id) => state[id];
@@ -523,6 +584,39 @@ class MediaApi {
         'deviceId': id,
         'value': v,
       });
+  }
+
+  Future<void> setGroupVolume(String id, int percent) async {
+    final target = percent.clamp(0, 100).round();
+    final store = _ref.read(mediaStateProvider.notifier);
+    final all = _ref.read(mediaStateProvider);
+    final cur = all[id];
+    if (cur != null && cur.groupRole.isGrouped) {
+      final ids = mediaGroupDeviceIds(cur, id, all);
+      final oldMax = ids.fold<int>(0, (m, gid) {
+        final v = all[gid]?.volume ?? 0;
+        return v > m ? v : m;
+      });
+      final next = <String, int>{};
+      for (final gid in ids) {
+        final vol = all[gid]?.volume ?? 0;
+        if (oldMax <= 0) {
+          next[gid] = target;
+        } else if (vol == oldMax) {
+          next[gid] = target;
+        } else {
+          next[gid] = ((vol * target) / oldMax).round().clamp(0, 100);
+        }
+      }
+      store.patchGroupVolumes(next, target);
+    } else {
+      store.patchVolume(id, target);
+    }
+    await _cmd({
+      'kind': 'media.group.volume',
+      'deviceId': id,
+      'value': target,
+    });
   }
 
   Future<void> setMuted(String id, bool muted) => _cmd({

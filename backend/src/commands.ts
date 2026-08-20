@@ -251,6 +251,11 @@ export const CommandSchema = z.discriminatedUnion("kind", [
     kind: z.literal("media.group.leave"),
     deviceId: z.string()
   }),
+  z.object({
+    kind: z.literal("media.group.volume"),
+    deviceId: z.string(),
+    value: z.number().min(0).max(100)
+  }),
 
   z.object({
     kind: z.literal("lutron.fireMapping"),
@@ -657,6 +662,12 @@ export async function dispatch(
       assertMedia(device);
       if (!media) throw new Error("media manager unavailable");
       await media.ungroup(device.id);
+      return;
+    }
+    case "media.group.volume": {
+      assertMedia(device);
+      if (!media) throw new Error("media manager unavailable");
+      await media.setGroupVolume(device.id, cmd.value);
       return;
     }
 

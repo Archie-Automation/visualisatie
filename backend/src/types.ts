@@ -363,6 +363,8 @@ export interface MediaState {
   /** 0..100 volume. Null means "unknown" (device offline). */
   volume?: number;
   muted?: boolean;
+  /** Max volume of this zone's group (coordinator + members). Only when grouped. */
+  groupVolume?: number;
   /** Position/duration in seconds (best effort — not all streams report). */
   position?: number;
   duration?: number;

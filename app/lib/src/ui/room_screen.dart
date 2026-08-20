@@ -309,20 +309,21 @@ class _FavDeviceWrap extends ConsumerWidget {
               );
             },
             child: Padding(
-              padding: EdgeInsets.only(top: 8, right: 4),
+              padding: EdgeInsets.only(top: 10, right: 2),
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 12, vertical: 5),
+                    horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
                   color: isFav
-                      ? LuxeColors.brass.withValues(alpha: 0.10)
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(20),
-                  border: isFav
-                      ? Border.all(
-                          color: LuxeColors.brass.withValues(alpha: 0.30))
-                      : null,
+                      ? LuxeColors.brass.withValues(alpha: 0.12)
+                      : LuxeColors.ink.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: isFav
+                        ? LuxeColors.brass.withValues(alpha: 0.45)
+                        : LuxeColors.ink.withValues(alpha: 0.18),
+                  ),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -331,26 +332,24 @@ class _FavDeviceWrap extends ConsumerWidget {
                       isFav
                           ? Icons.star_rounded
                           : Icons.star_outline_rounded,
-                      size: 13,
+                      size: 18,
                       color: isFav
                           ? LuxeColors.brass
-                          : LuxeColors.inkSoft
-                              .withValues(alpha: 0.45),
+                          : LuxeColors.inkSoft,
                     ),
-                    SizedBox(width: 5),
+                    const SizedBox(width: 7),
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 180),
                       child: Text(
                         isFav ? 'Favoriet' : 'Toevoegen',
                         key: ValueKey(isFav),
                         style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
                           color: isFav
                               ? LuxeColors.brass
-                              : LuxeColors.inkSoft
-                                  .withValues(alpha: 0.55),
-                          letterSpacing: 0.4,
+                              : LuxeColors.inkSoft,
+                          letterSpacing: 0.3,
                         ),
                       ),
                     ),

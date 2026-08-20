@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api.dart';
+import '../device_activity.dart';
+import '../fireplace_virtual.dart';
 import '../media_api.dart';
 import '../models.dart';
 import '../room_control_category.dart';
@@ -16,9 +18,16 @@ import 'widgets/glass_card.dart';
 import 'widgets/luxe_backdrop.dart';
 
 class SystemScreen extends ConsumerWidget {
-  const SystemScreen({super.key, required this.slug});
+  const SystemScreen({
+    super.key,
+    required this.slug,
+    this.activeOnly = false,
+  });
 
   final String slug;
+
+  /// From dashboard header status icons: only devices that are currently on.
+  final bool activeOnly;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -44,6 +53,7 @@ class SystemScreen extends ConsumerWidget {
               title: system.name,
               icon: system.icon,
               devices: devices,
+              activeOnly: activeOnly,
               onBack: () => appBack(context),
             );
           },
@@ -83,6 +93,7 @@ class _SystemDevicesBody extends ConsumerWidget {
     required this.title,
     required this.icon,
     required this.devices,
+    required this.activeOnly,
     required this.onBack,
   });
 
@@ -91,14 +102,15 @@ class _SystemDevicesBody extends ConsumerWidget {
   final String title;
   final IconData icon;
   final List<Device> devices;
+  final bool activeOnly;
   final VoidCallback onBack;
 
-  String _headerSubtitle(WidgetRef ref) {
+  String _headerSubtitle(WidgetRef ref, List<Device> visible) {
     if (slug == 'meldingen') {
       var items = 0;
       var active = 0;
       final busValues = ref.watch(busProvider).values;
-      for (final d in devices) {
+      for (final d in visible) {
         final configured = MeldingTile.configuredItems(d);
         items += configured.length;
         active += MeldingTile.activeItemCount(d, busValues);
@@ -111,7 +123,12 @@ class _SystemDevicesBody extends ConsumerWidget {
       }
       return items == 1 ? '1 melding' : '$items meldingen';
     }
-    final n = devices.length;
+    final n = visible.length;
+    if (activeOnly) {
+      if (n == 0) return 'Niets aan';
+      if (n == 1) return '1 apparaat aan';
+      return '$n apparaten aan';
+    }
     if (n == 1) return '1 apparaat';
     return '$n apparaten';
   }
@@ -119,13 +136,29 @@ class _SystemDevicesBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final mediaStates = ref.watch(mediaStateProvider);
-    final floorGroups = _groupByFloorRoom(cfg, devices);
+    var visible = devices;
+    if (activeOnly) {
+      final busValues = ref.watch(busProvider).values;
+      final fireplaceVirtual = ref.watch(fireplaceVirtualProvider);
+      visible = devices
+          .where(
+            (d) => isHouseActivityDeviceOn(
+              systemSlug: slug,
+              device: d,
+              busValues: busValues,
+              mediaStates: mediaStates,
+              fireplaceVirtual: fireplaceVirtual,
+            ),
+          )
+          .toList();
+    }
+    final floorGroups = _groupByFloorRoom(cfg, visible);
     final placedIds = {
       for (final fg in floorGroups)
         for (final re in fg.rooms)
           for (final d in re.devices) d.id,
     };
-    final unplaced = devices.where((d) => !placedIds.contains(d.id)).toList();
+    final unplaced = visible.where((d) => !placedIds.contains(d.id)).toList();
 
     return SafeArea(
       bottom: false,
@@ -135,13 +168,15 @@ class _SystemDevicesBody extends ConsumerWidget {
           FunctionScreenHeader(
             onBack: onBack,
             title: title,
-            subtitle: _headerSubtitle(ref),
+            subtitle: _headerSubtitle(ref, visible),
           ),
           Expanded(
-            child: devices.isEmpty
+            child: visible.isEmpty
                 ? Center(
                     child: Text(
-                      'Geen apparaten in dit systeem.',
+                      activeOnly
+                          ? 'Niets staat aan.'
+                          : 'Geen apparaten in dit systeem.',
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                             color: LuxeColors.inkSoft,
                           ),
@@ -155,7 +190,7 @@ class _SystemDevicesBody extends ConsumerWidget {
                       48,
                     ),
                     children: [
-                      _AudioGroupSummary(devices: devices, mediaStates: mediaStates),
+                      _AudioGroupSummary(devices: visible, mediaStates: mediaStates),
                       for (final fg in floorGroups) ...[
                         _SectionLabel(
                           icon: Icons.layers_outlined,

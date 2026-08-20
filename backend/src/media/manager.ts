@@ -210,6 +210,73 @@ export class MediaManager extends EventEmitter {
     setTimeout(() => void this.pollOne(coordinator), 600);
   }
 
+  /** Coordinator + members for a grouped device, or null if standalone. */
+  private _groupIdsFor(id: string): string[] | null {
+    const asMember = this.groupMap.get(id);
+    const coordId = asMember ?? id;
+    const members: string[] = [];
+    for (const [mId, cId] of this.groupMap) {
+      if (cId === coordId) members.push(mId);
+    }
+    if (!asMember && members.length === 0) return null;
+    return [coordId, ...members];
+  }
+
+  private _groupVolumeOf(ids: string[], selfId?: string, selfVol?: number): number {
+    let max = 0;
+    for (const gid of ids) {
+      const v =
+        gid === selfId && typeof selfVol === "number"
+          ? selfVol
+          : this.states.get(gid)?.volume;
+      if (typeof v === "number" && v > max) max = v;
+    }
+    return max;
+  }
+
+  /** Scale every zone in the group so the loudest equals [target] (0–100). */
+  async setGroupVolume(id: string, target: number): Promise<void> {
+    const ids = this._groupIdsFor(id);
+    const targetClamped = Math.max(0, Math.min(100, Math.round(target)));
+    if (!ids) {
+      await this.command(id, { action: "volume", value: targetClamped });
+      return;
+    }
+
+    const current = ids.map((gid) => ({
+      id: gid,
+      vol: this.states.get(gid)?.volume ?? 0
+    }));
+    const oldMax = Math.max(...current.map((c) => c.vol), 0);
+
+    const next = current.map((c) => {
+      if (oldMax <= 0) return { id: c.id, vol: targetClamped };
+      if (c.vol === oldMax) return { id: c.id, vol: targetClamped };
+      return {
+        id: c.id,
+        vol: Math.max(0, Math.min(100, Math.round((c.vol * targetClamped) / oldMax)))
+      };
+    });
+
+    await Promise.all(
+      next.map(async ({ id: gid, vol }) => {
+        const drv = this.drivers.get(gid);
+        if (!drv) return;
+        try {
+          await drv.setVolume(vol);
+        } catch (err) {
+          logger.warn({ err, gid, vol }, "group volume set failed");
+        }
+        const cur = this.states.get(gid);
+        if (!cur) return;
+        const updated: MediaState = { ...cur, volume: vol, groupVolume: targetClamped };
+        this._applyGroupFields(gid, updated);
+        this.states.set(gid, updated);
+        this.emit("stateChanged", updated);
+      })
+    );
+  }
+
   /** Remove `deviceId` from its group.
    *
    * Handles both cases:
@@ -344,7 +411,7 @@ export class MediaManager extends EventEmitter {
       } else if (memberIds && memberIds.length > 0) {
         updated = { ...state, groupRole: "coordinator", groupMemberIds: memberIds, groupCoordinatorId: undefined };
       } else {
-        updated = { ...state, groupRole: "standalone", groupMemberIds: undefined, groupCoordinatorId: undefined };
+        updated = { ...state, groupRole: "standalone", groupMemberIds: undefined, groupCoordinatorId: undefined, groupVolume: undefined };
       }
       // Also copy coordinator's now-playing info (including albumArt) to members.
       this._applyGroupFields(id, updated);
@@ -382,6 +449,28 @@ export class MediaManager extends EventEmitter {
         break;
       case "volume":
         await drv.setVolume(cmd.value);
+        {
+          const cur = this.states.get(id);
+          if (cur) {
+            const updated: MediaState = { ...cur, volume: cmd.value };
+            this.states.set(id, updated);
+            this._applyGroupFields(id, updated);
+            this.states.set(id, updated);
+            this.emit("stateChanged", updated);
+            const ids = this._groupIdsFor(id);
+            if (ids) {
+              const gv = this._groupVolumeOf(ids);
+              for (const gid of ids) {
+                if (gid === id) continue;
+                const s = this.states.get(gid);
+                if (!s || s.groupVolume === gv) continue;
+                const n: MediaState = { ...s, groupVolume: gv };
+                this.states.set(gid, n);
+                this.emit("stateChanged", n);
+              }
+            }
+          }
+        }
         break;
       case "mute":
         await drv.setMuted(cmd.value);
@@ -528,6 +617,10 @@ export class MediaManager extends EventEmitter {
           state.transport = coordState.transport;
         }
       }
+      const ids = this._groupIdsFor(id);
+      state.groupVolume = ids
+        ? this._groupVolumeOf(ids, id, state.volume)
+        : undefined;
       return;
     }
     // Collect members whose coordinator is this device.
@@ -539,10 +632,12 @@ export class MediaManager extends EventEmitter {
       state.groupRole = "coordinator";
       state.groupMemberIds = memberIds;
       state.groupCoordinatorId = undefined;
+      state.groupVolume = this._groupVolumeOf([id, ...memberIds], id, state.volume);
     } else {
       state.groupRole = "standalone";
       state.groupMemberIds = undefined;
       state.groupCoordinatorId = undefined;
+      state.groupVolume = undefined;
     }
   }
 }
@@ -598,6 +693,7 @@ function shallowEqual(a: MediaState | undefined, b: MediaState): boolean {
     a.currentUri === b.currentUri &&
     a.volume === b.volume &&
     a.muted === b.muted &&
+    a.groupVolume === b.groupVolume &&
     a.groupRole === b.groupRole &&
     a.groupCoordinatorId === b.groupCoordinatorId &&
     (a.groupMemberIds?.join(",") ?? "") === (b.groupMemberIds?.join(",") ?? "") &&

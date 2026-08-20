@@ -77,6 +77,7 @@ Alle media-commando's gaan via `POST /api/command`:
 // volume & mute
 { "kind": "media.volume", "deviceId": "...", "value": 35 }
 { "kind": "media.mute",   "deviceId": "...", "muted": true }
+{ "kind": "media.group.volume", "deviceId": "...", "value": 40 }
 
 // preset / favoriet
 { "kind": "media.preset", "deviceId": "...", "presetId": "Jazz FM" }
@@ -105,6 +106,10 @@ Shape (verkort):
   title?: string; artist?: string; album?: string;
   albumArt?: string; source?: string;
   volume?: number; muted?: boolean;
+  groupVolume?: number;
+  groupRole?: "coordinator" | "member" | "standalone";
+  groupMemberIds?: string[];
+  groupCoordinatorId?: string;
   position?: number; duration?: number;
   presets?: { id: string; name: string; image?: string }[];
 }
@@ -138,7 +143,6 @@ Shape (verkort):
 
 ## Toekomst
 
-- Groepen/zones (Sonos): twee kamers aan elkaar knopen.
 - Scène-integratie: `SceneAction` met `kind: "media"` zodat
   "Welkom thuis" zachtjes Jazz FM opzet in de hal.
 - Spotify-Connect / Tidal directe handoff (nu werkt dat via de
