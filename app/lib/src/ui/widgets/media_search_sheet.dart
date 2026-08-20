@@ -358,7 +358,10 @@ class _ResultRow extends StatelessWidget {
               height: 46,
               fit: BoxFit.cover,
               gaplessPlayback: true,
-              filterQuality: FilterQuality.low,
+              filterQuality: FilterQuality.high,
+              isAntiAlias: true,
+              cacheWidth: 128,
+              cacheHeight: 128,
               errorBuilder: (_, __, ___) => _placeholder,
             )
           : _placeholder,

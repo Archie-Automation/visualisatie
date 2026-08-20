@@ -741,6 +741,42 @@ class _GroupStatusBar extends StatelessWidget {
 /*  Bits                                                                 */
 /* --------------------------------------------------------------------- */
 
+const _presetArtSize = 64.0;
+
+/// Decode at ≥2× so cheap 1.0-density PoE panels don't show blocky upscales.
+class _SharpNetworkArt extends StatelessWidget {
+  const _SharpNetworkArt({
+    required this.url,
+    required this.size,
+    required this.errorBuilder,
+    this.imageKey,
+  });
+
+  final String url;
+  final double size;
+  final ImageErrorWidgetBuilder errorBuilder;
+  final Key? imageKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    final px = (size * math.max(dpr, 2.0)).round().clamp(64, 1024);
+    return Image.network(
+      url,
+      key: imageKey,
+      width: size,
+      height: size,
+      fit: BoxFit.cover,
+      gaplessPlayback: true,
+      filterQuality: FilterQuality.high,
+      isAntiAlias: true,
+      cacheWidth: px,
+      cacheHeight: px,
+      errorBuilder: errorBuilder,
+    );
+  }
+}
+
 class _Artwork extends StatefulWidget {
   const _Artwork({
     required this.state,
@@ -818,12 +854,10 @@ class _ArtworkState extends State<_Artwork> {
 
     Widget child;
     if (art != null && art.isNotEmpty) {
-      child = Image.network(
-        art,
-        key: ValueKey(art),
-        fit: BoxFit.cover,
-        gaplessPlayback: true,
-        filterQuality: FilterQuality.low,
+      child = _SharpNetworkArt(
+        url: art,
+        imageKey: ValueKey(art),
+        size: tileSize,
         errorBuilder: (_, __, ___) => _placeholder(),
       );
     } else {
@@ -1332,7 +1366,7 @@ class _Presets extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           SizedBox(
-            height: 92,
+            height: 108,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: presets.length,
@@ -1394,20 +1428,16 @@ class _PresetCardState extends State<_PresetCard> {
         alignment: Alignment.center,
         children: [
           img != null && img.isNotEmpty
-              ? Image.network(
-                  img,
-                  width: 52,
-                  height: 52,
-                  fit: BoxFit.cover,
-                  gaplessPlayback: true,
-                  filterQuality: FilterQuality.low,
+              ? _SharpNetworkArt(
+                  url: img,
+                  size: _presetArtSize,
                   errorBuilder: (_, __, ___) => _placeholder,
                 )
               : _placeholder,
           if (widget.loading)
             Container(
-              width: 52,
-              height: 52,
+              width: _presetArtSize,
+              height: _presetArtSize,
               color: Colors.black45,
               child: const Center(
                 child: SizedBox(
@@ -1477,10 +1507,10 @@ class _PresetCardState extends State<_PresetCard> {
   }
 
   Widget get _placeholder => Container(
-        width: 52,
-        height: 52,
+        width: _presetArtSize,
+        height: _presetArtSize,
         color: Colors.white10,
-        child: Icon(_fallbackIcon, color: Colors.white38, size: 24),
+        child: Icon(_fallbackIcon, color: Colors.white38, size: 28),
       );
 }
 
