@@ -20,12 +20,15 @@ const _fallbackEndHour = 21;
 bool isThemeScheduleId(String id) =>
     id == kThemeLightOnId || id == kThemeLightOffId;
 
+String themeScheduleDisplayName(String name) =>
+    name.replaceAll(' · ', ' ').replaceAll(' • ', ' ');
+
 /// Non-deletable day/night window for Auto theme.
 /// Shown as two rows in TIJDSCHEMA'S when Auto is selected.
 class ThemeAutoSchedule {
   const ThemeAutoSchedule({
-    this.lightOnName = 'Weergave · Licht',
-    this.lightOffName = 'Weergave · Donker',
+    this.lightOnName = 'Weergave licht',
+    this.lightOffName = 'Weergave donker',
     this.lightOnEnabled = true,
     this.lightOffEnabled = true,
     this.lightOn = const AstroTrigger(
@@ -67,14 +70,14 @@ class ThemeAutoSchedule {
   List<Schedule> asSchedules() => [
         Schedule(
           id: kThemeLightOnId,
-          name: lightOnName,
+          name: themeScheduleDisplayName(lightOnName),
           enabled: lightOnEnabled,
           trigger: lightOn,
           action: const ScheduleThemeAction(toLight: true),
         ),
         Schedule(
           id: kThemeLightOffId,
-          name: lightOffName,
+          name: themeScheduleDisplayName(lightOffName),
           enabled: lightOffEnabled,
           trigger: lightOff,
           action: const ScheduleThemeAction(toLight: false),
@@ -125,8 +128,12 @@ class ThemeAutoSchedule {
       );
     }
     return ThemeAutoSchedule(
-      lightOnName: (j['lightOnName'] as String?) ?? 'Weergave · Licht',
-      lightOffName: (j['lightOffName'] as String?) ?? 'Weergave · Donker',
+      lightOnName: themeScheduleDisplayName(
+        (j['lightOnName'] as String?) ?? 'Weergave licht',
+      ),
+      lightOffName: themeScheduleDisplayName(
+        (j['lightOffName'] as String?) ?? 'Weergave donker',
+      ),
       lightOnEnabled: j['lightOnEnabled'] as bool? ?? true,
       lightOffEnabled: j['lightOffEnabled'] as bool? ?? true,
       lightOn: j['lightOn'] is Map
