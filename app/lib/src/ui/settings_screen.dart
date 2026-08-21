@@ -1464,22 +1464,11 @@ class _ScheduleRow extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          s.name,
-                          style: Theme.of(context).textTheme.bodyLarge,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      if (locked) ...[
-                        const SizedBox(width: 6),
-                        Icon(Icons.lock_outline,
-                            size: 13, color: LuxeColors.inkSoft),
-                      ],
-                    ],
+                  Text(
+                    s.name,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 1),
                   Text(
@@ -1491,6 +1480,13 @@ class _ScheduleRow extends StatelessWidget {
                 ],
               ),
             ),
+            if (locked)
+              LuxeInfoIconButton(
+                title: 'Weergave',
+                body:
+                    'Hier kun je alleen het tijdstip aanpassen. '
+                    'Naam en actie (licht of donker) staan vast.',
+              ),
             if (onRun != null)
               IconButton(
                 tooltip: canEdit ? 'Nu uitvoeren' : 'Geen rechten',
