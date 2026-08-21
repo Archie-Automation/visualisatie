@@ -126,7 +126,7 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
                   color: LuxeColors.brassDeep, size: 22),
               SizedBox(width: 10),
               Text(
-                'BEHEERDER: SERVER BIJWERKEN',
+                'SERVER BIJWERKEN',
                 style: Theme.of(context).textTheme.labelLarge,
               ),
             ],
