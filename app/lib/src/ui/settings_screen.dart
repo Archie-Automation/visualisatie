@@ -1092,7 +1092,7 @@ class _SpotifyConnectDialogState extends State<_SpotifyConnectDialog> {
               decoration: const InputDecoration(
                 labelText: 'Callback-URL (als de pagina niet laadt)',
                 hintText:
-                    'http://127.0.0.1:4000/api/media/spotify/callback?code=…',
+                    'https://192.168.x.x:4443/api/media/spotify/callback?code=…',
                 border: OutlineInputBorder(),
               ),
             ),
