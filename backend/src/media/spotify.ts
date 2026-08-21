@@ -223,12 +223,13 @@ export function buildAuthUrl(stateNonce: string, serverBaseUrl?: string): string
 }
 
 /** Exchange the authorization code for tokens + store them. */
-export async function exchangeCode(code: string): Promise<void> {
+export async function exchangeCode(code: string, usedRedirectUri?: string): Promise<void> {
   if (!isConfigured()) throw new Error("Spotify niet geconfigureerd");
+  const redirect = stripTrailingSlash(usedRedirectUri?.trim() || redirectUri());
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code,
-    redirect_uri: redirectUri()
+    redirect_uri: redirect
   });
   const res = await fetch(`${AUTH_BASE}/api/token`, {
     method: "POST",

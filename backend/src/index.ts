@@ -158,9 +158,49 @@ function main() {
   const tlsCert = process.env.TLS_CERT_PATH?.trim();
   const tlsKey = process.env.TLS_KEY_PATH?.trim();
   if (httpsPort > 0 && tlsCert && tlsKey && fs.existsSync(tlsCert) && fs.existsSync(tlsKey)) {
+    /** Serving the Flutter SPA on :4443 is a different origin than :4000, so
+     *  the JWT is missing and every API call returns "missing token". HTTPS
+     *  is only for the Spotify OAuth callback (+ cert check). */
+    const httpAppOrigin = (req: http.IncomingMessage): string => {
+      const hostHdr = String(req.headers.host ?? "");
+      const hostname = hostHdr.replace(/:\d+$/, "").replace(/^\[|\]$/g, "");
+      const loopback =
+        !hostname ||
+        hostname === "127.0.0.1" ||
+        hostname === "localhost" ||
+        hostname === "::1";
+      if (!loopback) return `http://${hostname}:${listenPort}`;
+      const env = (process.env.PUBLIC_API_BASE ?? "").replace(/\/+$/, "");
+      if (env) {
+        try {
+          const u = new URL(env.includes("://") ? env : `http://${env}`);
+          if (u.hostname && u.hostname !== "127.0.0.1" && u.hostname !== "localhost") {
+            return `http://${u.hostname}:${listenPort}`;
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+      return env || `http://127.0.0.1:${listenPort}`;
+    };
+    const isSpotifyHttpsPath = (url: string): boolean => {
+      const pathname = url.split("?")[0];
+      return (
+        pathname === "/api/media/spotify/callback" ||
+        pathname === "/api/media/spotify/tls-ok"
+      );
+    };
     const httpsServer = https.createServer(
       { cert: fs.readFileSync(tlsCert), key: fs.readFileSync(tlsKey) },
-      app
+      (req, res) => {
+        if (isSpotifyHttpsPath(req.url ?? "/")) {
+          app(req, res);
+          return;
+        }
+        res.statusCode = 302;
+        res.setHeader("Location", `${httpAppOrigin(req)}/`);
+        res.end();
+      }
     );
     httpsServer.listen(httpsPort, () => {
       logger.info({ port: httpsPort }, "HTTPS server listening (Spotify OAuth callback)");

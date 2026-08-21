@@ -89,14 +89,44 @@ function stripHash(u: User): User {
 /** Short-lived OAuth `state` values for the Spotify login (CSRF guard). */
 const spotifyAuthStates = new Set<string>();
 
+/** HTTP origin of the Flutter app (never 127.0.0.1 when the request came via LAN). */
+function httpAppHome(req: { get(h: string): string | undefined }): string {
+  const httpPort = process.env.PORT ?? "4000";
+  const host = (req.get("host") ?? "").replace(/:\d+$/, "");
+  if (host && !spotify.isLoopbackUrl(`http://${host}`)) {
+    return `http://${host}:${httpPort}`;
+  }
+  const env = (process.env.PUBLIC_API_BASE ?? "").replace(/\/+$/, "");
+  if (env && !spotify.isLoopbackUrl(env)) {
+    try {
+      const u = new URL(env.includes("://") ? env : `http://${env}`);
+      if (u.hostname && !spotify.isLoopbackUrl(u.origin)) {
+        return `http://${u.hostname}:${httpPort}`;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return `http://127.0.0.1:${httpPort}`;
+}
+
 /** Minimal HTML page shown in the browser after the Spotify redirect. */
-function spotifyResultPage(message: string): string {
-  const home = (process.env.PUBLIC_API_BASE ?? "").replace(/\/+$/, "");
-  const back = home
-    ? `<p style="margin-top:1.25rem"><a href="${home}" style="color:#1db954">Terug naar de app</a></p>`
+function spotifyResultPage(
+  message: string,
+  home?: string,
+  autoRedirect = false
+): string {
+  const dest = (home ?? "").replace(/\/+$/, "");
+  const refresh =
+    autoRedirect && dest
+      ? `<meta http-equiv="refresh" content="1;url=${dest}/">`
+      : "";
+  const back = dest
+    ? `<p style="margin-top:1.25rem"><a href="${dest}/" style="color:#1db954">Terug naar de app</a></p>`
     : "";
   return `<!doctype html><html lang="nl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+${refresh}
 <title>Spotify</title>
 <style>body{font-family:system-ui,sans-serif;background:#121212;color:#fff;
 display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center}
@@ -1375,26 +1405,36 @@ p{color:#b3b3b3;margin:0}</style></head>
   /** Spotify redirects the browser here after login. No app auth header is
    *  present (it's a browser redirect), so we rely on the `state` value. */
   r.get("/media/spotify/callback", async (req, res) => {
+    const home = httpAppHome(req);
+    const usedRedirect = `${req.protocol}://${req.get("host") ?? ""}/api/media/spotify/callback`;
     const code = typeof req.query["code"] === "string" ? req.query["code"] : "";
     const state = typeof req.query["state"] === "string" ? req.query["state"] : "";
     const err = typeof req.query["error"] === "string" ? req.query["error"] : "";
     if (err) {
-      return res.status(400).send(spotifyResultPage(`Spotify-login geannuleerd: ${err}`));
+      return res.status(400).send(spotifyResultPage(`Spotify-login geannuleerd: ${err}`, home));
     }
     if (!code || !state) {
-      return res.status(400).send(spotifyResultPage("Ongeldige of verlopen login-poging."));
+      return res.status(400).send(spotifyResultPage("Ongeldige of verlopen login-poging.", home));
     }
     const nonce = spotify.parseOauthNonce(state);
     if (!spotifyAuthStates.has(nonce)) {
-      return res.status(400).send(spotifyResultPage("Ongeldige of verlopen login-poging."));
+      return res.status(400).send(spotifyResultPage("Ongeldige of verlopen login-poging.", home));
     }
     spotifyAuthStates.delete(nonce);
     try {
-      await spotify.exchangeCode(code);
-      res.send(spotifyResultPage("Spotify is verbonden. Je kunt dit venster sluiten en terug naar de app."));
+      await spotify.exchangeCode(code, usedRedirect);
+      res.send(
+        spotifyResultPage(
+          "Spotify is verbonden. Je wordt teruggestuurd naar de app.",
+          home,
+          true
+        )
+      );
     } catch (e) {
       logger.warn({ err: e }, "spotify callback failed");
-      res.status(400).send(spotifyResultPage("Verbinden met Spotify is mislukt. Probeer het opnieuw."));
+      res.status(400).send(
+        spotifyResultPage("Verbinden met Spotify is mislukt. Probeer het opnieuw.", home)
+      );
     }
   });
 
