@@ -4,6 +4,55 @@ import 'package:flutter/services.dart';
 import '../../models.dart';
 import '../../theme.dart';
 
+/// Quiet-luxury info sheet (settings “i”). Same shell as confirm dialogs.
+Future<void> showLuxeInfoDialog(
+  BuildContext context, {
+  required String title,
+  required String message,
+}) {
+  return showDialog<void>(
+    context: context,
+    barrierColor: Colors.black.withValues(alpha: 0.45),
+    builder: (ctx) => _LuxeDialog(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _DialogHeader(icon: Icons.info_outline_rounded, title: title),
+          const SizedBox(height: 14),
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(ctx).height * 0.5,
+            ),
+            child: SingleChildScrollView(
+              child: Text(message, style: Theme.of(ctx).textTheme.bodyMedium),
+            ),
+          ),
+          const SizedBox(height: 22),
+          Align(
+            alignment: Alignment.centerRight,
+            child: FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              style: FilledButton.styleFrom(
+                backgroundColor: LuxeColors.ink,
+                foregroundColor: LuxeColors.onInk,
+                shape: const StadiumBorder(),
+                padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                textStyle: const TextStyle(
+                  fontSize: 12,
+                  letterSpacing: 1.8,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              child: const Text('SLUITEN'),
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
 /// Show an "are you sure?" prompt. Returns `true` when the user confirms,
 /// `false` when they cancel. If [prompt] is `null` the dialog is skipped
 /// and the result is `true` (call-site keeps going).

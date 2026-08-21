@@ -16,6 +16,7 @@ import '../theme_mode.dart';
 import '../theme_auto_schedule.dart';
 import 'app_nav.dart';
 import 'schedule_editor_sheet.dart';
+import 'widgets/confirm_dialog.dart';
 import 'widgets/glass_card.dart';
 import 'widgets/luxe_backdrop.dart';
 import 'widgets/admin_server_update_card.dart';
@@ -186,50 +187,28 @@ class SettingsScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (!canEditSchedules)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Text(
-                  'Met dit account mag u geen tijdschema\'s wijzigen. '
-                  'Vraag een beheerder om het recht aan te passen (editScenes) of gebruik een ander account.',
-                  style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
-                        color: LuxeColors.inkSoft,
-                      ),
-                ),
-              ),
             Padding(
               padding: const EdgeInsets.only(right: 8),
-              child: Row(
-                children: [
-                  const Icon(Icons.schedule_outlined, size: 22),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('TIJDSCHEMA\'S',
-                            style: Theme.of(ctx).textTheme.labelLarge),
-                        const SizedBox(height: 2),
-                        Text(
-                          showThemeSchedules
-                              ? 'Scenes, apparaten en weergave (Auto) automatisch.'
-                              : 'Laat scenes of apparaten automatisch lopen.',
-                          style: Theme.of(ctx).textTheme.bodyMedium,
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: canEditSchedules
-                        ? 'Tijdschema toevoegen'
-                        : 'Geen rechten om te wijzigen',
-                    icon: const Icon(Icons.add_rounded),
-                    onPressed: canEditSchedules
-                        ? () => _openEditor(ctx, ref, cfg,
-                            canEditHouse: true)
-                        : null,
-                  ),
-                ],
+              child: _SettingsSectionTitle(
+                icon: Icons.schedule_outlined,
+                title: 'TIJDSCHEMA\'S',
+                infoTitle: 'Tijdschema\'s',
+                infoBody: [
+                  'Laat scenes of apparaten automatisch lopen op een tijdstip, of bij zonsopkomst en zonsondergang.',
+                  if (showThemeSchedules)
+                    'Op de wandtablet in Auto staan hier ook de licht- en donkerweergave.',
+                  if (!canEditSchedules)
+                    'Met dit account mag u geen tijdschema\'s wijzigen. Vraag een beheerder.',
+                ].join('\n\n'),
+                trailing: IconButton(
+                  tooltip: canEditSchedules
+                      ? 'Tijdschema toevoegen'
+                      : 'Geen rechten om te wijzigen',
+                  icon: const Icon(Icons.add_rounded),
+                  onPressed: canEditSchedules
+                      ? () => _openEditor(ctx, ref, cfg, canEditHouse: true)
+                      : null,
+                ),
               ),
             ),
             const SizedBox(height: 14),
@@ -254,9 +233,7 @@ class SettingsScreen extends ConsumerWidget {
                   return Padding(
                     padding: const EdgeInsets.fromLTRB(6, 4, 6, 8),
                     child: Text(
-                      canEditSchedules
-                          ? 'Nog geen tijdschema\'s. Tik op + om er een aan te maken.'
-                          : 'Er zijn nog geen tijdschema\'s, of u mag ze niet beheren.',
+                      'Nog geen tijdschema\'s',
                       style: Theme.of(ctx).textTheme.bodyMedium,
                     ),
                   );
@@ -457,38 +434,28 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.tablet_android_outlined,
-                        color: LuxeColors.ink, size: 22),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'WANDTABLET',
-                        style: Theme.of(context).textTheme.labelLarge,
-                      ),
-                    ),
-                    if (_saving)
-                      const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Android wandtablet: na inactiviteit terug naar home, '
-                  'daarna screensaver met klok en optionele ruimtetemperatuur.',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: LuxeColors.inkSoft,
-                      ),
+                _SettingsSectionTitle(
+                  icon: Icons.tablet_android_outlined,
+                  title: 'WANDTABLET',
+                  infoTitle: 'Wandtablet',
+                  infoBody:
+                      'Alleen op de Android-app. Na inactiviteit gaat dit scherm '
+                      'terug naar home, daarna een screensaver met klok.\n\n'
+                      'Koppel de ruimte waar het tablet hangt. Optioneel toont '
+                      'de screensaver de temperatuur van een ruimte of KNX-groepadres. '
+                      'Zet screensaver uit als de muziekspeler van die ruimte fullscreen open staat.',
+                  trailing: _saving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : null,
                 ),
                 const SizedBox(height: 16),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Inactiviteit & screensaver'),
-                  subtitle: const Text('Alleen actief op Android-app'),
                   value: settings.enabled,
                   onChanged: _saving
                       ? null
@@ -502,8 +469,6 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                       : null,
                   decoration: const InputDecoration(
                     labelText: 'Ruimte van dit scherm',
-                    helperText:
-                        'Koppel het wandtablet aan de ruimte waar het hangt',
                     border: OutlineInputBorder(),
                   ),
                   items: [
@@ -536,13 +501,6 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Geen screensaver bij open media-speler'),
-                  subtitle: Text(
-                    settings.panelRoomId != null
-                        ? 'Alleen geblokkeerd als de Sonos/Bluesound van '
-                            '${settings.panelRoomName ?? 'de gekoppelde ruimte'} '
-                            'fullscreen open staat én speelt'
-                        : 'Kies eerst een ruimte om dit te activeren',
-                  ),
                   value: settings.suppressScreensaverWhenMusicPlaying &&
                       settings.panelRoomId != null,
                   onChanged: settings.enabled &&
@@ -848,26 +806,17 @@ class _SpotifySectionState extends ConsumerState<_SpotifySection> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(Icons.library_music_outlined,
-                    color: LuxeColors.ink, size: 22),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('SPOTIFY',
-                          style: Theme.of(context).textTheme.labelLarge),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Eén keer inloggen voor dit huis. Daarna werkt Spotify op elk paneel.',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            _SettingsSectionTitle(
+              icon: Icons.library_music_outlined,
+              title: 'SPOTIFY',
+              infoTitle: 'Spotify',
+              infoBody:
+                  'Eén keer inloggen voor dit huis — daarna werkt Spotify op elk paneel.\n\n'
+                  'Maak eenmalig een gratis app op developer.spotify.com. '
+                  'Plak Client ID en Client Secret hier, en de Redirect URI exact in die Spotify-app.\n\n'
+                  'Eerste keer toont de browser een certificaatwaarschuwing. '
+                  'Kies Geavanceerd → Doorgaan tot je “Certificaat OK” ziet, '
+                  'daarna Verbind Spotify.',
             ),
             const SizedBox(height: 14),
             statusAsync.when(
@@ -916,8 +865,8 @@ class _SpotifySectionState extends ConsumerState<_SpotifySection> {
               Expanded(
                 child: Text(
                   status.account != null && status.account!.isNotEmpty
-                      ? 'Verbonden als ${status.account} — geldig op alle panelen'
-                      : 'Verbonden — geldig op alle panelen',
+                      ? 'Verbonden als ${status.account}'
+                      : 'Verbonden',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
@@ -942,21 +891,8 @@ class _SpotifySectionState extends ConsumerState<_SpotifySection> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (redirect.isNotEmpty) ...[
-          Text(
-            'Plak deze Redirect URI exact in de Spotify Developer-app:',
-            style: Theme.of(context).textTheme.labelMedium,
-          ),
-          const SizedBox(height: 4),
           _RedirectUriBox(redirect),
           if (status.tlsCheckUrl != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Eerste keer: de browser toont een certificaatwaarschuwing. '
-              'Kies Geavanceerd → Doorgaan. Tik hieronder eerst op Certificaat toestaan.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: LuxeColors.inkSoft,
-                  ),
-            ),
             const SizedBox(height: 4),
             TextButton.icon(
               onPressed: () => launchUrl(
@@ -1235,37 +1171,12 @@ class _SpotifyCredentialsFormState
   @override
   Widget build(BuildContext context) {
     final redirect = widget.suggestedRedirectUri ?? '';
-    final editing = widget.onCancel != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          editing
-              ? 'Vul de juiste Client ID en Client Secret in. De huidige koppeling wordt verbroken tot je opnieuw verbindt.'
-              : 'Maak eenmalig een gratis Spotify-app aan op developer.spotify.com, '
-                  'en plak hieronder de Client ID en Client Secret. '
-                  'Zet de Redirect URI hieronder exact in die Spotify-app.',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: LuxeColors.inkSoft,
-              ),
-        ),
         if (redirect.isNotEmpty) ...[
-          const SizedBox(height: 12),
-          Text(
-            'Plak deze Redirect URI exact in de Spotify Developer-app:',
-            style: Theme.of(context).textTheme.labelMedium,
-          ),
-          const SizedBox(height: 4),
           _RedirectUriBox(redirect),
-          if (widget.tlsCheckUrl != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Eerste keer: certificaatwaarschuwing → Geavanceerd → Doorgaan. '
-              'Tik eerst op Certificaat toestaan.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: LuxeColors.inkSoft,
-                  ),
-            ),
+          if (widget.tlsCheckUrl != null)
             TextButton.icon(
               onPressed: () => launchUrl(
                 Uri.parse(widget.tlsCheckUrl!),
@@ -1274,9 +1185,8 @@ class _SpotifyCredentialsFormState
               icon: const Icon(Icons.security_rounded),
               label: const Text('Certificaat toestaan'),
             ),
-          ],
+          const SizedBox(height: 12),
         ],
-        const SizedBox(height: 12),
         TextField(
           controller: _idCtrl,
           decoration: const InputDecoration(
@@ -1486,10 +1396,9 @@ class _AppearanceSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final mode = ref.watch(themeModeProvider);
-    final tabletHint = isWallTabletThemeTarget
-        ? 'Op de wandtablet volgt Auto het weergave-schema onder '
-            'Tijdschema\'s (standaard astro aan/uit).'
-        : 'Op de telefoon volgt Auto het systeem.';
+    final autoHint = isWallTabletThemeTarget
+        ? 'Op de wandtablet volgt Auto het licht/donker-schema onder Tijdschema\'s.'
+        : 'Op de telefoon volgt Auto het systeem van het apparaat.';
     return Padding(
       padding: EdgeInsets.fromLTRB(28, 0, 28, 16),
       child: GlassCard(
@@ -1498,25 +1407,11 @@ class _AppearanceSection extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(Icons.palette_outlined, color: LuxeColors.ink, size: 22),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('WEERGAVE',
-                          style: Theme.of(context).textTheme.labelLarge),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Licht, donker, of automatisch. $tabletHint',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+            _SettingsSectionTitle(
+              icon: Icons.palette_outlined,
+              title: 'WEERGAVE',
+              infoTitle: 'Weergave',
+              infoBody: 'Kies licht, donker of automatisch.\n\n$autoHint',
             ),
             const SizedBox(height: 16),
             SizedBox(
@@ -1585,6 +1480,76 @@ class _VersionFooter extends ConsumerWidget {
                 color: LuxeColors.inkSoft.withValues(alpha: 0.45),
                 fontSize: 11,
               ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsSectionTitle extends StatelessWidget {
+  const _SettingsSectionTitle({
+    required this.icon,
+    required this.title,
+    required this.infoTitle,
+    required this.infoBody,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String title;
+  final String infoTitle;
+  final String infoBody;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: LuxeColors.ink, size: 22),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(title, style: Theme.of(context).textTheme.labelLarge),
+        ),
+        _SettingsInfoButton(title: infoTitle, body: infoBody),
+        if (trailing != null) trailing!,
+      ],
+    );
+  }
+}
+
+class _SettingsInfoButton extends StatelessWidget {
+  const _SettingsInfoButton({required this.title, required this.body});
+
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: 'Uitleg',
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+      onPressed: () => showLuxeInfoDialog(
+        context,
+        title: title,
+        message: body,
+      ),
+      icon: Container(
+        width: 28,
+        height: 28,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: LuxeColors.brass.withValues(alpha: 0.14),
+          border: Border.all(
+            color: LuxeColors.brass.withValues(alpha: 0.4),
+          ),
+        ),
+        child: Icon(
+          Icons.info_outline_rounded,
+          size: 16,
+          color: LuxeColors.brassDeep,
         ),
       ),
     );
