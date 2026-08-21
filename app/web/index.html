@@ -60,7 +60,7 @@
     }
     @keyframes logoFlip {
       from { transform: perspective(400px) rotateY(0deg); }
-      to   { transform: perspective(400px) rotateY(360deg); }
+      to   { transform: perspective(400px) rotateY(180deg); }
     }
     .splash-logo {
       width: 120px;
@@ -68,7 +68,7 @@
       border-radius: 28px;
       overflow: hidden;
       background: #302b25;
-      animation: logoFlip 3s linear infinite;
+      animation: logoFlip 1.5s ease-in-out infinite alternate;
     }
     .splash-logo img {
       width: 120px;

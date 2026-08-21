@@ -176,7 +176,6 @@ enum _ActionKind { scene, devices }
 
 class _ScheduleEditorSheetState
     extends ConsumerState<ScheduleEditorSheet> {
-  late List<Schedule> _schedules;
   late Map<String, _Draft> _drafts;
   String? _selectedId;
   bool _saving = false;
@@ -184,66 +183,97 @@ class _ScheduleEditorSheetState
   @override
   void initState() {
     super.initState();
-    _schedules = [...widget.schedules];
-    _drafts = {
-      for (final s in _schedules) s.id: _Draft.fromSchedule(s, widget.config),
-    };
     if (widget.createNew) {
       final id = 'sch-${DateTime.now().millisecondsSinceEpoch}';
-      _schedules = [
-        ..._schedules,
-        Schedule(
-          id: id,
-          name: 'Nieuw tijdschema',
-          enabled: true,
-          trigger: TimeTrigger(
-              time: '18:00', days: List<bool>.from(kAllDays)),
-          action: const ScheduleSceneAction(sceneId: ''),
-        ),
-      ];
-      _drafts[id] = _Draft.fresh();
+      _drafts = {id: _Draft.fresh()};
       _selectedId = id;
-    } else {
-      _selectedId = widget.initiallySelectedId ??
-          (_schedules.isNotEmpty ? _schedules.first.id : null);
+      return;
     }
+    Schedule? match;
+    final want = widget.initiallySelectedId;
+    if (want != null) {
+      for (final s in widget.schedules) {
+        if (s.id == want) {
+          match = s;
+          break;
+        }
+      }
+    }
+    match ??= widget.schedules.isEmpty ? null : widget.schedules.first;
+    if (match == null) {
+      _drafts = {};
+      _selectedId = null;
+      return;
+    }
+    _drafts = {match.id: _Draft.fromSchedule(match, widget.config)};
+    _selectedId = match.id;
   }
 
   _Draft? get _draft =>
       _selectedId == null ? null : _drafts[_selectedId];
 
+  List<Schedule> _houseSchedulesFromServer() {
+    final fromProvider = ref.read(schedulesProvider).value;
+    final source = fromProvider ?? widget.schedules;
+    return [
+      for (final s in source)
+        if (!isThemeScheduleId(s.id)) s,
+    ];
+  }
+
   Future<void> _deleteSelected() async {
     final id = _selectedId;
     if (id == null || widget.lockedIds.contains(id)) return;
-    _schedules = _schedules.where((s) => s.id != id).toList();
-    _drafts.remove(id);
-    _selectedId = null;
-    await _save();
+    if (isThemeScheduleId(id)) return;
+    setState(() => _saving = true);
+    try {
+      if (widget.persistHouseSchedules) {
+        await ref.read(scheduleApiProvider).save(
+              _houseSchedulesFromServer().where((s) => s.id != id).toList(),
+            );
+      }
+      if (!mounted) return;
+      Navigator.of(context).pop(<Schedule>[]);
+    } catch (err) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: LuxeColors.danger,
+          behavior: SnackBarBehavior.floating,
+          shape: const StadiumBorder(),
+          content: Text('Opslaan mislukt: $err'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   Future<void> _save() async {
+    final id = _selectedId;
+    final draft = _draft;
+    if (id == null || draft == null) return;
     setState(() => _saving = true);
     try {
-      final out = <Schedule>[
-        for (final s in _schedules)
-          _drafts[s.id]?.toSchedule(s.id) ?? s,
-      ];
-      final themeOnes =
-          out.where((s) => isThemeScheduleId(s.id)).toList(growable: false);
-      final houseOnes =
-          out.where((s) => !isThemeScheduleId(s.id)).toList(growable: false);
-
-      if (themeOnes.isNotEmpty) {
+      final edited = draft.toSchedule(id);
+      if (isThemeScheduleId(id)) {
         final current = ref.read(themeAutoScheduleProvider);
         await ref
             .read(themeAutoScheduleProvider.notifier)
-            .save(current.mergeFromSchedules(themeOnes));
-      }
-      if (widget.persistHouseSchedules) {
-        await ref.read(scheduleApiProvider).save(houseOnes);
+            .save(current.mergeFromSchedules([edited]));
+      } else if (widget.persistHouseSchedules) {
+        final existing = _houseSchedulesFromServer();
+        final idx = existing.indexWhere((s) => s.id == id);
+        final next = [...existing];
+        if (idx >= 0) {
+          next[idx] = edited;
+        } else {
+          next.add(edited);
+        }
+        await ref.read(scheduleApiProvider).save(next);
       }
       if (!mounted) return;
-      Navigator.of(context).pop(out);
+      Navigator.of(context).pop([edited]);
     } catch (err) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -379,8 +409,8 @@ class _ScheduleEditorSheetState
             ),
             child: Text(
               _selectedId == kThemeLightOnId
-                  ? 'Weergave â†’ licht thema'
-                  : 'Weergave â†’ donker thema',
+                  ? 'Weergave → licht thema'
+                  : 'Weergave → donker thema',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           )
@@ -415,7 +445,7 @@ class _ScheduleEditorSheetState
         ] else ...[
           const SizedBox(height: 16),
           Text(
-            'Vast weergave-schema â€” niet verwijderbaar. Alleen zichtbaar '
+            'Vast weergave-schema — niet verwijderbaar. Alleen zichtbaar '
             'als Weergave op Auto staat.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: LuxeColors.inkSoft,
