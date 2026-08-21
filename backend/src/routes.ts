@@ -1300,9 +1300,13 @@ export function buildRouter(
 
   /** Best-effort public base URL of this backend, used to derive the Spotify
    *  redirect URI when the installer didn't set one explicitly. */
-  const spotifyServerBase = (req: { protocol: string; get(h: string): string | undefined }) =>
-    (process.env.PUBLIC_API_BASE?.trim() || `${req.protocol}://${req.get("host") ?? ""}`)
-      .replace(/\/+$/, "");
+  const spotifyServerBase = (req: { protocol: string; get(h: string): string | undefined }) => {
+    const env = (process.env.PUBLIC_API_BASE ?? "").trim().replace(/\/+$/, "");
+    const fromReq = `${req.protocol}://${req.get("host") ?? ""}`.replace(/\/+$/, "");
+    if (fromReq && !spotify.isLoopbackUrl(fromReq)) return fromReq;
+    if (env && !spotify.isLoopbackUrl(env)) return env;
+    return fromReq;
+  };
 
   /** Connection status — the app shows "verbonden als ...", the redirect URI
    *  to paste into the Spotify dashboard, and decides whether to offer search. */

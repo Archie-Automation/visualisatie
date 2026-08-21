@@ -9,7 +9,6 @@
 //   selected track plays on exactly the player whose popup is open.
 
 import { logger } from "../logger";
-import fs from "node:fs";
 import type { MediaSearchResult, MediaSearchSection } from "../types";
 import {
   clearTokens,
@@ -49,6 +48,20 @@ function redirectUri(): string {
 
 /** Spotify (2025) only allows https://… or http://127.0.0.1[:port] / http://[::1].
  *  LAN http (`http://192.168.x.x`) is rejected as "redirect_uri not matching". */
+function isLoopbackHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  return h === "127.0.0.1" || h === "localhost" || h === "::1" || h === "[::1]";
+}
+
+export function isLoopbackUrl(uri: string): boolean {
+  try {
+    const u = new URL(uri.includes("://") ? uri : `http://${uri}`);
+    return isLoopbackHost(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
 function isSpotifySafeRedirect(uri: string): boolean {
   try {
     const u = new URL(uri);
@@ -62,18 +75,14 @@ function isSpotifySafeRedirect(uri: string): boolean {
 }
 
 function lanHttpsCallback(serverBaseUrl?: string): string | undefined {
-  const httpsPort = (process.env.HTTPS_PORT ?? "").trim();
+  const httpsPort = (process.env.HTTPS_PORT ?? "4443").trim();
   if (!httpsPort || httpsPort === "0") return undefined;
-  const cert = process.env.TLS_CERT_PATH?.trim();
-  if (cert && !fs.existsSync(cert)) return undefined;
   const base = (serverBaseUrl || process.env.PUBLIC_API_BASE || "").trim();
   if (!base) return undefined;
   try {
     const u = new URL(base.includes("://") ? base : `http://${base}`);
     const host = u.hostname;
-    if (!host || host === "127.0.0.1" || host === "localhost" || host === "::1") {
-      return undefined;
-    }
+    if (!host || isLoopbackHost(host)) return undefined;
     return `https://${host}:${httpsPort}/api/media/spotify/callback`;
   } catch {
     return undefined;
@@ -138,19 +147,23 @@ export function saveAppCredentials(creds: {
   clearTokens();
 }
 
-/** Redirect URI that Spotify will accept. Prefer a public HTTPS bounce (no
- *  cert warnings), then the NUC HTTPS listener, then loopback. */
+/** Redirect URI that Spotify will accept. Never advertise 127.0.0.1 when the
+ *  client reached us via a LAN IP — that is the NUC, not the user's PC. */
 export function resolveRedirectUri(serverBaseUrl?: string): string {
   const bounce = oauthBounceUrl();
   if (bounce && isSpotifySafeRedirect(bounce)) return bounce;
-  const env = process.env.SPOTIFY_REDIRECT_URI?.trim() || "";
-  if (env && isSpotifySafeRedirect(env)) return stripTrailingSlash(env);
   const httpsCb = lanHttpsCallback(serverBaseUrl);
   if (httpsCb) return httpsCb;
+  const env = process.env.SPOTIFY_REDIRECT_URI?.trim() || "";
+  if (env && isSpotifySafeRedirect(env) && !isLoopbackUrl(env)) {
+    return stripTrailingSlash(env);
+  }
   const derived = serverBaseUrl
     ? `${stripTrailingSlash(serverBaseUrl)}/api/media/spotify/callback`
     : "";
-  if (derived && isSpotifySafeRedirect(derived)) return stripTrailingSlash(derived);
+  if (derived && isSpotifySafeRedirect(derived) && !isLoopbackUrl(derived)) {
+    return stripTrailingSlash(derived);
+  }
   return loopbackCallback(serverBaseUrl || derived);
 }
 
@@ -173,7 +186,9 @@ export function getStatus(): {
     connected: !!store.refreshToken,
     account: store.displayName,
     redirectUri:
-      storedRedirect && isSpotifySafeRedirect(storedRedirect)
+      storedRedirect &&
+      isSpotifySafeRedirect(storedRedirect) &&
+      !isLoopbackUrl(storedRedirect)
         ? stripTrailingSlash(storedRedirect)
         : undefined,
     clientId: clientId() || undefined
