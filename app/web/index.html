@@ -65,12 +65,16 @@
     .splash-logo {
       width: 120px;
       height: 120px;
+      border-radius: 28px;
+      overflow: hidden;
+      background: #302b25;
       animation: logoFlip 3s linear infinite;
     }
     .splash-logo img {
       width: 120px;
       height: 120px;
-      object-fit: contain;
+      object-fit: cover;
+      display: block;
     }
   </style>
 </head>
@@ -78,7 +82,7 @@
   <!-- HTML-niveau splash: zichtbaar vóórdat Flutter start -->
   <div id="flutter-loading">
     <div class="splash-logo">
-      <img src="assets/images/logo.png" alt="Logo">
+      <img src="icons/Icon-192.png" alt="Archie OS">
     </div>
   </div>
 
