@@ -9,6 +9,7 @@
 //   selected track plays on exactly the player whose popup is open.
 
 import { logger } from "../logger";
+import fs from "node:fs";
 import type { MediaSearchResult, MediaSearchSection } from "../types";
 import {
   clearTokens,
@@ -60,6 +61,25 @@ function isSpotifySafeRedirect(uri: string): boolean {
   }
 }
 
+function lanHttpsCallback(serverBaseUrl?: string): string | undefined {
+  const httpsPort = (process.env.HTTPS_PORT ?? "").trim();
+  if (!httpsPort || httpsPort === "0") return undefined;
+  const cert = process.env.TLS_CERT_PATH?.trim();
+  if (cert && !fs.existsSync(cert)) return undefined;
+  const base = (serverBaseUrl || process.env.PUBLIC_API_BASE || "").trim();
+  if (!base) return undefined;
+  try {
+    const u = new URL(base.includes("://") ? base : `http://${base}`);
+    const host = u.hostname;
+    if (!host || host === "127.0.0.1" || host === "localhost" || host === "::1") {
+      return undefined;
+    }
+    return `https://${host}:${httpsPort}/api/media/spotify/callback`;
+  } catch {
+    return undefined;
+  }
+}
+
 function loopbackCallback(serverBaseUrl?: string): string {
   let port = "4000";
   const base = (serverBaseUrl || "").trim();
@@ -95,17 +115,18 @@ export function saveAppCredentials(creds: {
   clearTokens();
 }
 
-/** Redirect URI that Spotify will accept. LAN http is rewritten to loopback
- *  so the dashboard URI and the authorize request actually match. */
+/** Redirect URI that Spotify will accept. LAN http is not allowed; use the
+ *  NUC HTTPS listener when present, otherwise loopback (same machine only). */
 export function resolveRedirectUri(serverBaseUrl?: string): string {
   const env = process.env.SPOTIFY_REDIRECT_URI?.trim() || "";
+  if (env && isSpotifySafeRedirect(env)) return stripTrailingSlash(env);
+  const httpsCb = lanHttpsCallback(serverBaseUrl);
+  if (httpsCb) return httpsCb;
   const derived = serverBaseUrl
     ? `${stripTrailingSlash(serverBaseUrl)}/api/media/spotify/callback`
     : "";
-  const stored = loadStore().redirectUri?.trim() || "";
-  const candidate = env || derived || stored;
-  if (candidate && isSpotifySafeRedirect(candidate)) return stripTrailingSlash(candidate);
-  return loopbackCallback(serverBaseUrl || derived || stored);
+  if (derived && isSpotifySafeRedirect(derived)) return stripTrailingSlash(derived);
+  return loopbackCallback(serverBaseUrl || derived);
 }
 
 export function isConnected(): boolean {

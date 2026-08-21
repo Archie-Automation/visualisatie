@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 dotenv.config({ quiet: true });
 import http from "node:http";
+import https from "node:https";
 import path from "node:path";
 import fs from "node:fs";
 import express from "express";
@@ -152,6 +153,19 @@ function main() {
   server.listen(listenPort, () => {
     logger.info({ port: listenPort }, "HTTP + WS server listening");
   });
+
+  const httpsPort = Number(process.env.HTTPS_PORT ?? 0);
+  const tlsCert = process.env.TLS_CERT_PATH?.trim();
+  const tlsKey = process.env.TLS_KEY_PATH?.trim();
+  if (httpsPort > 0 && tlsCert && tlsKey && fs.existsSync(tlsCert) && fs.existsSync(tlsKey)) {
+    const httpsServer = https.createServer(
+      { cert: fs.readFileSync(tlsCert), key: fs.readFileSync(tlsKey) },
+      app
+    );
+    httpsServer.listen(httpsPort, () => {
+      logger.info({ port: httpsPort }, "HTTPS server listening (Spotify OAuth callback)");
+    });
+  }
 
   process.on("exit", () => {
     stopSnapshotWarmer();

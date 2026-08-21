@@ -21,6 +21,9 @@ services:
       - KNX_SIMULATE=0
       - MEDIA_BASE_URL=${MEDIA_BASE_URL:-http://127.0.0.1:1984}
       - PUBLIC_API_BASE=${PUBLIC_API_BASE:-}
+      - HTTPS_PORT=${HTTPS_PORT:-4443}
+      - TLS_CERT_PATH=/data/certs/tls.crt
+      - TLS_KEY_PATH=/data/certs/tls.key
       - WEB_ROOT=/app/web
       - GO2RTC_CONFIG_PATH=/media/go2rtc.yaml
       - GO2RTC_AUTO_START=1
