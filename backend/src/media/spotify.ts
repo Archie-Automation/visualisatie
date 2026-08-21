@@ -52,13 +52,15 @@ export function isConfigured(): boolean {
   return !!(clientId() && clientSecret());
 }
 
-/** Save the OAuth app credentials entered in the app. */
+/** Save the OAuth app credentials entered in the app. Tokens from a previous
+ *  app/account are dropped — they cannot be reused with a different client. */
 export function saveAppCredentials(creds: {
   clientId?: string;
   clientSecret?: string;
   redirectUri?: string;
 }): void {
   saveCredentials(creds);
+  clearTokens();
 }
 
 /** Resolve the redirect URI, falling back to the server's own base URL. */
@@ -80,13 +82,16 @@ export function getStatus(): {
   connected: boolean;
   account?: string;
   redirectUri?: string;
+  /** Public OAuth client id, so the settings form can prefill when editing. */
+  clientId?: string;
 } {
   const store = loadStore();
   return {
     configured: isConfigured(),
     connected: !!store.refreshToken,
     account: store.displayName,
-    redirectUri: redirectUri() || undefined
+    redirectUri: redirectUri() || undefined,
+    clientId: clientId() || undefined
   };
 }
 

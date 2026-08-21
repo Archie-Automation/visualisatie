@@ -65,7 +65,8 @@ function write(next: SpotifyStore): void {
   }
 }
 
-/** Merge OAuth app credentials (leaves tokens untouched). */
+/** Merge OAuth app credentials (leaves tokens untouched — the caller
+ *  decides whether to drop them, e.g. after a client-id change). */
 export function saveCredentials(creds: {
   clientId?: string;
   clientSecret?: string;

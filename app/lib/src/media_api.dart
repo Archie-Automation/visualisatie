@@ -508,12 +508,15 @@ class SpotifyStatus {
   final String? redirectUri;
   /// Suggested redirect URI to paste into the Spotify dashboard.
   final String? suggestedRedirectUri;
+  /// Public OAuth client id (never the secret), used to prefill the form.
+  final String? clientId;
   const SpotifyStatus({
     required this.configured,
     required this.connected,
     this.account,
     this.redirectUri,
     this.suggestedRedirectUri,
+    this.clientId,
   });
 
   factory SpotifyStatus.fromJson(Map<String, dynamic> j) => SpotifyStatus(
@@ -522,6 +525,7 @@ class SpotifyStatus {
         account: j['account'] as String?,
         redirectUri: j['redirectUri'] as String?,
         suggestedRedirectUri: j['suggestedRedirectUri'] as String?,
+        clientId: j['clientId'] as String?,
       );
 }
 
