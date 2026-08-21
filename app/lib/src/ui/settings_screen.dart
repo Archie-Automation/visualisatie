@@ -209,7 +209,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           subtitle: topic == _SettingsTopic.tablet
               ? 'Alleen voor het wandtablet'
               : null,
-          trailing: _SettingsInfoButton(title: infoTitle, body: infoBody),
+          trailing: LuxeInfoIconButton(title: infoTitle, body: infoBody),
         ),
         Expanded(
           child: ListView(
@@ -627,15 +627,14 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                       : (v) => _save(settings.copyWith(enabled: v)),
                 ),
                 const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
+                _LabeledBox(
+                  label: 'Ruimte van dit scherm',
+                  child: DropdownButtonFormField<String>(
                   value: settings.panelRoomId != null &&
                           rooms.any((r) => r.id == settings.panelRoomId)
                       ? settings.panelRoomId
                       : null,
-                  decoration: const InputDecoration(
-                    labelText: 'Ruimte van dit scherm',
-                    border: OutlineInputBorder(),
-                  ),
+                  decoration: _kSettingsBox,
                   items: [
                     const DropdownMenuItem(
                       value: null,
@@ -662,6 +661,7 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                           }
                         }
                       : null,
+                ),
                 ),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
@@ -733,15 +733,14 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                     )),
                   )
                 else
-                  DropdownButtonFormField<String>(
+                  _LabeledBox(
+                    label: 'Ruimte',
+                    child: DropdownButtonFormField<String>(
                     value: settings.temperatureRoomId != null &&
                             rooms.any((r) => r.id == settings.temperatureRoomId)
                         ? settings.temperatureRoomId
                         : null,
-                    decoration: const InputDecoration(
-                      labelText: 'Ruimte',
-                      border: OutlineInputBorder(),
-                    ),
+                    decoration: _kSettingsBox,
                     items: [
                       const DropdownMenuItem(
                         value: null,
@@ -766,9 +765,10 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                                 temperatureRoomName: label,
                                 clearTemperatureGa: true,
                               ));
-                            }
                           }
-                        : null,
+                        }
+                      : null,
+                  ),
                   ),
                 const SizedBox(height: 12),
                 Align(
@@ -831,15 +831,14 @@ class _TemperatureGaFieldState extends State<_TemperatureGaField> {
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    return _LabeledBox(
+      label: 'Groepadres temperatuur',
+      child: TextField(
       enabled: widget.enabled,
       controller: _ctrl,
-      decoration: const InputDecoration(
-        labelText: 'Groepadres temperatuur',
-        hintText: 'bijv. 4/1/10',
-        border: OutlineInputBorder(),
-      ),
+      decoration: _kSettingsBox.copyWith(hintText: 'bijv. 4/1/10'),
       onSubmitted: widget.enabled ? widget.onSave : null,
+    ),
     );
   }
 }
@@ -864,12 +863,11 @@ class _MinutesDropdown extends StatelessWidget {
     final options = allowOff
         ? [0, 1, 2, 3, 5, 10, 15, 30, 60]
         : [1, 2, 3, 5, 10, 15, 30, 60];
-    return DropdownButtonFormField<int>(
+    return _LabeledBox(
+      label: label,
+      child: DropdownButtonFormField<int>(
       value: options.contains(value) ? value : options.first,
-      decoration: InputDecoration(
-        labelText: label,
-        border: const OutlineInputBorder(),
-      ),
+      decoration: _kSettingsBox,
       items: options
           .map(
             (m) => DropdownMenuItem(
@@ -881,6 +879,7 @@ class _MinutesDropdown extends StatelessWidget {
           )
           .toList(),
       onChanged: enabled ? (v) => v != null ? onChanged(v) : null : null,
+    ),
     );
   }
 }
@@ -1185,17 +1184,18 @@ class _SpotifyConnectDialogState extends State<_SpotifyConnectDialog> {
               ),
             ],
             const SizedBox(height: 12),
-            TextField(
+            _LabeledBox(
+              label: 'Callback-URL (als de pagina niet laadt)',
+              child: TextField(
               controller: _urlCtrl,
               enabled: !_busy,
               minLines: 2,
               maxLines: 4,
-              decoration: const InputDecoration(
-                labelText: 'Callback-URL (als de pagina niet laadt)',
+              decoration: _kSettingsBox.copyWith(
                 hintText:
                     'https://192.168.x.x:4443/api/media/spotify/callback?code=…',
-                border: OutlineInputBorder(),
               ),
+            ),
             ),
             if (_error != null) ...[
               const SizedBox(height: 8),
@@ -1352,21 +1352,21 @@ class _SpotifyCredentialsFormState
             ),
           const SizedBox(height: 12),
         ],
-        TextField(
+        _LabeledBox(
+          label: 'Client ID',
+          child: TextField(
           controller: _idCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Client ID',
-            border: OutlineInputBorder(),
-          ),
+          decoration: _kSettingsBox,
+        ),
         ),
         const SizedBox(height: 10),
-        TextField(
+        _LabeledBox(
+          label: 'Client Secret',
+          child: TextField(
           controller: _secretCtrl,
           obscureText: true,
-          decoration: const InputDecoration(
-            labelText: 'Client Secret',
-            border: OutlineInputBorder(),
-          ),
+          decoration: _kSettingsBox,
+        ),
         ),
         const SizedBox(height: 12),
         Wrap(
@@ -1720,6 +1720,34 @@ class _SettingsCard extends StatelessWidget {
   }
 }
 
+const _kSettingsBox = InputDecoration(
+  floatingLabelBehavior: FloatingLabelBehavior.never,
+  border: OutlineInputBorder(),
+);
+
+class _LabeledBox extends StatelessWidget {
+  const _LabeledBox({required this.label, required this.child});
+  final String label;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
+        ),
+        child,
+      ],
+    );
+  }
+}
+
 class _SettingsSectionTitle extends StatelessWidget {
   const _SettingsSectionTitle({
     required this.icon,
@@ -1761,48 +1789,9 @@ class _SettingsSectionTitle extends StatelessWidget {
             ],
           ),
         ),
-        _SettingsInfoButton(title: infoTitle, body: infoBody),
+        LuxeInfoIconButton(title: infoTitle, body: infoBody),
         if (trailing != null) trailing!,
       ],
-    );
-  }
-}
-
-class _SettingsInfoButton extends StatelessWidget {
-  const _SettingsInfoButton({required this.title, required this.body});
-
-  final String title;
-  final String body;
-
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: 'Uitleg',
-      visualDensity: VisualDensity.compact,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-      onPressed: () => showLuxeInfoDialog(
-        context,
-        title: title,
-        message: body,
-      ),
-      icon: Container(
-        width: 28,
-        height: 28,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: LuxeColors.brass.withValues(alpha: 0.14),
-          border: Border.all(
-            color: LuxeColors.brass.withValues(alpha: 0.4),
-          ),
-        ),
-        child: Icon(
-          Icons.info_outline_rounded,
-          size: 16,
-          color: LuxeColors.brassDeep,
-        ),
-      ),
     );
   }
 }

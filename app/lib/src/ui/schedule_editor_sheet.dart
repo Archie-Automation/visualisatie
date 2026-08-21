@@ -7,6 +7,7 @@ import '../schedule_api.dart';
 import '../scene_entry.dart';
 import '../theme.dart';
 import '../theme_auto_schedule.dart';
+import 'widgets/confirm_dialog.dart';
 import 'widgets/scene_entry_tiles.dart';
 
 /// Bottom sheet for creating and editing time/astro schedules. Uses the
@@ -333,7 +334,7 @@ class _ScheduleEditorSheetState
     final name = _draft?.name.trim();
     final title = (name != null && name.isNotEmpty) ? name : 'Tijdschema';
     return Padding(
-        padding: EdgeInsets.fromLTRB(24, 12, 8, 10),
+        padding: EdgeInsets.fromLTRB(24, 8, 8, 8),
         child: Row(
           children: [
             Expanded(
@@ -357,6 +358,14 @@ class _ScheduleEditorSheetState
                 ],
               ),
             ),
+            LuxeInfoIconButton(
+              title: 'Tijdschema',
+              body: widget.lockedIds.contains(_selectedId)
+                  ? 'Dit schema schakelt de weergave tussen licht en donker. '
+                      'Het is vast en alleen zichtbaar als Weergave op Auto staat.'
+                  : 'Laat een scene of apparaten automatisch lopen op een tijdstip, '
+                      'of bij zonsopkomst en zonsondergang.',
+            ),
             IconButton(
               icon: const Icon(Icons.close_rounded),
               onPressed: () => Navigator.of(context).pop(),
@@ -378,26 +387,39 @@ class _ScheduleEditorSheetState
     }
     final locked = widget.lockedIds.contains(_selectedId);
     return ListView(
-      padding: EdgeInsets.fromLTRB(24, 12, 24, 24),
+      padding: EdgeInsets.fromLTRB(24, 8, 24, 16),
       children: [
+        const _SectionHead('NAAM'),
         _NameField(
           key: ValueKey('name-$_selectedId'),
           initial: d.name,
           onChanged: (v) => setState(() => d.name = v),
         ),
         const SizedBox(height: 18),
+        const _SectionHead(
+          'WANNEER',
+          infoTitle: 'Wanneer',
+          infoBody:
+              'Tijd is een vast tijdstip. Zon volgt zonsopkomst of zonsondergang, '
+              'eventueel verschoven. Kies daarna op welke dagen het schema mag lopen.',
+        ),
         _TriggerTypeSelector(
           value: d.kind,
           onChanged: (v) => setState(() => d.kind = v),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         if (d.kind == _TriggerKind.time)
           _TimeTriggerEditor(draft: d, onTouch: () => setState(() {}))
         else
           _AstroTriggerEditor(draft: d, onTouch: () => setState(() {})),
         const SizedBox(height: 18),
-        Text('ACTIE', style: _kSectionStyle),
-        const SizedBox(height: 10),
+        _SectionHead(
+          'ACTIE',
+          infoTitle: 'Actie',
+          infoBody: locked
+              ? 'Dit schema zet de app op licht of donker. Dat kun je niet wijzigen.'
+              : 'Kies een bestaande scene, of stel apparaten hier direct in.',
+        ),
         if (locked)
           Container(
             width: double.infinity,
@@ -434,22 +456,13 @@ class _ScheduleEditorSheetState
             ),
         ],
         if (!locked) ...[
-          const SizedBox(height: 22),
+          const SizedBox(height: 18),
           TextButton.icon(
             icon: Icon(Icons.delete_outline,
                 size: 18, color: LuxeColors.danger),
             label: Text('Tijdschema verwijderen',
                 style: TextStyle(color: LuxeColors.danger)),
             onPressed: _deleteSelected,
-          ),
-        ] else ...[
-          const SizedBox(height: 16),
-          Text(
-            'Vast weergave-schema — niet verwijderbaar. Alleen zichtbaar '
-            'als Weergave op Auto staat.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: LuxeColors.inkSoft,
-                ),
           ),
         ],
       ],
@@ -506,6 +519,47 @@ final _kSectionStyle = TextStyle(
   color: LuxeColors.inkSoft,
 );
 
+InputDecoration _boxDecoration({String? hint}) => InputDecoration(
+      hintText: hint,
+      floatingLabelBehavior: FloatingLabelBehavior.never,
+      filled: true,
+      fillColor: LuxeColors.surface.withValues(alpha: 0.8),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: LuxeColors.line),
+      ),
+    );
+
+class _SectionHead extends StatelessWidget {
+  const _SectionHead(this.title, {this.infoTitle, this.infoBody});
+  final String title;
+  final String? infoTitle;
+  final String? infoBody;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(child: Text(title, style: _kSectionStyle)),
+          if (infoTitle != null && infoBody != null)
+            LuxeInfoIconButton(title: infoTitle!, body: infoBody!),
+        ],
+      ),
+    );
+  }
+}
+
 class _NameField extends StatefulWidget {
   const _NameField({super.key, required this.initial, required this.onChanged});
   final String initial;
@@ -533,15 +587,7 @@ class _NameFieldState extends State<_NameField> {
     return TextField(
       controller: _ctl,
       textCapitalization: TextCapitalization.sentences,
-      decoration: InputDecoration(
-        labelText: 'Naam',
-        filled: true,
-        fillColor: LuxeColors.surface.withValues(alpha: 0.8),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
-        ),
-      ),
+      decoration: _boxDecoration(hint: 'Naam van dit schema'),
       onChanged: widget.onChanged,
     );
   }
@@ -582,8 +628,6 @@ class _TimeTriggerEditor extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('TIJDSTIP', style: _kSectionStyle),
-        const SizedBox(height: 8),
         InkWell(
           onTap: () async {
             final picked = await showTimePicker(
@@ -603,7 +647,7 @@ class _TimeTriggerEditor extends StatelessWidget {
           borderRadius: BorderRadius.circular(14),
           child: Container(
             padding: EdgeInsets.symmetric(
-                horizontal: 16, vertical: 16),
+                horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
               color: LuxeColors.surface.withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(14),
@@ -616,7 +660,7 @@ class _TimeTriggerEditor extends StatelessWidget {
                 Text(
                   _hhmm(draft.time),
                   style: TextStyle(
-                      fontSize: 24,
+                      fontSize: 22,
                       fontWeight: FontWeight.w600,
                       color: LuxeColors.ink),
                 ),
@@ -626,7 +670,7 @@ class _TimeTriggerEditor extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         _WeekdayRow(days: draft.days, onTouch: onTouch),
       ],
     );
@@ -642,8 +686,6 @@ class _AstroTriggerEditor extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('ZON-EVENEMENT', style: _kSectionStyle),
-        const SizedBox(height: 8),
         SegmentedButton<AstroEvent>(
           showSelectedIcon: false,
           segments: const [
@@ -664,19 +706,20 @@ class _AstroTriggerEditor extends StatelessWidget {
             onTouch();
           },
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         _OffsetSlider(draft: draft, onTouch: onTouch),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
         _WeekdayRow(days: draft.days, onTouch: onTouch),
-        const SizedBox(height: 16),
-        Text('BEGRENZING (OPTIONEEL)', style: _kSectionStyle),
-        const SizedBox(height: 6),
-        Text(
-          'Voer alleen uit binnen een tijdvenster. Bv. "bij zonsondergang, '
-          'maar niet voor 18:00".',
-          style: Theme.of(context).textTheme.bodyMedium,
+        const SizedBox(height: 14),
+        const _SectionHead(
+          'BEGRENZING',
+          infoTitle: 'Begrenzing',
+          infoBody:
+              'Optioneel. Voer alleen uit binnen een tijdvenster. '
+              'Bijvoorbeeld: bij zonsondergang, maar niet voor 18:00.\n\n'
+              'Niet voor: later als de zon eerder is.\n'
+              'Niet na: overslaan als de zon later is.',
         ),
-        const SizedBox(height: 10),
         _GuardRow(
           label: 'Niet voor',
           guard: draft.notBefore,
@@ -706,7 +749,7 @@ class _OffsetSlider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final off = draft.offsetMin.clamp(-240, 240);
-    final label = off == 0
+    final shift = off == 0
         ? 'exact'
         : off > 0
             ? '$off min na'
@@ -718,7 +761,7 @@ class _OffsetSlider extends StatelessWidget {
           children: [
             Text('VERSCHUIVING', style: _kSectionStyle),
             const Spacer(),
-            Text(label, style: Theme.of(context).textTheme.titleMedium),
+            Text(shift, style: Theme.of(context).textTheme.titleMedium),
           ],
         ),
         SliderTheme(
@@ -731,7 +774,7 @@ class _OffsetSlider extends StatelessWidget {
             value: off.toDouble(),
             min: -240,
             max: 240,
-            divisions: 96, // 5-minute steps
+            divisions: 96,
             onChanged: (v) {
               draft.offsetMin = v.round();
               onTouch();
@@ -815,30 +858,32 @@ class _GuardRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final g = guard;
-    return Container(
-      padding: EdgeInsets.fromLTRB(14, 10, 10, 10),
-      decoration: BoxDecoration(
-        color: LuxeColors.surface.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: LuxeColors.lineSoft),
-      ),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 82,
-            child: Text(label,
-                style: Theme.of(context).textTheme.titleMedium),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Text(label, style: _kSectionStyle),
+        ),
+        Container(
+          padding: const EdgeInsets.fromLTRB(14, 4, 6, 4),
+          decoration: BoxDecoration(
+            color: LuxeColors.surface.withValues(alpha: 0.7),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: LuxeColors.lineSoft),
           ),
-          Expanded(
-            child: _guardBody(context, g),
+          child: Row(
+            children: [
+              Expanded(child: _guardBody(context, g)),
+              if (g != null)
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                  onPressed: () => onChanged(null),
+                ),
+            ],
           ),
-          if (g != null)
-            IconButton(
-              icon: const Icon(Icons.close_rounded, size: 18),
-              onPressed: () => onChanged(null),
-            ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
@@ -866,7 +911,7 @@ class _GuardRow extends StatelessWidget {
           child: Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
             child: Text(
-              'Geen â€” tik om toe te voegen',
+              'Tik om toe te voegen',
               style:
                   Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: LuxeColors.brassDeep,
@@ -978,7 +1023,7 @@ class _ScenePicker extends StatelessWidget {
           items.add(
             DropdownMenuItem(
               value: s.id,
-              child: Text('${s.name}  Â·  ${r.name}'),
+              child: Text('${s.name}  ·  ${r.name}'),
             ),
           );
         }
@@ -1006,15 +1051,7 @@ class _ScenePicker extends StatelessWidget {
       initialValue: current,
       isExpanded: true,
       items: items,
-      decoration: InputDecoration(
-        labelText: 'Scene',
-        filled: true,
-        fillColor: LuxeColors.surface.withValues(alpha: 0.8),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
-        ),
-      ),
+      decoration: _boxDecoration(hint: 'Kies een scene'),
       onChanged: (v) {
         if (v != null) onChanged(v);
       },
