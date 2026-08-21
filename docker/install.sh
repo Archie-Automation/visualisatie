@@ -144,6 +144,16 @@ if $DOCKER image inspect luxe-knx-stack:latest >/dev/null 2>&1; then
   ok "Oude image luxe-knx-stack:latest verwijderd"
 fi
 
+# Spotify-callback op :4443 (HTTPS). Zonder deze regel blokkeert UFW de terugkeer.
+if command -v ufw >/dev/null 2>&1; then
+  SUDO_UFW=""
+  if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
+    SUDO_UFW="sudo"
+  fi
+  $SUDO_UFW ufw status 2>/dev/null | grep -q "Status: active" && \
+    $SUDO_UFW ufw allow 4443/tcp comment "Archie OS Spotify HTTPS" >/dev/null 2>&1 || true
+fi
+
 $DOCKER compose --env-file .env up -d --build
 
 # ── Update-agent (server bijwerken vanaf de tablet) ─────────────────────────

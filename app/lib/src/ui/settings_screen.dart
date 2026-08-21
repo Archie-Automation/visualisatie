@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -774,7 +776,34 @@ class _SpotifySectionState extends ConsumerState<_SpotifySection> {
   Future<void> _connect(BuildContext ctx) async {
     final api = ref.read(mediaApiProvider);
     final messenger = ScaffoldMessenger.of(ctx);
+    final tlsCheck = ref.read(spotifyStatusProvider).value?.tlsCheckUrl;
     try {
+      if (tlsCheck != null && tlsCheck.isNotEmpty) {
+        await launchUrl(Uri.parse(tlsCheck), mode: LaunchMode.externalApplication);
+        if (!ctx.mounted) return;
+        final proceed = await showDialog<bool>(
+          context: ctx,
+          builder: (dctx) => AlertDialog(
+            title: const Text('Certificaat toestaan'),
+            content: const Text(
+              'Chrome toont een waarschuwing (zelf-getekend certificaat). '
+              'Kies Geavanceerd → Doorgaan tot je “Certificaat OK” ziet. '
+              'Daarna tik je hier op Verder.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dctx).pop(false),
+                child: const Text('Annuleren'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(dctx).pop(true),
+                child: const Text('Verder'),
+              ),
+            ],
+          ),
+        );
+        if (proceed != true || !ctx.mounted) return;
+      }
       final url = await api.spotifyLoginUrl();
       await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
     } catch (e) {
@@ -793,6 +822,11 @@ class _SpotifySectionState extends ConsumerState<_SpotifySection> {
       context: ctx,
       builder: (dctx) => _SpotifyConnectDialog(
         onFinishUrl: (pasted) => api.spotifyFinish(callbackUrl: pasted),
+        pollConnected: () async {
+          ref.invalidate(spotifyStatusProvider);
+          final next = await ref.read(spotifyStatusProvider.future);
+          return next.connected;
+        },
       ),
     );
     ref.invalidate(spotifyStatusProvider);
@@ -827,7 +861,7 @@ class _SpotifySectionState extends ConsumerState<_SpotifySection> {
                           style: Theme.of(context).textTheme.labelLarge),
                       const SizedBox(height: 2),
                       Text(
-                        'Verbind je Spotify-account om in de spelers te zoeken en af te spelen.',
+                        'Eén keer inloggen voor dit huis. Daarna werkt Spotify op elk paneel.',
                         style: Theme.of(context).textTheme.bodyMedium,
                       ),
                     ],
@@ -882,8 +916,8 @@ class _SpotifySectionState extends ConsumerState<_SpotifySection> {
               Expanded(
                 child: Text(
                   status.account != null && status.account!.isNotEmpty
-                      ? 'Verbonden als ${status.account}'
-                      : 'Verbonden',
+                      ? 'Verbonden als ${status.account} — geldig op alle panelen'
+                      : 'Verbonden — geldig op alle panelen',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
               ),
@@ -959,8 +993,12 @@ class _SpotifySectionState extends ConsumerState<_SpotifySection> {
 /// After the browser login, the user either lands on the backend callback
 /// (SSH tunnel / loopback) or pastes the 127.0.0.1 URL that failed to load.
 class _SpotifyConnectDialog extends StatefulWidget {
-  const _SpotifyConnectDialog({required this.onFinishUrl});
+  const _SpotifyConnectDialog({
+    required this.onFinishUrl,
+    required this.pollConnected,
+  });
   final Future<void> Function(String url) onFinishUrl;
+  final Future<bool> Function() pollConnected;
 
   @override
   State<_SpotifyConnectDialog> createState() => _SpotifyConnectDialogState();
@@ -970,9 +1008,28 @@ class _SpotifyConnectDialogState extends State<_SpotifyConnectDialog> {
   final _urlCtrl = TextEditingController();
   String? _error;
   bool _busy = false;
+  bool _waiting = true;
+  Timer? _poll;
+
+  @override
+  void initState() {
+    super.initState();
+    _poll = Timer.periodic(const Duration(seconds: 2), (_) => _check());
+    _check();
+  }
+
+  Future<void> _check() async {
+    try {
+      final ok = await widget.pollConnected();
+      if (ok && mounted) Navigator.of(context).pop();
+    } catch (_) {
+      /* keep waiting */
+    }
+  }
 
   @override
   void dispose() {
+    _poll?.cancel();
     _urlCtrl.dispose();
     super.dispose();
   }
@@ -1011,12 +1068,21 @@ class _SpotifyConnectDialogState extends State<_SpotifyConnectDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Log in het geopende venster in bij Spotify. '
-              'Eerste keer: als Chrome een certificaatwaarschuwing toont, '
-              'kies Geavanceerd en Doorgaan. '
-              'Tik daarna op Gereed.',
+              'Log in bij Spotify in het geopende venster. '
+              'Dit is eenmalig voor het hele huis — daarna werken alle panelen. '
+              'Deze dialoog sluit vanzelf als de koppeling lukt.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
+            if (_waiting) ...[
+              const SizedBox(height: 16),
+              const Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             TextField(
               controller: _urlCtrl,

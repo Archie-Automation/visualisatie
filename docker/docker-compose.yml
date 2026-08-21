@@ -24,6 +24,7 @@ services:
       - HTTPS_PORT=${HTTPS_PORT:-4443}
       - TLS_CERT_PATH=/data/certs/tls.crt
       - TLS_KEY_PATH=/data/certs/tls.key
+      - SPOTIFY_OAUTH_BOUNCE=${SPOTIFY_OAUTH_BOUNCE:-}
       - WEB_ROOT=/app/web
       - GO2RTC_CONFIG_PATH=/media/go2rtc.yaml
       - GO2RTC_AUTO_START=1

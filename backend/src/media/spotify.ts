@@ -98,6 +98,29 @@ function stripTrailingSlash(uri: string): string {
   return uri.replace(/\/+$/, "");
 }
 
+function oauthBounceUrl(): string {
+  return (process.env.SPOTIFY_OAUTH_BOUNCE ?? "").trim().replace(/\/+$/, "");
+}
+
+/** Encode nonce + LAN origin so a public HTTPS bounce page can send the
+ *  browser back to this house. */
+export function encodeOauthState(nonce: string, origin: string): string {
+  const payload = JSON.stringify({ n: nonce, o: stripTrailingSlash(origin) });
+  return Buffer.from(payload, "utf8").toString("base64url");
+}
+
+/** Accept both a plain nonce and a bounce-encoded state. */
+export function parseOauthNonce(state: string): string {
+  try {
+    const json = Buffer.from(state, "base64url").toString("utf8");
+    const parsed = JSON.parse(json) as { n?: unknown };
+    if (typeof parsed?.n === "string" && parsed.n.length > 0) return parsed.n;
+  } catch {
+    /* plain uuid */
+  }
+  return state;
+}
+
 /** Configured = we have an app id + secret. The redirect URI can be derived
  *  from the server's own address when not explicitly set. */
 export function isConfigured(): boolean {
@@ -115,9 +138,11 @@ export function saveAppCredentials(creds: {
   clearTokens();
 }
 
-/** Redirect URI that Spotify will accept. LAN http is not allowed; use the
- *  NUC HTTPS listener when present, otherwise loopback (same machine only). */
+/** Redirect URI that Spotify will accept. Prefer a public HTTPS bounce (no
+ *  cert warnings), then the NUC HTTPS listener, then loopback. */
 export function resolveRedirectUri(serverBaseUrl?: string): string {
+  const bounce = oauthBounceUrl();
+  if (bounce && isSpotifySafeRedirect(bounce)) return bounce;
   const env = process.env.SPOTIFY_REDIRECT_URI?.trim() || "";
   if (env && isSpotifySafeRedirect(env)) return stripTrailingSlash(env);
   const httpsCb = lanHttpsCallback(serverBaseUrl);
@@ -162,9 +187,15 @@ function basicAuthHeader(): string {
 
 /** Build the Spotify authorize URL the customer is sent to. The resolved
  *  redirect URI is persisted so the callback's token exchange matches. */
-export function buildAuthUrl(state: string, serverBaseUrl?: string): string {
+export function buildAuthUrl(stateNonce: string, serverBaseUrl?: string): string {
   const redirect = resolveRedirectUri(serverBaseUrl);
   if (redirect) saveRedirectUri(redirect);
+  const origin = stripTrailingSlash(
+    serverBaseUrl || process.env.PUBLIC_API_BASE || ""
+  );
+  const bounce = oauthBounceUrl();
+  const state =
+    bounce && origin ? encodeOauthState(stateNonce, origin) : stateNonce;
   logger.info({ redirect }, "spotify: authorize URL");
   const params = new URLSearchParams({
     response_type: "code",
