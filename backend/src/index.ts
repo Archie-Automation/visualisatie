@@ -165,6 +165,10 @@ function main() {
     httpsServer.listen(httpsPort, () => {
       logger.info({ port: httpsPort }, "HTTPS server listening (Spotify OAuth callback)");
     });
+  } else {
+    logger.warn(
+      "HTTPS (Spotify-callback) niet gestart — zet PUBLIC_API_BASE of controleer TLS_CERT_PATH"
+    );
   }
 
   process.on("exit", () => {

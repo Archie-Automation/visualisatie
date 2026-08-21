@@ -41,7 +41,7 @@ ENV LOG_STORE_PATH=/data/logs.db
 ENV HVAC_LOCK_STORE_PATH=/data/hvac-locks.json
 ENV SPOTIFY_STORE_PATH=/data/spotify.json
 
-RUN apk add --no-cache ffmpeg tini openssl \
+RUN apk add --no-cache ffmpeg tini openssl iproute2 \
   && mkdir -p /app/web /media /data
 
 COPY --from=alexxit/go2rtc:latest /usr/local/bin/go2rtc /usr/local/bin/go2rtc
@@ -58,6 +58,7 @@ ENV APP_VERSION_FILE=/app/APP_VERSION
 
 # entrypoint sets APP_VERSION from file if not already provided
 COPY docker/docker-entrypoint.sh /docker-entrypoint.sh
+COPY oauth/spotify-callback.html /app/web/spotify-callback.html
 RUN chmod +x /docker-entrypoint.sh
 
 EXPOSE 4000 4443 1984 8554 8555/tcp 8555/udp

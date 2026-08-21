@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spotify</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #121212; color: #fff;
+      display: flex; align-items: center; justify-content: center; min-height: 100vh;
+      margin: 0; text-align: center; }
+    p { color: #b3b3b3; }
+  </style>
+</head>
+<body>
+  <p>Terug naar je huis-app…</p>
+  <script>
+    (function () {
+      var params = new URLSearchParams(location.search);
+      var state = params.get("state") || "";
+      var origin;
+      try {
+        var b64 = state.replace(/-/g, "+").replace(/_/g, "/");
+        while (b64.length % 4) b64 += "=";
+        var decoded = JSON.parse(atob(b64));
+        origin = decoded && decoded.o;
+      } catch (e) {
+        document.body.textContent = "Ongeldige Spotify-terugkeer.";
+        return;
+      }
+      if (typeof origin !== "string" || !/^https?:\/\/[0-9A-Za-z.-]+(:\d+)?$/.test(origin)) {
+        document.body.textContent = "Ongeldig terugadres.";
+        return;
+      }
+      var next = origin.replace(/\/+$/, "") + "/api/media/spotify/callback";
+      location.replace(next + "?" + params.toString());
+    })();
+  </script>
+</body>
+</html>

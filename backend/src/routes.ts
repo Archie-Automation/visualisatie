@@ -1377,10 +1377,14 @@ p{color:#b3b3b3;margin:0}</style></head>
     if (err) {
       return res.status(400).send(spotifyResultPage(`Spotify-login geannuleerd: ${err}`));
     }
-    if (!code || !state || !spotifyAuthStates.has(state)) {
+    if (!code || !state) {
       return res.status(400).send(spotifyResultPage("Ongeldige of verlopen login-poging."));
     }
-    spotifyAuthStates.delete(state);
+    const nonce = spotify.parseOauthNonce(state);
+    if (!spotifyAuthStates.has(nonce)) {
+      return res.status(400).send(spotifyResultPage("Ongeldige of verlopen login-poging."));
+    }
+    spotifyAuthStates.delete(nonce);
     try {
       await spotify.exchangeCode(code);
       res.send(spotifyResultPage("Spotify is verbonden. Je kunt dit venster sluiten en terug naar de app."));
@@ -1413,10 +1417,14 @@ p{color:#b3b3b3;margin:0}</style></head>
         return res.status(400).json({ error: "Ongeldige callback-URL" });
       }
     }
-    if (!code || !state || !spotifyAuthStates.has(state)) {
+    if (!code || !state) {
       return res.status(400).json({ error: "Ongeldige of verlopen login-poging." });
     }
-    spotifyAuthStates.delete(state);
+    const nonce = spotify.parseOauthNonce(state);
+    if (!spotifyAuthStates.has(nonce)) {
+      return res.status(400).json({ error: "Ongeldige of verlopen login-poging." });
+    }
+    spotifyAuthStates.delete(nonce);
     try {
       await spotify.exchangeCode(code);
       res.json(spotify.getStatus());
