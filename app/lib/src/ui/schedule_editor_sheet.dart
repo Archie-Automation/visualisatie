@@ -360,8 +360,8 @@ class _ScheduleEditorSheetState
           locked
               ? 'Hier kun je alleen het tijdstip aanpassen. '
                   'Naam en actie (licht of donker) staan vast.'
-              : 'Tijd is een vast tijdstip. Zon volgt zonsopkomst of zonsondergang.\n\n'
-                  'Verschuiving: minuten voor of na het zon-event.\n'
+              : 'Tijd is een vast tijdstip. Astro volgt zonsopkomst of zonsondergang.\n\n'
+                  'Verschuiving: minuten voor of na het astro-event.\n'
                   'Dagen: op welke weekdagen het mag lopen.\n'
                   'Begrenzing: optioneel venster, bijvoorbeeld niet voor 18:00.',
         ),
@@ -836,8 +836,11 @@ class _TriggerTypeSelector extends StatelessWidget {
   final ValueChanged<_TriggerKind> onChanged;
   @override
   Widget build(BuildContext context) {
-    return SegmentedButton<_TriggerKind>(
+    return SizedBox(
+      width: double.infinity,
+      child: SegmentedButton<_TriggerKind>(
       showSelectedIcon: false,
+      expandedInsets: EdgeInsets.zero,
       segments: const [
         ButtonSegment(
           value: _TriggerKind.time,
@@ -847,11 +850,12 @@ class _TriggerTypeSelector extends StatelessWidget {
         ButtonSegment(
           value: _TriggerKind.astro,
           icon: Icon(Icons.wb_twilight, size: 16),
-          label: Text('Zon'),
+          label: Text('Astro'),
         ),
       ],
       selected: {value},
       onSelectionChanged: (s) => onChanged(s.first),
+    ),
     );
   }
 }
@@ -916,8 +920,11 @@ class _AstroTriggerEditor extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SegmentedButton<AstroEvent>(
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<AstroEvent>(
           showSelectedIcon: false,
+          expandedInsets: EdgeInsets.zero,
           segments: const [
             ButtonSegment(
               value: AstroEvent.sunrise,
@@ -935,6 +942,7 @@ class _AstroTriggerEditor extends StatelessWidget {
             draft.astroEvent = s.first;
             onTouch();
           },
+        ),
         ),
       ],
     );
@@ -981,9 +989,12 @@ class _OffsetStepper extends StatelessWidget {
           onStep: () => _set(draft.offsetMin + 1),
         ),
         const SizedBox(width: 8),
-        TextButton(
-          onPressed: off == 0 ? null : () => _set(0),
-          child: const Text('Reset'),
+        _HoldStepButton(
+          tooltip: 'Reset naar 0',
+          icon: Icons.restart_alt_rounded,
+          enabled: off != 0,
+          repeats: false,
+          onStep: () => _set(0),
         ),
       ],
     );
@@ -996,11 +1007,13 @@ class _HoldStepButton extends StatefulWidget {
     required this.onStep,
     required this.enabled,
     this.tooltip,
+    this.repeats = true,
   });
   final IconData icon;
   final VoidCallback onStep;
   final bool enabled;
   final String? tooltip;
+  final bool repeats;
 
   @override
   State<_HoldStepButton> createState() => _HoldStepButtonState();
@@ -1022,6 +1035,7 @@ class _HoldStepButtonState extends State<_HoldStepButton> {
   void _down() {
     if (!widget.enabled) return;
     widget.onStep();
+    if (!widget.repeats) return;
     _hold = Timer(const Duration(milliseconds: 350), () {
       _repeat = Timer.periodic(const Duration(milliseconds: 110), (_) {
         if (!mounted || !widget.enabled) {
@@ -1528,8 +1542,8 @@ String _hhmm(TimeOfDay t) =>
 
 String _offsetLabel(int offsetMin) {
   final off = offsetMin;
-  if (off == 0) return 'exact';
-  return off > 0 ? '$off min na' : '${-off} min voor';
+  if (off == 0) return '0 min';
+  return off > 0 ? '+$off min' : '$off min';
 }
 
 String _daysSummary(List<bool> m) {
