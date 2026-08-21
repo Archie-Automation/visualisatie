@@ -46,6 +46,38 @@ function redirectUri(): string {
   return loadStore().redirectUri?.trim() || process.env.SPOTIFY_REDIRECT_URI?.trim() || "";
 }
 
+/** Spotify (2025) only allows https://… or http://127.0.0.1[:port] / http://[::1].
+ *  LAN http (`http://192.168.x.x`) is rejected as "redirect_uri not matching". */
+function isSpotifySafeRedirect(uri: string): boolean {
+  try {
+    const u = new URL(uri);
+    if (u.protocol === "https:") return true;
+    const host = u.hostname.toLowerCase();
+    const loopback = host === "127.0.0.1" || host === "::1";
+    return u.protocol === "http:" && loopback;
+  } catch {
+    return false;
+  }
+}
+
+function loopbackCallback(serverBaseUrl?: string): string {
+  let port = "4000";
+  const base = (serverBaseUrl || "").trim();
+  if (base) {
+    try {
+      const u = new URL(base.includes("://") ? base : `http://${base}`);
+      if (u.port) port = u.port;
+    } catch {
+      /* keep default */
+    }
+  }
+  return `http://127.0.0.1:${port}/api/media/spotify/callback`;
+}
+
+function stripTrailingSlash(uri: string): string {
+  return uri.replace(/\/+$/, "");
+}
+
 /** Configured = we have an app id + secret. The redirect URI can be derived
  *  from the server's own address when not explicitly set. */
 export function isConfigured(): boolean {
@@ -63,14 +95,17 @@ export function saveAppCredentials(creds: {
   clearTokens();
 }
 
-/** Resolve the redirect URI, falling back to the server's own base URL. */
+/** Redirect URI that Spotify will accept. LAN http is rewritten to loopback
+ *  so the dashboard URI and the authorize request actually match. */
 export function resolveRedirectUri(serverBaseUrl?: string): string {
-  const explicit = redirectUri();
-  if (explicit) return explicit;
-  if (serverBaseUrl) {
-    return `${serverBaseUrl.replace(/\/+$/, "")}/api/media/spotify/callback`;
-  }
-  return "";
+  const env = process.env.SPOTIFY_REDIRECT_URI?.trim() || "";
+  const derived = serverBaseUrl
+    ? `${stripTrailingSlash(serverBaseUrl)}/api/media/spotify/callback`
+    : "";
+  const stored = loadStore().redirectUri?.trim() || "";
+  const candidate = env || derived || stored;
+  if (candidate && isSpotifySafeRedirect(candidate)) return stripTrailingSlash(candidate);
+  return loopbackCallback(serverBaseUrl || derived || stored);
 }
 
 export function isConnected(): boolean {
@@ -86,11 +121,15 @@ export function getStatus(): {
   clientId?: string;
 } {
   const store = loadStore();
+  const storedRedirect = redirectUri();
   return {
     configured: isConfigured(),
     connected: !!store.refreshToken,
     account: store.displayName,
-    redirectUri: redirectUri() || undefined,
+    redirectUri:
+      storedRedirect && isSpotifySafeRedirect(storedRedirect)
+        ? stripTrailingSlash(storedRedirect)
+        : undefined,
     clientId: clientId() || undefined
   };
 }
@@ -105,6 +144,7 @@ function basicAuthHeader(): string {
 export function buildAuthUrl(state: string, serverBaseUrl?: string): string {
   const redirect = resolveRedirectUri(serverBaseUrl);
   if (redirect) saveRedirectUri(redirect);
+  logger.info({ redirect }, "spotify: authorize URL");
   const params = new URLSearchParams({
     response_type: "code",
     client_id: clientId(),
