@@ -4,6 +4,52 @@ import 'package:flutter/services.dart';
 import '../../models.dart';
 import '../../theme.dart';
 
+/// Brass “i” used in settings and editors. Opens [showLuxeInfoDialog].
+class LuxeInfoIconButton extends StatelessWidget {
+  const LuxeInfoIconButton({
+    super.key,
+    required this.title,
+    required this.body,
+    this.tooltip = 'Uitleg',
+  });
+
+  final String title;
+  final String body;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      tooltip: tooltip,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+      onPressed: () => showLuxeInfoDialog(
+        context,
+        title: title,
+        message: body,
+      ),
+      icon: Container(
+        width: 28,
+        height: 28,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: LuxeColors.brass.withValues(alpha: 0.14),
+          border: Border.all(
+            color: LuxeColors.brass.withValues(alpha: 0.4),
+          ),
+        ),
+        child: Icon(
+          Icons.info_outline_rounded,
+          size: 16,
+          color: LuxeColors.brassDeep,
+        ),
+      ),
+    );
+  }
+}
+
 /// Quiet-luxury info sheet (settings “i”). Same shell as confirm dialogs.
 Future<void> showLuxeInfoDialog(
   BuildContext context, {
