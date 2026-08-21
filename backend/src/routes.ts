@@ -1320,11 +1320,10 @@ export function buildRouter(
     const clientId = typeof body?.clientId === "string" ? body.clientId.trim() : "";
     const clientSecret =
       typeof body?.clientSecret === "string" ? body.clientSecret.trim() : "";
-    const redirectUri =
-      typeof body?.redirectUri === "string" ? body.redirectUri.trim() : "";
     if (!clientId || !clientSecret) {
       return res.status(400).json({ error: "clientId en clientSecret zijn verplicht" });
     }
+    const redirectUri = spotify.resolveRedirectUri(spotifyServerBase(req));
     spotify.saveAppCredentials({ clientId, clientSecret, redirectUri });
     res.json(spotify.getStatus());
   });
@@ -1364,6 +1363,42 @@ export function buildRouter(
     } catch (e) {
       logger.warn({ err: e }, "spotify callback failed");
       res.status(400).send(spotifyResultPage("Verbinden met Spotify is mislukt. Probeer het opnieuw."));
+    }
+  });
+
+  /** Finish OAuth when the browser could not reach 127.0.0.1 (LAN install).
+   *  The user pastes the callback URL from the address bar. */
+  r.post("/media/spotify/finish", requireAuth, async (req, res) => {
+    const body = req.body as { url?: unknown; code?: unknown; state?: unknown };
+    let code = typeof body?.code === "string" ? body.code.trim() : "";
+    let state = typeof body?.state === "string" ? body.state.trim() : "";
+    let urlRaw = typeof body?.url === "string" ? body.url.trim() : "";
+    if (urlRaw && !/^[a-z][a-z0-9+.-]*:/i.test(urlRaw)) {
+      urlRaw = `http://${urlRaw}`;
+    }
+    if (urlRaw && (!code || !state)) {
+      try {
+        const u = new URL(urlRaw);
+        code = code || u.searchParams.get("code") || "";
+        state = state || u.searchParams.get("state") || "";
+        const err = u.searchParams.get("error");
+        if (err) {
+          return res.status(400).json({ error: `Spotify-login geannuleerd: ${err}` });
+        }
+      } catch {
+        return res.status(400).json({ error: "Ongeldige callback-URL" });
+      }
+    }
+    if (!code || !state || !spotifyAuthStates.has(state)) {
+      return res.status(400).json({ error: "Ongeldige of verlopen login-poging." });
+    }
+    spotifyAuthStates.delete(state);
+    try {
+      await spotify.exchangeCode(code);
+      res.json(spotify.getStatus());
+    } catch (e) {
+      logger.warn({ err: e }, "spotify finish failed");
+      res.status(400).json({ error: "Verbinden met Spotify is mislukt. Probeer het opnieuw." });
     }
   });
 

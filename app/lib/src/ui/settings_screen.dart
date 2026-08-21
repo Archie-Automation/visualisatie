@@ -789,22 +789,10 @@ class _SpotifySectionState extends ConsumerState<_SpotifySection> {
       return;
     }
     if (!ctx.mounted) return;
-    // The login happens in the browser; after returning the user confirms so
-    // we re-check the status.
     await showDialog<void>(
       context: ctx,
-      builder: (dctx) => AlertDialog(
-        title: const Text('Spotify verbinden'),
-        content: const Text(
-          'Log in het geopende venster in bij Spotify. '
-          'Tik daarna op Gereed om de koppeling te controleren.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dctx).pop(),
-            child: const Text('Gereed'),
-          ),
-        ],
+      builder: (dctx) => _SpotifyConnectDialog(
+        onFinishUrl: (pasted) => api.spotifyFinish(callbackUrl: pasted),
       ),
     );
     ref.invalidate(spotifyStatusProvider);
@@ -914,13 +902,16 @@ class _SpotifySectionState extends ConsumerState<_SpotifySection> {
         ],
       );
     }
-    final redirect = status.redirectUri ?? status.suggestedRedirectUri ?? '';
+    final redirect = status.suggestedRedirectUri ?? status.redirectUri ?? '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (redirect.isNotEmpty) ...[
-          Text('Redirect URI (zet deze in je Spotify-app):',
-              style: Theme.of(context).textTheme.labelMedium),
+          Text(
+            'Plak deze Redirect URI exact in de Spotify Developer-app. '
+            'Spotify weigert http://192.168.x — dit moet 127.0.0.1 of https zijn:',
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
           const SizedBox(height: 4),
           _RedirectUriBox(redirect),
           const SizedBox(height: 12),
@@ -940,6 +931,111 @@ class _SpotifySectionState extends ConsumerState<_SpotifySection> {
               child: const Text('Gegevens wijzigen'),
             ),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+/// After the browser login, the user either lands on the backend callback
+/// (SSH tunnel / loopback) or pastes the 127.0.0.1 URL that failed to load.
+class _SpotifyConnectDialog extends StatefulWidget {
+  const _SpotifyConnectDialog({required this.onFinishUrl});
+  final Future<void> Function(String url) onFinishUrl;
+
+  @override
+  State<_SpotifyConnectDialog> createState() => _SpotifyConnectDialogState();
+}
+
+class _SpotifyConnectDialogState extends State<_SpotifyConnectDialog> {
+  final _urlCtrl = TextEditingController();
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _urlCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final raw = _urlCtrl.text.trim();
+    if (raw.isEmpty) {
+      Navigator.of(context).pop();
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await widget.onFinishUrl(raw);
+      if (mounted) Navigator.of(context).pop();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _error = '$e';
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Spotify verbinden'),
+      content: SizedBox(
+        width: 420,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Log in het geopende venster in bij Spotify. '
+              'Laadt de pagina niet (verbinding geweigerd op 127.0.0.1), '
+              'kopieer de volledige URL uit de adresbalk en plak die hier.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _urlCtrl,
+              enabled: !_busy,
+              minLines: 2,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Callback-URL (als de pagina niet laadt)',
+                hintText:
+                    'http://127.0.0.1:4000/api/media/spotify/callback?code=…',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _error!,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: LuxeColors.danger,
+                    ),
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          child: const Text('Gereed'),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _submit,
+          child: _busy
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('URL versturen'),
         ),
       ],
     );
@@ -1059,15 +1155,19 @@ class _SpotifyCredentialsFormState
           editing
               ? 'Vul de juiste Client ID en Client Secret in. De huidige koppeling wordt verbroken tot je opnieuw verbindt.'
               : 'Maak eenmalig een gratis Spotify-app aan op developer.spotify.com, '
-                  'en plak hieronder de Client ID en Client Secret.',
+                  'en plak hieronder de Client ID en Client Secret. '
+                  'Zet de Redirect URI hieronder exact in die Spotify-app.',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: LuxeColors.inkSoft,
               ),
         ),
         if (redirect.isNotEmpty) ...[
           const SizedBox(height: 12),
-          Text('Redirect URI (zet deze in je Spotify-app):',
-              style: Theme.of(context).textTheme.labelMedium),
+          Text(
+            'Plak deze Redirect URI exact in de Spotify Developer-app. '
+            'Spotify weigert http://192.168.x — dit moet 127.0.0.1 of https zijn:',
+            style: Theme.of(context).textTheme.labelMedium,
+          ),
           const SizedBox(height: 4),
           _RedirectUriBox(redirect),
         ],

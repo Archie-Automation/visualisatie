@@ -729,6 +729,24 @@ class MediaApi {
     return data['url'] as String;
   }
 
+  /// Complete OAuth by pasting the callback URL (when 127.0.0.1 is unreachable).
+  Future<SpotifyStatus> spotifyFinish({required String callbackUrl}) async {
+    final auth = _ref.read(authProvider);
+    final res = await http.post(
+      Uri.parse('$apiBase/api/media/spotify/finish'),
+      headers: {
+        'content-type': 'application/json',
+        'authorization': 'Bearer ${auth.token}',
+      },
+      body: jsonEncode({'url': callbackUrl}),
+    );
+    final data = jsonDecode(res.body) as Map<String, dynamic>;
+    if (res.statusCode != 200) {
+      throw Exception(data['error'] as String? ?? 'Verbinden mislukt');
+    }
+    return SpotifyStatus.fromJson(data);
+  }
+
   /// Disconnect the Spotify account.
   Future<void> spotifyDisconnect() async {
     final auth = _ref.read(authProvider);
