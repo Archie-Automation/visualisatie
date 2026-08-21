@@ -8,6 +8,7 @@ import '../scene_entry.dart';
 import '../theme.dart';
 import '../theme_auto_schedule.dart';
 import 'widgets/confirm_dialog.dart';
+import 'widgets/glass_card.dart';
 import 'widgets/scene_entry_tiles.dart';
 
 /// Bottom sheet for creating and editing time/astro schedules. Uses the
@@ -174,12 +175,14 @@ class _Draft {
 
 enum _TriggerKind { time, astro }
 enum _ActionKind { scene, devices }
+enum _EditPane { overview, name, when, action }
 
 class _ScheduleEditorSheetState
     extends ConsumerState<ScheduleEditorSheet> {
   late Map<String, _Draft> _drafts;
   String? _selectedId;
   bool _saving = false;
+  _EditPane _pane = _EditPane.overview;
 
   @override
   void initState() {
@@ -293,25 +296,31 @@ class _ScheduleEditorSheetState
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
-    return Padding(
-      padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
-      child: Container(
-        decoration: BoxDecoration(
-          color: LuxeColors.cream,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-          boxShadow: LuxeShadows.lift,
-        ),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _handle(),
-              _header(),
-              const Divider(height: 1),
-              Flexible(child: _editor()),
-              _footer(),
-            ],
+    return PopScope(
+      canPop: _pane == _EditPane.overview,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) setState(() => _pane = _EditPane.overview);
+      },
+      child: Padding(
+        padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
+        child: Container(
+          decoration: BoxDecoration(
+            color: LuxeColors.cream,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+            boxShadow: LuxeShadows.lift,
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _handle(),
+                _header(),
+                const Divider(height: 1),
+                Flexible(child: _editor()),
+                _footer(),
+              ],
+            ),
           ),
         ),
       ),
@@ -331,48 +340,82 @@ class _ScheduleEditorSheetState
       );
 
   Widget _header() {
-    final name = _draft?.name.trim();
-    final title = (name != null && name.isNotEmpty) ? name : 'Tijdschema';
-    return Padding(
-        padding: EdgeInsets.fromLTRB(24, 8, 8, 8),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('TIJDSCHEMA',
-                      style: TextStyle(
-                        color: LuxeColors.inkSoft,
-                        fontSize: 11,
-                        letterSpacing: 1.4,
-                        fontWeight: FontWeight.w500,
-                      )),
-                  const SizedBox(height: 2),
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                ],
-              ),
-            ),
-            LuxeInfoIconButton(
-              title: 'Tijdschema',
-              body: widget.lockedIds.contains(_selectedId)
-                  ? 'Dit schema schakelt de weergave tussen licht en donker. '
-                      'Het is vast en alleen zichtbaar als Weergave op Auto staat.'
-                  : 'Laat een scene of apparaten automatisch lopen op een tijdstip, '
-                      'of bij zonsopkomst en zonsondergang.',
-            ),
-            IconButton(
-              icon: const Icon(Icons.close_rounded),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ],
+    final d = _draft;
+    final name = d?.name.trim();
+    final overviewTitle =
+        (name != null && name.isNotEmpty) ? name : 'Tijdschema';
+    final locked = widget.lockedIds.contains(_selectedId);
+    final (title, infoTitle, infoBody) = switch (_pane) {
+      _EditPane.overview => (
+          overviewTitle,
+          'Tijdschema',
+          locked
+              ? 'Dit schema schakelt de weergave tussen licht en donker. '
+                  'Het is vast en alleen zichtbaar als Weergave op Auto staat.'
+              : 'Naam, wanneer het loopt, en wat er gebeurt. Tik een onderdeel aan om het in te stellen.',
         ),
-      );
+      _EditPane.name => (
+          'Naam',
+          'Naam',
+          'Hoe dit tijdschema in de lijst heet.',
+        ),
+      _EditPane.when => (
+          'Wanneer',
+          'Wanneer',
+          'Tijd is een vast tijdstip. Zon volgt zonsopkomst of zonsondergang.\n\n'
+              'Verschuiving: minuten voor of na het zon-event.\n'
+              'Dagen: op welke weekdagen het mag lopen.\n'
+              'Begrenzing: optioneel venster, bijvoorbeeld niet voor 18:00.',
+        ),
+      _EditPane.action => (
+          'Actie',
+          'Actie',
+          locked
+              ? 'Dit schema zet de app op licht of donker. Dat kun je niet wijzigen.'
+              : 'Kies een bestaande scene, of stel apparaten hier direct in.',
+        ),
+    };
+    return Padding(
+      padding: EdgeInsets.fromLTRB(_pane == _EditPane.overview ? 24 : 8, 8, 8, 8),
+      child: Row(
+        children: [
+          if (_pane != _EditPane.overview)
+            IconButton(
+              tooltip: 'Terug',
+              icon: const Icon(Icons.arrow_back_ios_new, size: 16),
+              onPressed: () => setState(() => _pane = _EditPane.overview),
+            ),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'TIJDSCHEMA',
+                  style: TextStyle(
+                    color: LuxeColors.inkSoft,
+                    fontSize: 11,
+                    letterSpacing: 1.4,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+              ],
+            ),
+          ),
+          LuxeInfoIconButton(title: infoTitle, body: infoBody),
+          IconButton(
+            icon: const Icon(Icons.close_rounded),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _editor() {
@@ -385,41 +428,139 @@ class _ScheduleEditorSheetState
         ),
       );
     }
+    return switch (_pane) {
+      _EditPane.overview => _overview(d),
+      _EditPane.name => _namePane(d),
+      _EditPane.when => _whenPane(d),
+      _EditPane.action => _actionPane(d),
+    };
+  }
+
+  Widget _overview(_Draft d) {
     final locked = widget.lockedIds.contains(_selectedId);
     return ListView(
-      padding: EdgeInsets.fromLTRB(24, 8, 24, 16),
+      padding: const EdgeInsets.fromLTRB(22, 12, 22, 16),
       children: [
-        const _SectionHead('NAAM'),
+        GlassCard(
+          radius: 16,
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              _SettingRow(
+                title: 'Naam',
+                subtitle: _nameSummary(d),
+                onTap: () => setState(() => _pane = _EditPane.name),
+              ),
+              Divider(height: 1, indent: 16, color: LuxeColors.lineSoft),
+              _SettingRow(
+                title: 'Wanneer',
+                subtitle: _whenSummary(d),
+                onTap: () => setState(() => _pane = _EditPane.when),
+              ),
+              Divider(height: 1, indent: 16, color: LuxeColors.lineSoft),
+              _SettingRow(
+                title: 'Actie',
+                subtitle: _actionSummary(d, locked: locked),
+                onTap: () => setState(() => _pane = _EditPane.action),
+              ),
+            ],
+          ),
+        ),
+        if (!locked) ...[
+          const SizedBox(height: 12),
+          TextButton.icon(
+            icon: Icon(Icons.delete_outline,
+                size: 18, color: LuxeColors.danger),
+            label: Text('Tijdschema verwijderen',
+                style: TextStyle(color: LuxeColors.danger)),
+            onPressed: _deleteSelected,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _namePane(_Draft d) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+      children: [
         _NameField(
           key: ValueKey('name-$_selectedId'),
           initial: d.name,
           onChanged: (v) => setState(() => d.name = v),
         ),
-        const SizedBox(height: 18),
-        const _SectionHead(
-          'WANNEER',
-          infoTitle: 'Wanneer',
-          infoBody:
-              'Tijd is een vast tijdstip. Zon volgt zonsopkomst of zonsondergang, '
-              'eventueel verschoven. Kies daarna op welke dagen het schema mag lopen.',
-        ),
+      ],
+    );
+  }
+
+  Widget _whenPane(_Draft d) {
+    final touch = () => setState(() {});
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+      children: [
         _TriggerTypeSelector(
           value: d.kind,
           onChanged: (v) => setState(() => d.kind = v),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 14),
         if (d.kind == _TriggerKind.time)
-          _TimeTriggerEditor(draft: d, onTouch: () => setState(() {}))
-        else
-          _AstroTriggerEditor(draft: d, onTouch: () => setState(() {})),
+          _TimeTriggerEditor(draft: d, onTouch: touch)
+        else ...[
+          _AstroTriggerEditor(draft: d, onTouch: touch),
+          const SizedBox(height: 18),
+          _SubBlock(
+            title: 'VERSCHUIVING',
+            trailing: _offsetLabel(d.offsetMin),
+            child: _OffsetSlider(draft: d, onTouch: touch),
+          ),
+        ],
         const SizedBox(height: 18),
-        _SectionHead(
-          'ACTIE',
-          infoTitle: 'Actie',
-          infoBody: locked
-              ? 'Dit schema zet de app op licht of donker. Dat kun je niet wijzigen.'
-              : 'Kies een bestaande scene, of stel apparaten hier direct in.',
+        _SubBlock(
+          title: 'DAGEN',
+          child: _WeekdayRow(days: d.days, onTouch: touch),
         ),
+        if (d.kind == _TriggerKind.astro) ...[
+          const SizedBox(height: 18),
+          _SubBlock(
+            title: 'BEGRENZING',
+            infoTitle: 'Begrenzing',
+            infoBody:
+                'Optioneel. Voer alleen uit binnen een tijdvenster. '
+                'Bijvoorbeeld: bij zonsondergang, maar niet voor 18:00.\n\n'
+                'Niet voor: later als de zon eerder is.\n'
+                'Niet na: overslaan als de zon later is.',
+            child: Column(
+              children: [
+                _GuardRow(
+                  label: 'Niet voor',
+                  guard: d.notBefore,
+                  onChanged: (g) {
+                    d.notBefore = g;
+                    touch();
+                  },
+                ),
+                const SizedBox(height: 8),
+                _GuardRow(
+                  label: 'Niet na',
+                  guard: d.notAfter,
+                  onChanged: (g) {
+                    d.notAfter = g;
+                    touch();
+                  },
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _actionPane(_Draft d) {
+    final locked = widget.lockedIds.contains(_selectedId);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+      children: [
         if (locked)
           Container(
             width: double.infinity,
@@ -455,18 +596,53 @@ class _ScheduleEditorSheetState
               onTouch: () => setState(() {}),
             ),
         ],
-        if (!locked) ...[
-          const SizedBox(height: 18),
-          TextButton.icon(
-            icon: Icon(Icons.delete_outline,
-                size: 18, color: LuxeColors.danger),
-            label: Text('Tijdschema verwijderen',
-                style: TextStyle(color: LuxeColors.danger)),
-            onPressed: _deleteSelected,
-          ),
-        ],
       ],
     );
+  }
+
+  String _nameSummary(_Draft d) {
+    final n = d.name.trim();
+    return n.isEmpty ? 'Geen naam' : n;
+  }
+
+  String _whenSummary(_Draft d) {
+    final days = _daysSummary(d.days);
+    if (d.kind == _TriggerKind.time) {
+      return '${_hhmm(d.time)}  ·  $days';
+    }
+    final off = d.offsetMin;
+    final offStr = off == 0
+        ? ''
+        : off > 0
+            ? ' +${off}m'
+            : ' ${off}m';
+    return '${d.astroEvent.label}$offStr  ·  $days';
+  }
+
+  String _actionSummary(_Draft d, {required bool locked}) {
+    if (locked) {
+      return _selectedId == kThemeLightOnId
+          ? 'Weergave: licht'
+          : 'Weergave: donker';
+    }
+    if (d.actionKind == _ActionKind.scene) {
+      final id = d.sceneId;
+      if (id == null || id.isEmpty) return 'Geen scene';
+      for (final s in widget.config.scenes) {
+        if (s.id == id) return 'Scene: ${s.name}';
+      }
+      for (final f in widget.config.floors) {
+        for (final r in f.rooms) {
+          for (final s in r.scenes) {
+            if (s.id == id) return 'Scene: ${s.name}  ·  ${r.name}';
+          }
+        }
+      }
+      return 'Scene: (verwijderd)';
+    }
+    final n = d.entries.length;
+    if (n == 0) return 'Geen apparaten';
+    return n == 1 ? '1 apparaat' : '$n apparaten';
   }
 
   Widget _footer() {
@@ -539,23 +715,82 @@ InputDecoration _boxDecoration({String? hint}) => InputDecoration(
       ),
     );
 
-class _SectionHead extends StatelessWidget {
-  const _SectionHead(this.title, {this.infoTitle, this.infoBody});
+class _SettingRow extends StatelessWidget {
+  const _SettingRow({
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
   final String title;
-  final String? infoTitle;
-  final String? infoBody;
+  final String subtitle;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Expanded(child: Text(title, style: _kSectionStyle)),
-          if (infoTitle != null && infoBody != null)
-            LuxeInfoIconButton(title: infoTitle!, body: infoBody!),
-        ],
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.bodyLarge),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: LuxeColors.inkSoft,
+            ),
+          ],
+        ),
       ),
+    );
+  }
+}
+
+class _SubBlock extends StatelessWidget {
+  const _SubBlock({
+    required this.title,
+    required this.child,
+    this.trailing,
+    this.infoTitle,
+    this.infoBody,
+  });
+  final String title;
+  final String? trailing;
+  final String? infoTitle;
+  final String? infoBody;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text(title, style: _kSectionStyle)),
+            if (trailing != null)
+              Text(trailing!, style: Theme.of(context).textTheme.titleMedium),
+            if (infoTitle != null && infoBody != null)
+              LuxeInfoIconButton(title: infoTitle!, body: infoBody!),
+          ],
+        ),
+        const SizedBox(height: 8),
+        child,
+      ],
     );
   }
 }
@@ -670,8 +905,6 @@ class _TimeTriggerEditor extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 14),
-        _WeekdayRow(days: draft.days, onTouch: onTouch),
       ],
     );
   }
@@ -706,37 +939,6 @@ class _AstroTriggerEditor extends StatelessWidget {
             onTouch();
           },
         ),
-        const SizedBox(height: 14),
-        _OffsetSlider(draft: draft, onTouch: onTouch),
-        const SizedBox(height: 14),
-        _WeekdayRow(days: draft.days, onTouch: onTouch),
-        const SizedBox(height: 14),
-        const _SectionHead(
-          'BEGRENZING',
-          infoTitle: 'Begrenzing',
-          infoBody:
-              'Optioneel. Voer alleen uit binnen een tijdvenster. '
-              'Bijvoorbeeld: bij zonsondergang, maar niet voor 18:00.\n\n'
-              'Niet voor: later als de zon eerder is.\n'
-              'Niet na: overslaan als de zon later is.',
-        ),
-        _GuardRow(
-          label: 'Niet voor',
-          guard: draft.notBefore,
-          onChanged: (g) {
-            draft.notBefore = g;
-            onTouch();
-          },
-        ),
-        const SizedBox(height: 8),
-        _GuardRow(
-          label: 'Niet na',
-          guard: draft.notAfter,
-          onChanged: (g) {
-            draft.notAfter = g;
-            onTouch();
-          },
-        ),
       ],
     );
   }
@@ -749,39 +951,22 @@ class _OffsetSlider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final off = draft.offsetMin.clamp(-240, 240);
-    final shift = off == 0
-        ? 'exact'
-        : off > 0
-            ? '$off min na'
-            : '${-off} min voor';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text('VERSCHUIVING', style: _kSectionStyle),
-            const Spacer(),
-            Text(shift, style: Theme.of(context).textTheme.titleMedium),
-          ],
-        ),
-        SliderTheme(
-          data: SliderTheme.of(context).copyWith(
-            activeTrackColor: LuxeColors.ink,
-            inactiveTrackColor: LuxeColors.line,
-            thumbColor: LuxeColors.brass,
-          ),
-          child: Slider(
-            value: off.toDouble(),
-            min: -240,
-            max: 240,
-            divisions: 96,
-            onChanged: (v) {
-              draft.offsetMin = v.round();
-              onTouch();
-            },
-          ),
-        ),
-      ],
+    return SliderTheme(
+      data: SliderTheme.of(context).copyWith(
+        activeTrackColor: LuxeColors.ink,
+        inactiveTrackColor: LuxeColors.line,
+        thumbColor: LuxeColors.brass,
+      ),
+      child: Slider(
+        value: off.toDouble(),
+        min: -240,
+        max: 240,
+        divisions: 96,
+        onChanged: (v) {
+          draft.offsetMin = v.round();
+          onTouch();
+        },
+      ),
     );
   }
 }
@@ -793,12 +978,7 @@ class _WeekdayRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const names = ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('DAGEN', style: _kSectionStyle),
-        const SizedBox(height: 8),
-        Row(
+    return Row(
           children: [
             for (int i = 0; i < 7; i++)
               Expanded(
@@ -839,8 +1019,6 @@ class _WeekdayRow extends StatelessWidget {
                 ),
               ),
           ],
-        ),
-      ],
     );
   }
 }
@@ -1236,6 +1414,27 @@ class _DeviceEntryTile extends StatelessWidget {
 
 String _hhmm(TimeOfDay t) =>
     '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+String _offsetLabel(int offsetMin) {
+  final off = offsetMin;
+  if (off == 0) return 'exact';
+  return off > 0 ? '$off min na' : '${-off} min voor';
+}
+
+String _daysSummary(List<bool> m) {
+  if (m.every((x) => x)) return 'elke dag';
+  if (m.length >= 7 && !m[5] && !m[6] && m.take(5).every((x) => x)) {
+    return 'doordeweeks';
+  }
+  if (m.length >= 7 && m[5] && m[6] && m.take(5).every((x) => !x)) {
+    return 'weekend';
+  }
+  const names = ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'];
+  return [
+    for (int i = 0; i < 7 && i < m.length; i++)
+      if (m[i]) names[i],
+  ].join(', ');
+}
 
 TimeOfDay _parseTimeOfDay(String hhmm) {
   final parts = hhmm.split(':');
