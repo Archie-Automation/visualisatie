@@ -19,6 +19,7 @@ class DisplayPanelSettings {
     this.temperatureGa,
     this.temperatureRoomId,
     this.temperatureRoomName,
+    this.useOutdoorTemperature = false,
   });
 
   final bool enabled;
@@ -33,6 +34,8 @@ class DisplayPanelSettings {
   final String? temperatureGa;
   final String? temperatureRoomId;
   final String? temperatureRoomName;
+  /// Screensaver toont buitentemperatuur via [temperatureGa] i.p.v. een zone.
+  final bool useOutdoorTemperature;
 
   Duration get idleHomeDuration => Duration(minutes: idleHomeMinutes);
   Duration? get screensaverDuration => screensaverMinutes > 0
@@ -53,6 +56,7 @@ class DisplayPanelSettings {
     String? temperatureGa,
     String? temperatureRoomId,
     String? temperatureRoomName,
+    bool? useOutdoorTemperature,
     bool clearPanelRoom = false,
     bool clearTemperatureGa = false,
     bool clearTemperatureRoom = false,
@@ -76,7 +80,15 @@ class DisplayPanelSettings {
         temperatureRoomName: clearTemperatureRoom
             ? null
             : (temperatureRoomName ?? this.temperatureRoomName),
+        useOutdoorTemperature:
+            useOutdoorTemperature ?? this.useOutdoorTemperature,
       );
+
+  static bool _outdoorFromJson(Map<String, dynamic> json) {
+    final flag = json['useOutdoorTemperature'] as bool?;
+    if (flag != null) return flag;
+    return (json['temperatureGa'] as String?)?.trim().isNotEmpty ?? false;
+  }
 
   static DisplayPanelSettings fromHouseJson(Map<String, dynamic>? json) {
     if (json == null) return const DisplayPanelSettings();
@@ -91,6 +103,7 @@ class DisplayPanelSettings {
       temperatureGa: json['temperatureGa'] as String?,
       temperatureRoomId: json['temperatureRoomId'] as String?,
       temperatureRoomName: json['temperatureRoomName'] as String?,
+      useOutdoorTemperature: _outdoorFromJson(json),
     );
   }
 
@@ -103,6 +116,7 @@ class DisplayPanelSettings {
         if (panelRoomName != null) 'panelRoomName': panelRoomName,
         'suppressScreensaverWhenMusicPlaying':
             suppressScreensaverWhenMusicPlaying,
+        'useOutdoorTemperature': useOutdoorTemperature,
         if (temperatureGa != null && temperatureGa!.trim().isNotEmpty)
           'temperatureGa': temperatureGa!.trim(),
         if (temperatureRoomId != null && temperatureRoomId!.trim().isNotEmpty)
@@ -122,6 +136,7 @@ class DisplayPanelSettings {
         temperatureGa: json['temperatureGa'] as String?,
         temperatureRoomId: json['temperatureRoomId'] as String?,
         temperatureRoomName: json['temperatureRoomName'] as String?,
+        useOutdoorTemperature: _outdoorFromJson(json),
       );
 }
 
@@ -154,6 +169,7 @@ class DisplayPanelSettingsNotifier extends AsyncNotifier<DisplayPanelSettings> {
         temperatureRoomId: local.temperatureRoomId ?? house.temperatureRoomId,
         temperatureRoomName:
             local.temperatureRoomName ?? house.temperatureRoomName,
+        useOutdoorTemperature: local.useOutdoorTemperature,
       );
     } catch (_) {
       return house;
@@ -193,6 +209,13 @@ double? resolveDisplayTemperature({
   required BusState bus,
   required DisplayPanelSettings settings,
 }) {
+  if (settings.useOutdoorTemperature) {
+    final ga = settings.temperatureGa?.trim();
+    if (ga == null || ga.isEmpty) return null;
+    final v = bus.values[ga];
+    if (v is num) return v.toDouble();
+    return null;
+  }
   final ga = settings.temperatureGa?.trim();
   if (ga != null && ga.isNotEmpty) {
     final v = bus.values[ga];
@@ -291,6 +314,7 @@ DisplayHvacStatus? resolveDisplayHvacStatus({
   required BusState bus,
   required DisplayPanelSettings settings,
 }) {
+  if (settings.useOutdoorTemperature) return null;
   final d = _climateOrAcForDisplay(cfg: cfg, settings: settings);
   if (d == null) return null;
 

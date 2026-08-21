@@ -188,9 +188,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _SettingsTopic.tablet =>
         'Alleen voor het wandtablet (Android-app). Na inactiviteit gaat dit scherm '
             'terug naar home, daarna een screensaver met klok.\n\n'
-            'Koppel de ruimte waar het tablet hangt. Optioneel toont '
-            'de screensaver de temperatuur van een ruimte of KNX-groepadres. '
-            'Zet screensaver uit als de muziekspeler van die ruimte fullscreen open staat.',
+            'Koppel de locatie waar het tablet hangt. Optioneel toont '
+            'de screensaver de temperatuur van een ruimte of buitentemperatuur '
+            'via groepadres. Zet screensaver uit als de muziekspeler van '
+            'die ruimte fullscreen open staat.',
       _SettingsTopic.spotify =>
         'Eén keer inloggen voor dit huis — daarna werkt Spotify op elk paneel.\n\n'
             'Maak eenmalig een gratis app op developer.spotify.com. '
@@ -577,8 +578,7 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
           error: (e, _) => Text('Wandtablet-instellingen: $e'),
           data: (settings) {
             final rooms = cfg != null ? _roomOptions(cfg) : const [];
-            final useGa = settings.temperatureGa != null &&
-                settings.temperatureGa!.trim().isNotEmpty;
+            final useOutdoor = settings.useOutdoorTemperature;
 
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -592,9 +592,10 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                   infoBody:
                       'Alleen op de Android-app. Na inactiviteit gaat dit scherm '
                       'terug naar home, daarna een screensaver met klok.\n\n'
-                      'Koppel de ruimte waar het tablet hangt. Optioneel toont '
-                      'de screensaver de temperatuur van een ruimte of KNX-groepadres. '
-                      'Zet screensaver uit als de muziekspeler van die ruimte fullscreen open staat.',
+                      'Koppel de locatie waar het tablet hangt. Optioneel toont '
+                      'de screensaver de temperatuur van een ruimte of buitentemperatuur '
+                      'via groepadres. Zet screensaver uit als de muziekspeler van '
+                      'die ruimte fullscreen open staat.',
                   trailing: _saving
                       ? const SizedBox(
                           width: 18,
@@ -626,9 +627,28 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                       ? null
                       : (v) => _save(settings.copyWith(enabled: v)),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 20),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  visualDensity: VisualDensity.compact,
+                  title: const Text('Geen screensaver bij open media-speler'),
+                  subtitle: settings.panelRoomId == null
+                      ? const Text('Eerst locatie tablet kiezen')
+                      : null,
+                  value: settings.suppressScreensaverWhenMusicPlaying &&
+                      settings.panelRoomId != null,
+                  onChanged: settings.enabled &&
+                          !_saving &&
+                          settings.panelRoomId != null
+                      ? (v) => _save(settings.copyWith(
+                            suppressScreensaverWhenMusicPlaying: v,
+                          ))
+                      : null,
+                ),
+                const SizedBox(height: 12),
                 _LabeledBox(
-                  label: 'Ruimte van dit scherm',
+                  label: 'Locatie tablet',
                   child: DropdownButtonFormField<String>(
                   value: settings.panelRoomId != null &&
                           rooms.any((r) => r.id == settings.panelRoomId)
@@ -663,21 +683,6 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                       : null,
                 ),
                 ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  visualDensity: VisualDensity.compact,
-                  title: const Text('Geen screensaver bij open media-speler'),
-                  value: settings.suppressScreensaverWhenMusicPlaying &&
-                      settings.panelRoomId != null,
-                  onChanged: settings.enabled &&
-                          !_saving &&
-                          settings.panelRoomId != null
-                      ? (v) => _save(settings.copyWith(
-                            suppressScreensaverWhenMusicPlaying: v,
-                          ))
-                      : null,
-                ),
                 const SizedBox(height: 8),
                 _MinutesDropdown(
                   label: 'Terug naar beginscherm',
@@ -700,34 +705,48 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                     style: Theme.of(context).textTheme.labelMedium),
                 const SizedBox(height: 8),
                 SegmentedButton<bool>(
-                  segments: [
+                  segments: const [
                     ButtonSegment(value: false, label: Text('Ruimte')),
-                    ButtonSegment(value: true, label: Text('KNX GA')),
+                    ButtonSegment(value: true, label: Text('Buitentemperatuur')),
                   ],
-                  selected: {useGa},
+                  selected: {useOutdoor},
                   onSelectionChanged: settings.enabled && !_saving
                       ? (sel) {
                           if (sel.first) {
                             _save(settings.copyWith(
+                              useOutdoorTemperature: true,
                               clearTemperatureRoom: true,
-                              temperatureGa: settings.temperatureGa ?? '',
                             ));
                           } else {
+                            final fallbackId = settings.temperatureRoomId ??
+                                (rooms.isNotEmpty ? rooms.first.id : null);
+                            String? fallbackName;
+                            if (fallbackId != null) {
+                              for (final r in rooms) {
+                                if (r.id == fallbackId) {
+                                  fallbackName = r.label;
+                                  break;
+                                }
+                              }
+                            }
                             _save(settings.copyWith(
+                              useOutdoorTemperature: false,
                               clearTemperatureGa: true,
-                              temperatureRoomId: settings.temperatureRoomId ??
-                                  (rooms.isNotEmpty ? rooms.first.id : null),
+                              clearTemperatureRoom: fallbackId == null,
+                              temperatureRoomId: fallbackId,
+                              temperatureRoomName: fallbackName,
                             ));
                           }
                         }
                       : null,
                 ),
                 const SizedBox(height: 12),
-                if (useGa)
+                if (useOutdoor)
                   _TemperatureGaField(
                     enabled: settings.enabled && !_saving,
                     initialGa: settings.temperatureGa ?? '',
                     onSave: (v) => _save(settings.copyWith(
+                      useOutdoorTemperature: true,
                       temperatureGa: v.trim(),
                       clearTemperatureRoom: true,
                     )),
@@ -756,7 +775,10 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                     onChanged: settings.enabled && !_saving
                         ? (id) {
                             if (id == null) {
-                              _save(settings.copyWith(clearTemperatureRoom: true));
+                              _save(settings.copyWith(
+                                clearTemperatureRoom: true,
+                                useOutdoorTemperature: false,
+                              ));
                             } else {
                               final label =
                                   rooms.firstWhere((r) => r.id == id).label;
@@ -764,6 +786,7 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                                 temperatureRoomId: id,
                                 temperatureRoomName: label,
                                 clearTemperatureGa: true,
+                                useOutdoorTemperature: false,
                               ));
                           }
                         }
@@ -832,7 +855,7 @@ class _TemperatureGaFieldState extends State<_TemperatureGaField> {
   @override
   Widget build(BuildContext context) {
     return _LabeledBox(
-      label: 'Groepadres temperatuur',
+      label: 'Groepadres buitentemperatuur',
       child: TextField(
       enabled: widget.enabled,
       controller: _ctrl,
@@ -1592,6 +1615,14 @@ class _AppearanceSection extends ConsumerWidget {
             SizedBox(
               width: double.infinity,
               child: SegmentedButton<ThemeMode>(
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity(vertical: 1.5),
+                  padding: WidgetStatePropertyAll(
+                    EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  ),
+                  minimumSize: WidgetStatePropertyAll(Size(0, 48)),
+                  tapTargetSize: MaterialTapTargetSize.padded,
+                ),
                 segments: const [
                   ButtonSegment(
                     value: ThemeMode.light,

@@ -135,10 +135,15 @@
           "default": true,
           "description": "Geen screensaver zolang Sonos/Bluesound speelt in panelRoomId."
         },
+        "useOutdoorTemperature": {
+          "type": "boolean",
+          "default": false,
+          "description": "Screensaver toont buitentemperatuur via temperatureGa i.p.v. een zone (geen HVAC-iconen)."
+        },
         "temperatureGa": {
           "type": "string",
           "pattern": "^([0-9]{1,2})/([0-9]{1,2})/([0-9]{1,3})$",
-          "description": "Optionele KNX GA voor temperatuur op de screensaver."
+          "description": "KNX-groepadres voor buitentemperatuur op de screensaver."
         },
         "temperatureRoomId": {
           "type": "string",

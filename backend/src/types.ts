@@ -1061,6 +1061,7 @@ export interface HouseConfig {
     panelRoomId?: string;
     panelRoomName?: string;
     suppressScreensaverWhenMusicPlaying?: boolean;
+    useOutdoorTemperature?: boolean;
     temperatureGa?: string;
     temperatureRoomId?: string;
     temperatureRoomName?: string;

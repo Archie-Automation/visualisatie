@@ -130,7 +130,7 @@ class _ScreensaverOverlayState extends ConsumerState<ScreensaverOverlay> {
     final temp = settings.showTemperature
         ? resolveDisplayTemperature(cfg: cfg, bus: bus, settings: settings)
         : null;
-    final hvac = settings.showTemperature
+    final hvac = settings.showTemperature && !settings.useOutdoorTemperature
         ? resolveDisplayHvacStatus(cfg: cfg, bus: bus, settings: settings)
         : null;
 
@@ -209,7 +209,13 @@ class _ScreensaverOverlayState extends ConsumerState<ScreensaverOverlay> {
                                   ],
                                 ),
                               ),
-                              if (hvac != null) ...[
+                              if (settings.useOutdoorTemperature) ...[
+                                SizedBox(width: context.isPhone ? 12 : 16),
+                                _OutdoorTempIcon(
+                                  size: context.isPhone ? 34 : 44,
+                                  color: LuxeColors.brassGlow,
+                                ),
+                              ] else if (hvac != null) ...[
                                 SizedBox(width: context.isPhone ? 12 : 16),
                                 Icon(
                                   hvac.isHeating
@@ -236,6 +242,37 @@ class _ScreensaverOverlayState extends ConsumerState<ScreensaverOverlay> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Thermometer met klein huis — buitentemperatuur op de screensaver.
+class _OutdoorTempIcon extends StatelessWidget {
+  const _OutdoorTempIcon({required this.size, required this.color});
+
+  final double size;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size + 6,
+      height: size,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Icon(Icons.thermostat_outlined, size: size, color: color),
+          Positioned(
+            right: -2,
+            bottom: -1,
+            child: Icon(
+              Icons.home_outlined,
+              size: size * 0.42,
+              color: color,
+            ),
+          ),
+        ],
       ),
     );
   }
