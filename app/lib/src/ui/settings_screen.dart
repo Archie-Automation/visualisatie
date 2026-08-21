@@ -759,10 +759,19 @@ class _MinutesDropdown extends StatelessWidget {
   }
 }
 
-class _SpotifySection extends ConsumerWidget {
+class _SpotifySection extends ConsumerStatefulWidget {
   const _SpotifySection();
 
-  Future<void> _connect(BuildContext ctx, WidgetRef ref) async {
+  @override
+  ConsumerState<_SpotifySection> createState() => _SpotifySectionState();
+}
+
+class _SpotifySectionState extends ConsumerState<_SpotifySection> {
+  /// When true, show the credentials form even if keys were already saved
+  /// (wrong Client ID/Secret must remain editable).
+  bool _editingCredentials = false;
+
+  Future<void> _connect(BuildContext ctx) async {
     final api = ref.read(mediaApiProvider);
     final messenger = ScaffoldMessenger.of(ctx);
     try {
@@ -801,13 +810,13 @@ class _SpotifySection extends ConsumerWidget {
     ref.invalidate(spotifyStatusProvider);
   }
 
-  Future<void> _disconnect(BuildContext ctx, WidgetRef ref) async {
+  Future<void> _disconnect() async {
     await ref.read(mediaApiProvider).spotifyDisconnect();
     ref.invalidate(spotifyStatusProvider);
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final statusAsync = ref.watch(spotifyStatusProvider);
     return Padding(
       padding: EdgeInsets.fromLTRB(28, 8, 28, 20),
@@ -852,7 +861,7 @@ class _SpotifySection extends ConsumerWidget {
                 'Status kon niet geladen worden: $e',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
-              data: (status) => _statusBody(context, ref, status),
+              data: (status) => _statusBody(status),
             ),
           ],
         ),
@@ -860,29 +869,47 @@ class _SpotifySection extends ConsumerWidget {
     );
   }
 
-  Widget _statusBody(BuildContext context, WidgetRef ref, SpotifyStatus status) {
-    if (!status.configured) {
+  Widget _statusBody(SpotifyStatus status) {
+    if (!status.configured || _editingCredentials) {
       return _SpotifyCredentialsForm(
-        suggestedRedirectUri: status.suggestedRedirectUri,
+        suggestedRedirectUri:
+            status.suggestedRedirectUri ?? status.redirectUri,
+        initialClientId: status.clientId,
+        onCancel: status.configured
+            ? () => setState(() => _editingCredentials = false)
+            : null,
+        onSaved: () => setState(() => _editingCredentials = false),
       );
     }
     if (status.connected) {
-      return Row(
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.check_circle_rounded,
-              color: LuxeColors.brassDeep, size: 20),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              status.account != null && status.account!.isNotEmpty
-                  ? 'Verbonden als ${status.account}'
-                  : 'Verbonden',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
+          Row(
+            children: [
+              Icon(Icons.check_circle_rounded,
+                  color: LuxeColors.brassDeep, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  status.account != null && status.account!.isNotEmpty
+                      ? 'Verbonden als ${status.account}'
+                      : 'Verbonden',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+              TextButton(
+                onPressed: _disconnect,
+                child: const Text('Ontkoppelen'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => _disconnect(context, ref),
-            child: const Text('Ontkoppelen'),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: () => setState(() => _editingCredentials = true),
+              child: const Text('Gegevens wijzigen'),
+            ),
           ),
         ],
       );
@@ -898,13 +925,21 @@ class _SpotifySection extends ConsumerWidget {
           _RedirectUriBox(redirect),
           const SizedBox(height: 12),
         ],
-        Align(
-          alignment: Alignment.centerLeft,
-          child: FilledButton.icon(
-            onPressed: () => _connect(context, ref),
-            icon: const Icon(Icons.link_rounded),
-            label: const Text('Verbind Spotify'),
-          ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            FilledButton.icon(
+              onPressed: () => _connect(context),
+              icon: const Icon(Icons.link_rounded),
+              label: const Text('Verbind Spotify'),
+            ),
+            TextButton(
+              onPressed: () => setState(() => _editingCredentials = true),
+              child: const Text('Gegevens wijzigen'),
+            ),
+          ],
         ),
       ],
     );
@@ -952,8 +987,16 @@ class _RedirectUriBox extends StatelessWidget {
 /// Form to enter the Spotify OAuth app credentials directly in the app, so the
 /// user can test with their own account without editing server config.
 class _SpotifyCredentialsForm extends ConsumerStatefulWidget {
-  const _SpotifyCredentialsForm({this.suggestedRedirectUri});
+  const _SpotifyCredentialsForm({
+    this.suggestedRedirectUri,
+    this.initialClientId,
+    this.onCancel,
+    this.onSaved,
+  });
   final String? suggestedRedirectUri;
+  final String? initialClientId;
+  final VoidCallback? onCancel;
+  final VoidCallback? onSaved;
 
   @override
   ConsumerState<_SpotifyCredentialsForm> createState() =>
@@ -962,9 +1005,15 @@ class _SpotifyCredentialsForm extends ConsumerStatefulWidget {
 
 class _SpotifyCredentialsFormState
     extends ConsumerState<_SpotifyCredentialsForm> {
-  final _idCtrl = TextEditingController();
+  late final TextEditingController _idCtrl;
   final _secretCtrl = TextEditingController();
   bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _idCtrl = TextEditingController(text: widget.initialClientId ?? '');
+  }
 
   @override
   void dispose() {
@@ -983,6 +1032,7 @@ class _SpotifyCredentialsFormState
             redirectUri: widget.suggestedRedirectUri,
           );
       ref.invalidate(spotifyStatusProvider);
+      widget.onSaved?.call();
     } catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(
@@ -1001,12 +1051,15 @@ class _SpotifyCredentialsFormState
   @override
   Widget build(BuildContext context) {
     final redirect = widget.suggestedRedirectUri ?? '';
+    final editing = widget.onCancel != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Maak eenmalig een gratis Spotify-app aan op developer.spotify.com, '
-          'en plak hieronder de Client ID en Client Secret.',
+          editing
+              ? 'Vul de juiste Client ID en Client Secret in. De huidige koppeling wordt verbroken tot je opnieuw verbindt.'
+              : 'Maak eenmalig een gratis Spotify-app aan op developer.spotify.com, '
+                  'en plak hieronder de Client ID en Client Secret.',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: LuxeColors.inkSoft,
               ),
@@ -1036,19 +1089,28 @@ class _SpotifyCredentialsFormState
           ),
         ),
         const SizedBox(height: 12),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: FilledButton.icon(
-            onPressed: _saving ? null : _save,
-            icon: _saving
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.save_rounded),
-            label: const Text('Opslaan'),
-          ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            FilledButton.icon(
+              onPressed: _saving ? null : _save,
+              icon: _saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save_rounded),
+              label: const Text('Opslaan'),
+            ),
+            if (widget.onCancel != null)
+              TextButton(
+                onPressed: _saving ? null : widget.onCancel,
+                child: const Text('Annuleren'),
+              ),
+          ],
         ),
       ],
     );
