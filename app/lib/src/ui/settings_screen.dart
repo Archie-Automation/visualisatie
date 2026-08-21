@@ -97,31 +97,61 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         padding: const EdgeInsets.only(bottom: 36),
         children: [
           _header(auth),
-          _SettingsMenuTile(
-            icon: Icons.palette_outlined,
-            title: 'Weergave',
-            subtitle: 'Licht, donker of automatisch',
-            onTap: () => setState(() => _topic = _SettingsTopic.appearance),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(22, 4, 22, 12),
+            child: GlassCard(
+              radius: 16,
+              padding: EdgeInsets.zero,
+              child: Column(
+                children: [
+                  _SettingsMenuTile(
+                    icon: Icons.palette_outlined,
+                    title: 'Weergave',
+                    subtitle: 'Licht, donker of automatisch',
+                    onTap: () =>
+                        setState(() => _topic = _SettingsTopic.appearance),
+                  ),
+                  Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
+                  _SettingsMenuTile(
+                    icon: Icons.schedule_outlined,
+                    title: 'Tijdschema\'s',
+                    subtitle: 'Scenes en apparaten op tijd',
+                    onTap: () =>
+                        setState(() => _topic = _SettingsTopic.schedules),
+                  ),
+                  Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
+                  _SettingsMenuTile(
+                    icon: Icons.tablet_android_outlined,
+                    title: 'Wandtablet',
+                    subtitle: 'Alleen voor het wandtablet',
+                    onTap: () =>
+                        setState(() => _topic = _SettingsTopic.tablet),
+                  ),
+                  Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
+                  _SettingsMenuTile(
+                    icon: Icons.library_music_outlined,
+                    title: 'Spotify',
+                    subtitle: 'Account voor dit huis',
+                    onTap: () =>
+                        setState(() => _topic = _SettingsTopic.spotify),
+                  ),
+                ],
+              ),
+            ),
           ),
-          _SettingsMenuTile(
-            icon: Icons.schedule_outlined,
-            title: 'Tijdschema\'s',
-            subtitle: 'Scenes en apparaten op tijd',
-            onTap: () => setState(() => _topic = _SettingsTopic.schedules),
-          ),
-          _SettingsMenuTile(
-            icon: Icons.tablet_android_outlined,
-            title: 'Wandtablet',
-            subtitle: 'Alleen voor het wandtablet',
-            onTap: () => setState(() => _topic = _SettingsTopic.tablet),
-          ),
-          _SettingsMenuTile(
-            icon: Icons.library_music_outlined,
-            title: 'Spotify',
-            subtitle: 'Account voor dit huis',
-            onTap: () => setState(() => _topic = _SettingsTopic.spotify),
-          ),
-          const SizedBox(height: 16),
+          if (auth.isAuthed && auth.restoreComplete)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Center(
+                child: Text(
+                  'Ingelogd als ${auth.username ?? '—'} · ${auth.effectiveRole ?? ''}',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: LuxeColors.inkSoft.withValues(alpha: 0.55),
+                        fontSize: 11,
+                      ),
+                ),
+              ),
+            ),
           const _VersionFooter(),
         ],
       ),
@@ -180,7 +210,28 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           subtitle: topic == _SettingsTopic.tablet
               ? 'Alleen voor het wandtablet'
               : null,
-          trailing: _SettingsInfoButton(title: infoTitle, body: infoBody),
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (topic == _SettingsTopic.schedules)
+                IconButton(
+                  tooltip: canEditSchedules
+                      ? 'Tijdschema toevoegen'
+                      : 'Geen rechten om te wijzigen',
+                  icon: const Icon(Icons.add_rounded),
+                  onPressed: canEditSchedules
+                      ? () => _openEditor(
+                            context,
+                            ref,
+                            cfg,
+                            canEditHouse: true,
+                            createNew: true,
+                          )
+                      : null,
+                ),
+              _SettingsInfoButton(title: infoTitle, body: infoBody),
+            ],
+          ),
         ),
         Expanded(
           child: ListView(
@@ -269,35 +320,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Widget _header(AuthState auth) {
-    final uname = auth.username ?? '—';
-    final rol = auth.effectiveRole ?? (auth.isAuthed ? 'onbekend' : '—');
     return Padding(
-      padding: EdgeInsets.fromLTRB(22, 16, 22, 12),
+      padding: const EdgeInsets.fromLTRB(16, 12, 22, 8),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           _GlassBack(onTap: () => _popSettings(context)),
-          const SizedBox(width: 20),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('INSTELLINGEN',
-                    style: Theme.of(context).textTheme.labelLarge),
-                const SizedBox(height: 6),
-                Text('Voorkeuren',
-                    style: Theme.of(context).textTheme.displayMedium),
-                if (auth.isAuthed && auth.restoreComplete) ...[
-                  const SizedBox(height: 10),
-                  Text(
-                    'Ingelogd als $uname · rol: $rol',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: LuxeColors.inkSoft,
-                        ),
-                  ),
-                ],
-              ],
-            ),
+          const SizedBox(width: 14),
+          Text(
+            'Instellingen',
+            style: Theme.of(context).textTheme.headlineMedium,
           ),
         ],
       ),
@@ -319,16 +350,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final themeRows =
         showThemeSchedules ? themeSched.asSchedules() : const <Schedule>[];
 
-    final addBtn = IconButton(
-      tooltip: canEditSchedules
-          ? 'Tijdschema toevoegen'
-          : 'Geen rechten om te wijzigen',
-      icon: const Icon(Icons.add_rounded),
-      onPressed: canEditSchedules
-          ? () => _openEditor(ctx, ref, cfg, canEditHouse: true)
-          : null,
-    );
-
     return _SettingsCard(
       child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -345,11 +366,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   if (!canEditSchedules)
                     'Met dit account mag u geen tijdschema\'s wijzigen. Vraag een beheerder.',
                 ].join('\n\n'),
-                trailing: addBtn,
-              )
-            else
-              Align(alignment: Alignment.centerRight, child: addBtn),
-            const SizedBox(height: 10),
+              ),
             schedAsync.when(
               loading: () => const Padding(
                 padding: EdgeInsets.all(24),
@@ -378,7 +395,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 }
                 return Column(
                   children: [
-                    for (final s in display)
+                    for (final s in display) ...[
+                      if (s != display.first)
+                        Divider(height: 1, color: LuxeColors.lineSoft),
                       _ScheduleRow(
                         schedule: s,
                         config: cfg,
@@ -476,6 +495,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     HouseConfig cfg, {
     Schedule? initial,
     bool canEditHouse = true,
+    bool createNew = false,
   }) async {
     final existing =
         canEditHouse ? (ref.read(schedulesProvider).value ?? []) : <Schedule>[];
@@ -498,6 +518,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         schedules: merged,
         config: cfg,
         initiallySelectedId: initial?.id,
+        createNew: createNew,
         lockedIds: lockedIds,
         persistHouseSchedules: canEditHouse,
       ),
@@ -1404,84 +1425,69 @@ class _ScheduleRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = schedule;
-    return Padding(
-      padding: EdgeInsets.symmetric(vertical: 3),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: canEdit ? onEdit : null,
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(12, 8, 6, 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            color: LuxeColors.surface.withValues(alpha: 0.72),
-            border: Border.all(color: LuxeColors.lineSoft),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(9),
-                  color: LuxeColors.brass.withValues(alpha: 0.15),
-                  border: Border.all(
-                    color: LuxeColors.brass.withValues(alpha: 0.4),
-                  ),
-                ),
-                child: Icon(_triggerIcon(s.trigger),
-                    color: LuxeColors.brassDeep, size: 18),
-              ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            s.name,
-                            style: Theme.of(context).textTheme.titleMedium,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
+    final meta = '${describeTrigger(s.trigger)} · ${describeAction(s.action, config)}';
+    return InkWell(
+      onTap: canEdit ? onEdit : null,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(4, 8, 0, 8),
+        child: Row(
+          children: [
+            Icon(
+              _triggerIcon(s.trigger),
+              size: 18,
+              color: LuxeColors.brassDeep,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          s.name,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        if (locked) ...[
-                          const SizedBox(width: 6),
-                          Icon(Icons.lock_outline,
-                              size: 14, color: LuxeColors.inkSoft),
-                        ],
+                      ),
+                      if (locked) ...[
+                        const SizedBox(width: 6),
+                        Icon(Icons.lock_outline,
+                            size: 13, color: LuxeColors.inkSoft),
                       ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${describeTrigger(s.trigger)}  ·  ${describeAction(s.action, config)}',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              if (onRun != null)
-                IconButton(
-                  tooltip: canEdit
-                      ? 'Nu uitvoeren'
-                      : 'Alleen zichtbaar — geen rechten',
-                  icon: Icon(
-                    Icons.play_arrow_rounded,
-                    color: canEdit ? LuxeColors.ink : LuxeColors.inkSoft,
+                    ],
                   ),
-                  onPressed: canEdit ? onRun : null,
-                ),
-              Switch.adaptive(
-                value: s.enabled,
-                onChanged: canEdit ? onToggle : null,
-                activeThumbColor: LuxeColors.brass,
+                  const SizedBox(height: 1),
+                  Text(
+                    meta,
+                    style: Theme.of(context).textTheme.bodySmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
-            ],
-          ),
+            ),
+            if (onRun != null)
+              IconButton(
+                tooltip: canEdit ? 'Nu uitvoeren' : 'Geen rechten',
+                visualDensity: VisualDensity.compact,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
+                icon: Icon(
+                  Icons.play_arrow_rounded,
+                  size: 20,
+                  color: canEdit ? LuxeColors.ink : LuxeColors.inkSoft,
+                ),
+                onPressed: canEdit ? onRun : null,
+              ),
+            Switch.adaptive(
+              value: s.enabled,
+              onChanged: canEdit ? onToggle : null,
+              activeThumbColor: LuxeColors.brass,
+            ),
+          ],
         ),
       ),
     );
@@ -1639,25 +1645,23 @@ class _SettingsMenuTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 5, 22, 9),
-      child: GlassCard(
-        radius: 18,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        onTap: onTap,
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 11, 10, 11),
         child: Row(
           children: [
-            Icon(icon, color: LuxeColors.ink, size: 22),
-            const SizedBox(width: 14),
+            Icon(icon, color: LuxeColors.ink, size: 20),
+            const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
-                    style: Theme.of(context).textTheme.titleMedium,
+                    style: Theme.of(context).textTheme.bodyLarge,
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 1),
                   Text(
                     subtitle,
                     style: Theme.of(context).textTheme.bodySmall,
@@ -1665,7 +1669,11 @@ class _SettingsMenuTile extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(Icons.chevron_right_rounded, color: LuxeColors.inkSoft),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: LuxeColors.inkSoft,
+            ),
           ],
         ),
       ),

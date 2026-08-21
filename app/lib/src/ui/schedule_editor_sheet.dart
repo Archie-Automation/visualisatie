@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api.dart';
@@ -20,6 +20,7 @@ class ScheduleEditorSheet extends ConsumerStatefulWidget {
     this.initiallySelectedId,
     this.lockedIds = const {},
     this.persistHouseSchedules = true,
+    this.createNew = false,
   });
 
   final List<Schedule> schedules;
@@ -29,6 +30,8 @@ class ScheduleEditorSheet extends ConsumerStatefulWidget {
   final Set<String> lockedIds;
   /// When false, only theme schedules are written (no PUT /schedules).
   final bool persistHouseSchedules;
+  /// Open a blank schedule instead of picking from the list.
+  final bool createNew;
 
   @override
   ConsumerState<ScheduleEditorSheet> createState() =>
@@ -185,16 +188,8 @@ class _ScheduleEditorSheetState
     _drafts = {
       for (final s in _schedules) s.id: _Draft.fromSchedule(s, widget.config),
     };
-    _selectedId = widget.initiallySelectedId ??
-        (_schedules.isNotEmpty ? _schedules.first.id : null);
-  }
-
-  _Draft? get _draft =>
-      _selectedId == null ? null : _drafts[_selectedId];
-
-  void _addSchedule() {
-    final id = 'sch-${DateTime.now().millisecondsSinceEpoch}';
-    setState(() {
+    if (widget.createNew) {
+      final id = 'sch-${DateTime.now().millisecondsSinceEpoch}';
       _schedules = [
         ..._schedules,
         Schedule(
@@ -208,17 +203,22 @@ class _ScheduleEditorSheetState
       ];
       _drafts[id] = _Draft.fresh();
       _selectedId = id;
-    });
+    } else {
+      _selectedId = widget.initiallySelectedId ??
+          (_schedules.isNotEmpty ? _schedules.first.id : null);
+    }
   }
 
-  void _deleteSelected() {
+  _Draft? get _draft =>
+      _selectedId == null ? null : _drafts[_selectedId];
+
+  Future<void> _deleteSelected() async {
     final id = _selectedId;
     if (id == null || widget.lockedIds.contains(id)) return;
-    setState(() {
-      _schedules = _schedules.where((s) => s.id != id).toList();
-      _drafts.remove(id);
-      _selectedId = _schedules.isNotEmpty ? _schedules.first.id : null;
-    });
+    _schedules = _schedules.where((s) => s.id != id).toList();
+    _drafts.remove(id);
+    _selectedId = null;
+    await _save();
   }
 
   Future<void> _save() async {
@@ -277,7 +277,6 @@ class _ScheduleEditorSheetState
             children: [
               _handle(),
               _header(),
-              _scheduleList(),
               const Divider(height: 1),
               Flexible(child: _editor()),
               _footer(),
@@ -300,24 +299,31 @@ class _ScheduleEditorSheetState
         ),
       );
 
-  Widget _header() => Padding(
-        padding: EdgeInsets.fromLTRB(28, 16, 16, 12),
+  Widget _header() {
+    final name = _draft?.name.trim();
+    final title = (name != null && name.isNotEmpty) ? name : 'Tijdschema';
+    return Padding(
+        padding: EdgeInsets.fromLTRB(24, 12, 8, 10),
         child: Row(
           children: [
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('INSTELLINGEN · TIJDSCHEMA\'S',
+                  Text('TIJDSCHEMA',
                       style: TextStyle(
                         color: LuxeColors.inkSoft,
                         fontSize: 11,
-                        letterSpacing: 2.2,
-                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.4,
+                        fontWeight: FontWeight.w500,
                       )),
-                  const SizedBox(height: 4),
-                  Text('Automatiseer jouw huis',
-                      style: Theme.of(context).textTheme.displayMedium),
+                  const SizedBox(height: 2),
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
                 ],
               ),
             ),
@@ -328,96 +334,6 @@ class _ScheduleEditorSheetState
           ],
         ),
       );
-
-  Widget _scheduleList() {
-    return SizedBox(
-      height: 88,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.symmetric(horizontal: 24),
-        itemCount: widget.persistHouseSchedules
-            ? _schedules.length + 1
-            : _schedules.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 10),
-        itemBuilder: (context, i) {
-          if (widget.persistHouseSchedules && i == _schedules.length) {
-            return GestureDetector(
-              onTap: _addSchedule,
-              child: Container(
-                width: 88,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                    color: LuxeColors.ink.withValues(alpha: 0.2),
-                  ),
-                ),
-                child: const Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.add_rounded, size: 22),
-                      SizedBox(height: 4),
-                      Text('NIEUW',
-                          style: TextStyle(
-                            fontSize: 10,
-                            letterSpacing: 1.8,
-                            fontWeight: FontWeight.w600,
-                          )),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }
-          final s = _schedules[i];
-          final d = _drafts[s.id];
-          final selected = s.id == _selectedId;
-          return GestureDetector(
-            onTap: () => setState(() => _selectedId = s.id),
-            child: AnimatedContainer(
-              duration: Duration(milliseconds: 160),
-              width: 140,
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(18),
-                color: selected ? LuxeColors.ink : LuxeColors.surface,
-                border: Border.all(color: LuxeColors.lineSoft),
-                boxShadow:
-                    selected ? LuxeShadows.lift : LuxeShadows.soft,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(
-                    d?.kind == _TriggerKind.astro
-                        ? (d?.astroEvent == AstroEvent.sunrise
-                            ? Icons.wb_twilight
-                            : Icons.nightlight_round)
-                        : Icons.access_time_rounded,
-                    size: 18,
-                    color: selected
-                        ? LuxeColors.brassGlow
-                        : LuxeColors.ink,
-                  ),
-                  Spacer(),
-                  Text(
-                    d?.name ?? s.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: selected ? LuxeColors.onInk : LuxeColors.ink,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
   }
 
   Widget _editor() {
@@ -426,7 +342,7 @@ class _ScheduleEditorSheetState
       return const Center(
         child: Padding(
           padding: EdgeInsets.all(48),
-          child: Text('Nog geen tijdschema. Tik op Nieuw om te beginnen.'),
+          child: Text('Dit tijdschema is verwijderd.'),
         ),
       );
     }
@@ -463,8 +379,8 @@ class _ScheduleEditorSheetState
             ),
             child: Text(
               _selectedId == kThemeLightOnId
-                  ? 'Weergave → licht thema'
-                  : 'Weergave → donker thema',
+                  ? 'Weergave â†’ licht thema'
+                  : 'Weergave â†’ donker thema',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
           )
@@ -499,7 +415,7 @@ class _ScheduleEditorSheetState
         ] else ...[
           const SizedBox(height: 16),
           Text(
-            'Vast weergave-schema — niet verwijderbaar. Alleen zichtbaar '
+            'Vast weergave-schema â€” niet verwijderbaar. Alleen zichtbaar '
             'als Weergave op Auto staat.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: LuxeColors.inkSoft,
@@ -920,7 +836,7 @@ class _GuardRow extends StatelessWidget {
           child: Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
             child: Text(
-              'Geen — tik om toe te voegen',
+              'Geen â€” tik om toe te voegen',
               style:
                   Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: LuxeColors.brassDeep,
@@ -1032,7 +948,7 @@ class _ScenePicker extends StatelessWidget {
           items.add(
             DropdownMenuItem(
               value: s.id,
-              child: Text('${s.name}  ·  ${r.name}'),
+              child: Text('${s.name}  Â·  ${r.name}'),
             ),
           );
         }
