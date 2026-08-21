@@ -166,8 +166,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final topic = _topic!;
     final canEditSchedules = canEditScenesInApp(auth, cfg);
     final themeMode = ref.watch(themeModeProvider);
-    final showThemeSchedules =
-        isWallTabletThemeTarget && themeMode == ThemeMode.system;
+    final showThemeSchedules = showThemeAutoSchedules(themeMode);
 
     final title = switch (topic) {
       _SettingsTopic.appearance => 'Weergave',
@@ -178,11 +177,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final infoTitle = title;
     final infoBody = switch (topic) {
       _SettingsTopic.appearance =>
-        'Kies licht, donker of automatisch.\n\n${showThemeSchedules ? 'Op de wandtablet volgt Auto het licht/donker-schema onder Tijdschema\'s.' : 'Op de telefoon volgt Auto het systeem van het apparaat.'}',
+        'Kies licht, donker of automatisch.\n\n${showThemeSchedules ? 'Auto volgt het licht/donker-schema onder Tijdschema\'s.' : 'Licht of donker blijft vast tot je Auto kiest.'}',
       _SettingsTopic.schedules => [
           'Laat scenes of apparaten automatisch lopen op een tijdstip, of bij zonsopkomst en zonsondergang.',
           if (showThemeSchedules)
-            'Op de wandtablet in Auto staan hier ook de licht- en donkerweergave.',
+            'In Auto staan hier ook de licht- en donkerweergave.',
           if (!canEditSchedules)
             'Met dit account mag u geen tijdschema\'s wijzigen. Vraag een beheerder.',
         ].join('\n\n'),
@@ -210,28 +209,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           subtitle: topic == _SettingsTopic.tablet
               ? 'Alleen voor het wandtablet'
               : null,
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (topic == _SettingsTopic.schedules)
-                IconButton(
-                  tooltip: canEditSchedules
-                      ? 'Tijdschema toevoegen'
-                      : 'Geen rechten om te wijzigen',
-                  icon: const Icon(Icons.add_rounded),
-                  onPressed: canEditSchedules
-                      ? () => _openEditor(
-                            context,
-                            ref,
-                            cfg,
-                            canEditHouse: true,
-                            createNew: true,
-                          )
-                      : null,
-                ),
-              _SettingsInfoButton(title: infoTitle, body: infoBody),
-            ],
-          ),
+          trailing: _SettingsInfoButton(title: infoTitle, body: infoBody),
         ),
         Expanded(
           child: ListView(
@@ -344,8 +322,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     bool showTitle = true,
   }) {
     final themeMode = ref.watch(themeModeProvider);
-    final showThemeSchedules =
-        isWallTabletThemeTarget && themeMode == ThemeMode.system;
+    final showThemeSchedules = showThemeAutoSchedules(themeMode);
     final themeSched = ref.watch(themeAutoScheduleProvider);
     final themeRows =
         showThemeSchedules ? themeSched.asSchedules() : const <Schedule>[];
@@ -362,7 +339,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 infoBody: [
                   'Laat scenes of apparaten automatisch lopen op een tijdstip, of bij zonsopkomst en zonsondergang.',
                   if (showThemeSchedules)
-                    'Op de wandtablet in Auto staan hier ook de licht- en donkerweergave.',
+                    'In Auto staan hier ook de licht- en donkerweergave.',
                   if (!canEditSchedules)
                     'Met dit account mag u geen tijdschema\'s wijzigen. Vraag een beheerder.',
                 ].join('\n\n'),
@@ -384,7 +361,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               data: (list) {
                 final display = [...themeRows, ...list];
-                if (display.isEmpty) {
+                final addRow = canEditSchedules
+                    ? _AddScheduleRow(
+                        onTap: () => _openEditor(
+                          ctx,
+                          ref,
+                          cfg,
+                          canEditHouse: true,
+                          createNew: true,
+                        ),
+                      )
+                    : null;
+                if (display.isEmpty && addRow == null) {
                   return Padding(
                     padding: const EdgeInsets.fromLTRB(6, 4, 6, 8),
                     child: Text(
@@ -480,6 +468,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                                 }
                               },
                       ),
+                    ],
+                    if (addRow != null) ...[
+                      if (display.isNotEmpty)
+                        Divider(height: 1, color: LuxeColors.lineSoft),
+                      addRow,
+                    ],
                   ],
                 );
               },
@@ -500,8 +494,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final existing =
         canEditHouse ? (ref.read(schedulesProvider).value ?? []) : <Schedule>[];
     final themeMode = ref.read(themeModeProvider);
-    final includeTheme =
-        isWallTabletThemeTarget && themeMode == ThemeMode.system;
+    final includeTheme = showThemeAutoSchedules(themeMode);
     final themeOnes = includeTheme
         ? ref.read(themeAutoScheduleProvider).asSchedules()
         : const <Schedule>[];
@@ -1404,6 +1397,35 @@ class _SpotifyCredentialsFormState
   }
 }
 
+class _AddScheduleRow extends StatelessWidget {
+  const _AddScheduleRow({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(4, 10, 4, 8),
+        child: Row(
+          children: [
+            Icon(
+              Icons.add_rounded,
+              size: 20,
+              color: LuxeColors.brassDeep,
+            ),
+            const SizedBox(width: 10),
+            Text(
+              'Tijdschema toevoegen',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ScheduleRow extends StatelessWidget {
   const _ScheduleRow({
     required this.schedule,
@@ -1555,9 +1577,9 @@ class _AppearanceSection extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final mode = ref.watch(themeModeProvider);
-    final autoHint = isWallTabletThemeTarget
-        ? 'Op de wandtablet volgt Auto het licht/donker-schema onder Tijdschema\'s.'
-        : 'Op de telefoon volgt Auto het systeem van het apparaat.';
+    final autoHint = showThemeAutoSchedules(mode)
+        ? 'Auto volgt het licht/donker-schema onder Tijdschema\'s.'
+        : 'Licht of donker blijft vast tot je Auto kiest.';
     return _SettingsCard(
       child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

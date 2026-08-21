@@ -42,11 +42,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     _rotCtrl = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 3),
-    )..repeat();
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
 
-    _rotAnim = Tween<double>(begin: 0, end: 1).animate(
-      CurvedAnimation(parent: _rotCtrl, curve: Curves.linear),
+    _rotAnim = Tween<double>(begin: 0, end: pi).animate(
+      CurvedAnimation(parent: _rotCtrl, curve: Curves.easeInOut),
     );
 
     _pingOnce();
@@ -134,11 +134,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                     AnimatedBuilder(
                       animation: _rotAnim,
                       builder: (context, child) {
-                        final angle = _rotAnim.value * 2 * pi;
                         return Transform(
                           transform: Matrix4.identity()
                             ..setEntry(3, 2, 0.002)
-                            ..rotateY(angle),
+                            ..rotateY(_rotAnim.value),
                           alignment: Alignment.center,
                           child: child,
                         );

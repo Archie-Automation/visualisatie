@@ -20,7 +20,7 @@ const _fallbackEndHour = 21;
 bool isThemeScheduleId(String id) =>
     id == kThemeLightOnId || id == kThemeLightOffId;
 
-/// Non-deletable day/night window for wall-tablet Auto theme.
+/// Non-deletable day/night window for Auto theme.
 /// Shown as two rows in TIJDSCHEMA'S when Auto is selected.
 class ThemeAutoSchedule {
   const ThemeAutoSchedule({
@@ -266,7 +266,7 @@ bool _weekdayAllowed(WeekdayMask days, DateTime local) {
   return days[idx];
 }
 
-/// Whether the tablet should use light theme for [now] under [schedule].
+/// Whether Auto should use light theme for [now] under [schedule].
 bool isThemeLightForSchedule({
   required ThemeAutoSchedule schedule,
   required DateTime now,

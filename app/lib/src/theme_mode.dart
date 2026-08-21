@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,9 +8,9 @@ import 'theme_auto_schedule.dart';
 
 const _kThemeMode = 'luxe_theme_mode';
 
-/// Android wall-panel APK (not iPhone/web). Auto theme uses schedule, not OS.
-bool get isWallTabletThemeTarget =>
-    !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+/// Auto weergave toont (en volgt) de licht/donker-rijen onder Tijdschema's.
+bool showThemeAutoSchedules(ThemeMode preferred) =>
+    preferred == ThemeMode.system;
 
 /// Legacy fixed-hour fallback when schedule/astro cannot be resolved.
 const autoLightStartHour = 7;
@@ -26,8 +24,6 @@ ThemeMode resolveEffectiveThemeMode(
   ProjectGeo? geo,
 }) {
   if (preferred != ThemeMode.system) return preferred;
-  // Phone / web: follow OS appearance.
-  if (!isWallTabletThemeTarget) return ThemeMode.system;
   final sched = schedule ?? ThemeAutoSchedule.defaults;
   final light = isThemeLightForSchedule(
     schedule: sched,
@@ -73,11 +69,11 @@ class ThemeModeController extends Notifier<ThemeMode> {
 final themeModeProvider =
     NotifierProvider<ThemeModeController, ThemeMode>(ThemeModeController.new);
 
-/// Ticks once per minute on wall tablet when Automático is selected,
-/// so day→night flips without restart.
+/// Ticks once per minute when Auto is selected, so day→night flips
+/// without restart.
 final themeAutoTickProvider = StreamProvider<int>((ref) {
   final pref = ref.watch(themeModeProvider);
-  if (pref != ThemeMode.system || !isWallTabletThemeTarget) {
+  if (!showThemeAutoSchedules(pref)) {
     return Stream.value(0);
   }
   return Stream.periodic(const Duration(minutes: 1), (i) => i + 1);
