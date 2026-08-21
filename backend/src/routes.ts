@@ -781,17 +781,19 @@ export function buildRouter(
     }
   });
 
-  r.use(requireAuth, async (req, res, next) => {
-    if (req.method !== "GET") return next();
-    const m = req.path.match(/^\/cameras\/([^/]+)\/hls-seg\/(.+)$/);
-    if (!m) return next();
-    const cam = collectCameras(getConfig()).find((c) => c.id === m[1]);
+  // Must be a path-scoped route. `r.use(requireAuth, …)` without a prefix
+  // also wraps every later route — including unauthenticated Spotify
+  // `/tls-ok` and `/callback`, which then return `{ error: "missing token" }`.
+  r.get("/cameras/:id/hls-seg/*", requireAuth, async (req, res) => {
+    const cam = collectCameras(getConfig()).find((c) => c.id === req.params.id);
     if (!cam) return res.status(404).end();
-    const upstreamUrl = `${mediaBase()}/api/${m[2]}`;
+    const rest = typeof req.params[0] === "string" ? req.params[0] : "";
+    if (!rest) return res.status(404).end();
+    const upstreamUrl = `${mediaBase()}/api/${rest}`;
     try {
       await proxyHlsBody(res, upstreamUrl);
     } catch (err) {
-      logger.warn({ err, id: cam.id, path: m[2] }, "hls segment proxy failed");
+      logger.warn({ err, id: cam.id, path: rest }, "hls segment proxy failed");
       res.status(502).json({ error: "hls segment unavailable" });
     }
   });
