@@ -508,6 +508,8 @@ class SpotifyStatus {
   final String? redirectUri;
   /// Suggested redirect URI to paste into the Spotify dashboard.
   final String? suggestedRedirectUri;
+  /// HTTPS page to open once so the browser accepts the self-signed cert.
+  final String? tlsCheckUrl;
   /// Public OAuth client id (never the secret), used to prefill the form.
   final String? clientId;
   const SpotifyStatus({
@@ -516,6 +518,7 @@ class SpotifyStatus {
     this.account,
     this.redirectUri,
     this.suggestedRedirectUri,
+    this.tlsCheckUrl,
     this.clientId,
   });
 
@@ -525,6 +528,7 @@ class SpotifyStatus {
         account: j['account'] as String?,
         redirectUri: j['redirectUri'] as String?,
         suggestedRedirectUri: j['suggestedRedirectUri'] as String?,
+        tlsCheckUrl: j['tlsCheckUrl'] as String?,
         clientId: j['clientId'] as String?,
       );
 }

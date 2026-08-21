@@ -91,14 +91,18 @@ const spotifyAuthStates = new Set<string>();
 
 /** Minimal HTML page shown in the browser after the Spotify redirect. */
 function spotifyResultPage(message: string): string {
+  const home = (process.env.PUBLIC_API_BASE ?? "").replace(/\/+$/, "");
+  const back = home
+    ? `<p style="margin-top:1.25rem"><a href="${home}" style="color:#1db954">Terug naar de app</a></p>`
+    : "";
   return `<!doctype html><html lang="nl"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Spotify</title>
 <style>body{font-family:system-ui,sans-serif;background:#121212;color:#fff;
 display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center}
 .card{max-width:420px;padding:2rem}h1{font-size:1.25rem;margin:0 0 .75rem}
-p{color:#b3b3b3;margin:0}</style></head>
-<body><div class="card"><h1>Spotify</h1><p>${message}</p></div></body></html>`;
+p{color:#b3b3b3;margin:0}a{color:#1db954}</style></head>
+<body><div class="card"><h1>Spotify</h1><p>${message}</p>${back}</div></body></html>`;
 }
 
 /**
@@ -1304,9 +1308,14 @@ export function buildRouter(
    *  to paste into the Spotify dashboard, and decides whether to offer search. */
   r.get("/media/spotify/status", requireAuth, (req, res) => {
     const status = spotify.getStatus();
+    const suggestedRedirectUri = spotify.resolveRedirectUri(spotifyServerBase(req));
+    const tlsCheckUrl = suggestedRedirectUri.startsWith("https:")
+      ? suggestedRedirectUri.replace(/\/callback$/, "/tls-ok")
+      : undefined;
     res.json({
       ...status,
-      suggestedRedirectUri: spotify.resolveRedirectUri(spotifyServerBase(req))
+      suggestedRedirectUri,
+      tlsCheckUrl
     });
   });
 
@@ -1342,6 +1351,21 @@ export function buildRouter(
     // Expire unused states after 10 minutes to avoid unbounded growth.
     setTimeout(() => spotifyAuthStates.delete(state), 10 * 60 * 1000);
     res.json({ url: spotify.buildAuthUrl(state, spotifyServerBase(req)) });
+  });
+
+  /** Unauthenticated: open this over HTTPS once so the browser trusts the
+   *  self-signed cert before Spotify redirects here. */
+  r.get("/media/spotify/tls-ok", (_req, res) => {
+    res.type("html").send(`<!doctype html><html lang="nl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Spotify</title>
+<style>body{font-family:system-ui,sans-serif;background:#121212;color:#fff;
+display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center}
+.card{max-width:420px;padding:2rem}h1{font-size:1.25rem;margin:0 0 .75rem}
+p{color:#b3b3b3;margin:0}</style></head>
+<body><div class="card"><h1>Certificaat OK</h1>
+<p>Je kunt dit venster sluiten en in de app op Verbind Spotify tikken.</p>
+</div></body></html>`);
   });
 
   /** Spotify redirects the browser here after login. No app auth header is

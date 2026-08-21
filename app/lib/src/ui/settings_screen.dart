@@ -862,6 +862,7 @@ class _SpotifySectionState extends ConsumerState<_SpotifySection> {
       return _SpotifyCredentialsForm(
         suggestedRedirectUri:
             status.suggestedRedirectUri ?? status.redirectUri,
+        tlsCheckUrl: status.tlsCheckUrl,
         initialClientId: status.clientId,
         onCancel: status.configured
             ? () => setState(() => _editingCredentials = false)
@@ -908,12 +909,30 @@ class _SpotifySectionState extends ConsumerState<_SpotifySection> {
       children: [
         if (redirect.isNotEmpty) ...[
           Text(
-            'Plak deze Redirect URI exact in de Spotify Developer-app. '
-            'Spotify weigert http://192.168.x — dit moet 127.0.0.1 of https zijn:',
+            'Plak deze Redirect URI exact in de Spotify Developer-app:',
             style: Theme.of(context).textTheme.labelMedium,
           ),
           const SizedBox(height: 4),
           _RedirectUriBox(redirect),
+          if (status.tlsCheckUrl != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Eerste keer: de browser toont een certificaatwaarschuwing. '
+              'Kies Geavanceerd → Doorgaan. Tik hieronder eerst op Certificaat toestaan.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: LuxeColors.inkSoft,
+                  ),
+            ),
+            const SizedBox(height: 4),
+            TextButton.icon(
+              onPressed: () => launchUrl(
+                Uri.parse(status.tlsCheckUrl!),
+                mode: LaunchMode.externalApplication,
+              ),
+              icon: const Icon(Icons.security_rounded),
+              label: const Text('Certificaat toestaan'),
+            ),
+          ],
           const SizedBox(height: 12),
         ],
         Wrap(
@@ -993,8 +1012,9 @@ class _SpotifyConnectDialogState extends State<_SpotifyConnectDialog> {
           children: [
             Text(
               'Log in het geopende venster in bij Spotify. '
-              'Laadt de pagina niet (verbinding geweigerd op 127.0.0.1), '
-              'kopieer de volledige URL uit de adresbalk en plak die hier.',
+              'Eerste keer: als Chrome een certificaatwaarschuwing toont, '
+              'kies Geavanceerd en Doorgaan. '
+              'Tik daarna op Gereed.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 12),
@@ -1085,11 +1105,13 @@ class _RedirectUriBox extends StatelessWidget {
 class _SpotifyCredentialsForm extends ConsumerStatefulWidget {
   const _SpotifyCredentialsForm({
     this.suggestedRedirectUri,
+    this.tlsCheckUrl,
     this.initialClientId,
     this.onCancel,
     this.onSaved,
   });
   final String? suggestedRedirectUri;
+  final String? tlsCheckUrl;
   final String? initialClientId;
   final VoidCallback? onCancel;
   final VoidCallback? onSaved;
@@ -1164,12 +1186,29 @@ class _SpotifyCredentialsFormState
         if (redirect.isNotEmpty) ...[
           const SizedBox(height: 12),
           Text(
-            'Plak deze Redirect URI exact in de Spotify Developer-app. '
-            'Spotify weigert http://192.168.x — dit moet 127.0.0.1 of https zijn:',
+            'Plak deze Redirect URI exact in de Spotify Developer-app:',
             style: Theme.of(context).textTheme.labelMedium,
           ),
           const SizedBox(height: 4),
           _RedirectUriBox(redirect),
+          if (widget.tlsCheckUrl != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Eerste keer: certificaatwaarschuwing → Geavanceerd → Doorgaan. '
+              'Tik eerst op Certificaat toestaan.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: LuxeColors.inkSoft,
+                  ),
+            ),
+            TextButton.icon(
+              onPressed: () => launchUrl(
+                Uri.parse(widget.tlsCheckUrl!),
+                mode: LaunchMode.externalApplication,
+              ),
+              icon: const Icon(Icons.security_rounded),
+              label: const Text('Certificaat toestaan'),
+            ),
+          ],
         ],
         const SizedBox(height: 12),
         TextField(
