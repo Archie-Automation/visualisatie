@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../android_apk_updater.dart';
@@ -183,6 +184,51 @@ String _apkInstallErrorMessage(String? code) {
   }
 }
 
+/// High-contrast strip. Do not use [LuxeColors.ink] — those invert with theme
+/// and produce dark-on-dark (Licht) or a bar that vanishes into the canvas (Donker).
+class _BannerTone {
+  const _BannerTone({
+    required this.bg,
+    required this.fg,
+    required this.accent,
+    required this.buttonBg,
+    required this.buttonFg,
+    required this.track,
+    required this.statusIconBrightness,
+  });
+
+  final Color bg;
+  final Color fg;
+  final Color accent;
+  final Color buttonBg;
+  final Color buttonFg;
+  final Color track;
+  final Brightness statusIconBrightness;
+
+  static _BannerTone of(BuildContext context) {
+    if (Theme.of(context).brightness == Brightness.light) {
+      return const _BannerTone(
+        bg: Color(0xFF1A1814),
+        fg: Color(0xFFF7F6F2),
+        accent: Color(0xFFE2C88A),
+        buttonBg: Color(0xFFE8D5A8),
+        buttonFg: Color(0xFF1A1814),
+        track: Color(0x33F7F6F2),
+        statusIconBrightness: Brightness.light,
+      );
+    }
+    return const _BannerTone(
+      bg: Color(0xFFE8E4DC),
+      fg: Color(0xFF12110F),
+      accent: Color(0xFF5E4722),
+      buttonBg: Color(0xFF1A1814),
+      buttonFg: Color(0xFFF7F6F2),
+      track: Color(0x3312110F),
+      statusIconBrightness: Brightness.dark,
+    );
+  }
+}
+
 class _Banner extends StatelessWidget {
   const _Banner({
     required this.message,
@@ -196,68 +242,90 @@ class _Banner extends StatelessWidget {
   final VoidCallback? onAction;
   final double? progress;
 
-  /// Always a dark strip — do not use theme ink/brass (light mode = dark-on-dark).
-  static const _bg = Color(0xFF2C2620);
-  static const _fg = Color(0xFFF5F0E6);
-  static const _accent = Color(0xFFE2C88A);
-  static const _track = Color(0x33F5F0E6);
-
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: _bg,
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  const Icon(
-                    Icons.system_update_alt_rounded,
-                    color: _accent,
-                    size: 20,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      message,
-                      style: const TextStyle(
-                        color: _fg,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        height: 1.3,
-                      ),
+    final tone = _BannerTone.of(context);
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle(
+        statusBarColor: tone.bg,
+        statusBarIconBrightness: tone.statusIconBrightness,
+        statusBarBrightness: tone.statusIconBrightness == Brightness.light
+            ? Brightness.dark
+            : Brightness.light,
+      ),
+      child: Material(
+        color: tone.bg,
+        child: SafeArea(
+          bottom: false,
+          child: DefaultTextStyle(
+            style: TextStyle(
+              color: tone.fg,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              height: 1.3,
+            ),
+            child: IconTheme(
+              data: IconThemeData(color: tone.accent, size: 20),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.system_update_alt_rounded, color: tone.accent),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            message,
+                            style: TextStyle(color: tone.fg),
+                          ),
+                        ),
+                        if (actionLabel != null && onAction != null)
+                          FilledButton(
+                            onPressed: onAction,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: tone.buttonBg,
+                              foregroundColor: tone.buttonFg,
+                              disabledBackgroundColor:
+                                  tone.buttonBg.withValues(alpha: 0.45),
+                              disabledForegroundColor:
+                                  tone.buttonFg.withValues(alpha: 0.55),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 8,
+                              ),
+                              minimumSize: const Size(0, 36),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              visualDensity: VisualDensity.compact,
+                              textStyle: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                            child: Text(actionLabel!),
+                          ),
+                      ],
                     ),
-                  ),
-                  if (actionLabel != null && onAction != null)
-                    TextButton(
-                      onPressed: onAction,
-                      child: Text(
-                        actionLabel!,
-                        style: const TextStyle(
-                          color: _accent,
-                          fontWeight: FontWeight.w700,
+                    if (progress != null) ...[
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: LinearProgressIndicator(
+                          value: progress! > 0 && progress! < 1
+                              ? progress
+                              : null,
+                          minHeight: 3,
+                          color: tone.accent,
+                          backgroundColor: tone.track,
                         ),
                       ),
-                    ),
-                ],
-              ),
-              if (progress != null) ...[
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(2),
-                  child: LinearProgressIndicator(
-                    value: progress! > 0 && progress! < 1 ? progress : null,
-                    minHeight: 3,
-                    color: _accent,
-                    backgroundColor: _track,
-                  ),
+                    ],
+                  ],
                 ),
-              ],
-            ],
+              ),
+            ),
           ),
         ),
       ),
