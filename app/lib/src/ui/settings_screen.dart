@@ -77,11 +77,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('$e')),
             data: (cfg) {
+              final showMenu = _topic == null ||
+                  (_topic == _SettingsTopic.tablet &&
+                      !wallTabletDeviceSettingsApply);
               return Theme(
                 data: _settingsTheme(Theme.of(context)),
-                child: _topic == null
-                    ? _menu(auth)
-                    : _detail(cfg, schedAsync, auth),
+                child: showMenu ? _menu(auth) : _detail(cfg, schedAsync, auth),
               );
             },
           ),
@@ -120,14 +121,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     onTap: () =>
                         setState(() => _topic = _SettingsTopic.schedules),
                   ),
-                  Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
-                  _SettingsMenuTile(
-                    icon: Icons.tablet_android_outlined,
-                    title: 'Wandtablet',
-                    subtitle: 'Alleen voor het wandtablet',
-                    onTap: () =>
-                        setState(() => _topic = _SettingsTopic.tablet),
-                  ),
+                  if (wallTabletDeviceSettingsApply) ...[
+                    Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
+                    _SettingsMenuTile(
+                      icon: Icons.tablet_android_outlined,
+                      title: 'Wandtablet',
+                      subtitle: 'Alleen dit scherm',
+                      onTap: () =>
+                          setState(() => _topic = _SettingsTopic.tablet),
+                    ),
+                  ],
                   Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
                   _SettingsMenuTile(
                     icon: Icons.library_music_outlined,
@@ -187,9 +190,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             'Met dit account mag u geen tijdschema\'s wijzigen. Vraag een beheerder.',
         ].join('\n\n'),
       _SettingsTopic.tablet =>
-        'Alleen voor het wandtablet (Android-app). Na inactiviteit gaat dit scherm '
-            'terug naar home, daarna een screensaver met klok.\n\n'
-            'Koppel de locatie waar het tablet hangt. Optioneel toont '
+        'Deze instellingen gelden alleen voor dit apparaat. '
+            'Op telefoon of in de browser hebben ze geen effect op het wandtablet.\n\n'
+            'Na inactiviteit gaat dit scherm terug naar home, daarna een screensaver met klok.\n\n'
+            'Koppel de locatie waar dit tablet hangt. Optioneel toont '
             'de screensaver de temperatuur van een ruimte of buitentemperatuur '
             'via groepadres. Zet screensaver uit als de muziekspeler van '
             'die ruimte fullscreen open staat.',
@@ -209,7 +213,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           onBack: () => setState(() => _topic = null),
           title: title,
           subtitle: topic == _SettingsTopic.tablet
-              ? 'Alleen voor het wandtablet'
+              ? 'Alleen dit scherm'
               : null,
           trailing: LuxeInfoIconButton(title: infoTitle, body: infoBody),
         ),
@@ -588,12 +592,13 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                 _SettingsSectionTitle(
                   icon: Icons.tablet_android_outlined,
                   title: 'WANDTABLET',
-                  subtitle: 'Alleen voor het wandtablet',
+                  subtitle: 'Alleen dit scherm',
                   infoTitle: 'Wandtablet',
                   infoBody:
-                      'Alleen op de Android-app. Na inactiviteit gaat dit scherm '
-                      'terug naar home, daarna een screensaver met klok.\n\n'
-                      'Koppel de locatie waar het tablet hangt. Optioneel toont '
+                      'Deze instellingen gelden alleen voor dit apparaat. '
+                      'Op telefoon of in de browser hebben ze geen effect op het wandtablet.\n\n'
+                      'Na inactiviteit gaat dit scherm terug naar home, daarna een screensaver met klok.\n\n'
+                      'Koppel de locatie waar dit tablet hangt. Optioneel toont '
                       'de screensaver de temperatuur van een ruimte of buitentemperatuur '
                       'via groepadres. Zet screensaver uit als de muziekspeler van '
                       'die ruimte fullscreen open staat.',
@@ -1518,6 +1523,7 @@ class _ScheduleRow extends StatelessWidget {
             if (locked)
               LuxeInfoIconButton(
                 title: 'Weergave',
+                compact: true,
                 body:
                     'Hier kun je alleen het tijdstip aanpassen. '
                     'Naam en actie (licht of donker) staan vast.',
@@ -1903,7 +1909,7 @@ class _SettingsSectionTitle extends StatelessWidget {
             ],
           ),
         ),
-        LuxeInfoIconButton(title: infoTitle, body: infoBody),
+        LuxeInfoIconButton(title: infoTitle, body: infoBody, compact: true),
         if (trailing != null) trailing!,
       ],
     );

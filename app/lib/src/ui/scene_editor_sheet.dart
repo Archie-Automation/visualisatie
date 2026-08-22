@@ -8,16 +8,17 @@ import '../scene_api.dart';
 import '../scene_entry.dart';
 import '../theme.dart';
 import 'responsive.dart';
+import 'widgets/back_pill.dart';
+import 'widgets/confirm_dialog.dart';
+import 'widgets/glass_card.dart';
 import 'widgets/scene_entry_tiles.dart';
 import 'widgets/scene_icons.dart';
 
 enum SceneScope { global, room }
 
-/// Full-screen bottom sheet that lets a customer manage scenes. The
-/// editor speaks in device/state terms – no group addresses are ever
-/// exposed to the user. Each device selected into a scene gets a little
-/// mini-controller (on/off switch, dimmer slider, setpoint…) and a
-/// "Huidige stand overnemen" button that captures the live bus value.
+enum _EditPane { overview, name, icon, devices }
+
+/// Bottom sheet for one scene at a time (same chrome as the schedule editor).
 class SceneEditorSheet extends ConsumerStatefulWidget {
   const SceneEditorSheet({
     super.key,
@@ -26,6 +27,7 @@ class SceneEditorSheet extends ConsumerStatefulWidget {
     required this.config,
     this.roomId,
     this.initiallySelectedId,
+    this.createNew = false,
   });
 
   final List<Scene> scenes;
@@ -33,34 +35,102 @@ class SceneEditorSheet extends ConsumerStatefulWidget {
   final HouseConfig config;
   final String? roomId;
   final String? initiallySelectedId;
+  final bool createNew;
 
   @override
   ConsumerState<SceneEditorSheet> createState() => _SceneEditorSheetState();
 }
 
 class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
-  /// Scene metadata keyed by scene id – we store the full draft separately
-  /// so users can switch between scenes without losing edits.
-  late final Map<String, SceneDraft> _drafts;
-  late List<Scene> _scenes;
-  String? _selectedId;
+  late SceneDraft _draft;
+  late String _id;
   bool _saving = false;
+  _EditPane _pane = _EditPane.overview;
+  SceneDraft? _paneSnapshot;
 
   @override
   void initState() {
     super.initState();
-    _scenes = [...widget.scenes];
-    _drafts = {
-      for (final s in _scenes) s.id: SceneDraft.fromScene(s, widget.config),
-    };
-    _selectedId = widget.initiallySelectedId ??
-        (_scenes.isNotEmpty ? _scenes.first.id : null);
+    if (widget.createNew) {
+      _id = 'scn-${DateTime.now().millisecondsSinceEpoch}';
+      _draft = SceneDraft(name: 'Nieuwe Scene', icon: 'star', entries: []);
+      return;
+    }
+    Scene? match;
+    final want = widget.initiallySelectedId;
+    if (want != null) {
+      for (final s in widget.scenes) {
+        if (s.id == want) {
+          match = s;
+          break;
+        }
+      }
+    }
+    match ??= widget.scenes.isEmpty ? null : widget.scenes.first;
+    if (match == null) {
+      _id = 'scn-${DateTime.now().millisecondsSinceEpoch}';
+      _draft = SceneDraft(name: 'Nieuwe Scene', icon: 'star', entries: []);
+      return;
+    }
+    _id = match.id;
+    _draft = SceneDraft.fromScene(match, widget.config);
   }
 
-  SceneDraft? get _draft =>
-      _selectedId == null ? null : _drafts[_selectedId];
+  bool get _atSheetRoot => _pane == _EditPane.overview;
 
-  void _touch() => setState(() {});
+  bool get _readyToSave =>
+      _draft.name.trim().isNotEmpty && _draft.entries.isNotEmpty;
+
+  void _openPane(_EditPane pane) {
+    setState(() {
+      _paneSnapshot = _draft.copy();
+      _pane = pane;
+    });
+  }
+
+  void _leavePane({required bool revert}) {
+    setState(() {
+      if (revert && _paneSnapshot != null) {
+        _draft = _paneSnapshot!;
+      }
+      _paneSnapshot = null;
+      _pane = _EditPane.overview;
+    });
+  }
+
+  String? _paneError(_EditPane pane) {
+    switch (pane) {
+      case _EditPane.overview:
+        return null;
+      case _EditPane.name:
+        if (_draft.name.trim().isEmpty) return 'Vul een naam in.';
+        return null;
+      case _EditPane.icon:
+        return null;
+      case _EditPane.devices:
+        if (_draft.entries.isEmpty) return 'Kies minstens één apparaat.';
+        return null;
+    }
+  }
+
+  void _savePane() {
+    final err = _paneError(_pane);
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: LuxeColors.danger,
+          behavior: SnackBarBehavior.floating,
+          shape: const StadiumBorder(),
+          content: Text(err),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _paneSnapshot = null;
+      _pane = _EditPane.overview;
+    });
+  }
 
   SceneEntry _liveSnapshot(SceneEntry entry) {
     if (entry is MediaEntry) {
@@ -68,35 +138,9 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
     }
     return entry.snapshot(ref.read(busProvider));
   }
-  void _addScene() {
-    final id = 'scn-${DateTime.now().millisecondsSinceEpoch}';
-    final stub = Scene(
-      id: id,
-      name: 'Nieuwe Scene',
-      icon: 'star',
-      actions: const [],
-    );
-    setState(() {
-      _scenes = [..._scenes, stub];
-      _drafts[id] = SceneDraft(name: stub.name, icon: stub.icon, entries: []);
-      _selectedId = id;
-    });
-  }
-
-  void _deleteSelected() {
-    final id = _selectedId;
-    if (id == null) return;
-    setState(() {
-      _scenes = _scenes.where((s) => s.id != id).toList();
-      _drafts.remove(id);
-      _selectedId = _scenes.isNotEmpty ? _scenes.first.id : null;
-    });
-  }
 
   Future<void> _addDevices() async {
-    final draft = _draft;
-    if (draft == null) return;
-    final excluded = {for (final e in draft.entries) e.device.id};
+    final excluded = {for (final e in _draft.entries) e.device.id};
     final picked = await pickDevicesForScene(
       context,
       config: widget.config,
@@ -108,7 +152,7 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
       for (final d in picked) {
         final entry = d.defaultSceneEntry();
         if (entry == null) continue;
-        draft.entries.add(
+        _draft.entries.add(
           entry is MediaEntry
               ? entry.snapshotMedia(ref.read(mediaStateProvider)[d.id])
               : entry.snapshot(bus),
@@ -117,318 +161,295 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
     });
   }
 
-  void _replaceEntry(int i, SceneEntry next) {
-    final draft = _draft;
-    if (draft == null) return;
-    setState(() {
-      draft.entries[i] = next;
-    });
-  }
-
-  void _removeEntry(int i) {
-    final draft = _draft;
-    if (draft == null) return;
-    setState(() => draft.entries.removeAt(i));
-  }
-
-  void _snapshotAll() {
-    final draft = _draft;
-    if (draft == null) return;
-    setState(() {
-      for (int i = 0; i < draft.entries.length; i++) {
-        draft.entries[i] = _liveSnapshot(draft.entries[i]);
-      }
-    });
-  }
-
-  Future<void> _save() async {
+  Future<void> _delete() async {
+    if (widget.createNew) {
+      Navigator.of(context).pop();
+      return;
+    }
     setState(() => _saving = true);
     try {
-      // Fold drafts back into scene payloads.
-      final out = <Scene>[];
-      for (final s in _scenes) {
-        final d = _drafts[s.id];
-        if (d == null) {
-          out.add(s);
-          continue;
-        }
-        out.add(d.toScene(s.id));
-      }
-      final api = ref.read(sceneApiProvider);
-      if (widget.scope == SceneScope.global) {
-        await api.saveGlobal(out);
-      } else if (widget.roomId != null) {
-        await api.saveRoom(widget.roomId!, out);
-      }
-      ref.invalidate(configProvider);
+      final out = widget.scenes.where((s) => s.id != _id).toList();
+      await _persist(out);
       if (!mounted) return;
       Navigator.of(context).pop(out);
     } catch (err) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: LuxeColors.danger,
-          behavior: SnackBarBehavior.floating,
-          shape: const StadiumBorder(),
-          content: Text('Opslaan mislukt: $err'),
-        ),
-      );
+      _showSaveError(err);
     } finally {
       if (mounted) setState(() => _saving = false);
     }
   }
 
+  Future<void> _save() async {
+    if (!_readyToSave) return;
+    setState(() => _saving = true);
+    try {
+      final edited = _draft.toScene(_id);
+      final out = [...widget.scenes];
+      final idx = out.indexWhere((s) => s.id == _id);
+      if (idx >= 0) {
+        out[idx] = edited;
+      } else {
+        out.add(edited);
+      }
+      await _persist(out);
+      if (!mounted) return;
+      Navigator.of(context).pop(out);
+    } catch (err) {
+      if (!mounted) return;
+      _showSaveError(err);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _persist(List<Scene> out) async {
+    final api = ref.read(sceneApiProvider);
+    if (widget.scope == SceneScope.global) {
+      await api.saveGlobal(out);
+    } else if (widget.roomId != null) {
+      await api.saveRoom(widget.roomId!, out);
+    }
+    ref.invalidate(configProvider);
+  }
+
+  void _showSaveError(Object err) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: LuxeColors.danger,
+        behavior: SnackBarBehavior.floating,
+        shape: const StadiumBorder(),
+        content: Text('Opslaan mislukt: $err'),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
-    // Bounded height avoids Flexible + min Column layout loops (Flutter web).
     final sheetHeight = (mq.size.height * 0.92 - mq.viewInsets.bottom)
         .clamp(320.0, mq.size.height * 0.92);
-    return SizedBox(
-      height: sheetHeight,
-      child: Container(
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
-          color: LuxeColors.cream,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-          boxShadow: LuxeShadows.lift,
-        ),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            children: [
-              _buildHandle(),
-              _buildHeader(),
-              _buildScenePickerRail(),
-              Divider(height: 1, color: LuxeColors.lineSoft),
-              Expanded(child: _buildEditor()),
-              _buildFooter(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHandle() => Padding(
-        padding: EdgeInsets.only(top: 10),
-        child: Container(
-          width: 48,
-          height: 5,
-          decoration: BoxDecoration(
-            color: LuxeColors.inkFaint.withValues(alpha: 0.4),
-            borderRadius: BorderRadius.circular(4),
-          ),
-        ),
-      );
-
-  Widget _buildHeader() => Padding(
-        padding: EdgeInsets.fromLTRB(28, 16, 16, 18),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.scope == SceneScope.global
-                        ? 'SCENES · HOOFDPAGINA'
-                        : 'SCENES · KAMER',
-                    style: TextStyle(
-                      color: LuxeColors.inkSoft,
-                      fontSize: 11,
-                      letterSpacing: 2.2,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Beheer jouw sferen',
-                    style: Theme.of(context).textTheme.displayMedium,
-                  ),
-                ],
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.close_rounded),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ],
-        ),
-      );
-
-  static const _sceneChipHeight = 76.0;
-  static const _sceneListHeight = 84.0;
-
-  Widget _buildScenePickerRail() {
-    final phone = context.isPhone;
-    return ColoredBox(
-      color: LuxeColors.surfaceDim.withValues(alpha: 0.55),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          0,
-          phone ? 18 : 14,
-          0,
-          phone ? 36 : 28,
-        ),
-        child: SizedBox(
-          height: _sceneListHeight,
-          child: _buildSceneList(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSceneList() {
-    return ListView.separated(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      itemCount: _scenes.length + 1,
-      separatorBuilder: (_, __) => const SizedBox(width: 10),
-      itemBuilder: (context, i) {
-        if (i == _scenes.length) return _addTile();
-        final s = _scenes[i];
-        final draft = _drafts[s.id];
-        final name = draft?.name ?? s.name;
-        final icon = draft?.icon ?? s.icon;
-        final selected = s.id == _selectedId;
-        return _chip(
-          label: name,
-          icon: sceneIconFor(icon),
-          selected: selected,
-          onTap: () => setState(() => _selectedId = s.id),
-        );
+    return PopScope(
+      canPop: _atSheetRoot,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _leavePane(revert: true);
       },
-    );
-  }
-
-  static const _sceneChipShadow = [
-    BoxShadow(color: Color(0x0A000000), blurRadius: 8, offset: Offset(0, 2)),
-    BoxShadow(color: Color(0x0C000000), blurRadius: 16, offset: Offset(0, 6)),
-  ];
-
-  Widget _chip({
-    required String label,
-    required IconData icon,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: Duration(milliseconds: 160),
-        width: 130,
-        height: _sceneChipHeight,
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(18),
-          color: selected ? LuxeColors.ink : LuxeColors.surface,
-          border: Border.all(color: LuxeColors.lineSoft),
-          boxShadow: _sceneChipShadow,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Icon(icon,
-                size: 18,
-                color: selected ? LuxeColors.brassGlow : LuxeColors.ink),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: selected ? LuxeColors.onInk : LuxeColors.ink,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _addTile() => SizedBox(
-        height: _sceneChipHeight,
-        child: GestureDetector(
-        onTap: _addScene,
+      child: SizedBox(
+        height: sheetHeight,
         child: Container(
-          width: 88,
-          height: _sceneChipHeight,
+          clipBehavior: Clip.antiAlias,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: LuxeColors.ink.withValues(alpha: 0.2),
-            ),
+            color: LuxeColors.cream,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+            boxShadow: LuxeShadows.lift,
           ),
-          child: const Center(
+          child: SafeArea(
+            top: false,
             child: Column(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.add_rounded, size: 22),
-                SizedBox(height: 4),
-                Text(
-                  'NIEUW',
-                  style: TextStyle(
-                    fontSize: 10,
-                    letterSpacing: 1.8,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
+                _header(),
+                Expanded(child: _editor()),
+                _footer(),
               ],
             ),
           ),
         ),
       ),
     );
+  }
 
-  Widget _buildEditor() {
-    final draft = _draft;
-    final phone = context.isPhone;
-    final hPad = context.listHPad;
-    if (draft == null) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(48),
-          child: Text('Nog geen scenes. Tik op Nieuw om te beginnen.'),
+  Widget _header() {
+    final name = _draft.name.trim();
+    final overviewTitle = name.isNotEmpty ? name : 'Scene';
+    final (title, infoTitle, infoBody) = switch (_pane) {
+      _EditPane.overview => (
+          overviewTitle,
+          'Scene',
+          widget.scope == SceneScope.global
+              ? 'Overkoepelende scene voor het hele huis. Naam, icoon en apparaten moeten ingevuld zijn om op te slaan.'
+              : 'Kamer-scene. Naam, icoon en apparaten moeten ingevuld zijn om op te slaan.',
         ),
-      );
-    }
-    final roomGroups = groupSceneEntriesByRoom(widget.config, draft.entries);
+      _EditPane.name => (
+          'Naam',
+          'Naam',
+          'Hoe deze scene in de lijst heet.',
+        ),
+      _EditPane.icon => (
+          'Icoon',
+          'Icoon',
+          'Kies een icoon zodat de scene herkenbaar is in de strip.',
+        ),
+      _EditPane.devices => (
+          'Apparaten',
+          'Apparaten',
+          'Zet elk apparaat op de stand die deze scene moet activeren. '
+              'Optioneel: wachttijd vóór een apparaat, of huidige stand overnemen.',
+        ),
+    };
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
+      child: SizedBox(
+        height: HeaderIconButton.size,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            IgnorePointer(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: HeaderIconButton.size + 8),
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: LuxeColors.ink,
+                    height: 1.25,
+                  ),
+                ),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: LuxeInfoIconButton(title: infoTitle, body: infoBody),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: BackPill(
+                onTap: () {
+                  if (_atSheetRoot) {
+                    Navigator.of(context).pop();
+                    return;
+                  }
+                  _leavePane(revert: true);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _editor() {
+    return switch (_pane) {
+      _EditPane.overview => _overview(),
+      _EditPane.name => _namePane(),
+      _EditPane.icon => _iconPane(),
+      _EditPane.devices => _devicesPane(),
+    };
+  }
+
+  Widget _overview() {
+    final n = _draft.entries.length;
     return ListView(
-      padding: EdgeInsets.fromLTRB(hPad, 22, hPad, 24),
+      padding: const EdgeInsets.fromLTRB(22, 12, 22, 16),
+      children: [
+        GlassCard(
+          radius: 16,
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              _SettingRow(
+                title: 'Naam',
+                subtitle: _draft.name.trim().isEmpty
+                    ? 'Geen naam'
+                    : _draft.name.trim(),
+                done: _draft.name.trim().isNotEmpty,
+                onTap: () => _openPane(_EditPane.name),
+              ),
+              Divider(height: 1, indent: 16, color: LuxeColors.lineSoft),
+              _SettingRow(
+                title: 'Icoon',
+                subtitle: _draft.icon == null || _draft.icon!.isEmpty
+                    ? 'Geen icoon'
+                    : 'Gekozen',
+                leading: Icon(
+                  sceneIconFor(_draft.icon),
+                  size: 22,
+                  color: LuxeColors.ink,
+                ),
+                done: _draft.icon != null && _draft.icon!.isNotEmpty,
+                onTap: () => _openPane(_EditPane.icon),
+              ),
+              Divider(height: 1, indent: 16, color: LuxeColors.lineSoft),
+              _SettingRow(
+                title: 'Apparaten',
+                subtitle: n == 0
+                    ? 'Geen apparaten'
+                    : (n == 1 ? '1 apparaat' : '$n apparaten'),
+                done: n > 0,
+                onTap: () => _openPane(_EditPane.devices),
+              ),
+            ],
+          ),
+        ),
+        if (!widget.createNew) ...[
+          const SizedBox(height: 12),
+          TextButton.icon(
+            icon:
+                Icon(Icons.delete_outline, size: 18, color: LuxeColors.danger),
+            label: Text(
+              'Scene verwijderen',
+              style: TextStyle(color: LuxeColors.danger),
+            ),
+            onPressed: _saving ? null : _delete,
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _namePane() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
       children: [
         _NameField(
-          key: ValueKey('name-$_selectedId'),
-          initial: draft.name,
-          onChanged: (v) {
-            draft.name = v;
-            _touch();
-          },
+          key: ValueKey('name-$_id'),
+          initial: _draft.name,
+          onChanged: (v) => setState(() => _draft.name = v),
         ),
-        const SizedBox(height: 18),
+      ],
+    );
+  }
+
+  Widget _iconPane() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+      children: [
         _IconPicker(
-          selected: draft.icon,
-          onSelected: (name) {
-            draft.icon = name;
-            _touch();
-          },
+          selected: _draft.icon,
+          onSelected: (name) => setState(() => _draft.icon = name),
         ),
-        SizedBox(height: 22),
+      ],
+    );
+  }
+
+  Widget _devicesPane() {
+    final phone = context.isPhone;
+    final roomGroups = groupSceneEntriesByRoom(widget.config, _draft.entries);
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(22, 12, 22, 16),
+      children: [
         if (phone)
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('APPARATEN IN DEZE SCENE', style: _kSectionStyle),
-              if (draft.entries.isNotEmpty) ...[
-                const SizedBox(height: 6),
+              if (_draft.entries.isNotEmpty)
                 TextButton.icon(
                   icon: const Icon(Icons.download_rounded, size: 18),
                   label: const Text('Huidige stand'),
-                  onPressed: _snapshotAll,
+                  onPressed: () {
+                    setState(() {
+                      for (int i = 0; i < _draft.entries.length; i++) {
+                        _draft.entries[i] = _liveSnapshot(_draft.entries[i]);
+                      }
+                    });
+                  },
                 ),
-              ],
             ],
           )
         else
@@ -436,16 +457,22 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
             children: [
               Text('APPARATEN IN DEZE SCENE', style: _kSectionStyle),
               const Spacer(),
-              if (draft.entries.isNotEmpty)
+              if (_draft.entries.isNotEmpty)
                 TextButton.icon(
                   icon: const Icon(Icons.download_rounded, size: 18),
                   label: const Text('Huidige stand'),
-                  onPressed: _snapshotAll,
+                  onPressed: () {
+                    setState(() {
+                      for (int i = 0; i < _draft.entries.length; i++) {
+                        _draft.entries[i] = _liveSnapshot(_draft.entries[i]);
+                      }
+                    });
+                  },
                 ),
             ],
           ),
         SizedBox(height: phone ? 10 : 6),
-        if (draft.entries.isEmpty)
+        if (_draft.entries.isEmpty)
           _EmptyHint(onAdd: _addDevices)
         else ...[
           for (final group in roomGroups)
@@ -456,65 +483,86 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
               children: [
                 for (final i in group.indices)
                   _EntryCard(
-                    key: ValueKey(
-                        'entry-$_selectedId-${draft.entries[i].device.id}'),
-                    entry: draft.entries[i],
+                    key: ValueKey('entry-$_id-${_draft.entries[i].device.id}'),
+                    entry: _draft.entries[i],
                     embedded: true,
-                    onChanged: (e) => _replaceEntry(i, e),
-                    onRemove: () => _removeEntry(i),
-                    onSnapshot: () =>
-                        _replaceEntry(i, _liveSnapshot(draft.entries[i])),
+                    onChanged: (e) => setState(() => _draft.entries[i] = e),
+                    onRemove: () => setState(() => _draft.entries.removeAt(i)),
+                    onSnapshot: () => setState(
+                      () => _draft.entries[i] =
+                          _liveSnapshot(_draft.entries[i]),
+                    ),
                   ),
               ],
             ),
           const SizedBox(height: 10),
           _AddDeviceButton(onTap: _addDevices),
         ],
-        const SizedBox(height: 16),
-        TextButton.icon(
-          icon: Icon(Icons.delete_outline,
-              size: 18, color: LuxeColors.danger),
-          label: Text('Scene verwijderen',
-              style: TextStyle(color: LuxeColors.danger)),
-          onPressed: _deleteSelected,
-        ),
       ],
     );
   }
 
-  Widget _buildFooter() {
+  Widget _footer() {
+    if (_pane != _EditPane.overview) {
+      return _footerButtons(
+        cancelLabel: 'Annuleren',
+        onCancel: _saving ? null : () => _leavePane(revert: true),
+        saveLabel: 'Opslaan',
+        onSave: _saving ? null : _savePane,
+      );
+    }
+    return _footerButtons(
+      cancelLabel: 'Annuleren',
+      onCancel: _saving ? null : () => Navigator.of(context).pop(),
+      saveLabel: 'Scene opslaan',
+      onSave: (_saving || !_readyToSave) ? null : _save,
+    );
+  }
+
+  Widget _footerButtons({
+    required String cancelLabel,
+    required VoidCallback? onCancel,
+    required String saveLabel,
+    required VoidCallback? onSave,
+  }) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(24, 12, 24, 18),
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 18),
       child: Row(
         children: [
           Expanded(
             child: OutlinedButton(
-              onPressed: _saving ? null : () => Navigator.of(context).pop(),
+              onPressed: onCancel,
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size.fromHeight(52),
                 shape: const StadiumBorder(),
               ),
-              child: const Text('Annuleren'),
+              child: Text(cancelLabel),
             ),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: FilledButton(
-              onPressed: _saving ? null : _save,
+              onPressed: onSave,
               style: FilledButton.styleFrom(
                 backgroundColor: LuxeColors.ink,
                 foregroundColor: LuxeColors.onInk,
+                disabledBackgroundColor:
+                    LuxeColors.ink.withValues(alpha: 0.28),
+                disabledForegroundColor:
+                    LuxeColors.onInk.withValues(alpha: 0.7),
                 minimumSize: const Size.fromHeight(52),
                 shape: const StadiumBorder(),
               ),
-              child: _saving
+              child: _saving && _pane == _EditPane.overview
                   ? SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: LuxeColors.onInk),
+                        strokeWidth: 2,
+                        color: LuxeColors.onInk,
+                      ),
                     )
-                  : const Text('Opslaan'),
+                  : Text(saveLabel),
             ),
           ),
         ],
@@ -530,7 +578,67 @@ final _kSectionStyle = TextStyle(
   color: LuxeColors.inkSoft,
 );
 
-/* --------------------------- sub-widgets ------------------------------ */
+class _SettingRow extends StatelessWidget {
+  const _SettingRow({
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.done = false,
+    this.leading,
+  });
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final bool done;
+  final Widget? leading;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+        child: Row(
+          children: [
+            if (leading != null) ...[
+              leading!,
+              const SizedBox(width: 12),
+            ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.bodyLarge),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            if (done)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Icon(
+                  Icons.check_rounded,
+                  size: 18,
+                  color: LuxeColors.brassDeep,
+                ),
+              ),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: LuxeColors.inkSoft,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class _EntryCard extends StatelessWidget {
   const _EntryCard({
@@ -557,8 +665,7 @@ class _EntryCard extends StatelessWidget {
       ),
       IconButton(
         tooltip: 'Huidige stand overnemen',
-        icon: Icon(Icons.download_rounded,
-            size: 20, color: LuxeColors.inkSoft),
+        icon: Icon(Icons.download_rounded, size: 20, color: LuxeColors.inkSoft),
         visualDensity: VisualDensity.compact,
         onPressed: onSnapshot,
       ),
@@ -612,7 +719,7 @@ class _EntryCard extends StatelessWidget {
     }
 
     return Container(
-      margin: EdgeInsets.only(top: 10),
+      margin: const EdgeInsets.only(top: 10),
       padding: const EdgeInsets.fromLTRB(16, 14, 10, 16),
       decoration: BoxDecoration(
         color: LuxeColors.surface.withValues(alpha: 0.9),
@@ -635,12 +742,11 @@ class _AddDeviceButton extends StatelessWidget {
       onTap: onTap,
       child: Container(
         width: double.infinity,
-        padding: EdgeInsets.symmetric(vertical: 18),
+        padding: const EdgeInsets.symmetric(vertical: 18),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: LuxeColors.ink.withValues(alpha: 0.25),
-            style: BorderStyle.solid,
           ),
         ),
         child: const Row(
@@ -648,11 +754,13 @@ class _AddDeviceButton extends StatelessWidget {
           children: [
             Icon(Icons.add_rounded, size: 18),
             SizedBox(width: 8),
-            Text('Apparaten toevoegen',
-                style: TextStyle(
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.3,
-                )),
+            Text(
+              'Apparaten toevoegen',
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.3,
+              ),
+            ),
           ],
         ),
       ),
@@ -666,7 +774,7 @@ class _EmptyHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: EdgeInsets.only(top: 8),
+      margin: const EdgeInsets.only(top: 8),
       padding: const EdgeInsets.fromLTRB(18, 22, 18, 22),
       decoration: BoxDecoration(
         color: LuxeColors.surface,
@@ -678,7 +786,7 @@ class _EmptyHint extends StatelessWidget {
         children: [
           Text('Nog geen apparaten',
               style: Theme.of(context).textTheme.titleLarge),
-          SizedBox(height: 6),
+          const SizedBox(height: 6),
           Text(
             'Voeg lampen, zonwering, airco en andere apparaten toe. Zet ze op '
             'de stand die deze scene moet activeren — of gebruik “Huidige '
@@ -733,12 +841,23 @@ class _NameFieldState extends State<_NameField> {
       controller: _ctl,
       textCapitalization: TextCapitalization.words,
       decoration: InputDecoration(
-        labelText: 'Naam van de scene',
+        hintText: 'Naam van de scene',
+        floatingLabelBehavior: FloatingLabelBehavior.never,
         filled: true,
         fillColor: LuxeColors.surface.withValues(alpha: 0.8),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: LuxeColors.line),
         ),
       ),
       onChanged: widget.onChanged,
@@ -753,42 +872,30 @@ class _IconPicker extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Wrap(
+      spacing: 10,
+      runSpacing: 10,
       children: [
-        Text('ICOON', style: _kSectionStyle),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            for (final name in kSceneIconPalette)
-              GestureDetector(
-                onTap: () => onSelected(name),
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: name == selected
-                        ? LuxeColors.ink
-                        : LuxeColors.surface,
-                    border: Border.all(
-                      color: name == selected
-                          ? LuxeColors.brass
-                          : LuxeColors.line,
-                    ),
-                  ),
-                  child: Icon(
-                    sceneIconFor(name),
-                    size: 20,
-                    color:
-                        name == selected ? LuxeColors.brassGlow : LuxeColors.ink,
-                  ),
+        for (final name in kSceneIconPalette)
+          GestureDetector(
+            onTap: () => onSelected(name),
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: name == selected ? LuxeColors.ink : LuxeColors.surface,
+                border: Border.all(
+                  color: name == selected ? LuxeColors.brass : LuxeColors.line,
                 ),
               ),
-          ],
-        ),
+              child: Icon(
+                sceneIconFor(name),
+                size: 20,
+                color: name == selected ? LuxeColors.brassGlow : LuxeColors.ink,
+              ),
+            ),
+          ),
       ],
     );
   }

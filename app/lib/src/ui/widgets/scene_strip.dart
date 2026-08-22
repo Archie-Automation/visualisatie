@@ -126,6 +126,7 @@ class SceneStrip extends ConsumerWidget {
         scenes: scenes,
         config: cfg,
         initiallySelectedId: initial?.id,
+        createNew: initial == null,
         scope: roomId == null ? SceneScope.global : SceneScope.room,
         roomId: roomId,
       ),

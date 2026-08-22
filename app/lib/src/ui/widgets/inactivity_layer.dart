@@ -247,7 +247,7 @@ class _ScreensaverOverlayState extends ConsumerState<ScreensaverOverlay> {
   }
 }
 
-/// Thermometer met klein huis — buitentemperatuur op de screensaver.
+/// Thermometer + huis — buitentemperatuur op de screensaver.
 class _OutdoorTempIcon extends StatelessWidget {
   const _OutdoorTempIcon({required this.size, required this.color});
 
@@ -256,24 +256,13 @@ class _OutdoorTempIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: size + 6,
-      height: size,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Icon(Icons.thermostat_outlined, size: size, color: color),
-          Positioned(
-            right: -2,
-            bottom: -1,
-            child: Icon(
-              Icons.home_outlined,
-              size: size * 0.42,
-              color: color,
-            ),
-          ),
-        ],
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.thermostat_outlined, size: size, color: color),
+        SizedBox(width: size * 0.18),
+        Icon(Icons.home_outlined, size: size, color: color),
+      ],
     );
   }
 }

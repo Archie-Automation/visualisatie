@@ -3,32 +3,45 @@ import 'package:flutter/services.dart';
 
 import '../../models.dart';
 import '../../theme.dart';
+import 'back_pill.dart';
 
 /// Brass “i” used in settings and editors. Opens [showLuxeInfoDialog].
+///
+/// Header placement matches [HeaderIconButton] (same size as Terug).
+/// Use [compact] next to in-card section labels.
 class LuxeInfoIconButton extends StatelessWidget {
   const LuxeInfoIconButton({
     super.key,
     required this.title,
     required this.body,
     this.tooltip = 'Uitleg',
+    this.compact = false,
   });
 
   final String title;
   final String body;
   final String tooltip;
+  final bool compact;
+
+  void _open(BuildContext context) {
+    showLuxeInfoDialog(context, title: title, message: body);
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (!compact) {
+      return HeaderIconButton(
+        icon: Icons.info_outline_rounded,
+        tooltip: tooltip,
+        onTap: () => _open(context),
+      );
+    }
     return IconButton(
       tooltip: tooltip,
       visualDensity: VisualDensity.compact,
       padding: EdgeInsets.zero,
       constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-      onPressed: () => showLuxeInfoDialog(
-        context,
-        title: title,
-        message: body,
-      ),
+      onPressed: () => _open(context),
       icon: Container(
         width: 28,
         height: 28,

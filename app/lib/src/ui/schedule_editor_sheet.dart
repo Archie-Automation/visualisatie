@@ -227,7 +227,6 @@ class _ScheduleEditorSheetState
   String? _selectedId;
   bool _saving = false;
   _EditPane _pane = _EditPane.overview;
-  final Set<_EditPane> _confirmed = {};
   _Draft? _paneSnapshot;
 
   @override
@@ -257,7 +256,6 @@ class _ScheduleEditorSheetState
     }
     _drafts = {match.id: _Draft.fromSchedule(match, widget.config)};
     _selectedId = match.id;
-    _confirmed.addAll({_EditPane.name, _EditPane.when, _EditPane.action});
     if (widget.lockedIds.contains(match.id)) {
       _pane = _EditPane.when;
     }
@@ -349,10 +347,7 @@ class _ScheduleEditorSheetState
     if (_themeLocked) return true;
     final d = _draft;
     if (d == null) return false;
-    return _confirmed.contains(_EditPane.name) &&
-        _confirmed.contains(_EditPane.when) &&
-        _confirmed.contains(_EditPane.action) &&
-        _paneError(_EditPane.name, d) == null &&
+    return _paneError(_EditPane.name, d) == null &&
         _paneError(_EditPane.when, d) == null &&
         _paneError(_EditPane.action, d) == null;
   }
@@ -373,7 +368,6 @@ class _ScheduleEditorSheetState
       return;
     }
     setState(() {
-      _confirmed.add(_pane);
       _paneSnapshot = null;
       _pane = _EditPane.overview;
     });
@@ -390,7 +384,7 @@ class _ScheduleEditorSheetState
           behavior: SnackBarBehavior.floating,
           shape: const StadiumBorder(),
           content: Text(
-            'Sla eerst naam, wanneer en actie elk apart op.',
+            'Vul naam, wanneer en actie in.',
           ),
         ),
       );
@@ -480,7 +474,7 @@ class _ScheduleEditorSheetState
       _EditPane.overview => (
           overviewTitle,
           'Tijdschema',
-          'Naam, wanneer het loopt, en wat er gebeurt. Tik een onderdeel aan, vul het in en sla dat onderdeel op. Daarna kun je het hele schema opslaan.',
+          'Naam, wanneer het loopt, en wat er gebeurt. Alle drie moeten ingevuld zijn om op te slaan.',
         ),
       _EditPane.name => (
           'Naam',
@@ -584,30 +578,24 @@ class _ScheduleEditorSheetState
               if (!locked) ...[
                 _SettingRow(
                   title: 'Naam',
-                  subtitle: _confirmed.contains(_EditPane.name)
-                      ? _nameSummary(d)
-                      : 'Tik om in te stellen',
-                  done: _confirmed.contains(_EditPane.name),
+                  subtitle: _nameSummary(d),
+                  done: _paneError(_EditPane.name, d) == null,
                   onTap: () => _openPane(_EditPane.name),
                 ),
                 Divider(height: 1, indent: 16, color: LuxeColors.lineSoft),
               ],
               _SettingRow(
                 title: 'Wanneer',
-                subtitle: _confirmed.contains(_EditPane.when) || locked
-                    ? _whenSummary(d)
-                    : 'Tik om in te stellen',
-                done: _confirmed.contains(_EditPane.when) || locked,
+                subtitle: _whenSummary(d),
+                done: locked || _paneError(_EditPane.when, d) == null,
                 onTap: () => _openPane(_EditPane.when),
               ),
               if (!locked) ...[
                 Divider(height: 1, indent: 16, color: LuxeColors.lineSoft),
                 _SettingRow(
                   title: 'Actie',
-                  subtitle: _confirmed.contains(_EditPane.action)
-                      ? _actionSummary(d, locked: locked)
-                      : 'Tik om in te stellen',
-                  done: _confirmed.contains(_EditPane.action),
+                  subtitle: _actionSummary(d, locked: locked),
+                  done: _paneError(_EditPane.action, d) == null,
                   onTap: () => _openPane(_EditPane.action),
                 ),
               ],
@@ -804,26 +792,11 @@ class _ScheduleEditorSheetState
         onSave: _saving ? null : _savePane,
       );
     }
-    return Column(
-      children: [
-        if (!_allSectionsReady)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
-            child: Text(
-              'Sla naam, wanneer en actie elk op voordat je het schema bewaart.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: LuxeColors.inkSoft,
-                  ),
-            ),
-          ),
-        _footerButtons(
-          cancelLabel: 'Annuleren',
-          onCancel: _saving ? null : () => Navigator.of(context).pop(),
-          saveLabel: 'Schema opslaan',
-          onSave: (_saving || !_allSectionsReady) ? null : _save,
-        ),
-      ],
+    return _footerButtons(
+      cancelLabel: 'Annuleren',
+      onCancel: _saving ? null : () => Navigator.of(context).pop(),
+      saveLabel: 'Schema opslaan',
+      onSave: (_saving || !_allSectionsReady) ? null : _save,
     );
   }
 
@@ -987,7 +960,7 @@ class _SubBlock extends StatelessWidget {
             if (trailing != null)
               Text(trailing!, style: Theme.of(context).textTheme.titleMedium),
             if (infoTitle != null && infoBody != null)
-              LuxeInfoIconButton(title: infoTitle!, body: infoBody!),
+              LuxeInfoIconButton(title: infoTitle!, body: infoBody!, compact: true),
           ],
         ),
         const SizedBox(height: 8),

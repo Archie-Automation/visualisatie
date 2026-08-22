@@ -7,7 +7,6 @@ import '../../api.dart';
 import '../../full_app_restart.dart';
 import '../../server_update.dart';
 import '../../software_version.dart';
-import '../../theme.dart';
 import 'reload_app_stub.dart'
     if (dart.library.html) 'reload_app_web.dart' as reload;
 
@@ -197,10 +196,16 @@ class _Banner extends StatelessWidget {
   final VoidCallback? onAction;
   final double? progress;
 
+  /// Always a dark strip — do not use theme ink/brass (light mode = dark-on-dark).
+  static const _bg = Color(0xFF2C2620);
+  static const _fg = Color(0xFFF5F0E6);
+  static const _accent = Color(0xFFE2C88A);
+  static const _track = Color(0x33F5F0E6);
+
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Color(0xFF3D3428),
+      color: _bg,
       child: SafeArea(
         bottom: false,
         child: Padding(
@@ -210,19 +215,19 @@ class _Banner extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.system_update_alt_rounded,
-                    color: LuxeColors.brass,
+                    color: _accent,
                     size: 20,
                   ),
-                  SizedBox(width: 10),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       message,
-                      style: TextStyle(
-                        color: LuxeColors.inkSoft,
+                      style: const TextStyle(
+                        color: _fg,
                         fontSize: 13,
-                        fontWeight: FontWeight.w500,
+                        fontWeight: FontWeight.w600,
                         height: 1.3,
                       ),
                     ),
@@ -232,8 +237,8 @@ class _Banner extends StatelessWidget {
                       onPressed: onAction,
                       child: Text(
                         actionLabel!,
-                        style: TextStyle(
-                          color: LuxeColors.brass,
+                        style: const TextStyle(
+                          color: _accent,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -241,14 +246,14 @@ class _Banner extends StatelessWidget {
                 ],
               ),
               if (progress != null) ...[
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(2),
                   child: LinearProgressIndicator(
                     value: progress! > 0 && progress! < 1 ? progress : null,
                     minHeight: 3,
-                    color: LuxeColors.brass,
-                    backgroundColor: LuxeColors.lineSoft,
+                    color: _accent,
+                    backgroundColor: _track,
                   ),
                 ),
               ],

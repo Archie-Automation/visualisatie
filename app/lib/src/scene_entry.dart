@@ -1378,4 +1378,12 @@ class SceneDraft {
       mediaActions: mediaActions,
     );
   }
+
+  SceneDraft copy() => SceneDraft(
+        name: name,
+        icon: icon,
+        entries: [...entries],
+        extras: [...extras],
+        mediaExtras: [...mediaExtras],
+      );
 }
