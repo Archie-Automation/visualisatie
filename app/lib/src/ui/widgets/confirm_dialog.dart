@@ -6,58 +6,28 @@ import '../../theme.dart';
 import 'back_pill.dart';
 
 /// Brass “i” used in settings and editors. Opens [showLuxeInfoDialog].
-///
-/// Header placement matches [HeaderIconButton] (same size as Terug).
-/// Use [compact] next to in-card section labels.
+/// Same 48×48 chrome as [BackPill] / [HeaderIconButton].
 class LuxeInfoIconButton extends StatelessWidget {
   const LuxeInfoIconButton({
     super.key,
     required this.title,
     required this.body,
     this.tooltip = 'Uitleg',
-    this.compact = false,
   });
 
   final String title;
   final String body;
   final String tooltip;
-  final bool compact;
-
-  void _open(BuildContext context) {
-    showLuxeInfoDialog(context, title: title, message: body);
-  }
 
   @override
   Widget build(BuildContext context) {
-    if (!compact) {
-      return HeaderIconButton(
+    return SizedBox(
+      width: HeaderIconButton.size,
+      height: HeaderIconButton.size,
+      child: HeaderIconButton(
         icon: Icons.info_outline_rounded,
         tooltip: tooltip,
-        onTap: () => _open(context),
-      );
-    }
-    return IconButton(
-      tooltip: tooltip,
-      visualDensity: VisualDensity.compact,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
-      onPressed: () => _open(context),
-      icon: Container(
-        width: 28,
-        height: 28,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: LuxeColors.brass.withValues(alpha: 0.14),
-          border: Border.all(
-            color: LuxeColors.brass.withValues(alpha: 0.4),
-          ),
-        ),
-        child: Icon(
-          Icons.info_outline_rounded,
-          size: 16,
-          color: LuxeColors.brassDeep,
-        ),
+        onTap: () => showLuxeInfoDialog(context, title: title, message: body),
       ),
     );
   }

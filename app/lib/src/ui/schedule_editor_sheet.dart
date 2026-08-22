@@ -76,6 +76,10 @@ class _Draft {
   List<_SceneStep> sceneSteps;
   List<SceneEntry> entries;
 
+  // Conditions (optional) — device status and/or logic bits, all must match.
+  List<SceneEntry> conditionEntries;
+  List<_LogicCond> logicConds;
+
   _Draft({
     required this.name,
     required this.enabled,
@@ -87,6 +91,8 @@ class _Draft {
     required this.actionKind,
     required this.sceneSteps,
     required this.entries,
+    required this.conditionEntries,
+    required this.logicConds,
   });
 
   _Draft copy() => _Draft(
@@ -100,6 +106,8 @@ class _Draft {
         actionKind: actionKind,
         sceneSteps: [for (final s in sceneSteps) s.copy()],
         entries: [...entries],
+        conditionEntries: [...conditionEntries],
+        logicConds: [for (final c in logicConds) c.copy()],
       )
         ..notBefore = notBefore
         ..notAfter = notAfter;
@@ -115,6 +123,8 @@ class _Draft {
         actionKind: _ActionKind.scene,
         sceneSteps: [],
         entries: [],
+        conditionEntries: [],
+        logicConds: [],
       );
 
   static _Draft fromSchedule(Schedule s, HouseConfig cfg) {
@@ -149,6 +159,24 @@ class _Draft {
       draft
         ..actionKind = _ActionKind.devices
         ..entries = _reconstructEntries(a.actions, cfg);
+    }
+    final condEntries = <SceneAction>[];
+    for (final c in s.conditions) {
+      if (c is ScheduleDeviceCondition) {
+        condEntries.addAll(c.actions);
+      } else if (c is ScheduleLogicCondition) {
+        final d = cfg.deviceById(c.deviceId);
+        final label = _logicButtonLabel(d, c.buttonId);
+        draft.logicConds.add(_LogicCond(
+          deviceId: c.deviceId,
+          buttonId: c.buttonId,
+          label: label,
+          equals: c.equals,
+        ));
+      }
+    }
+    if (condEntries.isNotEmpty) {
+      draft.conditionEntries = _reconstructEntries(condEntries, cfg);
     }
     return draft;
   }
@@ -189,12 +217,27 @@ class _Draft {
       }
       action = ScheduleActionsAction(actions: acts);
     }
+    final conditions = <ScheduleCondition>[
+      for (final e in conditionEntries)
+        if (e.toActions().isNotEmpty)
+          ScheduleDeviceCondition(
+            deviceId: e.device.id,
+            actions: e.withDelayMs(0).toActions(),
+          ),
+      for (final c in logicConds)
+        ScheduleLogicCondition(
+          deviceId: c.deviceId,
+          buttonId: c.buttonId,
+          equals: c.equals,
+        ),
+    ];
     return Schedule(
       id: id,
       name: name.trim().isEmpty ? 'Tijdschema' : name.trim(),
       enabled: enabled,
       trigger: trigger,
       action: action,
+      conditions: conditions,
     );
   }
 
@@ -219,7 +262,39 @@ class _Draft {
 
 enum _TriggerKind { time, astro }
 enum _ActionKind { scene, devices }
-enum _EditPane { overview, name, when, action }
+enum _EditPane { overview, name, when, condition, action }
+
+class _LogicCond {
+  String deviceId;
+  String buttonId;
+  String label;
+  bool equals;
+  _LogicCond({
+    required this.deviceId,
+    required this.buttonId,
+    required this.label,
+    required this.equals,
+  });
+  _LogicCond copy() => _LogicCond(
+        deviceId: deviceId,
+        buttonId: buttonId,
+        label: label,
+        equals: equals,
+      );
+}
+
+String _logicButtonLabel(Device? d, String buttonId) {
+  if (d == null) return 'Logica';
+  final cfg = d.raw['universal'] as Map?;
+  final buttons = cfg?['buttons'] as List? ?? const [];
+  for (final b in buttons) {
+    if (b is Map && b['id'] == buttonId) {
+      final name = (b['label'] as String?)?.trim();
+      if (name != null && name.isNotEmpty) return '${d.name} · $name';
+    }
+  }
+  return d.name;
+}
 
 class _ScheduleEditorSheetState
     extends ConsumerState<ScheduleEditorSheet> {
@@ -236,6 +311,7 @@ class _ScheduleEditorSheetState
       final id = 'sch-${DateTime.now().millisecondsSinceEpoch}';
       _drafts = {id: _Draft.fresh()};
       _selectedId = id;
+      _pane = _EditPane.name;
       return;
     }
     Schedule? match;
@@ -301,17 +377,71 @@ class _ScheduleEditorSheetState
     }
   }
 
+  bool get _createFlow => widget.createNew && !_themeLocked;
+
+  List<_EditPane> get _createSteps => const [
+        _EditPane.name,
+        _EditPane.when,
+        _EditPane.condition,
+        _EditPane.action,
+      ];
+
   void _openPane(_EditPane pane) {
     final d = _draft;
     if (d == null) return;
+    if (!_themeLocked && !_canOpen(pane, d)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: LuxeColors.danger,
+          behavior: SnackBarBehavior.floating,
+          shape: const StadiumBorder(),
+          content: Text(_lockHint(pane)),
+        ),
+      );
+      return;
+    }
     setState(() {
       _paneSnapshot = d.copy();
       _pane = pane;
     });
   }
 
+  bool _canOpen(_EditPane pane, _Draft d) {
+    switch (pane) {
+      case _EditPane.overview:
+      case _EditPane.name:
+        return true;
+      case _EditPane.when:
+        return _paneError(_EditPane.name, d) == null;
+      case _EditPane.condition:
+      case _EditPane.action:
+        return _paneError(_EditPane.name, d) == null &&
+            _paneError(_EditPane.when, d) == null;
+    }
+  }
+
+  String _lockHint(_EditPane pane) {
+    if (pane == _EditPane.when) return 'Vul eerst de naam in.';
+    return 'Vul eerst naam en wanneer in.';
+  }
+
   void _leavePane({required bool revert}) {
     final id = _selectedId;
+    if (_createFlow) {
+      final i = _createSteps.indexOf(_pane);
+      if (i <= 0) {
+        Navigator.of(context).pop();
+        return;
+      }
+      setState(() {
+        if (revert && id != null && _paneSnapshot != null) {
+          _drafts[id] = _paneSnapshot!;
+        }
+        _pane = _createSteps[i - 1];
+        _paneSnapshot = _drafts[id]?.copy();
+      });
+      return;
+    }
     setState(() {
       if (revert && id != null && _paneSnapshot != null) {
         _drafts[id] = _paneSnapshot!;
@@ -330,6 +460,8 @@ class _ScheduleEditorSheetState
         return null;
       case _EditPane.when:
         if (!d.days.any((x) => x)) return 'Kies minstens één dag.';
+        return null;
+      case _EditPane.condition:
         return null;
       case _EditPane.action:
         if (d.actionKind == _ActionKind.scene) {
@@ -365,6 +497,18 @@ class _ScheduleEditorSheetState
           content: Text(err),
         ),
       );
+      return;
+    }
+    if (_createFlow) {
+      final i = _createSteps.indexOf(_pane);
+      if (i < 0 || i >= _createSteps.length - 1) {
+        _save();
+        return;
+      }
+      setState(() {
+        _paneSnapshot = d.copy();
+        _pane = _createSteps[i + 1];
+      });
       return;
     }
     setState(() {
@@ -429,8 +573,9 @@ class _ScheduleEditorSheetState
   bool get _themeLocked => widget.lockedIds.contains(_selectedId);
 
   bool get _atSheetRoot =>
-      _pane == _EditPane.overview ||
-      (_themeLocked && _pane == _EditPane.when);
+      (!_createFlow && _pane == _EditPane.overview) ||
+      (_themeLocked && _pane == _EditPane.when) ||
+      (_createFlow && _pane == _EditPane.name);
 
   @override
   Widget build(BuildContext context) {
@@ -474,7 +619,8 @@ class _ScheduleEditorSheetState
       _EditPane.overview => (
           overviewTitle,
           'Tijdschema',
-          'Naam, wanneer het loopt, en wat er gebeurt. Alle drie moeten ingevuld zijn om op te slaan.',
+          'Naam, wanneer, optionele voorwaarde, en wat er gebeurt. '
+              'Nieuw schema: naam → wanneer → voorwaarde → actie, daarna wordt het bewaard.',
         ),
       _EditPane.name => (
           'Naam',
@@ -491,6 +637,13 @@ class _ScheduleEditorSheetState
                   'Verschuiving: minuten voor of na het astro-event.\n'
                   'Dagen: op welke weekdagen het mag lopen.\n'
                   'Begrenzing: optioneel venster, bijvoorbeeld niet voor 18:00.',
+        ),
+      _EditPane.condition => (
+          'Voorwaarde',
+          'Voorwaarde',
+          'Optioneel. Het schema vuurt alleen als élke voorwaarde op dat moment klopt.\n\n'
+              'Apparaat: huidige stand (aan/uit, stand, …).\n'
+              'Logica: status van een logisch bit of universele knop.',
         ),
       _EditPane.action => (
           'Actie',
@@ -561,6 +714,7 @@ class _ScheduleEditorSheetState
       _EditPane.overview => _overview(d),
       _EditPane.name => _namePane(d),
       _EditPane.when => _whenPane(d),
+      _EditPane.condition => _conditionPane(d),
       _EditPane.action => _actionPane(d),
     };
   }
@@ -588,14 +742,24 @@ class _ScheduleEditorSheetState
                 title: 'Wanneer',
                 subtitle: _whenSummary(d),
                 done: locked || _paneError(_EditPane.when, d) == null,
+                locked: !locked && !_canOpen(_EditPane.when, d),
                 onTap: () => _openPane(_EditPane.when),
               ),
               if (!locked) ...[
                 Divider(height: 1, indent: 16, color: LuxeColors.lineSoft),
                 _SettingRow(
+                  title: 'Voorwaarde',
+                  subtitle: _conditionSummary(d),
+                  done: true,
+                  locked: !_canOpen(_EditPane.condition, d),
+                  onTap: () => _openPane(_EditPane.condition),
+                ),
+                Divider(height: 1, indent: 16, color: LuxeColors.lineSoft),
+                _SettingRow(
                   title: 'Actie',
                   subtitle: _actionSummary(d, locked: locked),
                   done: _paneError(_EditPane.action, d) == null,
+                  locked: !_canOpen(_EditPane.action, d),
                   onTap: () => _openPane(_EditPane.action),
                 ),
               ],
@@ -691,6 +855,45 @@ class _ScheduleEditorSheetState
     );
   }
 
+  Widget _conditionPane(_Draft d) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+      children: [
+        Text(
+          'Alleen uitvoeren als deze status klopt. Leeg = altijd.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 14),
+        _SubBlock(
+          title: 'APPARATEN',
+          infoTitle: 'Apparaat',
+          infoBody:
+              'Kies een apparaat en zet de stand die op het vuurtijdstip '
+              'waar moet zijn, bijvoorbeeld lamp aan.',
+          child: _DevicesActionEditor(
+            draft: d,
+            config: widget.config,
+            onTouch: () => setState(() {}),
+            conditionMode: true,
+          ),
+        ),
+        const SizedBox(height: 18),
+        _SubBlock(
+          title: 'LOGICA',
+          infoTitle: 'Logica',
+          infoBody:
+              'Status van een logische bit (universele knop). '
+              'Bijvoorbeeld: alleen als ‘thuis’ aan is.',
+          child: _LogicConditionEditor(
+            draft: d,
+            config: widget.config,
+            onTouch: () => setState(() {}),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _actionPane(_Draft d) {
     return ListView(
       padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
@@ -753,6 +956,13 @@ class _ScheduleEditorSheetState
     return '${d.astroEvent.label}$offStr  ·  $days';
   }
 
+  String _conditionSummary(_Draft d) {
+    final n = d.conditionEntries.length + d.logicConds.length;
+    if (n == 0) return 'Geen (altijd)';
+    if (n == 1) return '1 voorwaarde';
+    return '$n voorwaarden';
+  }
+
   String _actionSummary(_Draft d, {required bool locked}) {
     if (locked) {
       return _selectedId == kThemeLightOnId
@@ -782,6 +992,23 @@ class _ScheduleEditorSheetState
         onCancel: () => Navigator.of(context).pop(),
         saveLabel: 'Opslaan',
         onSave: _saving ? null : _save,
+      );
+    }
+    if (_createFlow) {
+      final last = _pane == _EditPane.action;
+      return _footerButtons(
+        cancelLabel: 'Annuleren',
+        onCancel: _saving
+            ? null
+            : () {
+                if (_pane == _EditPane.name) {
+                  Navigator.of(context).pop();
+                  return;
+                }
+                _leavePane(revert: true);
+              },
+        saveLabel: last ? 'Opslaan' : 'Volgende',
+        onSave: _saving ? null : (last ? _save : _savePane),
       );
     }
     if (_pane != _EditPane.overview) {
@@ -834,7 +1061,9 @@ class _ScheduleEditorSheetState
                 minimumSize: const Size.fromHeight(52),
                 shape: const StadiumBorder(),
               ),
-              child: _saving && _pane == _EditPane.overview
+              child: _saving &&
+                      (_pane == _EditPane.overview ||
+                          (_createFlow && _pane == _EditPane.action))
                   ? SizedBox(
                       width: 20,
                       height: 20,
@@ -885,50 +1114,55 @@ class _SettingRow extends StatelessWidget {
     required this.subtitle,
     required this.onTap,
     this.done = false,
+    this.locked = false,
   });
   final String title;
   final String subtitle;
   final VoidCallback onTap;
   final bool done;
+  final bool locked;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: Theme.of(context).textTheme.bodyLarge),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-              ),
-            ),
-            if (done)
-              Padding(
-                padding: const EdgeInsets.only(right: 4),
-                child: Icon(
-                  Icons.check_rounded,
-                  size: 18,
-                  color: LuxeColors.brassDeep,
+    return Opacity(
+      opacity: locked ? 0.45 : 1,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: Theme.of(context).textTheme.bodyLarge),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
                 ),
               ),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 20,
-              color: LuxeColors.inkSoft,
-            ),
-          ],
+              if (done && !locked)
+                Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Icon(
+                    Icons.check_rounded,
+                    size: 18,
+                    color: LuxeColors.brassDeep,
+                  ),
+                ),
+              Icon(
+                locked ? Icons.lock_outline_rounded : Icons.chevron_right_rounded,
+                size: 20,
+                color: LuxeColors.inkSoft,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -960,7 +1194,7 @@ class _SubBlock extends StatelessWidget {
             if (trailing != null)
               Text(trailing!, style: Theme.of(context).textTheme.titleMedium),
             if (infoTitle != null && infoBody != null)
-              LuxeInfoIconButton(title: infoTitle!, body: infoBody!, compact: true),
+              LuxeInfoIconButton(title: infoTitle!, body: infoBody!),
           ],
         ),
         const SizedBox(height: 8),
@@ -1900,10 +2134,12 @@ class _DevicesActionEditor extends ConsumerStatefulWidget {
     required this.draft,
     required this.config,
     required this.onTouch,
+    this.conditionMode = false,
   });
   final _Draft draft;
   final HouseConfig config;
   final VoidCallback onTouch;
+  final bool conditionMode;
 
   @override
   ConsumerState<_DevicesActionEditor> createState() =>
@@ -1912,8 +2148,12 @@ class _DevicesActionEditor extends ConsumerStatefulWidget {
 
 class _DevicesActionEditorState
     extends ConsumerState<_DevicesActionEditor> {
+  List<SceneEntry> get _entries => widget.conditionMode
+      ? widget.draft.conditionEntries
+      : widget.draft.entries;
+
   Future<void> _pick() async {
-    final excluded = {for (final e in widget.draft.entries) e.device.id};
+    final excluded = {for (final e in _entries) e.device.id};
     final picked = await pickDevicesForScene(
       context,
       config: widget.config,
@@ -1924,14 +2164,14 @@ class _DevicesActionEditorState
     for (final d in picked) {
       final entry = d.defaultSceneEntry();
       if (entry == null) continue;
-      widget.draft.entries.add(entry.snapshot(bus));
+      _entries.add(entry.snapshot(bus));
     }
     widget.onTouch();
   }
 
   @override
   Widget build(BuildContext context) {
-    final entries = widget.draft.entries;
+    final entries = _entries;
     if (entries.isEmpty) {
       return Container(
         margin: EdgeInsets.only(top: 4),
@@ -1944,19 +2184,25 @@ class _DevicesActionEditorState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Nog geen apparaten',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text(
+              widget.conditionMode ? 'Geen apparaatvoorwaarde' : 'Nog geen apparaten',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
             SizedBox(height: 6),
             Text(
-              'Kies de apparaten die dit schema moet aansturen en zet ze op '
-              'de gewenste stand.',
+              widget.conditionMode
+                  ? 'Koppel een apparaatstand die waar moet zijn als het schema vuurt.'
+                  : 'Kies de apparaten die dit schema moet aansturen en zet ze op '
+                      'de gewenste stand.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 12),
             FilledButton.icon(
               onPressed: _pick,
               icon: const Icon(Icons.add_rounded),
-              label: const Text('Apparaten kiezen'),
+              label: Text(widget.conditionMode
+                  ? 'Apparaat kiezen'
+                  : 'Apparaten kiezen'),
               style: FilledButton.styleFrom(
                 backgroundColor: LuxeColors.ink,
                 foregroundColor: LuxeColors.onInk,
@@ -1974,6 +2220,7 @@ class _DevicesActionEditorState
             entry: entries[i],
             locationLabel:
                 widget.config.locationLabelForDevice(entries[i].device.id),
+            showDelay: !widget.conditionMode,
             onChanged: (e) {
               entries[i] = e;
               widget.onTouch();
@@ -1992,7 +2239,9 @@ class _DevicesActionEditorState
         OutlinedButton.icon(
           onPressed: _pick,
           icon: const Icon(Icons.add_rounded),
-          label: const Text('Apparaten toevoegen'),
+          label: Text(widget.conditionMode
+              ? 'Apparaat toevoegen'
+              : 'Apparaten toevoegen'),
           style: OutlinedButton.styleFrom(
             minimumSize: const Size.fromHeight(44),
             shape: const StadiumBorder(),
@@ -2003,6 +2252,269 @@ class _DevicesActionEditorState
   }
 }
 
+class _LogicConditionEditor extends StatelessWidget {
+  const _LogicConditionEditor({
+    required this.draft,
+    required this.config,
+    required this.onTouch,
+  });
+  final _Draft draft;
+  final HouseConfig config;
+  final VoidCallback onTouch;
+
+  Future<void> _pick(BuildContext context) async {
+    final taken = {
+      for (final c in draft.logicConds) '${c.deviceId}/${c.buttonId}',
+    };
+    final picked = await _pickLogicButtons(
+      context,
+      config: config,
+      exclude: taken,
+    );
+    if (picked == null || picked.isEmpty) return;
+    draft.logicConds.addAll(picked);
+    onTouch();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = draft.logicConds;
+    if (items.isEmpty) {
+      return Container(
+        margin: const EdgeInsets.only(top: 4),
+        padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
+        decoration: BoxDecoration(
+          color: LuxeColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: LuxeColors.lineSoft),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Geen logica', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 6),
+            Text(
+              'Koppel de status van een logische bit of universele knop.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: () => _pick(context),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('Logica kiezen'),
+              style: FilledButton.styleFrom(
+                backgroundColor: LuxeColors.ink,
+                foregroundColor: LuxeColors.onInk,
+                shape: const StadiumBorder(),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return Column(
+      children: [
+        for (int i = 0; i < items.length; i++)
+          Container(
+            margin: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.fromLTRB(14, 8, 4, 8),
+            decoration: BoxDecoration(
+              color: LuxeColors.surface.withValues(alpha: 0.9),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: LuxeColors.lineSoft),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    items[i].label,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                ),
+                SegmentedButton<bool>(
+                  showSelectedIcon: false,
+                  segments: const [
+                    ButtonSegment(value: true, label: Text('Aan')),
+                    ButtonSegment(value: false, label: Text('Uit')),
+                  ],
+                  selected: {items[i].equals},
+                  onSelectionChanged: (s) {
+                    items[i].equals = s.first;
+                    onTouch();
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, size: 20),
+                  onPressed: () {
+                    items.removeAt(i);
+                    onTouch();
+                  },
+                ),
+              ],
+            ),
+          ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          onPressed: () => _pick(context),
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Logica toevoegen'),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(44),
+            shape: const StadiumBorder(),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _LogicPick {
+  const _LogicPick({
+    required this.deviceId,
+    required this.buttonId,
+    required this.label,
+  });
+  final String deviceId;
+  final String buttonId;
+  final String label;
+}
+
+Future<List<_LogicCond>?> _pickLogicButtons(
+  BuildContext context, {
+  required HouseConfig config,
+  required Set<String> exclude,
+}) async {
+  final rows = <_LogicPick>[];
+  for (final d in config.allDevices) {
+    if (d.type != DeviceType.universal) continue;
+    final cfg = d.raw['universal'] as Map?;
+    final buttons = cfg?['buttons'] as List? ?? const [];
+    for (final b in buttons) {
+      if (b is! Map) continue;
+      final id = b['id'] as String? ?? '';
+      if (id.isEmpty) continue;
+      if (exclude.contains('${d.id}/$id')) continue;
+      final name = (b['label'] as String?)?.trim();
+      rows.add(_LogicPick(
+        deviceId: d.id,
+        buttonId: id,
+        label: name == null || name.isEmpty ? d.name : '${d.name} · $name',
+      ));
+    }
+  }
+  if (rows.isEmpty) {
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: LuxeColors.danger,
+          behavior: SnackBarBehavior.floating,
+          shape: const StadiumBorder(),
+          content: const Text('Geen logica geconfigureerd.'),
+        ),
+      );
+    }
+    return const [];
+  }
+  final selected = <String>{};
+  return showModalBottomSheet<List<_LogicCond>>(
+    context: context,
+    useSafeArea: true,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (ctx, setSt) {
+          return DraggableScrollableSheet(
+            initialChildSize: 0.7,
+            minChildSize: 0.4,
+            maxChildSize: 0.95,
+            expand: false,
+            builder: (ctx, scroll) => Container(
+              decoration: BoxDecoration(
+                color: LuxeColors.cream,
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 5,
+                    margin: const EdgeInsets.only(top: 10, bottom: 6),
+                    decoration: BoxDecoration(
+                      color: LuxeColors.inkFaint.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 6, 24, 10),
+                    child: Text(
+                      'Kies logica',
+                      style: Theme.of(ctx).textTheme.displayMedium,
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView.builder(
+                      controller: scroll,
+                      itemCount: rows.length,
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                      itemBuilder: (ctx, i) {
+                        final row = rows[i];
+                        final key = '${row.deviceId}/${row.buttonId}';
+                        final on = selected.contains(key);
+                        return CheckboxListTile(
+                          value: on,
+                          title: Text(row.label),
+                          onChanged: (v) => setSt(() {
+                            if (v == true) {
+                              selected.add(key);
+                            } else {
+                              selected.remove(key);
+                            }
+                          }),
+                        );
+                      },
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+                    child: FilledButton(
+                      onPressed: selected.isEmpty
+                          ? null
+                          : () {
+                              Navigator.of(ctx).pop([
+                                for (final row in rows)
+                                  if (selected.contains(
+                                      '${row.deviceId}/${row.buttonId}'))
+                                    _LogicCond(
+                                      deviceId: row.deviceId,
+                                      buttonId: row.buttonId,
+                                      label: row.label,
+                                      equals: true,
+                                    ),
+                              ]);
+                            },
+                      style: FilledButton.styleFrom(
+                        backgroundColor: LuxeColors.ink,
+                        foregroundColor: LuxeColors.onInk,
+                        minimumSize: const Size.fromHeight(48),
+                        shape: const StadiumBorder(),
+                      ),
+                      child: Text(selected.isEmpty
+                          ? 'Kies logica'
+                          : '${selected.length} toevoegen'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
+}
+
 class _DeviceEntryTile extends StatelessWidget {
   const _DeviceEntryTile({
     required this.entry,
@@ -2010,6 +2522,7 @@ class _DeviceEntryTile extends StatelessWidget {
     required this.onChanged,
     required this.onRemove,
     required this.onSnapshot,
+    this.showDelay = true,
   });
 
   final SceneEntry entry;
@@ -2017,6 +2530,7 @@ class _DeviceEntryTile extends StatelessWidget {
   final ValueChanged<SceneEntry> onChanged;
   final VoidCallback onRemove;
   final VoidCallback onSnapshot;
+  final bool showDelay;
 
   @override
   Widget build(BuildContext context) {
@@ -2040,10 +2554,11 @@ class _DeviceEntryTile extends StatelessWidget {
                   locationLabel: locationLabel,
                 ),
               ),
-              SceneEntryDelayToggleButton(
-                delayMs: entry.delayMs,
-                onChanged: (ms) => onChanged(entry.withDelayMs(ms)),
-              ),
+              if (showDelay)
+                SceneEntryDelayToggleButton(
+                  delayMs: entry.delayMs,
+                  onChanged: (ms) => onChanged(entry.withDelayMs(ms)),
+                ),
               IconButton(
                 tooltip: 'Huidige stand overnemen',
                 icon: const Icon(Icons.download_rounded, size: 20),

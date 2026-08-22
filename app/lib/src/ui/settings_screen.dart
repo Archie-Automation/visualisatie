@@ -1487,7 +1487,11 @@ class _ScheduleRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = schedule;
-    final meta = '${describeTrigger(s.trigger)} · ${describeAction(s.action, config)}';
+    final cond = s.conditions.isEmpty
+        ? ''
+        : ' · ${s.conditions.length} voorwaarde${s.conditions.length == 1 ? '' : 'n'}';
+    final meta =
+        '${describeTrigger(s.trigger)} · ${describeAction(s.action, config)}$cond';
     return InkWell(
       onTap: canEdit ? onEdit : null,
       child: Padding(
@@ -1523,7 +1527,6 @@ class _ScheduleRow extends StatelessWidget {
             if (locked)
               LuxeInfoIconButton(
                 title: 'Weergave',
-                compact: true,
                 body:
                     'Hier kun je alleen het tijdstip aanpassen. '
                     'Naam en actie (licht of donker) staan vast.',
@@ -1909,7 +1912,7 @@ class _SettingsSectionTitle extends StatelessWidget {
             ],
           ),
         ),
-        LuxeInfoIconButton(title: infoTitle, body: infoBody, compact: true),
+        LuxeInfoIconButton(title: infoTitle, body: infoBody),
         if (trailing != null) trailing!,
       ],
     );

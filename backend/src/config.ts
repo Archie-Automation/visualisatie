@@ -92,6 +92,17 @@ export function walkDevices(
   }
 }
 
+export function findDevice(
+  cfg: HouseConfig,
+  id: string
+): import("./types").Device | undefined {
+  let hit: import("./types").Device | undefined;
+  walkDevices(cfg, (d) => {
+    if (d.id === id) hit = d;
+  });
+  return hit;
+}
+
 /**
  * Collect every GA mentioned anywhere in the config – lights, shading,
  * climate, intercom, new device types (fireplace/ac/fan/universal) and
