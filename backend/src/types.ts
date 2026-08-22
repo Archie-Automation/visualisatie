@@ -1143,6 +1143,21 @@ export type ScheduleAction =
     }
   | { kind: "actions"; actions: SceneAction[] };
 
+/** Must match bus status at fire time (AND). Empty/absent = always run. */
+export type ScheduleCondition =
+  | {
+      kind: "device";
+      deviceId: string;
+      /** Expected write-shaped actions; evaluator reads the matching status GA. */
+      actions: SceneAction[];
+    }
+  | {
+      kind: "logic";
+      deviceId: string;
+      buttonId: string;
+      equals: boolean;
+    };
+
 export interface Schedule {
   id: string;
   name: string;
@@ -1150,6 +1165,8 @@ export interface Schedule {
   enabled: boolean;
   trigger: ScheduleTrigger;
   action: ScheduleAction;
+  /** All must match current device/logic status or the fire is skipped. */
+  conditions?: ScheduleCondition[];
   /** Populated by the scheduler after every fire; purely informational. */
   lastRun?: string; // ISO timestamp
 }

@@ -997,12 +997,77 @@ class ScheduleActionsAction extends ScheduleAction {
       };
 }
 
+sealed class ScheduleCondition {
+  const ScheduleCondition();
+  Map<String, dynamic> toJson();
+
+  static ScheduleCondition? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final j = Map<String, dynamic>.from(raw);
+    final kind = j['kind'] as String?;
+    if (kind == 'logic') {
+      return ScheduleLogicCondition(
+        deviceId: j['deviceId'] as String? ?? '',
+        buttonId: j['buttonId'] as String? ?? '',
+        equals: j['equals'] == true,
+      );
+    }
+    if (kind == 'device') {
+      final acts = ((j['actions'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((a) => SceneAction.fromJson(a.cast<String, dynamic>()))
+          .toList();
+      return ScheduleDeviceCondition(
+        deviceId: j['deviceId'] as String? ?? '',
+        actions: acts,
+      );
+    }
+    return null;
+  }
+}
+
+class ScheduleDeviceCondition extends ScheduleCondition {
+  final String deviceId;
+  final List<SceneAction> actions;
+  const ScheduleDeviceCondition({
+    required this.deviceId,
+    required this.actions,
+  });
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'kind': 'device',
+        'deviceId': deviceId,
+        'actions': actions.map((a) => a.toJson()).toList(),
+      };
+}
+
+class ScheduleLogicCondition extends ScheduleCondition {
+  final String deviceId;
+  final String buttonId;
+  final bool equals;
+  const ScheduleLogicCondition({
+    required this.deviceId,
+    required this.buttonId,
+    required this.equals,
+  });
+
+  @override
+  Map<String, dynamic> toJson() => {
+        'kind': 'logic',
+        'deviceId': deviceId,
+        'buttonId': buttonId,
+        'equals': equals,
+      };
+}
+
 class Schedule {
   final String id;
   final String name;
   final bool enabled;
   final ScheduleTrigger trigger;
   final ScheduleAction action;
+  final List<ScheduleCondition> conditions;
   final DateTime? lastRun;
 
   const Schedule({
@@ -1011,6 +1076,7 @@ class Schedule {
     required this.enabled,
     required this.trigger,
     required this.action,
+    this.conditions = const [],
     this.lastRun,
   });
 
@@ -1019,6 +1085,7 @@ class Schedule {
     bool? enabled,
     ScheduleTrigger? trigger,
     ScheduleAction? action,
+    List<ScheduleCondition>? conditions,
   }) =>
       Schedule(
         id: id,
@@ -1026,10 +1093,17 @@ class Schedule {
         enabled: enabled ?? this.enabled,
         trigger: trigger ?? this.trigger,
         action: action ?? this.action,
+        conditions: conditions ?? this.conditions,
         lastRun: lastRun,
       );
 
-  factory Schedule.fromJson(Map<String, dynamic> j) => Schedule(
+  factory Schedule.fromJson(Map<String, dynamic> j) {
+    final conds = <ScheduleCondition>[];
+    for (final c in (j['conditions'] as List?) ?? const []) {
+      final parsed = ScheduleCondition.fromJson(c);
+      if (parsed != null) conds.add(parsed);
+    }
+    return Schedule(
         id: j['id'] as String,
         name: j['name'] as String,
         enabled: j['enabled'] == true,
@@ -1037,10 +1111,12 @@ class Schedule {
             (j['trigger'] as Map).cast<String, dynamic>()),
         action: ScheduleAction.fromJson(
             (j['action'] as Map).cast<String, dynamic>()),
+        conditions: conds,
         lastRun: j['lastRun'] is String
             ? DateTime.tryParse(j['lastRun'] as String)
             : null,
       );
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -1048,6 +1124,8 @@ class Schedule {
         'enabled': enabled,
         'trigger': trigger.toJson(),
         'action': action.toJson(),
+        if (conditions.isNotEmpty)
+          'conditions': conditions.map((c) => c.toJson()).toList(),
         if (lastRun != null) 'lastRun': lastRun!.toIso8601String(),
       };
 }

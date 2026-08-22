@@ -11,6 +11,7 @@ import * as SunCalc from "suncalc";
 import { logger } from "./logger";
 import { findScene, getConfig, updateConfig } from "./config";
 import { runScene } from "./scenes";
+import { scheduleConditionsMet } from "./scheduleConditions";
 import type { KnxBus } from "./knxBus";
 import type { MediaManager } from "./media/manager";
 import type {
@@ -54,8 +55,16 @@ export function startScheduler(bus: KnxBus, media: MediaManager): SchedulerHandl
     const handle = setTimeout(async () => {
       timers.delete(s.id);
       try {
-        await fire(s, bus, media);
-        markRan(s.id);
+        const live = getScheduleById(s.id) ?? s;
+        if (!scheduleConditionsMet(live, bus, getConfig())) {
+          logger.info(
+            { id: live.id, name: live.name },
+            "schedule skipped: condition not met"
+          );
+        } else {
+          await fire(live, bus, media);
+          markRan(live.id);
+        }
       } catch (err) {
         logger.warn({ err, id: s.id }, "schedule fire failed");
       }

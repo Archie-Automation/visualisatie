@@ -1173,12 +1173,27 @@ export function buildRouter(
     })
   ]);
 
+  const ConditionSchema = z.discriminatedUnion("kind", [
+    z.object({
+      kind: z.literal("device"),
+      deviceId: z.string().min(1).max(64),
+      actions: z.array(SceneActionSchema).min(1).max(8)
+    }),
+    z.object({
+      kind: z.literal("logic"),
+      deviceId: z.string().min(1).max(64),
+      buttonId: z.string().min(1).max(64),
+      equals: z.boolean()
+    })
+  ]);
+
   const ScheduleSchema = z.object({
     id: z.string().min(1).max(64),
     name: z.string().min(1).max(60),
     enabled: z.boolean(),
     trigger: TriggerSchema,
     action: ActionSchema,
+    conditions: z.array(ConditionSchema).max(16).optional(),
     lastRun: z.string().datetime().optional()
   });
 
