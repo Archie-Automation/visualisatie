@@ -617,24 +617,18 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                       ),
                     ),
                   ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  visualDensity: VisualDensity.compact,
-                  title: const Text('Inactiviteit & screensaver'),
+                _SettingsToggle(
+                  label: 'Inactiviteit & screensaver',
                   value: settings.enabled,
                   onChanged: _saving
                       ? null
                       : (v) => _save(settings.copyWith(enabled: v)),
                 ),
-                const SizedBox(height: 20),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  visualDensity: VisualDensity.compact,
-                  title: const Text('Geen screensaver bij open media-speler'),
-                  subtitle: settings.panelRoomId == null
-                      ? const Text('Eerst locatie tablet kiezen')
+                const SizedBox(height: _kWandtabletFunctionGap),
+                _SettingsToggle(
+                  label: 'Geen screensaver bij open media-speler',
+                  hint: settings.panelRoomId == null
+                      ? 'Eerst locatie tablet kiezen'
                       : null,
                   value: settings.suppressScreensaverWhenMusicPlaying &&
                       settings.panelRoomId != null,
@@ -646,7 +640,7 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                           ))
                       : null,
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: _kWandtabletFunctionGap),
                 _LabeledBox(
                   label: 'Locatie tablet',
                   child: DropdownButtonFormField<String>(
@@ -683,7 +677,7 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                       : null,
                 ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: _kWandtabletFunctionGap),
                 _MinutesDropdown(
                   label: 'Terug naar beginscherm',
                   value: settings.idleHomeMinutes,
@@ -691,7 +685,7 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                   onChanged: (v) =>
                       _save(settings.copyWith(idleHomeMinutes: v)),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: _kWandtabletFunctionGap),
                 _MinutesDropdown(
                   label: 'Screensaver',
                   value: settings.screensaverMinutes,
@@ -700,100 +694,117 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                   onChanged: (v) =>
                       _save(settings.copyWith(screensaverMinutes: v)),
                 ),
-                const SizedBox(height: 16),
-                Text('Temperatuur op screensaver',
-                    style: Theme.of(context).textTheme.labelMedium),
-                const SizedBox(height: 8),
-                SegmentedButton<bool>(
-                  segments: const [
-                    ButtonSegment(value: false, label: Text('Ruimte')),
-                    ButtonSegment(value: true, label: Text('Buitentemperatuur')),
-                  ],
-                  selected: {useOutdoor},
-                  onSelectionChanged: settings.enabled && !_saving
-                      ? (sel) {
-                          if (sel.first) {
-                            _save(settings.copyWith(
-                              useOutdoorTemperature: true,
-                              clearTemperatureRoom: true,
-                            ));
-                          } else {
-                            final fallbackId = settings.temperatureRoomId ??
-                                (rooms.isNotEmpty ? rooms.first.id : null);
-                            String? fallbackName;
-                            if (fallbackId != null) {
-                              for (final r in rooms) {
-                                if (r.id == fallbackId) {
-                                  fallbackName = r.label;
-                                  break;
+                const SizedBox(height: _kWandtabletFunctionGap),
+                _LabeledBox(
+                  label: 'Temperatuur op screensaver',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: SegmentedButton<bool>(
+                          segments: const [
+                            ButtonSegment(
+                              value: false,
+                              label: Text('Ruimte'),
+                            ),
+                            ButtonSegment(
+                              value: true,
+                              label: Text('Buitentemperatuur'),
+                            ),
+                          ],
+                          selected: {useOutdoor},
+                          onSelectionChanged: settings.enabled && !_saving
+                              ? (sel) {
+                                  if (sel.first) {
+                                    _save(settings.copyWith(
+                                      useOutdoorTemperature: true,
+                                      clearTemperatureRoom: true,
+                                    ));
+                                  } else {
+                                    final fallbackId =
+                                        settings.temperatureRoomId ??
+                                            (rooms.isNotEmpty
+                                                ? rooms.first.id
+                                                : null);
+                                    String? fallbackName;
+                                    if (fallbackId != null) {
+                                      for (final r in rooms) {
+                                        if (r.id == fallbackId) {
+                                          fallbackName = r.label;
+                                          break;
+                                        }
+                                      }
+                                    }
+                                    _save(settings.copyWith(
+                                      useOutdoorTemperature: false,
+                                      clearTemperatureGa: true,
+                                      clearTemperatureRoom: fallbackId == null,
+                                      temperatureRoomId: fallbackId,
+                                      temperatureRoomName: fallbackName,
+                                    ));
+                                  }
                                 }
-                              }
-                            }
-                            _save(settings.copyWith(
-                              useOutdoorTemperature: false,
-                              clearTemperatureGa: true,
-                              clearTemperatureRoom: fallbackId == null,
-                              temperatureRoomId: fallbackId,
-                              temperatureRoomName: fallbackName,
-                            ));
-                          }
-                        }
-                      : null,
-                ),
-                const SizedBox(height: 12),
-                if (useOutdoor)
-                  _TemperatureGaField(
-                    enabled: settings.enabled && !_saving,
-                    initialGa: settings.temperatureGa ?? '',
-                    onSave: (v) => _save(settings.copyWith(
-                      useOutdoorTemperature: true,
-                      temperatureGa: v.trim(),
-                      clearTemperatureRoom: true,
-                    )),
-                  )
-                else
-                  _LabeledBox(
-                    label: 'Ruimte',
-                    child: DropdownButtonFormField<String>(
-                    value: settings.temperatureRoomId != null &&
-                            rooms.any((r) => r.id == settings.temperatureRoomId)
-                        ? settings.temperatureRoomId
-                        : null,
-                    decoration: _kSettingsBox,
-                    items: [
-                      const DropdownMenuItem(
-                        value: null,
-                        child: Text('Geen temperatuur'),
-                      ),
-                      ...rooms.map(
-                        (r) => DropdownMenuItem(
-                          value: r.id,
-                          child: Text(r.label),
+                              : null,
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      if (useOutdoor)
+                        _TemperatureGaField(
+                          enabled: settings.enabled && !_saving,
+                          initialGa: settings.temperatureGa ?? '',
+                          onSave: (v) => _save(settings.copyWith(
+                            useOutdoorTemperature: true,
+                            temperatureGa: v.trim(),
+                            clearTemperatureRoom: true,
+                          )),
+                        )
+                      else
+                        DropdownButtonFormField<String>(
+                          value: settings.temperatureRoomId != null &&
+                                  rooms.any(
+                                    (r) => r.id == settings.temperatureRoomId,
+                                  )
+                              ? settings.temperatureRoomId
+                              : null,
+                          decoration: _kSettingsBox,
+                          items: [
+                            const DropdownMenuItem(
+                              value: null,
+                              child: Text('Geen temperatuur'),
+                            ),
+                            ...rooms.map(
+                              (r) => DropdownMenuItem(
+                                value: r.id,
+                                child: Text(r.label),
+                              ),
+                            ),
+                          ],
+                          onChanged: settings.enabled && !_saving
+                              ? (id) {
+                                  if (id == null) {
+                                    _save(settings.copyWith(
+                                      clearTemperatureRoom: true,
+                                      useOutdoorTemperature: false,
+                                    ));
+                                  } else {
+                                    final label = rooms
+                                        .firstWhere((r) => r.id == id)
+                                        .label;
+                                    _save(settings.copyWith(
+                                      temperatureRoomId: id,
+                                      temperatureRoomName: label,
+                                      clearTemperatureGa: true,
+                                      useOutdoorTemperature: false,
+                                    ));
+                                  }
+                                }
+                              : null,
+                        ),
                     ],
-                    onChanged: settings.enabled && !_saving
-                        ? (id) {
-                            if (id == null) {
-                              _save(settings.copyWith(
-                                clearTemperatureRoom: true,
-                                useOutdoorTemperature: false,
-                              ));
-                            } else {
-                              final label =
-                                  rooms.firstWhere((r) => r.id == id).label;
-                              _save(settings.copyWith(
-                                temperatureRoomId: id,
-                                temperatureRoomName: label,
-                                clearTemperatureGa: true,
-                                useOutdoorTemperature: false,
-                              ));
-                          }
-                        }
-                      : null,
                   ),
-                  ),
-                const SizedBox(height: 12),
+                ),
+                const SizedBox(height: _kWandtabletFunctionGap),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: TextButton(
@@ -1751,6 +1762,48 @@ const _kSettingsBox = InputDecoration(
   floatingLabelBehavior: FloatingLabelBehavior.never,
   border: OutlineInputBorder(),
 );
+
+const double _kWandtabletFunctionGap = 22;
+
+class _SettingsToggle extends StatelessWidget {
+  const _SettingsToggle({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.hint,
+  });
+
+  final String label;
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+  final String? hint;
+
+  @override
+  Widget build(BuildContext context) {
+    return _LabeledBox(
+      label: label,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          if (hint != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              hint!,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: LuxeColors.inkSoft,
+                  ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
 
 class _LabeledBox extends StatelessWidget {
   const _LabeledBox({required this.label, required this.child});
