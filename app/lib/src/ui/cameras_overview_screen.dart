@@ -8,8 +8,10 @@ import '../kiosk_system_ui.dart';
 import '../models.dart';
 import '../theme.dart';
 import 'app_nav.dart';
+import 'widgets/back_pill.dart';
 import 'widgets/camera_snapshot.dart';
 import 'widgets/camera_stream_body.dart';
+import 'widgets/function_screen_header.dart';
 import 'widgets/luxe_backdrop.dart';
 
 void _restoreSystemUi() {
@@ -66,16 +68,43 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
 
     return cfg.when(
       loading: () => Scaffold(
-        body: Center(child: CircularProgressIndicator(color: LuxeColors.brass)),
+        backgroundColor: Colors.transparent,
+        body: LuxeBackdrop(
+          child: Column(
+            children: [
+              FunctionScreenHeader(
+                onBack: () => appBack(context),
+                title: "Camera's",
+              ),
+              const Expanded(
+                child: Center(child: CircularProgressIndicator()),
+              ),
+            ],
+          ),
+        ),
       ),
       error: (e, _) => Scaffold(
-        appBar: AppBar(title: Text("Camera's")),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Text('Configuratie laden mislukt:\n$e',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: LuxeColors.inkSoft)),
+        backgroundColor: Colors.transparent,
+        body: LuxeBackdrop(
+          child: Column(
+            children: [
+              FunctionScreenHeader(
+                onBack: () => appBack(context),
+                title: "Camera's",
+              ),
+              Expanded(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'Configuratie laden mislukt:\n$e',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: LuxeColors.inkSoft),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -83,8 +112,20 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
         final cameras = List<Device>.from(c.cameras);
         if (cameras.isEmpty) {
           return Scaffold(
-            appBar: AppBar(title: const Text("Camera's")),
-            body: const Center(child: Text("Geen camera's in dit project.")),
+            backgroundColor: Colors.transparent,
+            body: LuxeBackdrop(
+              child: Column(
+                children: [
+                  FunctionScreenHeader(
+                    onBack: () => appBack(context),
+                    title: "Camera's",
+                  ),
+                  const Expanded(
+                    child: Center(child: Text("Geen camera's in dit project.")),
+                  ),
+                ],
+              ),
+            ),
           );
         }
 
@@ -123,24 +164,16 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
             // ── Portrait layout ────────────────────────────────────────────
             final info = ref.watch(cameraInfoProvider(selId));
             return Scaffold(
-              extendBodyBehindAppBar: true,
-              appBar: AppBar(
-                backgroundColor: Colors.transparent,
-                elevation: 0,
-                leading: IconButton(
-                  icon: Icon(Icons.arrow_back_rounded),
-                  onPressed: () => appBack(context),
-                ),
-                title: Text(
-                  selectedDevice.name,
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w400, letterSpacing: 0.5),
-                ),
-              ),
+              backgroundColor: Colors.transparent,
               body: LuxeBackdrop(
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const SizedBox(height: kToolbarHeight + 12),
+                    FunctionScreenHeader(
+                      onBack: () => appBack(context),
+                      title: selectedDevice.name,
+                      subtitle: "Camera's",
+                    ),
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
@@ -247,25 +280,14 @@ class _FullscreenCameraView extends ConsumerWidget {
             ),
             data: (i) => CameraLivePlayer(info: i, fit: BoxFit.contain),
           ),
-          // Terugknop linksonder
+          // Terug — zelfde BackPill linksboven als de rest van de app
           Positioned(
-            bottom: 16,
-            left: 16,
+            top: 0,
+            left: 0,
             child: SafeArea(
-              child: GestureDetector(
-                onTap: onBack,
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    color: Colors.black.withValues(alpha: 0.5),
-                    border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.2)),
-                  ),
-                  child: const Icon(Icons.arrow_back_rounded,
-                      color: Colors.white, size: 20),
-                ),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+                child: BackPill(onTap: onBack),
               ),
             ),
           ),
