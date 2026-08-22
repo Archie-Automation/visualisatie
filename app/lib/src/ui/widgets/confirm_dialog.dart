@@ -3,10 +3,10 @@ import 'package:flutter/services.dart';
 
 import '../../models.dart';
 import '../../theme.dart';
+import '../responsive.dart';
 import 'back_pill.dart';
 
-/// Brass “i” used in settings and editors. Opens [showLuxeInfoDialog].
-/// Same 48×48 chrome as [BackPill] / [HeaderIconButton].
+/// Brass circular “i”. Same 48px hit target as [BackPill], circle not square.
 class LuxeInfoIconButton extends StatelessWidget {
   const LuxeInfoIconButton({
     super.key,
@@ -21,13 +21,39 @@ class LuxeInfoIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: HeaderIconButton.size,
-      height: HeaderIconButton.size,
-      child: HeaderIconButton(
-        icon: Icons.info_outline_rounded,
-        tooltip: tooltip,
+    final iconSize = context.isPhone ? 20.0 : 22.0;
+    const size = HeaderIconButton.size;
+    return Semantics(
+      button: true,
+      label: tooltip,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
         onTap: () => showLuxeInfoDialog(context, title: title, message: body),
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: LuxeColors.brass.withValues(alpha: 0.14),
+              border: Border.all(color: LuxeColors.brass.withValues(alpha: 0.4)),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x14000000),
+                  blurRadius: 8,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Icon(
+                Icons.info_outline_rounded,
+                size: iconSize,
+                color: LuxeColors.brassDeep,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
