@@ -43,6 +43,16 @@ class ScheduleEditorSheet extends ConsumerStatefulWidget {
       _ScheduleEditorSheetState();
 }
 
+const _kMaxSceneWaitMs = 1800000; // 30 min between scenes
+const _kDefaultSceneWaitMs = 5000;
+
+class _SceneStep {
+  String sceneId;
+  int delayMs;
+  _SceneStep({required this.sceneId, this.delayMs = 0});
+  _SceneStep copy() => _SceneStep(sceneId: sceneId, delayMs: delayMs);
+}
+
 /// Editor-local mutable draft. Kept out of the public [Schedule] model
 /// because our JSON model is immutable and building a new copy per
 /// keystroke would be both slow and fiddly.
@@ -63,7 +73,7 @@ class _Draft {
 
   // Action
   _ActionKind actionKind;
-  String? sceneId;
+  List<_SceneStep> sceneSteps;
   List<SceneEntry> entries;
 
   _Draft({
@@ -75,8 +85,24 @@ class _Draft {
     required this.astroEvent,
     required this.offsetMin,
     required this.actionKind,
+    required this.sceneSteps,
     required this.entries,
   });
+
+  _Draft copy() => _Draft(
+        name: name,
+        enabled: enabled,
+        kind: kind,
+        time: time,
+        days: [...days],
+        astroEvent: astroEvent,
+        offsetMin: offsetMin,
+        actionKind: actionKind,
+        sceneSteps: [for (final s in sceneSteps) s.copy()],
+        entries: [...entries],
+      )
+        ..notBefore = notBefore
+        ..notAfter = notAfter;
 
   static _Draft fresh() => _Draft(
         name: 'Nieuw tijdschema',
@@ -87,6 +113,7 @@ class _Draft {
         astroEvent: AstroEvent.sunset,
         offsetMin: 0,
         actionKind: _ActionKind.scene,
+        sceneSteps: [],
         entries: [],
       );
 
@@ -114,7 +141,10 @@ class _Draft {
     if (a is ScheduleSceneAction) {
       draft
         ..actionKind = _ActionKind.scene
-        ..sceneId = a.sceneId;
+        ..sceneSteps = [
+          for (final step in a.effectiveSteps)
+            _SceneStep(sceneId: step.sceneId, delayMs: step.delayMs),
+        ];
     } else if (a is ScheduleActionsAction) {
       draft
         ..actionKind = _ActionKind.devices
@@ -140,7 +170,18 @@ class _Draft {
     if (isThemeScheduleId(id)) {
       action = ScheduleThemeAction(toLight: id == kThemeLightOnId);
     } else if (actionKind == _ActionKind.scene) {
-      action = ScheduleSceneAction(sceneId: sceneId ?? '');
+      final steps = [
+        for (final s in sceneSteps)
+          if (s.sceneId.isNotEmpty)
+            ScheduleSceneStep(
+              sceneId: s.sceneId,
+              delayMs: s.delayMs.clamp(0, _kMaxSceneWaitMs),
+            ),
+      ];
+      action = ScheduleSceneAction(
+        sceneId: steps.isEmpty ? '' : steps.first.sceneId,
+        steps: steps,
+      );
     } else {
       final acts = <SceneAction>[];
       for (final e in entries) {
@@ -186,6 +227,8 @@ class _ScheduleEditorSheetState
   String? _selectedId;
   bool _saving = false;
   _EditPane _pane = _EditPane.overview;
+  final Set<_EditPane> _confirmed = {};
+  _Draft? _paneSnapshot;
 
   @override
   void initState() {
@@ -214,6 +257,7 @@ class _ScheduleEditorSheetState
     }
     _drafts = {match.id: _Draft.fromSchedule(match, widget.config)};
     _selectedId = match.id;
+    _confirmed.addAll({_EditPane.name, _EditPane.when, _EditPane.action});
     if (widget.lockedIds.contains(match.id)) {
       _pane = _EditPane.when;
     }
@@ -259,10 +303,99 @@ class _ScheduleEditorSheetState
     }
   }
 
+  void _openPane(_EditPane pane) {
+    final d = _draft;
+    if (d == null) return;
+    setState(() {
+      _paneSnapshot = d.copy();
+      _pane = pane;
+    });
+  }
+
+  void _leavePane({required bool revert}) {
+    final id = _selectedId;
+    setState(() {
+      if (revert && id != null && _paneSnapshot != null) {
+        _drafts[id] = _paneSnapshot!;
+      }
+      _paneSnapshot = null;
+      _pane = _EditPane.overview;
+    });
+  }
+
+  String? _paneError(_EditPane pane, _Draft d) {
+    switch (pane) {
+      case _EditPane.overview:
+        return null;
+      case _EditPane.name:
+        if (d.name.trim().isEmpty) return 'Vul een naam in.';
+        return null;
+      case _EditPane.when:
+        if (!d.days.any((x) => x)) return 'Kies minstens één dag.';
+        return null;
+      case _EditPane.action:
+        if (d.actionKind == _ActionKind.scene) {
+          if (d.sceneSteps.every((s) => s.sceneId.isEmpty)) {
+            return 'Kies minstens één scene.';
+          }
+          return null;
+        }
+        if (d.entries.isEmpty) return 'Kies minstens één apparaat.';
+        return null;
+    }
+  }
+
+  bool get _allSectionsReady {
+    if (_themeLocked) return true;
+    final d = _draft;
+    if (d == null) return false;
+    return _confirmed.contains(_EditPane.name) &&
+        _confirmed.contains(_EditPane.when) &&
+        _confirmed.contains(_EditPane.action) &&
+        _paneError(_EditPane.name, d) == null &&
+        _paneError(_EditPane.when, d) == null &&
+        _paneError(_EditPane.action, d) == null;
+  }
+
+  void _savePane() {
+    final d = _draft;
+    if (d == null) return;
+    final err = _paneError(_pane, d);
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: LuxeColors.danger,
+          behavior: SnackBarBehavior.floating,
+          shape: const StadiumBorder(),
+          content: Text(err),
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _confirmed.add(_pane);
+      _paneSnapshot = null;
+      _pane = _EditPane.overview;
+    });
+  }
+
   Future<void> _save() async {
     final id = _selectedId;
     final draft = _draft;
     if (id == null || draft == null) return;
+    if (!_themeLocked && !_allSectionsReady) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: LuxeColors.danger,
+          behavior: SnackBarBehavior.floating,
+          shape: const StadiumBorder(),
+          content: Text(
+            'Sla eerst naam, wanneer en actie elk apart op.',
+          ),
+        ),
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
       final edited = draft.toSchedule(id);
@@ -311,7 +444,7 @@ class _ScheduleEditorSheetState
     return PopScope(
       canPop: _atSheetRoot,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) setState(() => _pane = _EditPane.overview);
+        if (!didPop) _leavePane(revert: true);
       },
       child: Padding(
         padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
@@ -347,7 +480,7 @@ class _ScheduleEditorSheetState
       _EditPane.overview => (
           overviewTitle,
           'Tijdschema',
-          'Naam, wanneer het loopt, en wat er gebeurt. Tik een onderdeel aan om het in te stellen.',
+          'Naam, wanneer het loopt, en wat er gebeurt. Tik een onderdeel aan, vul het in en sla dat onderdeel op. Daarna kun je het hele schema opslaan.',
         ),
       _EditPane.name => (
           'Naam',
@@ -368,7 +501,9 @@ class _ScheduleEditorSheetState
       _EditPane.action => (
           'Actie',
           'Actie',
-          'Kies een bestaande scene, of stel apparaten hier direct in.',
+          'Kies een of meer bestaande scenes — optioneel met wachttijd ertussen — of stel apparaten hier direct in.\n\n'
+              'Overkoepelende scenes gelden voor het hele huis. Kamer-scenes alleen voor die ruimte. '
+              'Je kunt ze combineren, bijvoorbeeld eerst een overkoepelende scene en daarna een kamer-scene.',
         ),
     };
     return Padding(
@@ -408,7 +543,7 @@ class _ScheduleEditorSheetState
                     Navigator.of(context).pop();
                     return;
                   }
-                  setState(() => _pane = _EditPane.overview);
+                  _leavePane(revert: true);
                 },
               ),
             ),
@@ -449,22 +584,31 @@ class _ScheduleEditorSheetState
               if (!locked) ...[
                 _SettingRow(
                   title: 'Naam',
-                  subtitle: _nameSummary(d),
-                  onTap: () => setState(() => _pane = _EditPane.name),
+                  subtitle: _confirmed.contains(_EditPane.name)
+                      ? _nameSummary(d)
+                      : 'Tik om in te stellen',
+                  done: _confirmed.contains(_EditPane.name),
+                  onTap: () => _openPane(_EditPane.name),
                 ),
                 Divider(height: 1, indent: 16, color: LuxeColors.lineSoft),
               ],
               _SettingRow(
                 title: 'Wanneer',
-                subtitle: _whenSummary(d),
-                onTap: () => setState(() => _pane = _EditPane.when),
+                subtitle: _confirmed.contains(_EditPane.when) || locked
+                    ? _whenSummary(d)
+                    : 'Tik om in te stellen',
+                done: _confirmed.contains(_EditPane.when) || locked,
+                onTap: () => _openPane(_EditPane.when),
               ),
               if (!locked) ...[
                 Divider(height: 1, indent: 16, color: LuxeColors.lineSoft),
                 _SettingRow(
                   title: 'Actie',
-                  subtitle: _actionSummary(d, locked: locked),
-                  onTap: () => setState(() => _pane = _EditPane.action),
+                  subtitle: _confirmed.contains(_EditPane.action)
+                      ? _actionSummary(d, locked: locked)
+                      : 'Tik om in te stellen',
+                  done: _confirmed.contains(_EditPane.action),
+                  onTap: () => _openPane(_EditPane.action),
                 ),
               ],
             ],
@@ -586,10 +730,10 @@ class _ScheduleEditorSheetState
           ),
           const SizedBox(height: 12),
           if (d.actionKind == _ActionKind.scene)
-            _ScenePicker(
+            _SceneSequenceEditor(
               config: widget.config,
-              value: d.sceneId,
-              onChanged: (v) => setState(() => d.sceneId = v),
+              steps: d.sceneSteps,
+              onChanged: () => setState(() {}),
             )
           else
             _DevicesActionEditor(
@@ -628,19 +772,15 @@ class _ScheduleEditorSheetState
           : 'Weergave: donker';
     }
     if (d.actionKind == _ActionKind.scene) {
-      final id = d.sceneId;
-      if (id == null || id.isEmpty) return 'Geen scene';
-      for (final s in widget.config.scenes) {
-        if (s.id == id) return 'Scene: ${s.name}';
+      final steps = [
+        for (final s in d.sceneSteps)
+          if (s.sceneId.isNotEmpty) s,
+      ];
+      if (steps.isEmpty) return 'Geen scene';
+      if (steps.length == 1) {
+        return _sceneSummary(widget.config, steps.first.sceneId);
       }
-      for (final f in widget.config.floors) {
-        for (final r in f.rooms) {
-          for (final s in r.scenes) {
-            if (s.id == id) return 'Scene: ${s.name}  ·  ${r.name}';
-          }
-        }
-      }
-      return 'Scene: (verwijderd)';
+      return '${steps.length} scenes';
     }
     final n = d.entries.length;
     if (n == 0) return 'Geen apparaten';
@@ -648,38 +788,87 @@ class _ScheduleEditorSheetState
   }
 
   Widget _footer() {
+    if (_themeLocked) {
+      return _footerButtons(
+        cancelLabel: 'Annuleren',
+        onCancel: () => Navigator.of(context).pop(),
+        saveLabel: 'Opslaan',
+        onSave: _saving ? null : _save,
+      );
+    }
+    if (_pane != _EditPane.overview) {
+      return _footerButtons(
+        cancelLabel: 'Annuleren',
+        onCancel: _saving ? null : () => _leavePane(revert: true),
+        saveLabel: 'Opslaan',
+        onSave: _saving ? null : _savePane,
+      );
+    }
+    return Column(
+      children: [
+        if (!_allSectionsReady)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+            child: Text(
+              'Sla naam, wanneer en actie elk op voordat je het schema bewaart.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: LuxeColors.inkSoft,
+                  ),
+            ),
+          ),
+        _footerButtons(
+          cancelLabel: 'Annuleren',
+          onCancel: _saving ? null : () => Navigator.of(context).pop(),
+          saveLabel: 'Schema opslaan',
+          onSave: (_saving || !_allSectionsReady) ? null : _save,
+        ),
+      ],
+    );
+  }
+
+  Widget _footerButtons({
+    required String cancelLabel,
+    required VoidCallback? onCancel,
+    required String saveLabel,
+    required VoidCallback? onSave,
+  }) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(24, 12, 24, 18),
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 18),
       child: Row(
         children: [
           Expanded(
             child: OutlinedButton(
-              onPressed: _saving ? null : () => Navigator.of(context).pop(),
+              onPressed: onCancel,
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size.fromHeight(52),
                 shape: const StadiumBorder(),
               ),
-              child: const Text('Annuleren'),
+              child: Text(cancelLabel),
             ),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: FilledButton(
-              onPressed: _saving ? null : _save,
+              onPressed: onSave,
               style: FilledButton.styleFrom(
                 backgroundColor: LuxeColors.ink,
                 foregroundColor: LuxeColors.onInk,
+                disabledBackgroundColor:
+                    LuxeColors.ink.withValues(alpha: 0.28),
+                disabledForegroundColor:
+                    LuxeColors.onInk.withValues(alpha: 0.7),
                 minimumSize: const Size.fromHeight(52),
                 shape: const StadiumBorder(),
               ),
-              child: _saving
+              child: _saving && _pane == _EditPane.overview
                   ? SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: LuxeColors.onInk),
                     )
-                  : const Text('Opslaan'),
+                  : Text(saveLabel),
             ),
           ),
         ],
@@ -722,10 +911,12 @@ class _SettingRow extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.done = false,
   });
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final bool done;
 
   @override
   Widget build(BuildContext context) {
@@ -750,6 +941,15 @@ class _SettingRow extends StatelessWidget {
                 ],
               ),
             ),
+            if (done)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Icon(
+                  Icons.check_rounded,
+                  size: 18,
+                  color: LuxeColors.brassDeep,
+                ),
+              ),
             Icon(
               Icons.chevron_right_rounded,
               size: 20,
@@ -1284,57 +1484,64 @@ class _ActionKindSelector extends StatelessWidget {
   final ValueChanged<_ActionKind> onChanged;
   @override
   Widget build(BuildContext context) {
-    return SegmentedButton<_ActionKind>(
-      showSelectedIcon: false,
-      segments: const [
-        ButtonSegment(
-          value: _ActionKind.scene,
-          icon: Icon(Icons.auto_awesome, size: 16),
-          label: Text('Scene'),
-        ),
-        ButtonSegment(
-          value: _ActionKind.devices,
-          icon: Icon(Icons.lightbulb_outline, size: 16),
-          label: Text('Apparaten'),
-        ),
-      ],
-      selected: {value},
-      onSelectionChanged: (s) => onChanged(s.first),
+    return SizedBox(
+      width: double.infinity,
+      child: SegmentedButton<_ActionKind>(
+        showSelectedIcon: false,
+        expandedInsets: EdgeInsets.zero,
+        segments: const [
+          ButtonSegment(
+            value: _ActionKind.scene,
+            icon: Icon(Icons.auto_awesome, size: 16),
+            label: Text('Scene'),
+          ),
+          ButtonSegment(
+            value: _ActionKind.devices,
+            icon: Icon(Icons.lightbulb_outline, size: 16),
+            label: Text('Apparaten'),
+          ),
+        ],
+        selected: {value},
+        onSelectionChanged: (s) => onChanged(s.first),
+      ),
     );
   }
 }
 
-class _ScenePicker extends StatelessWidget {
-  const _ScenePicker({
+class _SceneSequenceEditor extends StatelessWidget {
+  const _SceneSequenceEditor({
     required this.config,
-    required this.value,
+    required this.steps,
     required this.onChanged,
   });
   final HouseConfig config;
-  final String? value;
-  final ValueChanged<String> onChanged;
+  final List<_SceneStep> steps;
+  final VoidCallback onChanged;
+
+  Future<void> _addScenes(BuildContext context) async {
+    final picked = await _pickScenesForSchedule(context, config: config);
+    if (!context.mounted) return;
+    if (picked == null || picked.isEmpty) return;
+    for (final id in picked) {
+      steps.add(_SceneStep(sceneId: id));
+    }
+    onChanged();
+  }
+
+  void _addWait() {
+    if (steps.isEmpty) return;
+    if (steps.last.delayMs <= 0) {
+      steps.last.delayMs = _kDefaultSceneWaitMs;
+      onChanged();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final items = <DropdownMenuItem<String>>[];
-    for (final s in config.scenes) {
-      items.add(DropdownMenuItem(value: s.id, child: Text(s.name)));
-    }
-    for (final f in config.floors) {
-      for (final r in f.rooms) {
-        for (final s in r.scenes) {
-          items.add(
-            DropdownMenuItem(
-              value: s.id,
-              child: Text('${s.name}  ·  ${r.name}'),
-            ),
-          );
-        }
-      }
-    }
-    if (items.isEmpty) {
+    final refs = _allSceneRefs(config);
+    if (refs.isEmpty) {
       return Container(
-        padding: EdgeInsets.all(14),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: LuxeColors.brass.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(14),
@@ -1349,17 +1556,370 @@ class _ScenePicker extends StatelessWidget {
         ),
       );
     }
-    final current = items.any((i) => i.value == value) ? value : null;
-    return DropdownButtonFormField<String>(
-      initialValue: current,
-      isExpanded: true,
-      items: items,
-      decoration: _boxDecoration(hint: 'Kies een scene'),
-      onChanged: (v) {
-        if (v != null) onChanged(v);
-      },
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Overkoepelende scenes gelden voor het hele huis. '
+          'Je kunt meerdere scenes achter elkaar zetten en een wachttijd ertussen zetten.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: LuxeColors.inkSoft,
+              ),
+        ),
+        const SizedBox(height: 12),
+        if (steps.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+            decoration: BoxDecoration(
+              color: LuxeColors.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: LuxeColors.lineSoft),
+            ),
+            child: Text(
+              'Nog geen scenes. Kies een of meer scenes; voeg daarna desgewenst een wachttijd toe.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          )
+        else
+          for (int i = 0; i < steps.length; i++)
+            _SceneStepTile(
+              index: i,
+              step: steps[i],
+              config: config,
+              onChanged: onChanged,
+              onRemove: () {
+                steps.removeAt(i);
+                onChanged();
+              },
+            ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            FilledButton.icon(
+              onPressed: () => _addScenes(context),
+              icon: const Icon(Icons.add_rounded),
+              label: Text(steps.isEmpty ? 'Scenes kiezen' : 'Scene toevoegen'),
+              style: FilledButton.styleFrom(
+                backgroundColor: LuxeColors.ink,
+                foregroundColor: LuxeColors.onInk,
+                shape: const StadiumBorder(),
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: steps.isEmpty ? null : _addWait,
+              icon: const Icon(Icons.timer_outlined),
+              label: const Text('Wachttijd'),
+              style: OutlinedButton.styleFrom(
+                shape: const StadiumBorder(),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
+}
+
+class _SceneStepTile extends StatelessWidget {
+  const _SceneStepTile({
+    required this.index,
+    required this.step,
+    required this.config,
+    required this.onChanged,
+    required this.onRemove,
+  });
+  final int index;
+  final _SceneStep step;
+  final HouseConfig config;
+  final VoidCallback onChanged;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final ref = _lookupScene(config, step.sceneId);
+    final showDelay = step.delayMs > 0 || index > 0;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+      decoration: BoxDecoration(
+        color: LuxeColors.surface.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: LuxeColors.lineSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      (ref?.location ?? 'Scene').toUpperCase(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 10,
+                        letterSpacing: 1.2,
+                        fontWeight: FontWeight.w600,
+                        color: LuxeColors.inkSoft,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      ref?.name ?? '(verwijderd)',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  ],
+                ),
+              ),
+              SceneEntryDelayToggleButton(
+                delayMs: step.delayMs,
+                onChanged: (ms) {
+                  step.delayMs = ms.clamp(0, _kMaxSceneWaitMs);
+                  onChanged();
+                },
+              ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded, size: 20),
+                onPressed: onRemove,
+              ),
+            ],
+          ),
+          if (showDelay) ...[
+            const SizedBox(height: 8),
+            SceneDelayPicker(
+              delayMs: step.delayMs,
+              onChanged: (ms) {
+                step.delayMs = ms.clamp(0, _kMaxSceneWaitMs);
+                onChanged();
+              },
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SceneRef {
+  const _SceneRef({
+    required this.id,
+    required this.name,
+    required this.location,
+    required this.global,
+  });
+  final String id;
+  final String name;
+  final String location;
+  final bool global;
+}
+
+List<_SceneRef> _allSceneRefs(HouseConfig config) {
+  final out = <_SceneRef>[
+    for (final s in config.scenes)
+      _SceneRef(
+        id: s.id,
+        name: s.name,
+        location: 'Overkoepelend',
+        global: true,
+      ),
+  ];
+  for (final f in config.floors) {
+    for (final r in f.rooms) {
+      for (final s in r.scenes) {
+        out.add(
+          _SceneRef(
+            id: s.id,
+            name: s.name,
+            location: r.name,
+            global: false,
+          ),
+        );
+      }
+    }
+  }
+  return out;
+}
+
+_SceneRef? _lookupScene(HouseConfig config, String id) {
+  for (final s in _allSceneRefs(config)) {
+    if (s.id == id) return s;
+  }
+  return null;
+}
+
+String _sceneSummary(HouseConfig cfg, String id) {
+  final hit = _lookupScene(cfg, id);
+  if (hit == null) return 'Scene: (verwijderd)';
+  if (hit.global) return 'Scene: ${hit.name}';
+  return 'Scene: ${hit.name}  ·  ${hit.location}';
+}
+
+Future<List<String>?> _pickScenesForSchedule(
+  BuildContext context, {
+  required HouseConfig config,
+}) async {
+  final refs = _allSceneRefs(config);
+  if (refs.isEmpty) return const [];
+  final selected = <String>{};
+  final grouped = <String, List<_SceneRef>>{};
+  for (final r in refs) {
+    grouped.putIfAbsent(r.location, () => []).add(r);
+  }
+  final sectionOrder = [
+    if (grouped.containsKey('Overkoepelend')) 'Overkoepelend',
+    ...grouped.keys.where((k) => k != 'Overkoepelend'),
+  ];
+
+  return showModalBottomSheet<List<String>>(
+    context: context,
+    useSafeArea: true,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (ctx) {
+      return StatefulBuilder(
+        builder: (ctx, setState) {
+          return DraggableScrollableSheet(
+            initialChildSize: 0.85,
+            minChildSize: 0.5,
+            maxChildSize: 0.95,
+            expand: false,
+            builder: (ctx, scrollCtl) => Container(
+              decoration: BoxDecoration(
+                color: LuxeColors.cream,
+                borderRadius:
+                    BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    width: 48,
+                    height: 5,
+                    margin: const EdgeInsets.only(top: 10, bottom: 6),
+                    decoration: BoxDecoration(
+                      color: LuxeColors.inkFaint.withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 6, 24, 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                'Kies scenes',
+                                style:
+                                    Theme.of(ctx).textTheme.displayMedium,
+                              ),
+                            ),
+                            Text(
+                              '${selected.length} gekozen',
+                              style: Theme.of(ctx).textTheme.bodyMedium,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Overkoepelende scenes sturen het hele huis aan. '
+                          'Kamer-scenes alleen die ruimte. Je kunt beide combineren.',
+                          style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
+                                color: LuxeColors.inkSoft,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(
+                    child: ListView(
+                      controller: scrollCtl,
+                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 12),
+                      children: [
+                        for (final section in sectionOrder)
+                          SceneDeviceRoomSection(
+                            title: section,
+                            children: [
+                              for (final s in grouped[section]!)
+                                CheckboxListTile(
+                                  value: selected.contains(s.id),
+                                  onChanged: (_) => setState(() {
+                                    if (selected.contains(s.id)) {
+                                      selected.remove(s.id);
+                                    } else {
+                                      selected.add(s.id);
+                                    }
+                                  }),
+                                  title: Text(s.name),
+                                  controlAffinity:
+                                      ListTileControlAffinity.leading,
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                  ),
+                                ),
+                            ],
+                          ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () =>
+                                Navigator.of(ctx).pop(const <String>[]),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size.fromHeight(48),
+                              shape: const StadiumBorder(),
+                            ),
+                            child: const Text('Annuleren'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: selected.isEmpty
+                                ? null
+                                : () {
+                                    final ordered = [
+                                      for (final section in sectionOrder)
+                                        for (final s in grouped[section]!)
+                                          if (selected.contains(s.id)) s.id,
+                                    ];
+                                    Navigator.of(ctx).pop(ordered);
+                                  },
+                            style: FilledButton.styleFrom(
+                              backgroundColor: LuxeColors.ink,
+                              foregroundColor: LuxeColors.onInk,
+                              minimumSize: const Size.fromHeight(48),
+                              shape: const StadiumBorder(),
+                            ),
+                            child: Text(
+                              selected.isEmpty
+                                  ? 'Kies scenes'
+                                  : '${selected.length} toevoegen',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    },
+  );
 }
 
 class _DevicesActionEditor extends ConsumerStatefulWidget {

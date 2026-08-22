@@ -106,12 +106,24 @@ async function executeAction(
 ) {
   if (action.kind === "scene") {
     const cfg = getConfig();
-    const hit = findScene(cfg, action.sceneId);
-    if (!hit) {
-      logger.warn({ sceneId: action.sceneId }, "schedule: scene no longer exists");
-      return;
+    const steps =
+      action.steps && action.steps.length > 0
+        ? action.steps
+        : [{ sceneId: action.sceneId }];
+    for (const step of steps) {
+      if (step.delayMs && step.delayMs > 0) {
+        await new Promise<void>((r) => setTimeout(r, step.delayMs));
+      }
+      const hit = findScene(cfg, step.sceneId);
+      if (!hit) {
+        logger.warn(
+          { sceneId: step.sceneId },
+          "schedule: scene no longer exists"
+        );
+        continue;
+      }
+      await runScene(hit.scene, bus, cfg, media);
     }
-    await runScene(hit.scene, bus, cfg, media);
     return;
   }
   await runActionList(action.actions, bus, media);

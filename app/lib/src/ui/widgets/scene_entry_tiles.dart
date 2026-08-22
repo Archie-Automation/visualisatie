@@ -75,7 +75,7 @@ class SceneEntryControls extends StatelessWidget {
         _buildTypeControls(context),
         if (entry.delayMs > 0) ...[
           const SizedBox(height: 12),
-          _SceneDelayPicker(
+          SceneDelayPicker(
             delayMs: entry.delayMs,
             onChanged: (ms) => onChanged(entry.withDelayMs(ms)),
           ),
@@ -289,8 +289,9 @@ class _DelayRepeatButtonState extends State<_DelayRepeatButton> {
   }
 }
 
-class _SceneDelayPicker extends StatefulWidget {
-  const _SceneDelayPicker({
+class SceneDelayPicker extends StatefulWidget {
+  const SceneDelayPicker({
+    super.key,
     required this.delayMs,
     required this.onChanged,
   });
@@ -299,10 +300,10 @@ class _SceneDelayPicker extends StatefulWidget {
   final ValueChanged<int> onChanged;
 
   @override
-  State<_SceneDelayPicker> createState() => _SceneDelayPickerState();
+  State<SceneDelayPicker> createState() => _SceneDelayPickerState();
 }
 
-class _SceneDelayPickerState extends State<_SceneDelayPicker> {
+class _SceneDelayPickerState extends State<SceneDelayPicker> {
   late final TextEditingController _controller;
   final _focusNode = FocusNode();
 
@@ -313,7 +314,7 @@ class _SceneDelayPickerState extends State<_SceneDelayPicker> {
   }
 
   @override
-  void didUpdateWidget(covariant _SceneDelayPicker oldWidget) {
+  void didUpdateWidget(covariant SceneDelayPicker oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.delayMs != widget.delayMs && !_focusNode.hasFocus) {
       _controller.text = formatSceneDelayInput(widget.delayMs);

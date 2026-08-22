@@ -903,7 +903,7 @@ sealed class ScheduleAction {
 
   static ScheduleAction fromJson(Map<String, dynamic> j) {
     if (j['kind'] == 'scene') {
-      return ScheduleSceneAction(sceneId: j['sceneId'] as String);
+      return ScheduleSceneAction.fromJson(j);
     }
     if (j['kind'] == 'theme') {
       return ScheduleThemeAction(toLight: j['toLight'] == true);
@@ -915,11 +915,68 @@ sealed class ScheduleAction {
   }
 }
 
+class ScheduleSceneStep {
+  final String sceneId;
+  final int delayMs;
+  const ScheduleSceneStep({required this.sceneId, this.delayMs = 0});
+
+  factory ScheduleSceneStep.fromJson(Map<String, dynamic> j) =>
+      ScheduleSceneStep(
+        sceneId: j['sceneId'] as String,
+        delayMs: (j['delayMs'] as num?)?.toInt() ?? 0,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'sceneId': sceneId,
+        if (delayMs > 0) 'delayMs': delayMs,
+      };
+}
+
 class ScheduleSceneAction extends ScheduleAction {
   final String sceneId;
-  const ScheduleSceneAction({required this.sceneId});
+  final List<ScheduleSceneStep> steps;
+  const ScheduleSceneAction({
+    required this.sceneId,
+    this.steps = const [],
+  });
+
+  List<ScheduleSceneStep> get effectiveSteps {
+    if (steps.isNotEmpty) return steps;
+    if (sceneId.isEmpty) return const [];
+    return [ScheduleSceneStep(sceneId: sceneId)];
+  }
+
+  factory ScheduleSceneAction.fromJson(Map<String, dynamic> j) {
+    final rawSteps = j['steps'];
+    final parsed = <ScheduleSceneStep>[];
+    if (rawSteps is List) {
+      for (final s in rawSteps) {
+        if (s is Map) {
+          parsed.add(
+            ScheduleSceneStep.fromJson(s.cast<String, dynamic>()),
+          );
+        }
+      }
+    }
+    final id = (j['sceneId'] as String?) ??
+        (parsed.isNotEmpty ? parsed.first.sceneId : '');
+    return ScheduleSceneAction(
+      sceneId: id,
+      steps: parsed,
+    );
+  }
+
   @override
-  Map<String, dynamic> toJson() => {'kind': 'scene', 'sceneId': sceneId};
+  Map<String, dynamic> toJson() {
+    final eff = effectiveSteps;
+    final first = eff.isNotEmpty ? eff.first.sceneId : sceneId;
+    final needsSteps = eff.length > 1 || eff.any((s) => s.delayMs > 0);
+    return {
+      'kind': 'scene',
+      'sceneId': first,
+      if (needsSteps) 'steps': eff.map((s) => s.toJson()).toList(),
+    };
+  }
 }
 
 /// Local tablet Auto theme edge — never persisted to house schedules API.
