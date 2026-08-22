@@ -256,20 +256,37 @@ class _OutdoorTempIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Material icons have large optical padding; overlap so they read as one mark.
-    return SizedBox(
-      width: size * 1.38,
-      height: size,
-      child: Stack(
-        clipBehavior: Clip.none,
-        children: [
-          Icon(Icons.thermostat_outlined, size: size, color: color),
-          Positioned(
-            left: size * 0.38,
-            child: Icon(Icons.home_outlined, size: size, color: color),
+    // Crop Material optical padding on the facing edges so the glyphs sit
+    // flush beside each other — not stacked, not a full-icon gap.
+    final trim = size * 0.14;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: size - trim,
+          height: size,
+          child: ClipRect(
+            child: OverflowBox(
+              alignment: Alignment.centerLeft,
+              maxWidth: size,
+              maxHeight: size,
+              child: Icon(Icons.thermostat_outlined, size: size, color: color),
+            ),
           ),
-        ],
-      ),
+        ),
+        SizedBox(
+          width: size - trim,
+          height: size,
+          child: ClipRect(
+            child: OverflowBox(
+              alignment: Alignment.centerRight,
+              maxWidth: size,
+              maxHeight: size,
+              child: Icon(Icons.home_outlined, size: size, color: color),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
