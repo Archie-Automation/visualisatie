@@ -2,6 +2,8 @@
 
 import 'package:flutter/material.dart';
 
+import 'roles.dart';
+
 enum DeviceType {
   lightSwitch,
   lightDimmer,
@@ -609,6 +611,7 @@ class CurrentUser {
   final String? displayName;
   final String role;
   final bool canEditScenes;
+  final bool enabled;
 
   const CurrentUser({
     required this.id,
@@ -616,22 +619,27 @@ class CurrentUser {
     required this.role,
     required this.canEditScenes,
     this.displayName,
+    this.enabled = true,
   });
 
-  bool get isAdmin => role == 'admin';
+  bool get isInstaller => isInstallerRole(role);
+  bool get isSuperUser => isSuperUserRole(role);
+  bool get isStaff => isStaffRole(role);
+  bool get isAdmin => isInstaller;
 
   factory CurrentUser.fromJson(Map<String, dynamic> j) {
     final access = (j['access'] as Map?) ?? const {};
-    // Default "true" unless the backend explicitly opted out. Admins always.
+    final role = j['role'] as String? ?? 'user';
     final editRaw = access['editScenes'];
     final canEdit =
-        j['role'] == 'admin' || (editRaw == null ? true : editRaw == true);
+        isStaffRole(role) || (editRaw == null ? true : editRaw == true);
     return CurrentUser(
       id: j['id'] as String,
       username: j['username'] as String,
-      role: j['role'] as String,
+      role: role,
       displayName: j['displayName'] as String?,
       canEditScenes: canEdit,
+      enabled: j['enabled'] != false,
     );
   }
 }

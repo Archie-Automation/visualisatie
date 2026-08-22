@@ -33,6 +33,8 @@ import '../satel_api.dart'
         saveSatelPin;
 import '../shading_subtype_glyph.dart';
 import '../theme.dart';
+import '../roles.dart';
+import '../ui/user_access_editor.dart';
 import '../ui/widgets/admin_full_restart_card.dart';
 import '../ui/widgets/admin_server_update_card.dart';
 import 'installer_api.dart';
@@ -695,8 +697,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       'access': {
         'floors': '*',
         'rooms': '*',
+        'functions': '*',
         'editScenes': true,
       },
+      'enabled': true,
     });
     setState(() => _sel = _Focus.user(_users().length - 1));
   }
@@ -2610,13 +2614,19 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         for (var i = 0; i < list.length; i++)
           ListTile(
             leading: Icon(
-              list[i]['role'] == 'admin'
-                  ? Icons.admin_panel_settings_outlined
-                  : Icons.person_outline,
+              isInstallerRole(list[i]['role'] as String?)
+                  ? Icons.construction_outlined
+                  : isSuperUserRole(list[i]['role'] as String?)
+                      ? Icons.admin_panel_settings_outlined
+                      : Icons.person_outline,
             ),
             title: Text(list[i]['username'] as String? ?? ''),
             subtitle: Text(
-              '${list[i]['role']} ? ${list[i]['displayName'] ?? ''}',
+              [
+                roleLabel(list[i]['role'] as String?),
+                if (list[i]['enabled'] == false) 'geblokkeerd',
+                list[i]['displayName'] ?? '',
+              ].where((s) => s.toString().trim().isNotEmpty).join(' · '),
             ),
             selected: _sel.kind == _FocusKind.user && _sel.fi == i,
             trailing: const Icon(Icons.chevron_right),
@@ -2635,6 +2645,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     return _InstallerUserForm(
       key: ValueKey(list[i]['id']),
       user: list[i],
+      floors: aclFloorsFromHouseMaps(_floors()),
       onChanged: () => setState(() {}),
       onDelete: () {
         list.removeAt(i);
@@ -2648,11 +2659,13 @@ class _InstallerUserForm extends StatefulWidget {
   const _InstallerUserForm({
     super.key,
     required this.user,
+    required this.floors,
     required this.onChanged,
     required this.onDelete,
   });
 
   final Map<String, dynamic> user;
+  final List<AclNavFloor> floors;
   final VoidCallback onChanged;
   final VoidCallback onDelete;
 
@@ -2667,6 +2680,13 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
   void initState() {
     super.initState();
     _password = TextEditingController();
+    final r = normalizeRole(widget.user['role'] as String?);
+    widget.user['role'] = switch (r) {
+      AppRole.installer => 'installer',
+      AppRole.superuser => 'superuser',
+      AppRole.user => 'user',
+    };
+    if (widget.user['enabled'] == null) widget.user['enabled'] = true;
   }
 
   @override
@@ -2681,6 +2701,7 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
     final m = <String, dynamic>{
       'floors': '*',
       'rooms': '*',
+      'functions': '*',
       'editScenes': true,
     };
     widget.user['access'] = m;
@@ -2690,8 +2711,15 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
   @override
   Widget build(BuildContext context) {
     final u = widget.user;
-    final access = _ensureAccess();
-    final editScenes = access['editScenes'] != false;
+    _ensureAccess();
+    final roleRaw = u['role'] as String? ?? 'user';
+    final role = normalizeRole(roleRaw);
+    final roleValue = switch (role) {
+      AppRole.installer => 'installer',
+      AppRole.superuser => 'superuser',
+      AppRole.user => 'user',
+    };
+    final enabled = u['enabled'] != false;
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -2704,22 +2732,37 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: DropdownButtonFormField<String>(
-            initialValue: u['role'] as String? ?? 'user',
+            initialValue: roleValue,
             decoration: const InputDecoration(
               labelText: 'Rol',
               border: OutlineInputBorder(),
             ),
             items: const [
-              DropdownMenuItem(value: 'admin', child: Text('Beheerder (admin)')),
-              DropdownMenuItem(value: 'user', child: Text('Gebruiker (user)')),
+              DropdownMenuItem(value: 'installer', child: Text('Installer')),
+              DropdownMenuItem(value: 'superuser', child: Text('Super user')),
+              DropdownMenuItem(value: 'user', child: Text('Gebruiker')),
             ],
             onChanged: (v) {
               if (v != null) {
                 u['role'] = v;
                 widget.onChanged();
+                setState(() {});
               }
             },
           ),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Account actief'),
+          subtitle: const Text(
+            'Uit = kan niet inloggen. Super user gebruikt dit om de installer te blokkeren.',
+          ),
+          value: enabled,
+          onChanged: (v) {
+            u['enabled'] = v;
+            widget.onChanged();
+            setState(() {});
+          },
         ),
         TextField(
           controller: _password,
@@ -2728,7 +2771,7 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
             labelText: 'Nieuw wachtwoord (leeg = ongewijzigd)',
             border: OutlineInputBorder(),
             helperText:
-                'Voor een nieuw account is een wachtwoord verplicht v??r Opslaan.',
+                'Voor een nieuw account is een wachtwoord verplicht vóór Opslaan.',
           ),
           onChanged: (s) {
             if (s.isEmpty) {
@@ -2739,16 +2782,18 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
             widget.onChanged();
           },
         ),
-        const SizedBox(height: 8),
-        SwitchListTile(
-          title: const Text('Scenes en tijdschema\'s mogen wijzigen'),
-          value: editScenes,
-          onChanged: (v) {
-            access['editScenes'] = v;
-            widget.onChanged();
-            setState(() {});
-          },
-        ),
+        if (role == AppRole.user) ...[
+          const SizedBox(height: 16),
+          Text('Vrijgegeven toegang', style: Theme.of(context).textTheme.titleMedium),
+          UserAccessEditor(
+            user: u,
+            floors: widget.floors,
+            onChanged: () {
+              widget.onChanged();
+              setState(() {});
+            },
+          ),
+        ],
         const SizedBox(height: 24),
         OutlinedButton.icon(
           onPressed: widget.onDelete,

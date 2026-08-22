@@ -89,7 +89,7 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
   Widget build(BuildContext context) {
     final outdated = ref.watch(softwareUpdateAvailableProvider);
     final status = ref.watch(softwareVersionStatusProvider).asData?.value;
-    final admin = ref.watch(authProvider).isAdmin;
+    final admin = ref.watch(authProvider).isInstaller;
 
     if (_serverUpdating) {
       return _Banner(

@@ -993,19 +993,33 @@ export interface GatewayConfig {
   mode?: "tunneling" | "routing";
 }
 
+export type UserRole = "installer" | "superuser" | "user" | "admin";
+
 export interface User {
   id: string;
   username: string;
   displayName?: string;
-  role: "admin" | "user";
+  /**
+   * `admin` is a legacy alias for `installer`.
+   * installer — technical house/KNX config + everything else
+   * superuser — customer app + user management, no technical config
+   * user — only floors/rooms/functions released by staff
+   */
+  role: UserRole;
   passwordHash: string;
+  /** If false, login is rejected. Super user uses this to block the installer. */
+  enabled?: boolean;
   access?: {
     floors?: "*" | string[];
     rooms?: "*" | string[];
+    /** House-wide systems (`verlichting`, `klimaat`, …). `*` or omit = all. */
+    functions?: "*" | string[];
+    /** Per-room function slugs. `*` = whole room. Overrides `functions` for that room. */
+    roomFunctions?: Record<string, "*" | string[]>;
     canRelease?: "*" | string[];
     talkIntercoms?: "*" | string[];
     /** If false, the user can run scenes but cannot create/edit/delete them.
-     *  Defaults to `true` — customers shouldn't need admin to tweak moods. */
+     *  Defaults to `true`. Installer and superuser always can. */
     editScenes?: boolean;
   };
 }

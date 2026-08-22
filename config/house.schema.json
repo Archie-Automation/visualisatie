@@ -1145,8 +1145,12 @@
         "id": { "type": "string" },
         "username": { "type": "string" },
         "displayName": { "type": "string" },
-        "role": { "type": "string", "enum": ["admin", "user"] },
+        "role": {
+          "type": "string",
+          "enum": ["installer", "superuser", "user", "admin"]
+        },
         "passwordHash": { "type": "string" },
+        "enabled": { "type": "boolean" },
         "access": {
           "type": "object",
           "properties": {
@@ -1161,6 +1165,21 @@
                 { "type": "string", "enum": ["*"] },
                 { "type": "array", "items": { "type": "string" } }
               ]
+            },
+            "functions": {
+              "oneOf": [
+                { "type": "string", "enum": ["*"] },
+                { "type": "array", "items": { "type": "string" } }
+              ]
+            },
+            "roomFunctions": {
+              "type": "object",
+              "additionalProperties": {
+                "oneOf": [
+                  { "type": "string", "enum": ["*"] },
+                  { "type": "array", "items": { "type": "string" } }
+                ]
+              }
             },
             "canRelease": {
               "oneOf": [

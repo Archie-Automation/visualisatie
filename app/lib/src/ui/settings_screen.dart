@@ -9,6 +9,7 @@ import '../api.dart';
 import '../display_panel_config.dart';
 import '../media_api.dart';
 import '../models.dart';
+import '../roles.dart';
 import '../schedule_api.dart';
 import '../software_version.dart';
 import '../theme.dart';
@@ -17,13 +18,14 @@ import '../theme_auto_schedule.dart';
 import 'app_nav.dart';
 import 'responsive.dart';
 import 'schedule_editor_sheet.dart';
+import 'users_admin_section.dart';
 import 'widgets/confirm_dialog.dart';
 import 'widgets/function_screen_header.dart';
 import 'widgets/glass_card.dart';
 import 'widgets/luxe_backdrop.dart';
 import 'installer_nav.dart';
 
-enum _SettingsTopic { appearance, schedules, tablet, spotify }
+enum _SettingsTopic { appearance, schedules, tablet, spotify, users }
 
 /// Customer-facing settings: menu first, then one function at a time.
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -139,6 +141,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     onTap: () =>
                         setState(() => _topic = _SettingsTopic.spotify),
                   ),
+                  if (auth.isStaff) ...[
+                    Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
+                    _SettingsMenuTile(
+                      icon: Icons.people_outline,
+                      title: 'Gebruikers',
+                      subtitle: auth.isInstaller
+                          ? 'Accounts, rollen en toegang'
+                          : 'Accounts, toegang, installer blokkeren',
+                      onTap: () =>
+                          setState(() => _topic = _SettingsTopic.users),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -148,7 +162,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               padding: const EdgeInsets.only(bottom: 8),
               child: Center(
                 child: Text(
-                  'Ingelogd als ${auth.username ?? '—'} · ${auth.effectiveRole ?? ''}',
+                  'Ingelogd als ${auth.username ?? '—'} · ${roleLabel(auth.effectiveRole)}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: LuxeColors.inkSoft.withValues(alpha: 0.55),
                         fontSize: 11,
@@ -177,6 +191,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _SettingsTopic.schedules => 'Tijdschema\'s',
       _SettingsTopic.tablet => 'Wandtablet',
       _SettingsTopic.spotify => 'Spotify',
+      _SettingsTopic.users => 'Gebruikers',
     };
     final infoTitle = title;
     final infoBody = switch (topic) {
@@ -204,6 +219,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             'Eerste keer toont de browser een certificaatwaarschuwing. '
             'Kies Geavanceerd → Doorgaan tot je “Certificaat OK” ziet, '
             'daarna Verbind Spotify.',
+      _SettingsTopic.users =>
+        'Installer ziet alles, inclusief technische configuratie.\n\n'
+            'Super user ziet alles in de app en beheert gebruikers, maar niet de KNX-opbouw. '
+            'Super user kan de installer blokkeren of weer vrijgeven.\n\n'
+            'Een gewone gebruiker ziet alleen wat hier is vrijgegeven: functies, '
+            'functies per kamer, hele kamers of verdiepingen, en eventueel scenes.',
     };
 
     return Column(
@@ -238,6 +259,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   const _DisplayPanelSection(showTitle: false),
                 _SettingsTopic.spotify =>
                   const _SpotifySection(showTitle: false),
+                _SettingsTopic.users =>
+                  UsersAdminSection(cfg: cfg, showTitle: false),
               },
             ],
           ),
@@ -247,7 +270,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Widget _installerTile(BuildContext ctx, AuthState auth) {
-    final locked = !auth.isAdmin;
+    final locked = !auth.isInstaller;
     return Padding(
       padding: EdgeInsets.fromLTRB(28, 8, 28, 8),
       child: GlassCard(
@@ -277,9 +300,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       const SizedBox(height: 2),
                       Text(
                         locked
-                            ? 'Alleen voor rol admin — tik voor uitleg. '
-                                'Met admin: verdiepingen, kamers, KNX, IP, streams, gebruikers.'
-                            : 'Verdiepingen, kamers, KNX, camera’s, IP, streams, gebruikers. '
+                            ? 'Alleen voor de installer — tik voor uitleg. '
+                                'Super user beheert gebruikers via Gebruikers hierboven.'
+                            : 'Verdiepingen, kamers, KNX, camera’s, IP, streams. '
                                 'Ook: gereedschap-icoon op het dashboard. '
                                 'Herstart backend/app: open dit scherm en kies links Project.',
                         style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
@@ -1715,7 +1738,7 @@ class _VersionFooter extends ConsumerWidget {
     final status = ref.watch(softwareVersionStatusProvider).asData?.value;
     final server = status?.running.version;
     final app = status?.clientVersion?.version ?? kAppVersion;
-    final line = auth.isAdmin && server != null && server.isNotEmpty
+    final line = auth.isInstaller && server != null && server.isNotEmpty
         ? 'app $app · server $server'
         : 'versie $app';
     return Padding(
