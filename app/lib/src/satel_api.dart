@@ -409,10 +409,14 @@ final satelEnabledProvider =
 class SatelEnabledNotifier extends AsyncNotifier<bool> {
   @override
   Future<bool> build() async {
-    // Fetch from server on first load — no watch dependency to avoid reset loops.
+    final token = ref.watch(authProvider).token;
+    if (token == null) return false;
     try {
       final res = await http
-          .get(Uri.parse('$apiBase/api/satel-config'))
+          .get(
+            Uri.parse('$apiBase/api/satel-config'),
+            headers: {'authorization': 'Bearer $token'},
+          )
           .timeout(const Duration(seconds: 5));
       if (res.statusCode == 200) {
         final body = jsonDecode(res.body) as Map<String, dynamic>;

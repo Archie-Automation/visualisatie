@@ -12,8 +12,8 @@
     {
       "id": "usr-admin",
       "username": "admin",
-      "displayName": "Admin",
-      "role": "admin",
+      "displayName": "Installer",
+      "role": "installer",
       "passwordHash": "$2b$10$REPLACE_ME_WITH_BCRYPT_HASH",
       "access": {
         "floors": "*",

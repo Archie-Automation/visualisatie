@@ -4,6 +4,13 @@ import type { NextFunction, Request, Response } from "express";
 import type { User } from "./types";
 import { getConfig } from "./config";
 import { logger } from "./logger";
+import {
+  isInstallerRole,
+  isStaffRole,
+  isUserEnabled,
+  normalizeRole,
+  type AppRole
+} from "./roles";
 
 const SECRET = process.env.JWT_SECRET ?? "dev-secret-change-me";
 const TTL = process.env.TOKEN_TTL ?? "12h";
@@ -11,7 +18,7 @@ const TTL = process.env.TOKEN_TTL ?? "12h";
 export interface TokenPayload {
   sub: string;
   username: string;
-  role: "admin" | "user";
+  role: AppRole;
 }
 
 export interface AuthedRequest extends Request {
@@ -25,13 +32,15 @@ export async function authenticate(
   const users = getConfig().users ?? [];
   const user = users.find((u) => u.username === username);
   if (!user) return null;
+  if (!isUserEnabled(user)) return null;
   const ok = await bcrypt.compare(password, user.passwordHash).catch(() => false);
 
-  // Bootstrap convenience: if the hash is the placeholder, accept "admin"/"admin".
+  const role = normalizeRole(user.role);
+  // Bootstrap convenience: placeholder hash accepts admin/admin (installer) or guest.
   const isBootstrap =
     user.passwordHash.includes("REPLACE_ME") &&
-    ((user.role === "admin" && password === "admin") ||
-      (user.role === "user" && password === "guest"));
+    ((role === "installer" && password === "admin") ||
+      (role === "user" && password === "guest"));
 
   if (!ok && !isBootstrap) return null;
   if (isBootstrap) {
@@ -41,10 +50,15 @@ export async function authenticate(
   const payload: TokenPayload = {
     sub: user.id,
     username: user.username,
-    role: user.role
+    role
   };
   const token = jwt.sign(payload, SECRET, { expiresIn: TTL as jwt.SignOptions["expiresIn"] });
-  const { passwordHash: _ph, ...publicUser } = user;
+  const { passwordHash: _ph, ...rest } = user;
+  const publicUser: Omit<User, "passwordHash"> = {
+    ...rest,
+    role,
+    enabled: isUserEnabled(user)
+  };
   return { token, user: publicUser };
 }
 
@@ -60,19 +74,39 @@ export function requireAuth(
   try {
     const decoded = jwt.verify(hdr.slice(7), SECRET) as TokenPayload;
     req.user = decoded;
+    const live = (getConfig().users ?? []).find((u) => u.id === decoded.sub);
+    if (live && !isUserEnabled(live)) {
+      return res.status(401).json({ error: "account disabled" });
+    }
     next();
   } catch {
     return res.status(401).json({ error: "invalid token" });
   }
 }
 
-export function requireAdmin(
+/** Technical configuration (KNX house editor, server update, …). */
+export function requireInstaller(
   req: AuthedRequest,
   res: Response,
   next: NextFunction
 ) {
-  if (req.user?.role !== "admin") {
-    return res.status(403).json({ error: "admin only" });
+  if (!isInstallerRole(req.user?.role)) {
+    return res.status(403).json({ error: "installer only" });
+  }
+  next();
+}
+
+/** @deprecated Use requireInstaller. Kept so old call sites keep compiling. */
+export const requireAdmin = requireInstaller;
+
+/** Installer or super user (user management, full customer app). */
+export function requireStaff(
+  req: AuthedRequest,
+  res: Response,
+  next: NextFunction
+) {
+  if (!isStaffRole(req.user?.role)) {
+    return res.status(403).json({ error: "staff only" });
   }
   next();
 }
@@ -89,13 +123,13 @@ export function canReleaseIntercom(
   intercomId: string
 ): boolean {
   const u = currentUser(req);
-  // Service token / non-resolvable users: admins always, everyone else no.
-  if (!u) return req.user?.role === "admin";
+  if (!u) return isStaffRole(req.user?.role);
+  if (!isUserEnabled(u)) return false;
+  if (isStaffRole(u.role)) return true;
   const acl = u.access?.canRelease;
   if (acl === "*") return true;
   if (Array.isArray(acl)) return acl.includes(intercomId);
-  // Unset → inherit from role.
-  return u.role === "admin";
+  return false;
 }
 
 /** Can this authenticated caller view/answer the given intercom? */
@@ -104,18 +138,18 @@ export function canViewIntercom(
   intercomId: string
 ): boolean {
   const u = currentUser(req);
-  if (!u) return req.user?.role === "admin";
+  if (!u) return isStaffRole(req.user?.role);
+  if (isStaffRole(u.role)) return true;
   const acl = u.access?.talkIntercoms;
-  if (acl === undefined) return true; // no explicit restriction
+  if (acl === undefined) return true;
   if (acl === "*") return true;
   return acl.includes(intercomId);
 }
 
 /** Can this caller create / rename / delete scenes?
- *  Admins always. Users get true unless explicitly denied via
- *  `access.editScenes === false`. */
+ *  Installer and superuser always. Users unless `access.editScenes === false`. */
 export function canEditScenes(req: AuthedRequest): boolean {
-  if (req.user?.role === "admin") return true;
+  if (isStaffRole(req.user?.role)) return true;
   const u = currentUser(req);
   if (!u) return false;
   return u.access?.editScenes !== false;

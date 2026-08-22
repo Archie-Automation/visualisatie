@@ -7,10 +7,20 @@ import {
   canEditScenes,
   canReleaseIntercom,
   canViewIntercom,
+  currentUser,
   requireAdmin,
   requireAuth,
+  requireStaff,
   type AuthedRequest
 } from "./auth";
+import { isStaffRole, normalizeRole } from "./roles";
+import {
+  assertUsersMutation,
+  canonicalizeStoredUser,
+  filterConfigForUser,
+  houseFunctionAllowed,
+  userMayUseDevice
+} from "./userAccess";
 import {
   collectAllGAs,
   findRoom,
@@ -34,7 +44,7 @@ import type { KnxBus } from "./knxBus";
 import { logger } from "./logger";
 import { runScene } from "./scenes";
 import type { SchedulerHandle } from "./scheduler";
-import type { Floor, HouseConfig, Scene, Schedule, User } from "./types";
+import type { HouseConfig, Scene, Schedule, User } from "./types";
 import { appVersionInfo } from "./version";
 import {
   fetchAndroidApkFromGithub,
@@ -139,12 +149,20 @@ p{color:#b3b3b3;margin:0}a{color:#1db954}</style></head>
  * Strip sensitive bits before shipping config to a client and apply
  * per-user ACLs. Camera/intercom credentials never leave the backend.
  */
-function publicConfig(cfg: HouseConfig, role: "admin" | "user", userId?: string) {
+function publicConfig(cfg: HouseConfig, role: string, userId?: string) {
   const { users, cameras = [], intercoms = [], ...rest } = cfg;
   const me = users?.find((u) => u.id === userId);
   // Ship only the current user, with passwordHash stripped, so the client
   // can render an accurate capability UI.
-  const mePublic = me ? [stripHash(me)] : [];
+  const mePublic = me
+    ? [
+        stripHash({
+          ...me,
+          role: normalizeRole(me.role),
+          enabled: me.enabled !== false
+        })
+      ]
+    : [];
   // The stripping below removes fields that the Device types mark as
   // required (rtsp/sources on camera/intercom) – intentional, since the
   // client never needs those – so we force the TS shape back to
@@ -204,24 +222,8 @@ function publicConfig(cfg: HouseConfig, role: "admin" | "user", userId?: string)
       }))
     }))
   } as unknown as HouseConfig;
-  if (role === "admin" || !me?.access) return scrubbed;
-
-  const allowedFloors = me.access.floors;
-  const allowedRooms = me.access.rooms;
-
-  const filterFloor = (f: Floor) => {
-    if (allowedFloors !== "*" && allowedFloors && !allowedFloors.includes(f.id))
-      return null;
-    const rooms = f.rooms.filter(
-      (r) => allowedRooms === "*" || !allowedRooms || allowedRooms.includes(r.id)
-    );
-    return { ...f, rooms };
-  };
-
-  return {
-    ...scrubbed,
-    floors: scrubbed.floors.map(filterFloor).filter((x): x is Floor => !!x)
-  };
+  if (isStaffRole(role) || isStaffRole(me?.role) || !me?.access) return scrubbed;
+  return filterConfigForUser(scrubbed, me);
 }
 
 /** Full house.json for the installer UI (no password hashes). */
@@ -437,15 +439,21 @@ export function buildRouter(
   // ── Satel integration config (enabled + partitions) ─────────────────────
   // GET  /api/satel-config  → { enabled: bool, partitions: [{number, name}[]] }
   // POST /api/satel-config  → body { enabled?, partitions? }, responds 204
-  r.get("/satel-config", (_req, res) => {
+  r.get("/satel-config", requireAuth, (req: AuthedRequest, res) => {
     const cfg = getConfig();
+    const enabled = cfg.satel?.enabled ?? false;
+    const u = currentUser(req);
+    const allowed =
+      isStaffRole(req.user?.role) ||
+      isStaffRole(u?.role) ||
+      houseFunctionAllowed(u?.access, "alarm");
     res.json({
-      enabled: cfg.satel?.enabled ?? false,
-      partitions: cfg.satel?.partitions ?? [],
+      enabled: Boolean(enabled && allowed),
+      partitions: allowed ? (cfg.satel?.partitions ?? []) : []
     });
   });
 
-  r.post("/satel-config", requireAuth, (req: AuthedRequest, res) => {
+  r.post("/satel-config", requireAuth, requireAdmin, (req: AuthedRequest, res) => {
     const { enabled, partitions } = req.body ?? {};
     updateConfig((draft) => {
       draft.satel = draft.satel ?? {};
@@ -466,6 +474,89 @@ export function buildRouter(
     const result = await authenticate(username, password);
     if (!result) return res.status(401).json({ error: "invalid credentials" });
     res.json(result);
+  });
+
+  r.get("/users", requireAuth, requireStaff, (_req, res) => {
+    const users = (getConfig().users ?? []).map((u) =>
+      stripHash({
+        ...u,
+        role: normalizeRole(u.role),
+        enabled: u.enabled !== false
+      })
+    );
+    res.json({ users });
+  });
+
+  r.put("/users", requireAuth, requireStaff, async (req: AuthedRequest, res) => {
+    const actor = currentUser(req);
+    if (!actor) return res.status(403).json({ error: "onbekende gebruiker" });
+
+    const StarOrIds = z.union([z.literal("*"), z.array(z.string())]);
+    const parsed = z
+      .object({
+        users: z.array(
+          z.object({
+            id: z.string().min(1),
+            username: z.string().min(1),
+            displayName: z.string().optional(),
+            role: z.enum(["installer", "superuser", "user", "admin"]),
+            passwordHash: z.string().optional(),
+            password: z.string().optional(),
+            enabled: z.boolean().optional(),
+            access: z
+              .object({
+                floors: StarOrIds.optional(),
+                rooms: StarOrIds.optional(),
+                functions: StarOrIds.optional(),
+                roomFunctions: z.record(StarOrIds).optional(),
+                canRelease: StarOrIds.optional(),
+                talkIntercoms: StarOrIds.optional(),
+                editScenes: z.boolean().optional()
+              })
+              .optional()
+          })
+        )
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      return res
+        .status(400)
+        .json({ error: "ongeldige gebruikerslijst", details: parsed.error.issues });
+    }
+
+    const body = { users: parsed.data.users as unknown as User[] };
+    await applyPlaintextPasswords(body);
+
+    const previous = getConfig();
+    const nextUsers = body.users.map((u) =>
+      canonicalizeStoredUser({
+        ...u,
+        passwordHash: u.passwordHash ?? ""
+      })
+    );
+    const draft = structuredClone(previous);
+    draft.users = nextUsers;
+    mergePasswordHashes(draft, previous);
+    const userErr = assertUsersHaveHashes(draft);
+    if (userErr) return res.status(400).json({ error: userErr });
+
+    const mutErr = assertUsersMutation(
+      actor,
+      previous.users ?? [],
+      draft.users ?? []
+    );
+    if (mutErr) return res.status(403).json({ error: mutErr });
+
+    persistConfig(draft);
+    ws.broadcastConfigChanged(getConfigVersion());
+    const users = (getConfig().users ?? []).map((u) =>
+      stripHash({
+        ...u,
+        role: normalizeRole(u.role),
+        enabled: u.enabled !== false
+      })
+    );
+    res.json({ ok: true, users });
   });
 
   r.get("/config", requireAuth, (req: AuthedRequest, res) => {
@@ -1310,12 +1401,20 @@ export function buildRouter(
     });
   });
 
-  r.post("/command", requireAuth, async (req, res) => {
+  r.post("/command", requireAuth, async (req: AuthedRequest, res) => {
     const parsed = CommandSchema.safeParse(req.body);
     if (!parsed.success) {
       return res
         .status(400)
         .json({ error: "invalid command", details: parsed.error.issues });
+    }
+    const deviceId =
+      "deviceId" in parsed.data ? parsed.data.deviceId : undefined;
+    if (typeof deviceId === "string") {
+      const u = currentUser(req);
+      if (!userMayUseDevice(u, req.user?.role, getConfig(), deviceId)) {
+        return res.status(403).json({ error: "geen toegang tot dit apparaat" });
+      }
     }
     try {
       await dispatch(parsed.data, getConfig(), bus, media, lutron);

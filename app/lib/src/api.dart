@@ -11,6 +11,7 @@ import 'media_api.dart';
 import 'hvac_switch_lock.dart';
 import 'fireplace_virtual.dart';
 import 'models.dart';
+import 'roles.dart';
 
 /// Returns the API base URL.
 /// In release builds on web the app is served by the backend itself, so we
@@ -120,15 +121,19 @@ class AuthState {
     return _parseJwtRole(t);
   }
 
-  bool get isAdmin {
-    final r = effectiveRole;
-    return r != null && r.toLowerCase() == 'admin';
-  }
+  bool get isInstaller => isInstallerRole(effectiveRole);
+
+  bool get isSuperUser => isSuperUserRole(effectiveRole);
+
+  bool get isStaff => isStaffRole(effectiveRole);
+
+  /// Technical configuration (KNX house editor). Legacy name for [isInstaller].
+  bool get isAdmin => isInstaller;
 }
 
-/// Scene/schedule editing: admins always; other users follow ACL on `me`.
+/// Scene/schedule editing: installer and superuser always; other users follow ACL on `me`.
 bool canEditScenesInApp(AuthState auth, HouseConfig cfg) =>
-    auth.isAdmin || (cfg.me?.canEditScenes ?? false);
+    auth.isStaff || (cfg.me?.canEditScenes ?? false);
 
 class AuthController extends Notifier<AuthState> {
   @override

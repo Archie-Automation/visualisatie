@@ -893,7 +893,7 @@ Widget _header(
         const SizedBox(width: 12),
         _HouseActivityHeaderButtons(cfg: cfg),
         // On narrow phones collapse installer icon into a single menu
-        if (auth.isAdmin) ...[
+        if (auth.isInstaller) ...[
           _GlassIconButton(
             icon: Icons.construction_outlined,
             tooltip: 'Technische configuratie',

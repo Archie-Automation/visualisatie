@@ -87,7 +87,7 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
         if (!auth.restoreComplete && !onLogin) return '/splash';
         if (!auth.isAuthed && !onLogin) return '/login';
         if (auth.isAuthed && onLogin) return '/';
-        if (installer && auth.isAuthed && !auth.isAdmin) return '/';
+        if (installer && auth.isAuthed && !auth.isInstaller) return '/';
         return null;
       },
       refreshListenable: _routerRefresh,

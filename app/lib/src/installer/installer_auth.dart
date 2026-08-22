@@ -42,7 +42,7 @@ class InstallerAuthController extends Notifier<InstallerAuthState> {
     if (res.statusCode != 200) return false;
     final body = jsonDecode(res.body) as Map<String, dynamic>;
     final user = body['user'] as Map<String, dynamic>;
-    if (user['role'] != 'admin') return false;
+    if (user['role'] != 'admin' && user['role'] != 'installer') return false;
 
     final token = body['token'] as String;
     final sp = await SharedPreferences.getInstance();
