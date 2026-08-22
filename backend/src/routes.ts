@@ -1153,7 +1153,20 @@ export function buildRouter(
   ]);
 
   const ActionSchema = z.discriminatedUnion("kind", [
-    z.object({ kind: z.literal("scene"), sceneId: z.string().min(1).max(64) }),
+    z.object({
+      kind: z.literal("scene"),
+      sceneId: z.string().min(1).max(64),
+      steps: z
+        .array(
+          z.object({
+            sceneId: z.string().min(1).max(64),
+            delayMs: z.number().int().min(0).max(1_800_000).optional()
+          })
+        )
+        .min(1)
+        .max(32)
+        .optional()
+    }),
     z.object({
       kind: z.literal("actions"),
       actions: z.array(SceneActionSchema).min(1).max(64)

@@ -1127,8 +1127,20 @@ export type ScheduleTrigger =
       notAfter?: ScheduleGuard;
     };
 
+export type ScheduleSceneStep = {
+  sceneId: string;
+  /** Wait before this scene runs (ms). Independent of per-device scene delays. */
+  delayMs?: number;
+};
+
 export type ScheduleAction =
-  | { kind: "scene"; sceneId: string }
+  | {
+      kind: "scene";
+      /** First scene (always set for backward compatibility). */
+      sceneId: string;
+      /** Optional sequence. When present, this is the source of truth. */
+      steps?: ScheduleSceneStep[];
+    }
   | { kind: "actions"; actions: SceneAction[] };
 
 export interface Schedule {

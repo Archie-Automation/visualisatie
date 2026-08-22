@@ -15,6 +15,7 @@ import '../theme.dart';
 import '../theme_mode.dart';
 import '../theme_auto_schedule.dart';
 import 'app_nav.dart';
+import 'responsive.dart';
 import 'schedule_editor_sheet.dart';
 import 'widgets/confirm_dialog.dart';
 import 'widgets/function_screen_header.dart';
@@ -1583,20 +1584,36 @@ String describeAction(ScheduleAction a, HouseConfig cfg) {
     return a.toLight ? 'Weergave: licht' : 'Weergave: donker';
   }
   if (a is ScheduleSceneAction) {
-    // Look up scene name across global + room scenes.
-    final global = cfg.scenes.where((s) => s.id == a.sceneId).toList();
-    if (global.isNotEmpty) return 'Scene: ${global.first.name}';
-    for (final f in cfg.floors) {
-      for (final r in f.rooms) {
-        for (final s in r.scenes) {
-          if (s.id == a.sceneId) return 'Scene: ${s.name}  (${r.name})';
-        }
-      }
+    final steps = a.effectiveSteps;
+    if (steps.isEmpty) return 'Geen scene';
+    if (steps.length == 1) {
+      return 'Scene: ${_sceneName(cfg, steps.first.sceneId)}';
     }
-    return 'Scene: (verwijderd)';
+    return '${steps.length} scenes';
   }
   a as ScheduleActionsAction;
   return '${a.actions.length} apparaten';
+}
+
+String _sceneName(HouseConfig cfg, String id) {
+  for (final s in cfg.scenes) {
+    if (s.id == id) return s.name;
+  }
+  for (final f in cfg.floors) {
+    for (final r in f.rooms) {
+      for (final s in r.scenes) {
+        if (s.id == id) return '${s.name}  (${r.name})';
+      }
+    }
+  }
+  return '(verwijderd)';
+}
+
+Widget _fitSegmentLabel(String text) {
+  return FittedBox(
+    fit: BoxFit.scaleDown,
+    child: Text(text, maxLines: 1, softWrap: false),
+  );
 }
 
 class _AppearanceSection extends ConsumerWidget {
@@ -1626,29 +1643,46 @@ class _AppearanceSection extends ConsumerWidget {
             SizedBox(
               width: double.infinity,
               child: SegmentedButton<ThemeMode>(
-                style: const ButtonStyle(
-                  visualDensity: VisualDensity(vertical: 1.5),
+                showSelectedIcon: false,
+                expandedInsets: EdgeInsets.zero,
+                style: ButtonStyle(
+                  visualDensity: const VisualDensity(vertical: 1.5),
                   padding: WidgetStatePropertyAll(
-                    EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                    EdgeInsets.symmetric(
+                      horizontal: context.isPhone ? 4 : 10,
+                      vertical: 14,
+                    ),
                   ),
-                  minimumSize: WidgetStatePropertyAll(Size(0, 48)),
+                  minimumSize: const WidgetStatePropertyAll(Size(0, 48)),
                   tapTargetSize: MaterialTapTargetSize.padded,
+                  textStyle: WidgetStatePropertyAll(
+                    Theme.of(context).textTheme.labelLarge?.copyWith(
+                          letterSpacing: 0.15,
+                          fontSize: context.isPhone ? 13 : 14,
+                        ),
+                  ),
                 ),
-                segments: const [
+                segments: [
                   ButtonSegment(
                     value: ThemeMode.light,
-                    label: Text('Licht'),
-                    icon: Icon(Icons.light_mode_outlined, size: 18),
+                    label: _fitSegmentLabel('Licht'),
+                    icon: context.isPhone
+                        ? null
+                        : const Icon(Icons.light_mode_outlined, size: 18),
                   ),
                   ButtonSegment(
                     value: ThemeMode.dark,
-                    label: Text('Donker'),
-                    icon: Icon(Icons.dark_mode_outlined, size: 18),
+                    label: _fitSegmentLabel('Donker'),
+                    icon: context.isPhone
+                        ? null
+                        : const Icon(Icons.dark_mode_outlined, size: 18),
                   ),
                   ButtonSegment(
                     value: ThemeMode.system,
-                    label: Text('Auto'),
-                    icon: Icon(Icons.brightness_auto_outlined, size: 18),
+                    label: _fitSegmentLabel('Auto'),
+                    icon: context.isPhone
+                        ? null
+                        : const Icon(Icons.brightness_auto_outlined, size: 18),
                   ),
                 ],
                 selected: {mode},
