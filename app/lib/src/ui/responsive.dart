@@ -16,15 +16,17 @@ extension ResponsiveX on BuildContext {
   double get _h => MediaQuery.sizeOf(this).height;
   double get _shortest => MediaQuery.sizeOf(this).shortestSide;
 
-  /// Phone layout — shortestSide for orientation, width for narrow viewports,
-  /// plus mobile user-agent on web (PWA in browser).
+  /// Phone layout — shortestSide for orientation, width for narrow viewports.
   ///
   /// Landscape wall panels (e.g. 1280×800 @240dpi ≈ 853×533) would otherwise
-  /// count as phones and look oversized; treat wide landscape as tablet+.
+  /// count as phones; treat wide, reasonably tall landscape as tablet+.
+  /// iPhone landscape is wide (~844) but only ~390 tall — keep phone layout.
+  /// iPad (browser / PWA) follows the same size rules as the Android panel;
+  /// do not force phone layout just because the user-agent says "Mobile".
   bool get isPhone {
-    if (platform.isMobileWebUserAgent) return true;
     final landscape = _w > _h;
-    if (landscape && _w >= 700) return false;
+    if (landscape && _w >= 700 && _h >= 500) return false;
+    if (platform.isPhoneWebUserAgent) return true;
     return _shortest < 600 || _w < 600;
   }
 
