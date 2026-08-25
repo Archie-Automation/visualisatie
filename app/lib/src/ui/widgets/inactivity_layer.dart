@@ -247,7 +247,7 @@ class _ScreensaverOverlayState extends ConsumerState<ScreensaverOverlay> {
   }
 }
 
-/// Thermometer + huis — buitentemperatuur op de screensaver.
+/// Wolk + thermometer — buitentemperatuur op de screensaver.
 class _OutdoorTempIcon extends StatelessWidget {
   const _OutdoorTempIcon({required this.size, required this.color});
 
@@ -270,7 +270,7 @@ class _OutdoorTempIcon extends StatelessWidget {
               alignment: Alignment.centerLeft,
               maxWidth: size,
               maxHeight: size,
-              child: Icon(Icons.thermostat_outlined, size: size, color: color),
+              child: Icon(Icons.cloud_outlined, size: size, color: color),
             ),
           ),
         ),
@@ -282,7 +282,7 @@ class _OutdoorTempIcon extends StatelessWidget {
               alignment: Alignment.centerRight,
               maxWidth: size,
               maxHeight: size,
-              child: Icon(Icons.home_outlined, size: size, color: color),
+              child: Icon(Icons.thermostat_outlined, size: size, color: color),
             ),
           ),
         ),
