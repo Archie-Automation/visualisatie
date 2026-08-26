@@ -710,6 +710,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         'rooms': '*',
         'functions': '*',
         'devices': '*',
+        'scenes': '*',
         'editScenes': true,
       },
       'enabled': true,
@@ -2636,12 +2637,18 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             subtitle: Text(
               [
                 roleLabel(list[i]['role'] as String?),
-                if (list[i]['enabled'] == false) 'geblokkeerd',
                 list[i]['displayName'] ?? '',
               ].where((s) => s.toString().trim().isNotEmpty).join(' · '),
             ),
             selected: _sel.kind == _FocusKind.user && _sel.fi == i,
-            trailing: const Icon(Icons.chevron_right),
+            trailing: Switch.adaptive(
+              value: list[i]['enabled'] != false,
+              onChanged: (v) {
+                list[i]['enabled'] = v;
+                setState(() {});
+              },
+              activeThumbColor: LuxeColors.brass,
+            ),
             onTap: () => _selectFocus(_Focus.user(i)),
           ),
       ],
@@ -2718,6 +2725,7 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
       'rooms': '*',
       'functions': '*',
       'devices': '*',
+      'scenes': '*',
       'editScenes': true,
     };
     widget.user['access'] = m;
@@ -2735,7 +2743,6 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
       AppRole.superuser => 'superuser',
       AppRole.user => 'user',
     };
-    final enabled = u['enabled'] != false;
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -2777,19 +2784,6 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
               }
             },
           ),
-        ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Account actief'),
-          subtitle: const Text(
-            'Uit = kan niet inloggen. Super user gebruikt dit om de installer te blokkeren.',
-          ),
-          value: enabled,
-          onChanged: (v) {
-            u['enabled'] = v;
-            widget.onChanged();
-            setState(() {});
-          },
         ),
         TextField(
           controller: _password,

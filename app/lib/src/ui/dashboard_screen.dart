@@ -1,4 +1,5 @@
-﻿import 'dart:math';
+﻿import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -850,13 +851,75 @@ class _RoomDashboardRow extends ConsumerWidget {
   }
 }
 
-String _timeGreeting() {
-  final hour = DateTime.now().hour;
+String _timeGreeting([DateTime? at]) {
+  final hour = (at ?? DateTime.now()).hour;
   if (hour < 5) return 'Goedenacht';
   if (hour < 12) return 'Goedemorgen';
   if (hour < 18) return 'Goedemiddag';
   if (hour < 23) return 'Goedenavond';
   return 'Goedenacht';
+}
+
+DateTime _nextGreetingBoundary(DateTime now) {
+  const hours = [5, 12, 18, 23];
+  for (final h in hours) {
+    final candidate = DateTime(now.year, now.month, now.day, h);
+    if (candidate.isAfter(now)) return candidate;
+  }
+  return DateTime(now.year, now.month, now.day + 1, 5);
+}
+
+class _TimeGreetingText extends StatefulWidget {
+  const _TimeGreetingText();
+
+  @override
+  State<_TimeGreetingText> createState() => _TimeGreetingTextState();
+}
+
+class _TimeGreetingTextState extends State<_TimeGreetingText>
+    with WidgetsBindingObserver {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _schedule();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      setState(() {});
+      _schedule();
+    }
+  }
+
+  void _schedule() {
+    _timer?.cancel();
+    final now = DateTime.now();
+    final next = _nextGreetingBoundary(now);
+    _timer = Timer(next.difference(now) + const Duration(milliseconds: 80), () {
+      if (!mounted) return;
+      setState(() {});
+      _schedule();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      _timeGreeting().toUpperCase(),
+      style: Theme.of(context).textTheme.labelLarge,
+    );
+  }
 }
 
 Widget _header(
@@ -876,8 +939,7 @@ Widget _header(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(_timeGreeting().toUpperCase(),
-                  style: Theme.of(context).textTheme.labelLarge),
+              const _TimeGreetingText(),
               const SizedBox(height: 10),
               Text(
                 cfg.projectName,

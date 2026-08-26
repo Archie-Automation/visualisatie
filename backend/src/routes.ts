@@ -19,7 +19,8 @@ import {
   canonicalizeStoredUser,
   filterConfigForUser,
   houseFunctionAllowed,
-  userMayUseDevice
+  userMayUseDevice,
+  aclAllows
 } from "./userAccess";
 import {
   collectAllGAs,
@@ -511,6 +512,7 @@ export function buildRouter(
                 functions: StarOrIds.optional(),
                 roomFunctions: z.record(StarOrIds).optional(),
                 devices: StarOrIds.optional(),
+                scenes: StarOrIds.optional(),
                 canRelease: StarOrIds.optional(),
                 talkIntercoms: StarOrIds.optional(),
                 editScenes: z.boolean().optional()
@@ -1168,14 +1170,18 @@ export function buildRouter(
     const cfg = getConfig();
     const hit = findScene(cfg, req.params.id);
     if (!hit) return res.status(404).json({ error: "unknown scene" });
-    // Room-scoped scenes honour the user's room ACL.
-    if (hit.scope === "room" && hit.roomId) {
-      const scrubbed = publicConfig(cfg, req.user!.role, req.user!.sub);
-      const stillVisible = scrubbed.floors.some((f) =>
-        f.rooms.some((r) => r.id === hit.roomId)
-      );
-      if (!stillVisible)
-        return res.status(403).json({ error: "room not allowed" });
+    const u = currentUser(req);
+    if (!isStaffRole(req.user?.role) && !isStaffRole(u?.role)) {
+      if (hit.scope === "room" && hit.roomId) {
+        const scrubbed = publicConfig(cfg, req.user!.role, req.user!.sub);
+        const stillVisible = scrubbed.floors.some((f) =>
+          f.rooms.some((r) => r.id === hit.roomId)
+        );
+        if (!stillVisible)
+          return res.status(403).json({ error: "room not allowed" });
+      } else if (!aclAllows(u?.access?.scenes, hit.scene.id)) {
+        return res.status(403).json({ error: "scene not allowed" });
+      }
     }
     try {
       await runScene(hit.scene, bus, cfg, media);
@@ -1193,7 +1199,26 @@ export function buildRouter(
     if (!parsed.success)
       return res.status(400).json({ error: "bad scenes", issues: parsed.error.issues });
     updateConfig((draft) => {
-      draft.scenes = parsed.data.scenes as Scene[];
+      const u = currentUser(req);
+      const incoming = parsed.data.scenes as Scene[];
+      const list = u?.access?.scenes;
+      if (
+        isStaffRole(req.user?.role) ||
+        isStaffRole(u?.role) ||
+        list === undefined ||
+        list === "*"
+      ) {
+        draft.scenes = incoming;
+        return;
+      }
+      const allowed = new Set(list);
+      const existing = draft.scenes ?? [];
+      const hidden = existing.filter((s) => !allowed.has(s.id));
+      const existingIds = new Set(existing.map((s) => s.id));
+      const visibleOrNew = incoming.filter(
+        (s) => allowed.has(s.id) || !existingIds.has(s.id)
+      );
+      draft.scenes = [...visibleOrNew, ...hidden];
     });
     res.json({ ok: true, count: parsed.data.scenes.length });
   });
