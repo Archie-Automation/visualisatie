@@ -101,16 +101,21 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
     if (!outdated) return const SizedBox.shrink();
     if (status == null) return const SizedBox.shrink();
 
-    // Native tablet: APK install beats the web-only "Vernieuwen" path.
-    if (status.androidApkUpdateAvailable) {
+    // Native tablet: tap anywhere on the strip to install. FilledButton/InkWell
+    // often eats the first touch on PoE wall panels.
+    final canInstallApk = supportsAndroidApkUpdate &&
+        (status.androidApkUpdateAvailable || status.clientStale);
+    if (canInstallApk) {
       final latest = status.latest;
-      final ver = latest?.tag ?? latest?.version ?? '';
+      final ver = latest?.tag ??
+          latest?.version ??
+          status.running.version;
       final message = _error ??
           (_installing
               ? 'App-update downloaden… Bevestig daarna de installatie.'
               : (ver.isEmpty
-                  ? 'Nieuwe app-versie beschikbaar.'
-                  : 'Nieuwe app-versie ($ver) beschikbaar.'));
+                  ? 'Nieuwe app-versie beschikbaar. Tik om te installeren.'
+                  : 'Nieuwe app-versie ($ver) beschikbaar. Tik om te installeren.'));
       return _Banner(
         message: message,
         actionLabel: _installing ? null : 'Installeren',
@@ -245,6 +250,7 @@ class _Banner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tone = _BannerTone.of(context);
+    final tappable = onAction != null;
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle(
         statusBarColor: tone.bg,
@@ -255,74 +261,82 @@ class _Banner extends StatelessWidget {
       ),
       child: Material(
         color: tone.bg,
-        child: SafeArea(
-          bottom: false,
-          child: DefaultTextStyle(
-            style: TextStyle(
-              color: tone.fg,
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              height: 1.3,
-            ),
-            child: IconTheme(
-              data: IconThemeData(color: tone.accent, size: 20),
-              child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.system_update_alt_rounded, color: tone.accent),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            message,
-                            style: TextStyle(color: tone.fg),
+        child: Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: tappable ? (_) => onAction!() : null,
+          child: SafeArea(
+            bottom: false,
+            child: DefaultTextStyle(
+              style: TextStyle(
+                color: tone.fg,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                height: 1.3,
+              ),
+              child: IconTheme(
+                data: IconThemeData(color: tone.accent, size: 20),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.system_update_alt_rounded,
+                              color: tone.accent),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              message,
+                              style: TextStyle(color: tone.fg),
+                            ),
                           ),
-                        ),
-                        if (actionLabel != null && onAction != null)
-                          FilledButton(
-                            onPressed: onAction,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: tone.buttonBg,
-                              foregroundColor: tone.buttonFg,
-                              disabledBackgroundColor:
-                                  tone.buttonBg.withValues(alpha: 0.45),
-                              disabledForegroundColor:
-                                  tone.buttonFg.withValues(alpha: 0.55),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 8,
-                              ),
-                              minimumSize: const Size(0, 36),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              visualDensity: VisualDensity.compact,
-                              textStyle: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
+                          if (actionLabel != null)
+                            IgnorePointer(
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 16,
+                                  vertical: 10,
+                                ),
+                                constraints: const BoxConstraints(minHeight: 44),
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: tappable
+                                      ? tone.buttonBg
+                                      : tone.buttonBg.withValues(alpha: 0.45),
+                                  borderRadius: BorderRadius.circular(22),
+                                ),
+                                child: Text(
+                                  actionLabel!,
+                                  style: TextStyle(
+                                    color: tappable
+                                        ? tone.buttonFg
+                                        : tone.buttonFg.withValues(alpha: 0.55),
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                  ),
+                                ),
                               ),
                             ),
-                            child: Text(actionLabel!),
-                          ),
-                      ],
-                    ),
-                    if (progress != null) ...[
-                      const SizedBox(height: 8),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(2),
-                        child: LinearProgressIndicator(
-                          value: progress! > 0 && progress! < 1
-                              ? progress
-                              : null,
-                          minHeight: 3,
-                          color: tone.accent,
-                          backgroundColor: tone.track,
-                        ),
+                        ],
                       ),
+                      if (progress != null) ...[
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(2),
+                          child: LinearProgressIndicator(
+                            value: progress! > 0 && progress! < 1
+                                ? progress
+                                : null,
+                            minHeight: 3,
+                            color: tone.accent,
+                            backgroundColor: tone.track,
+                          ),
+                        ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
