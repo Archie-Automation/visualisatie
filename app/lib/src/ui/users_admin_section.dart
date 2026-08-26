@@ -11,6 +11,7 @@ import '../user_credentials.dart';
 import 'user_access_editor.dart';
 import 'widgets/back_pill.dart';
 import 'widgets/glass_card.dart';
+import 'widgets/luxe_form.dart';
 
 class UsersAdminSection extends ConsumerStatefulWidget {
   const UsersAdminSection({super.key, required this.cfg, this.showTitle = false});
@@ -270,10 +271,9 @@ class _UserRow extends StatelessWidget {
                 ],
               ),
             ),
-            Switch.adaptive(
+            LuxeOnOffSwitch(
               value: enabled,
               onChanged: canToggle ? onToggle : null,
-              activeThumbColor: LuxeColors.brass,
             ),
           ],
         ),
