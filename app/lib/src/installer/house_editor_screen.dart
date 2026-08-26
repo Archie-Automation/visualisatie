@@ -35,9 +35,14 @@ import '../shading_subtype_glyph.dart';
 import '../theme.dart';
 import '../roles.dart';
 import '../user_credentials.dart';
+import '../ui/responsive.dart';
 import '../ui/user_access_editor.dart';
 import '../ui/widgets/admin_full_restart_card.dart';
 import '../ui/widgets/admin_server_update_card.dart';
+import '../ui/widgets/back_pill.dart';
+import '../ui/widgets/function_screen_header.dart';
+import '../ui/widgets/luxe_backdrop.dart';
+import '../ui/widgets/luxe_form.dart';
 import 'installer_api.dart';
 import 'installer_auth.dart';
 import 'installer_form_sections.dart';
@@ -1306,44 +1311,50 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   Widget _camerasInstallerPanel(BuildContext context) {
     final list = _cameras();
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.only(bottom: 36),
       children: [
-        Row(
-          children: [
-            Text('Camera\'s', style: Theme.of(context).textTheme.titleLarge),
-            const Spacer(),
-            FilledButton.icon(
-              onPressed: _addCamera,
-              icon: const Icon(Icons.add_a_photo_outlined),
-              label: const Text('Camera toevoegen'),
-            ),
-          ],
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
+          child: Text(
+            'Camera\'s horen bij het hele project, niet bij een kamer.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: LuxeColors.inkSoft,
+                ),
+          ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          'Camera\'s horen bij het hele project, niet bij een kamer. '
-          'Configureer hier RTSP, pad, aspect en opties.',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+        LuxeListCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              if (list.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                  child: Text(
+                    'Nog geen camera\'s',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              for (var i = 0; i < list.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+                LuxeNavRow(
+                  icon: Icons.videocam_outlined,
+                  title: list[i]['name'] as String? ??
+                      list[i]['id'] as String? ??
+                      '',
+                  subtitle: list[i]['id'] as String?,
+                  selected: _sel.kind == _FocusKind.cameraDetail && _sel.ci == i,
+                  onTap: () => _selectFocus(_Focus.cameraDetail(i)),
+                ),
+              ],
+              if (list.isNotEmpty)
+                Divider(height: 1, color: LuxeColors.lineSoft),
+              LuxeAddRow(
+                label: 'Camera toevoegen',
+                onTap: _addCamera,
               ),
+            ],
+          ),
         ),
-        const SizedBox(height: 24),
-        if (list.isEmpty)
-          Text(
-            'Nog geen camera. Klik op ?Camera toevoegen?.',
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
-        for (var i = 0; i < list.length; i++)
-          Card(
-            margin: const EdgeInsets.only(bottom: 10),
-            child: ListTile(
-              leading: const Icon(Icons.videocam_outlined),
-              title: Text(list[i]['name'] as String? ?? list[i]['id'] as String),
-              subtitle: Text(list[i]['id'] as String? ?? ''),
-              trailing: const Icon(Icons.edit_outlined),
-              onTap: () => _selectFocus(_Focus.cameraDetail(i)),
-            ),
-          ),
       ],
     );
   }
@@ -1429,58 +1440,58 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   Widget _audioInstallerPanel(BuildContext context) {
     final rows = _audioDevicesInRooms();
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.only(bottom: 36),
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text('Audio (Sonos / Bluesound)',
-                  style: Theme.of(context).textTheme.titleLarge),
-            ),
-            IconButton(
-              tooltip: 'Toevoegen in kamer',
-              icon: const Icon(Icons.add_circle_outline),
-              onPressed: () async {
-                final pick = await showPickDeviceTypeSheet(context);
-                if (pick != null && context.mounted) {
-                  await _pickRoomAndAddDevice(context, pick);
-                }
-              },
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Overzicht voor de installateur: de apparaten staan in de JSON onder '
-          'de gekozen kamer (zelfde als in de boom links). Tik om te bewerken.',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
-        ),
-        const SizedBox(height: 24),
-        if (rows.isEmpty)
-          Text(
-            'Nog geen Sonos/Bluesound in kamers. Gebruik + of voeg toe via een kamer.',
-            style: Theme.of(context).textTheme.bodyLarge,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
+          child: Text(
+            'Apparaten staan in de gekozen kamer. Tik om te bewerken.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: LuxeColors.inkSoft,
+                ),
           ),
-        for (final row in rows)
-          Card(
-            margin: const EdgeInsets.only(bottom: 10),
-            child: ListTile(
-              leading: Icon(
-                row.dev['type'] == 'media_bluesound'
-                    ? Icons.speaker_group_outlined
-                    : Icons.speaker_outlined,
+        ),
+        LuxeListCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              if (rows.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                  child: Text(
+                    'Nog geen Sonos of Bluesound in kamers',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              for (var i = 0; i < rows.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+                LuxeNavRow(
+                  icon: rows[i].dev['type'] == 'media_bluesound'
+                      ? Icons.speaker_group_outlined
+                      : Icons.speaker_outlined,
+                  title: rows[i].dev['name'] as String? ??
+                      rows[i].dev['id'] as String? ??
+                      '',
+                  subtitle: rows[i].location,
+                  onTap: () => setState(
+                    () => _sel = _Focus.device(rows[i].fi, rows[i].ri, rows[i].di),
+                  ),
+                ),
+              ],
+              if (rows.isNotEmpty)
+                Divider(height: 1, color: LuxeColors.lineSoft),
+              LuxeAddRow(
+                label: 'Audio toevoegen',
+                onTap: () async {
+                  final pick = await showPickDeviceTypeSheet(context);
+                  if (pick != null && context.mounted) {
+                    await _pickRoomAndAddDevice(context, pick);
+                  }
+                },
               ),
-              title: Text(
-                  row.dev['name'] as String? ?? row.dev['id'] as String),
-              subtitle: Text('${row.location} ? ${row.dev['id']}'),
-              trailing: const Icon(Icons.edit_outlined),
-              onTap: () => setState(
-                () => _sel = _Focus.device(row.fi, row.ri, row.di),
-              ),
-            ),
+            ],
           ),
+        ),
       ],
     );
   }
@@ -1488,44 +1499,51 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   Widget _intercomsInstallerPanel(BuildContext context) {
     final list = _intercoms();
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.only(bottom: 36),
       children: [
-        Row(
-          children: [
-            Text('Intercom', style: Theme.of(context).textTheme.titleLarge),
-            const Spacer(),
-            FilledButton.icon(
-              onPressed: _addIntercom,
-              icon: const Icon(Icons.doorbell_outlined),
-              label: const Text('Intercom toevoegen'),
-            ),
-          ],
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
+          child: Text(
+            'Intercom hoort bij het hele project, niet bij een kamer.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: LuxeColors.inkSoft,
+                ),
+          ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          'Intercom hoort bij het hele project, niet bij een kamer. '
-          'Configureer hier type (DoorBird / 2N / SIP), stream en KNX voor deurbel en deur.',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+        LuxeListCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              if (list.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                  child: Text(
+                    'Nog geen intercom',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              for (var i = 0; i < list.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+                LuxeNavRow(
+                  icon: Icons.doorbell_outlined,
+                  title: list[i]['name'] as String? ??
+                      list[i]['id'] as String? ??
+                      '',
+                  subtitle: list[i]['id'] as String?,
+                  selected:
+                      _sel.kind == _FocusKind.intercomDetail && _sel.ci == i,
+                  onTap: () => _selectFocus(_Focus.intercomDetail(i)),
+                ),
+              ],
+              if (list.isNotEmpty)
+                Divider(height: 1, color: LuxeColors.lineSoft),
+              LuxeAddRow(
+                label: 'Intercom toevoegen',
+                onTap: _addIntercom,
               ),
+            ],
+          ),
         ),
-        const SizedBox(height: 24),
-        if (list.isEmpty)
-          Text(
-            'Nog geen intercom. Klik op ?Intercom toevoegen?.',
-            style: Theme.of(context).textTheme.bodyLarge,
-          ),
-        for (var i = 0; i < list.length; i++)
-          Card(
-            margin: const EdgeInsets.only(bottom: 10),
-            child: ListTile(
-              leading: const Icon(Icons.doorbell_outlined),
-              title: Text(list[i]['name'] as String? ?? list[i]['id'] as String),
-              subtitle: Text(list[i]['id'] as String? ?? ''),
-              trailing: const Icon(Icons.edit_outlined),
-              onTap: () => _selectFocus(_Focus.intercomDetail(i)),
-            ),
-          ),
       ],
     );
   }
@@ -1914,25 +1932,70 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     }
   }
 
+  String get _headerTitle {
+    final wide = MediaQuery.sizeOf(context).width >= 900;
+    if (!wide && _mobileShowDetail) return _focusTitle(_sel);
+    return widget.useCustomerSession
+        ? 'Technische configuratie'
+        : 'Huisconfiguratie';
+  }
+
+  String _focusTitle(_Focus sel) => switch (sel.kind) {
+        _FocusKind.project => 'Project',
+        _FocusKind.knx => 'KNX-gateway',
+        _FocusKind.lutron => 'Lutron',
+        _FocusKind.cameras => "Camera's",
+        _FocusKind.cameraDetail => 'Camera',
+        _FocusKind.audio => 'Audio',
+        _FocusKind.intercoms => 'Intercom',
+        _FocusKind.intercomDetail => 'Intercom',
+        _FocusKind.users => 'Gebruikers',
+        _FocusKind.user => 'Gebruiker',
+        _FocusKind.logs => 'Logs',
+        _FocusKind.satel => 'Satel alarm',
+        _FocusKind.floor => 'Verdieping',
+        _FocusKind.room => 'Kamer',
+        _FocusKind.device => 'Apparaat',
+        _FocusKind.globalDevice => 'Apparaat',
+      };
+
+  Future<void> _onHeaderBack({required bool wide}) async {
+    if (!wide && _mobileShowDetail) {
+      setState(() => _mobileShowDetail = false);
+      return;
+    }
+    if (widget.useCustomerSession) {
+      if (mounted) context.pop();
+    } else {
+      await ref.read(installerAuthProvider.notifier).logout();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        backgroundColor: Colors.transparent,
+        body: LuxeBackdrop(
+          child: Center(child: CircularProgressIndicator()),
+        ),
       );
     }
     if (_loadErr != null || _house == null) {
       return Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(_loadErr ?? 'Onbekende fout'),
-                const SizedBox(height: 16),
-                FilledButton(onPressed: _load, child: const Text('Opnieuw')),
-              ],
+        backgroundColor: Colors.transparent,
+        body: LuxeBackdrop(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(_loadErr ?? 'Onbekende fout'),
+                  const SizedBox(height: 16),
+                  FilledButton(onPressed: _load, child: const Text('Opnieuw')),
+                ],
+              ),
             ),
           ),
         ),
@@ -1951,82 +2014,80 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       child: Focus(
         autofocus: true,
         child: PopScope(
-      // On mobile, intercepting the back gesture while detail is visible
-      // navigates back to the menu instead of popping the route.
       canPop: wide || !_mobileShowDetail,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) setState(() => _mobileShowDetail = false);
       },
       child: Scaffold(
-        appBar: AppBar(
-          // On mobile detail view, replace the route back button with a
-          // menu-back button so the user can navigate the menu without leaving.
-          leading: (!wide && _mobileShowDetail)
-              ? IconButton(
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  tooltip: 'Terug naar menu',
-                  onPressed: () => setState(() => _mobileShowDetail = false),
-                )
-              : null,
-          title: Text(widget.useCustomerSession
-              ? 'Technische configuratie'
-              : 'Installateur ? huisconfiguratie'),
-          actions: [
-            if (wide || _mobileShowDetail) ...[
-              IconButton(
-                icon: const Icon(Icons.refresh),
-                tooltip: 'Herladen van server',
-                onPressed: _saving ? null : _load,
-              ),
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: FilledButton.icon(
-                  onPressed: _saving ? null : _save,
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
+        backgroundColor: Colors.transparent,
+        body: LuxeBackdrop(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              FunctionScreenHeader(
+                onBack: () => _onHeaderBack(wide: wide),
+                title: _headerTitle,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                      HeaderIconButton(
+                        icon: Icons.refresh,
+                        tooltip: 'Herladen van server',
+                        onTap: _saving ? () {} : _load,
+                      ),
+                      const SizedBox(width: 6),
+                      if (context.isPhone)
+                        HeaderIconButton(
+                          icon: Icons.check,
+                          tooltip: 'Opslaan',
+                          onTap: _saving ? () {} : _save,
                         )
-                      : const Icon(Icons.save),
-                  label: const Text('Opslaan'),
+                      else
+                        FilledButton(
+                          onPressed: _saving ? null : _save,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: LuxeColors.ink,
+                            foregroundColor: LuxeColors.onInk,
+                            disabledBackgroundColor:
+                                LuxeColors.ink.withValues(alpha: 0.28),
+                            minimumSize: const Size(88, 48),
+                            shape: const StadiumBorder(),
+                          ),
+                          child: _saving
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Text('Opslaan'),
+                        ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: LayoutBuilder(
+                  builder: (ctx, c) {
+                    final isWide = c.maxWidth >= 900;
+                    final tree = _buildTree(ctx);
+                    if (!isWide) {
+                      if (_mobileShowDetail) return _buildDetail(ctx);
+                      return tree;
+                    }
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SizedBox(width: 360, child: tree),
+                        Expanded(child: _buildDetail(ctx)),
+                      ],
+                    );
+                  },
                 ),
               ),
             ],
-            TextButton(
-              onPressed: () async {
-                if (widget.useCustomerSession) {
-                  if (context.mounted) context.pop();
-                } else {
-                  await ref.read(installerAuthProvider.notifier).logout();
-                }
-              },
-              child: Text(widget.useCustomerSession ? 'Terug' : 'Uitloggen'),
-            ),
-          ],
-        ),
-        body: LayoutBuilder(
-          builder: (ctx, c) {
-            final isWide = c.maxWidth >= 900;
-            final tree = _buildTree(ctx);
-            if (!isWide) {
-              // Mobile: show either the menu list OR the detail full-screen.
-              if (_mobileShowDetail) return _buildDetail(ctx);
-              return tree;
-            }
-            // Desktop/tablet: side-by-side layout.
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                SizedBox(width: 340, child: tree),
-                const VerticalDivider(width: 1),
-                Expanded(child: _buildDetail(ctx)),
-              ],
-            );
-          },
+          ),
         ),
       ),
         ),
@@ -2140,75 +2201,101 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
 
   Widget _buildTree(BuildContext context) {
     final floors = _floors();
+    Widget div() => Divider(height: 1, color: LuxeColors.lineSoft);
     return ListView(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.only(bottom: 36),
       children: [
-        ListTile(
-          title: const Text('Project'),
-          selected: _sel.kind == _FocusKind.project,
-          leading: const Icon(Icons.home_work_outlined),
-          onTap: () => _selectFocus(const _Focus.project()),
+        LuxeListCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              LuxeNavRow(
+                icon: Icons.home_work_outlined,
+                title: 'Project',
+                subtitle: 'Naam, locatie, timezone',
+                selected: _sel.kind == _FocusKind.project,
+                onTap: () => _selectFocus(const _Focus.project()),
+              ),
+              div(),
+              LuxeNavRow(
+                icon: Icons.hub_outlined,
+                title: 'KNX-gateway',
+                subtitle: 'Bus en import',
+                selected: _sel.kind == _FocusKind.knx,
+                trailing: _IntegrationBadge(
+                    enabled: (_house?['knx']?['enabled'] as bool?) != false &&
+                        _house?['knx'] != null),
+                onTap: () => _selectFocus(const _Focus.knx()),
+              ),
+              div(),
+              LuxeNavRow(
+                icon: Icons.tune_outlined,
+                title: 'Lutron QSX/QS',
+                subtitle: 'Processor',
+                selected: _sel.kind == _FocusKind.lutron,
+                trailing: _IntegrationBadge(
+                    enabled:
+                        (_house?['lutron']?['telnet']?['enabled'] as bool?) ==
+                            true),
+                onTap: () => _selectFocus(const _Focus.lutron()),
+              ),
+              div(),
+              LuxeNavRow(
+                icon: Icons.videocam_outlined,
+                title: 'Camera\'s',
+                subtitle: 'Hele huis',
+                selected: _sel.kind == _FocusKind.cameras ||
+                    _sel.kind == _FocusKind.cameraDetail,
+                onTap: () => _selectFocus(const _Focus.cameras()),
+              ),
+              div(),
+              LuxeNavRow(
+                icon: Icons.speaker_group_outlined,
+                title: 'Audio',
+                subtitle: 'Sonos en Bluesound',
+                selected: _sel.kind == _FocusKind.audio,
+                onTap: () => _selectFocus(const _Focus.audio()),
+              ),
+              div(),
+              LuxeNavRow(
+                icon: Icons.doorbell_outlined,
+                title: 'Intercom',
+                subtitle: 'Deurbel en deur',
+                selected: _sel.kind == _FocusKind.intercoms ||
+                    _sel.kind == _FocusKind.intercomDetail,
+                onTap: () => _selectFocus(const _Focus.intercoms()),
+              ),
+              div(),
+              LuxeNavRow(
+                icon: Icons.people_outline,
+                title: 'Gebruikers',
+                subtitle: 'Accounts en toegang',
+                selected: _sel.kind == _FocusKind.users ||
+                    _sel.kind == _FocusKind.user,
+                onTap: () => _selectFocus(const _Focus.users()),
+              ),
+              div(),
+              LuxeNavRow(
+                icon: Icons.show_chart_outlined,
+                title: 'Logs / grafieken',
+                selected: _sel.kind == _FocusKind.logs,
+                onTap: () => _selectFocus(const _Focus.logs()),
+              ),
+              div(),
+              LuxeNavRow(
+                icon: Icons.security_outlined,
+                title: 'Satel alarm',
+                selected: _sel.kind == _FocusKind.satel,
+                onTap: () => _selectFocus(const _Focus.satel()),
+              ),
+            ],
+          ),
         ),
-        ListTile(
-          title: const Text('KNX-gateway'),
-          selected: _sel.kind == _FocusKind.knx,
-          leading: const Icon(Icons.hub_outlined),
-          trailing: _IntegrationBadge(
-              enabled: (_house?['knx']?['enabled'] as bool?) != false &&
-                  _house?['knx'] != null),
-          onTap: () => _selectFocus(const _Focus.knx()),
-        ),
-        ListTile(
-          title: const Text('Lutron QSX/QS Processor'),
-          selected: _sel.kind == _FocusKind.lutron,
-          leading: const Icon(Icons.home_work_outlined),
-          trailing: _IntegrationBadge(
-              enabled: (_house?['lutron']?['telnet']?['enabled'] as bool?) ==
-                  true),
-          onTap: () => _selectFocus(const _Focus.lutron()),
-        ),
-        ListTile(
-          title: const Text('Camera\'s'),
-          selected: _sel.kind == _FocusKind.cameras ||
-              _sel.kind == _FocusKind.cameraDetail,
-          leading: const Icon(Icons.videocam_outlined),
-          onTap: () => _selectFocus(const _Focus.cameras()),
-        ),
-        ListTile(
-          title: const Text('Audio'),
-          selected: _sel.kind == _FocusKind.audio,
-          leading: const Icon(Icons.speaker_group_outlined),
-          onTap: () => _selectFocus(const _Focus.audio()),
-        ),
-        ListTile(
-          title: const Text('Intercom'),
-          selected: _sel.kind == _FocusKind.intercoms ||
-              _sel.kind == _FocusKind.intercomDetail,
-          leading: const Icon(Icons.doorbell_outlined),
-          onTap: () => _selectFocus(const _Focus.intercoms()),
-        ),
-        ListTile(
-          title: const Text('Gebruikers'),
-          selected: _sel.kind == _FocusKind.users ||
-              (_sel.kind == _FocusKind.user),
-          leading: const Icon(Icons.people_outline),
-          onTap: () => _selectFocus(const _Focus.users()),
-        ),
-        ListTile(
-          title: const Text('Logs / grafieken'),
-          selected: _sel.kind == _FocusKind.logs,
-          leading: const Icon(Icons.show_chart_outlined),
-          onTap: () => _selectFocus(const _Focus.logs()),
-        ),
-        ListTile(
-          title: const Text('Satel alarm'),
-          selected: _sel.kind == _FocusKind.satel,
-          leading: const Icon(Icons.security_outlined),
-          onTap: () => _selectFocus(const _Focus.satel()),
-        ),
-        const Divider(),
-        // ?? Global (room-less) devices ????????????????????????????????????
-        ExpansionTile(
+        LuxeListCard(
+          padding: EdgeInsets.zero,
+          child: Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
           key: const ValueKey('global-devices'),
           leading: const Icon(Icons.devices_other_outlined),
           title: DragTarget<_DeviceDragData>(
@@ -2242,17 +2329,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                           _sel.di == di,
                       onTap: () => _selectFocus(_Focus.globalDevice(di)),
                     ),
-                  ListTile(
-                    dense: true,
-                    visualDensity: VisualDensity.compact,
-                    contentPadding:
-                        const EdgeInsets.only(left: 0, right: 8),
-                    leading:
-                        const Icon(Icons.add_circle_outline, size: 18),
-                    title: const Text('Apparaat toevoegen'),
+                  LuxeAddRow(
+                    label: 'Apparaat toevoegen',
                     onTap: () async {
-                      final pick =
-                          await showPickDeviceTypeSheet(context);
+                      final pick = await showPickDeviceTypeSheet(context);
                       if (pick == null) return;
                       _addGlobalDevice(pick);
                     },
@@ -2262,12 +2342,18 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             ),
           ],
         ),
-        const Divider(),
-        ListTile(
-          leading: const Icon(Icons.add),
-          title: const Text('Verdieping toevoegen'),
-          onTap: _addFloor,
+          ),
         ),
+        LuxeListCard(
+          padding: EdgeInsets.zero,
+          child: Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: Column(
+              children: [
+                LuxeAddRow(
+                  label: 'Verdieping toevoegen',
+                  onTap: _addFloor,
+                ),
         for (var fi = 0; fi < floors.length; fi++)
           ExpansionTile(
             key: ValueKey('f-$fi'),
@@ -2384,15 +2470,8 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                                           _Focus.device(fi, ri, di),
                                         ),
                                   ),
-                                ListTile(
-                                  dense: true,
-                                  visualDensity: VisualDensity.compact,
-                                  contentPadding:
-                                      const EdgeInsets.only(left: 0, right: 8),
-                                  leading: const Icon(
-                                      Icons.add_circle_outline,
-                                      size: 18),
-                                  title: const Text('Apparaat toevoegen'),
+                                LuxeAddRow(
+                                  label: 'Apparaat toevoegen',
                                   onTap: () async {
                                     final pick =
                                         await showPickDeviceTypeSheet(context);
@@ -2407,12 +2486,8 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                           ),
                         ],
                       ),
-                    ListTile(
-                      dense: true,
-                      visualDensity: VisualDensity.compact,
-                      contentPadding: const EdgeInsets.only(left: 0, right: 8),
-                      leading: const Icon(Icons.add_circle_outline, size: 18),
-                      title: const Text('Kamer toevoegen'),
+                    LuxeAddRow(
+                      label: 'Kamer toevoegen',
                       onTap: () => _addRoom(fi),
                     ),
                   ],
@@ -2420,6 +2495,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               ),
             ],
           ),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -2602,55 +2681,70 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   Widget _usersPanel(BuildContext context) {
     final list = _users();
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.only(bottom: 36),
       children: [
-        Row(
-          children: [
-            Text('Gebruikers', style: Theme.of(context).textTheme.titleLarge),
-            const Spacer(),
-            FilledButton.icon(
-              onPressed: _addUser,
-              icon: const Icon(Icons.person_add_outlined),
-              label: const Text('Toevoegen'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Nieuwe gebruikers: vul bij de gebruiker een wachtwoord in en kies Opslaan. '
-          'Bestaande gebruikers: laat wachtwoord leeg om het huidige te behouden.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 16),
-        if (list.isEmpty)
-          const Text('Nog geen gebruikers. Maak er een aan.'),
-        for (var i = 0; i < list.length; i++)
-          ListTile(
-            leading: Icon(
-              isInstallerRole(list[i]['role'] as String?)
-                  ? Icons.construction_outlined
-                  : isSuperUserRole(list[i]['role'] as String?)
-                      ? Icons.admin_panel_settings_outlined
-                      : Icons.person_outline,
-            ),
-            title: Text(list[i]['username'] as String? ?? ''),
-            subtitle: Text(
-              [
-                roleLabel(list[i]['role'] as String?),
-                list[i]['displayName'] ?? '',
-              ].where((s) => s.toString().trim().isNotEmpty).join(' · '),
-            ),
-            selected: _sel.kind == _FocusKind.user && _sel.fi == i,
-            trailing: Switch.adaptive(
-              value: list[i]['enabled'] != false,
-              onChanged: (v) {
-                list[i]['enabled'] = v;
-                setState(() {});
-              },
-              activeThumbColor: LuxeColors.brass,
-            ),
-            onTap: () => _selectFocus(_Focus.user(i)),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
+          child: Text(
+            'Nieuwe gebruikers: vul een code in en kies Opslaan. '
+            'Bestaande: laat code leeg om hem te houden.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: LuxeColors.inkSoft,
+                ),
           ),
+        ),
+        LuxeListCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              if (list.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                  child: Text(
+                    'Nog geen gebruikers',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              for (var i = 0; i < list.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+                LuxeNavRow(
+                  icon: isInstallerRole(list[i]['role'] as String?)
+                      ? Icons.construction_outlined
+                      : isSuperUserRole(list[i]['role'] as String?)
+                          ? Icons.admin_panel_settings_outlined
+                          : Icons.person_outline,
+                  title: () {
+                    final name = (list[i]['displayName'] as String?)?.trim();
+                    final username = list[i]['username'] as String? ?? '';
+                    if (name != null && name.isNotEmpty) return name;
+                    return username.isEmpty ? 'Nieuwe gebruiker' : username;
+                  }(),
+                  subtitle: [
+                    if ((list[i]['username'] as String?)?.isNotEmpty == true)
+                      list[i]['username'],
+                    roleLabel(list[i]['role'] as String?),
+                  ].join(' · '),
+                  selected: _sel.kind == _FocusKind.user && _sel.fi == i,
+                  trailing: Switch.adaptive(
+                    value: list[i]['enabled'] != false,
+                    onChanged: (v) {
+                      list[i]['enabled'] = v;
+                      setState(() {});
+                    },
+                    activeThumbColor: LuxeColors.brass,
+                  ),
+                  onTap: () => _selectFocus(_Focus.user(i)),
+                ),
+              ],
+              if (list.isNotEmpty)
+                Divider(height: 1, color: LuxeColors.lineSoft),
+              LuxeAddRow(
+                label: 'Gebruiker toevoegen',
+                onTap: _addUser,
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -2764,48 +2858,60 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
           labelOverride: 'Weergavenaam',
         ),
         Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: DropdownButtonFormField<String>(
-            initialValue: roleValue,
-            decoration: const InputDecoration(
-              labelText: 'Rol',
-              border: OutlineInputBorder(),
-            ),
-            items: const [
-              DropdownMenuItem(value: 'installer', child: Text('Installer')),
-              DropdownMenuItem(value: 'superuser', child: Text('Super user')),
-              DropdownMenuItem(value: 'user', child: Text('Gebruiker')),
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const LuxeFieldLabel('Rol'),
+              DropdownButtonFormField<String>(
+                initialValue: roleValue,
+                decoration: luxeFilledDecoration(),
+                items: const [
+                  DropdownMenuItem(value: 'installer', child: Text('Installer')),
+                  DropdownMenuItem(value: 'superuser', child: Text('Super user')),
+                  DropdownMenuItem(value: 'user', child: Text('Gebruiker')),
+                ],
+                onChanged: (v) {
+                  if (v != null) {
+                    u['role'] = v;
+                    widget.onChanged();
+                    setState(() {});
+                  }
+                },
+              ),
             ],
-            onChanged: (v) {
-              if (v != null) {
-                u['role'] = v;
-                widget.onChanged();
-                setState(() {});
-              }
-            },
           ),
         ),
-        TextField(
-          controller: _password,
-          obscureText: true,
-          decoration: InputDecoration(
-            labelText: u['_new'] == true
-                ? 'Code'
-                : 'Nieuwe code (leeg = ongewijzigd)',
-            hintText: u['_new'] == true ? 'Minstens 4 tekens' : null,
-            border: const OutlineInputBorder(),
-            helperText: u['_new'] == true
-                ? 'Verplicht bij een nieuw account.'
-                : null,
+        Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              LuxeFieldLabel(
+                u['_new'] == true
+                    ? 'Code'
+                    : 'Nieuwe code (leeg = ongewijzigd)',
+              ),
+              TextField(
+                controller: _password,
+                obscureText: true,
+                decoration: luxeFilledDecoration(
+                  hint: u['_new'] == true ? 'Minstens 4 tekens' : null,
+                  helper: u['_new'] == true
+                      ? 'Verplicht bij een nieuw account.'
+                      : null,
+                ),
+                onChanged: (s) {
+                  if (s.isEmpty) {
+                    u.remove('password');
+                  } else {
+                    u['password'] = s;
+                  }
+                  widget.onChanged();
+                },
+              ),
+            ],
           ),
-          onChanged: (s) {
-            if (s.isEmpty) {
-              u.remove('password');
-            } else {
-              u['password'] = s;
-            }
-            widget.onChanged();
-          },
         ),
         if (role == AppRole.user) ...[
           const SizedBox(height: 16),
@@ -3271,8 +3377,8 @@ class _LutronForm extends StatelessWidget {
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 20),
-        SwitchListTile(
-          title: const Text('Telnet ingeschakeld'),
+        LuxeSwitchRow(
+          title: 'Telnet ingeschakeld',
           value: telm['enabled'] == true,
           onChanged: (v) {
             telm['enabled'] = v;
@@ -3341,18 +3447,16 @@ class _KnxForm extends StatelessWidget {
         Text('KNX', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 16),
         // ?? Enabled toggle ??????????????????????????????????????????
-        SwitchListTile(
-          title: const Text('KNX ingeschakeld'),
-          subtitle: const Text(
-            'Schakel uit als er geen KNX-bus aanwezig is. '
-            'De app start dan direct op zonder verbindingspogingen.',
-          ),
+        LuxeSwitchRow(
+          title: 'KNX ingeschakeld',
+          subtitle:
+              'Schakel uit als er geen KNX-bus aanwezig is. '
+              'De app start dan direct op zonder verbindingspogingen.',
           value: enabled,
           onChanged: (v) {
             knx['enabled'] = v;
             onChanged();
           },
-          contentPadding: EdgeInsets.zero,
         ),
         const Divider(height: 24),
         if (enabled) ...[
@@ -3450,11 +3554,14 @@ class _MapStringForm extends StatelessWidget {
             ),
         if (onDelete != null) ...[
           const SizedBox(height: 24),
-          OutlinedButton.icon(
+          OutlinedButton(
             onPressed: onDelete,
-            icon: const Icon(Icons.delete_outline),
-            label: Text('$title verwijderen'),
-            style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red,
+              minimumSize: const Size.fromHeight(52),
+              shape: const StadiumBorder(),
+            ),
+            child: Text('$title verwijderen'),
           ),
         ],
       ],
@@ -3550,34 +3657,34 @@ class _BoundStrFieldState extends State<_BoundStrField> {
         ? KnxGaCatalog.instance.nameFor(_c.text)
         : null;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: TextField(
-        controller: _c,
-        decoration: InputDecoration(
-          labelText: widget.labelOverride ?? widget.keyName,
-          hintText: widget.hintText,
-          helperText: resolvedName,
-          helperMaxLines: 2,
-          border: const OutlineInputBorder(),
-          alignLabelWithHint: widget.maxLines > 1,
-          suffixIcon: gaSearch
-              ? IconButton(
-                  icon: const Icon(Icons.search),
-                  tooltip: 'Groepsadres zoeken',
-                  onPressed: _pickGa,
-                )
-              : null,
-        ),
-        keyboardType: widget.number
-            ? const TextInputType.numberWithOptions(decimal: true)
-            : (widget.maxLines > 1
-                ? TextInputType.multiline
-                : TextInputType.url),
-        maxLines: widget.maxLines,
-        inputFormatters: widget.number
-            ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.-]'))]
-            : null,
-        onChanged: (s) {
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LuxeFieldLabel(widget.labelOverride ?? widget.keyName),
+          TextField(
+            controller: _c,
+            decoration: luxeFilledDecoration(
+              hint: widget.hintText,
+              helper: resolvedName,
+              suffixIcon: gaSearch
+                  ? IconButton(
+                      icon: const Icon(Icons.search),
+                      tooltip: 'Groepsadres zoeken',
+                      onPressed: _pickGa,
+                    )
+                  : null,
+            ),
+            keyboardType: widget.number
+                ? const TextInputType.numberWithOptions(decimal: true)
+                : (widget.maxLines > 1
+                    ? TextInputType.multiline
+                    : TextInputType.url),
+            maxLines: widget.maxLines,
+            inputFormatters: widget.number
+                ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9.-]'))]
+                : null,
+            onChanged: (s) {
           if (widget.number) {
             if (s.isEmpty) {
               widget.map.remove(widget.keyName);
@@ -3600,7 +3707,9 @@ class _BoundStrFieldState extends State<_BoundStrField> {
           }
           widget.onNotify();
           if (gaSearch) setState(() {});
-        },
+            },
+          ),
+        ],
       ),
     );
   }
@@ -3621,19 +3730,23 @@ class _DropdownField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: DropdownButtonFormField<String>(
-        initialValue: value,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-        ),
-        items: [
-          for (final o in options) DropdownMenuItem(value: o, child: Text(o)),
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LuxeFieldLabel(label),
+          DropdownButtonFormField<String>(
+            initialValue: value,
+            decoration: luxeFilledDecoration(),
+            items: [
+              for (final o in options)
+                DropdownMenuItem(value: o, child: Text(o)),
+            ],
+            onChanged: (v) {
+              if (v != null) onChanged(v);
+            },
+          ),
         ],
-        onChanged: (v) {
-          if (v != null) onChanged(v);
-        },
       ),
     );
   }
@@ -3928,52 +4041,44 @@ class _ShadingUiSection extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           if (hasPos)
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Positie-slider'),
+            LuxeSwitchRow(
+              title: 'Positie-slider',
               value: _get('showPositionSlider', defPosSlider),
               onChanged: (v) => _setBool('showPositionSlider', v),
             ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Rij knoppen onder positie-slider (omhoog/stop/omlaag)'),
-            subtitle: const Text('Alleen als de positie-slider aan staat'),
+          LuxeSwitchRow(
+            title: 'Rij knoppen onder positie-slider (omhoog/stop/omlaag)',
+            subtitle: 'Alleen als de positie-slider aan staat',
             value: _get('showMoveButtonsUnderSlider', defPosSlider && hasPos),
             onChanged: (hasPos && _get('showPositionSlider', defPosSlider))
                 ? (v) => _setBool('showMoveButtonsUnderSlider', v)
                 : null,
           ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Knop omhoog / open'),
+          LuxeSwitchRow(
+            title: 'Knop omhoog / open',
             value: _get('showMoveUp', true),
             onChanged: (v) => _setBool('showMoveUp', v),
           ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Knop stop'),
-            subtitle: hasStop
-                ? null
-                : const Text('Geen stop_step-GA in config'),
+          LuxeSwitchRow(
+            title: 'Knop stop',
+            subtitle: hasStop ? null : 'Geen stop_step-GA in config',
             value: _get('showMoveStop', hasStop),
             onChanged: hasStop ? (v) => _setBool('showMoveStop', v) : null,
           ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Knop omlaag / dicht'),
+          LuxeSwitchRow(
+            title: 'Knop omlaag / dicht',
             value: _get('showMoveDown', true),
             onChanged: (v) => _setBool('showMoveDown', v),
           ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Lamellen-slider'),
+          LuxeSwitchRow(
+            title: 'Lamellen-slider',
             value: _get('showSlatSlider', showSlatsLegacy),
-            onChanged: showSlatsLegacy ? (v) => _setBool('showSlatSlider', v) : null,
+            onChanged:
+                showSlatsLegacy ? (v) => _setBool('showSlatSlider', v) : null,
           ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Lamellen stap (+ / ? 5 %)'),
-            subtitle: hasSlat ? null : const Text('Geen slat-GA'),
+          LuxeSwitchRow(
+            title: 'Lamellen stap (+ / − 5 %)',
+            subtitle: hasSlat ? null : 'Geen slat-GA',
             value: _get('showSlatStepButtons', false),
             onChanged: hasSlat ? (v) => _setBool('showSlatStepButtons', v) : null,
           ),
@@ -4067,10 +4172,9 @@ class _FireplaceStepRangesSection extends StatelessWidget {
           style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11),
         ),
         const SizedBox(height: 8),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Vaste percent-banden per stand'),
-          subtitle: const Text('2?10 stappen; uit = ??n doorlopende schuifregelaar.'),
+        LuxeSwitchRow(
+          title: 'Vaste percent-banden per stand',
+          subtitle: '2?10 stappen; uit = ??n doorlopende schuifregelaar.',
           value: enabled,
           onChanged: (v) {
             if (v) {
@@ -4109,13 +4213,12 @@ class _FireplaceStepRangesSection extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 4),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Percentage verbergen op knoppen'),
-            subtitle: const Text(
-                'Verberg het %-bereik als sublabel op de vlamstand-knoppen.'),
-            value: flame['hideStepPercent'] == true,
-            onChanged: (v) {
+          LuxeSwitchRow(
+          title: 'Percentage verbergen op knoppen',
+          subtitle: 
+                'Verberg het %-bereik als sublabel op de vlamstand-knoppen.',
+          value: flame['hideStepPercent'] == true,
+          onChanged: (v) {
               if (v) {
                 flame['hideStepPercent'] = true;
               } else {
@@ -4123,7 +4226,7 @@ class _FireplaceStepRangesSection extends StatelessWidget {
               }
               onChanged();
             },
-          ),
+        ),
           const SizedBox(height: 12),
           for (var i = 0; i < rows.length; i++) ...[
             Text('Stap ${i + 1}', style: Theme.of(context).textTheme.titleSmall),
@@ -4825,13 +4928,11 @@ class _DeviceForm extends StatelessWidget {
         const SizedBox(height: 16),
         _BoundStrField('id', device, onChanged),
         _BoundStrField('name', device, onChanged),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Toon als favoriet op het dashboard'),
-          subtitle: const Text(
-            'Standaard-instelling voor alle gebruikers. '
-            'Gebruikers kunnen dit daarna zelf aanpassen met de ster-knop.',
-          ),
+        LuxeSwitchRow(
+          title: 'Toon als favoriet op het dashboard',
+          subtitle:
+              'Standaard-instelling voor alle gebruikers. '
+              'Gebruikers kunnen dit daarna zelf aanpassen met de ster-knop.',
           value: device['favorite'] as bool? ?? false,
           onChanged: (v) {
             device['favorite'] = v;
@@ -5281,13 +5382,12 @@ class _RtspDeviceExtra extends StatelessWidget {
           ),
         ),
         if (includeRepublish)
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Stream opnieuw publiceren (go2rtc)'),
-            subtitle: const Text(
-                'Standaard aan. Zet uit alleen als go2rtc deze stream niet mag opnemen.'),
-            value: m['republish'] != false,
-            onChanged: (v) {
+          LuxeSwitchRow(
+          title: 'Stream opnieuw publiceren (go2rtc)',
+          subtitle: 
+                'Standaard aan. Zet uit alleen als go2rtc deze stream niet mag opnemen.',
+          value: m['republish'] != false,
+          onChanged: (v) {
               if (v) {
                 m.remove('republish');
               } else {
@@ -5295,7 +5395,7 @@ class _RtspDeviceExtra extends StatelessWidget {
               }
               onChanged();
             },
-          ),
+        ),
         if (nestedKey == 'camera')
           Theme(
             data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -5306,13 +5406,12 @@ class _RtspDeviceExtra extends StatelessWidget {
               subtitle: const Text(
                   'Leeg = automatisch op basis van RTSP-url (Synology/NVR/camera)'),
               children: [
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Forceer FFmpeg voor live'),
-                  subtitle: const Text(
-                      'Transcodeert naar H.264 met korte GOP — vloeiender op tablets'),
-                  value: m['go2rtcFfmpeg'] == true,
-                  onChanged: (v) {
+                LuxeSwitchRow(
+          title: 'Forceer FFmpeg voor live',
+          subtitle: 
+                      'Transcodeert naar H.264 met korte GOP — vloeiender op tablets',
+          value: m['go2rtcFfmpeg'] == true,
+          onChanged: (v) {
                     if (v) {
                       m['go2rtcFfmpeg'] = true;
                     } else {
@@ -5320,14 +5419,13 @@ class _RtspDeviceExtra extends StatelessWidget {
                     }
                     onChanged();
                   },
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Forceer: geen audio op RTSP'),
-                  subtitle: const Text(
-                      'Helpt als WebRTC geen beeld geeft door audio op de stream'),
-                  value: m['go2rtcVideoOnly'] == true,
-                  onChanged: (v) {
+        ),
+                LuxeSwitchRow(
+          title: 'Forceer: geen audio op RTSP',
+          subtitle: 
+                      'Helpt als WebRTC geen beeld geeft door audio op de stream',
+          value: m['go2rtcVideoOnly'] == true,
+          onChanged: (v) {
                     if (v) {
                       m['go2rtcVideoOnly'] = true;
                     } else {
@@ -5335,14 +5433,13 @@ class _RtspDeviceExtra extends StatelessWidget {
                     }
                     onChanged();
                   },
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('go2rtc: backchannel uit (#backchannel=0)'),
-                  subtitle: const Text(
-                      'Alleen bij glitchy NVR two-way-audio op RTSP'),
-                  value: m['go2rtcBackchannel0'] == true,
-                  onChanged: (v) {
+        ),
+                LuxeSwitchRow(
+          title: 'go2rtc: backchannel uit (#backchannel=0)',
+          subtitle: 
+                      'Alleen bij glitchy NVR two-way-audio op RTSP',
+          value: m['go2rtcBackchannel0'] == true,
+          onChanged: (v) {
                     if (v) {
                       m['go2rtcBackchannel0'] = true;
                     } else {
@@ -5350,7 +5447,7 @@ class _RtspDeviceExtra extends StatelessWidget {
                     }
                     onChanged();
                   },
-                ),
+        ),
               ],
             ),
           ),
@@ -5620,25 +5717,23 @@ class _IntercomKnxExtras extends StatelessWidget {
             emptyMeansRemove: true,
             key: ValueKey('dbird-port-${device['id']}'),
           ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('HTTPS'),
-            subtitle: const Text('Poort 443 standaard bij TLS.'),
-            value: doorbird['useTls'] == true,
-            onChanged: (v) {
+          LuxeSwitchRow(
+          title: 'HTTPS',
+          subtitle: 'Poort 443 standaard bij TLS.',
+          value: doorbird['useTls'] == true,
+          onChanged: (v) {
               doorbird['useTls'] = v;
               onChanged();
             },
-          ),
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Zelfondertekend certificaat accepteren'),
-            value: doorbird['insecureTls'] != false,
-            onChanged: (v) {
+        ),
+          LuxeSwitchRow(
+          title: 'Zelfondertekend certificaat accepteren',
+          value: doorbird['insecureTls'] != false,
+          onChanged: (v) {
               doorbird['insecureTls'] = v;
               onChanged();
             },
-          ),
+        ),
           _BoundStrField(
             'username',
             doorbird,

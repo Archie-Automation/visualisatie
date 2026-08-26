@@ -400,14 +400,26 @@ class UserAccessEditor extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Scenes en tijdschema\'s mogen wijzigen'),
-          value: editScenes,
-          onChanged: (v) {
-            access['editScenes'] = v;
-            onChanged();
-          },
+        Padding(
+          padding: const EdgeInsets.fromLTRB(0, 4, 0, 4),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Scenes en tijdschema\'s mogen wijzigen',
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+              ),
+              Switch.adaptive(
+                value: editScenes,
+                onChanged: (v) {
+                  access['editScenes'] = v;
+                  onChanged();
+                },
+                activeThumbColor: LuxeColors.brass,
+              ),
+            ],
+          ),
         ),
         const SizedBox(height: 8),
         Text('Zichtbaar in de app', style: Theme.of(context).textTheme.titleMedium),
