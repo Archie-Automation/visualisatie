@@ -539,42 +539,37 @@ class _UserEditor extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        _FieldLabel(label: 'Inlognaam'),
         TextFormField(
           initialValue: user['username'] as String? ?? '',
           enabled: !lockInstaller,
-          decoration: const InputDecoration(
-            labelText: 'Inlognaam',
-            hintText: 'Uniek, waarmee deze persoon inlogt',
-            border: OutlineInputBorder(),
+          decoration: _userFieldDecoration(
+            hint: 'Uniek, waarmee deze persoon inlogt',
           ),
           onChanged: (v) {
             user['username'] = v;
             onChanged();
           },
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
+        _FieldLabel(label: 'Weergavenaam'),
         TextFormField(
           initialValue: user['displayName'] as String? ?? '',
-          decoration: const InputDecoration(
-            labelText: 'Weergavenaam',
-            border: OutlineInputBorder(),
-          ),
+          decoration: _userFieldDecoration(),
           onChanged: (v) {
             user['displayName'] = v;
             onChanged();
           },
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
+        _FieldLabel(label: 'Rol'),
         DropdownButtonFormField<String>(
           initialValue: switch (role) {
             AppRole.installer => 'installer',
             AppRole.superuser => 'superuser',
             AppRole.user => 'user',
           },
-          decoration: const InputDecoration(
-            labelText: 'Rol',
-            border: OutlineInputBorder(),
-          ),
+          decoration: _userFieldDecoration(),
           items: roleItems,
           onChanged: canChangeRole
               ? (v) {
@@ -605,15 +600,16 @@ class _UserEditor extends StatelessWidget {
         ),
         if (!lockInstaller) ...[
           const SizedBox(height: 8),
+          _FieldLabel(
+            label: user['_new'] == true
+                ? 'Code'
+                : 'Nieuwe code (leeg = ongewijzigd)',
+          ),
           TextField(
             controller: password,
             obscureText: true,
-            decoration: InputDecoration(
-              labelText: user['_new'] == true
-                  ? 'Code'
-                  : 'Nieuwe code (leeg = ongewijzigd)',
-              hintText: user['_new'] == true ? 'Minstens 4 tekens' : null,
-              border: const OutlineInputBorder(),
+            decoration: _userFieldDecoration(
+              hint: user['_new'] == true ? 'Minstens 4 tekens' : null,
             ),
             onChanged: (s) {
               if (s.isEmpty) {
@@ -660,6 +656,42 @@ class _UserEditor extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+InputDecoration _userFieldDecoration({String? hint}) => InputDecoration(
+      hintText: hint,
+      floatingLabelBehavior: FloatingLabelBehavior.never,
+      filled: true,
+      fillColor: LuxeColors.surface.withValues(alpha: 0.8),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: LuxeColors.line),
+      ),
+    );
+
+class _FieldLabel extends StatelessWidget {
+  const _FieldLabel({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(
+        label,
+        style: Theme.of(context).textTheme.labelMedium,
+      ),
     );
   }
 }
