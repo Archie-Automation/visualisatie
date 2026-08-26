@@ -58,6 +58,46 @@ class _UsersAdminSectionState extends ConsumerState<UsersAdminSection> {
     }
   }
 
+  bool _canToggleEnabled(Map<String, dynamic> user) {
+    final selfId = widget.cfg.me?.id;
+    final selfName = ref.read(authProvider).username;
+    if (selfId != null && user['id'] == selfId) return false;
+    if (selfName != null && user['username'] == selfName) return false;
+    return true;
+  }
+
+  Future<void> _setEnabled(Map<String, dynamic> user, bool enabled) async {
+    final token = ref.read(authProvider).token;
+    final users = _users;
+    if (token == null || users == null) return;
+    final prev = user['enabled'] != false;
+    setState(() => user['enabled'] = enabled);
+    try {
+      final saved = await saveHouseUsers(
+        users: usersPayloadForSave(users),
+        token: token,
+      );
+      if (!mounted) return;
+      setState(() {
+        _users = saved;
+        _error = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => user['enabled'] = prev);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: LuxeColors.danger,
+          shape: const StadiumBorder(),
+          content: Text(
+            'Opslaan mislukt: ${e.toString().replaceFirst('Exception: ', '')}',
+          ),
+        ),
+      );
+    }
+  }
+
   Future<void> _openEditor({Map<String, dynamic>? existing}) async {
     final users = _users;
     final token = ref.read(authProvider).token;
@@ -89,6 +129,7 @@ class _UsersAdminSectionState extends ConsumerState<UsersAdminSection> {
           'rooms': '*',
           'functions': '*',
           'devices': '*',
+          'scenes': '*',
           'editScenes': true,
         },
       };
@@ -143,7 +184,9 @@ class _UsersAdminSectionState extends ConsumerState<UsersAdminSection> {
               if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
               _UserRow(
                 user: users[i],
+                canToggle: _canToggleEnabled(users[i]),
                 onTap: () => _openEditor(existing: users[i]),
+                onToggle: (v) => _setEnabled(users[i], v),
               ),
             ],
             if (users.isNotEmpty)
@@ -169,10 +212,17 @@ Map<String, dynamic> _copyUser(Map<String, dynamic> u) {
 }
 
 class _UserRow extends StatelessWidget {
-  const _UserRow({required this.user, required this.onTap});
+  const _UserRow({
+    required this.user,
+    required this.canToggle,
+    required this.onTap,
+    required this.onToggle,
+  });
 
   final Map<String, dynamic> user;
+  final bool canToggle;
   final VoidCallback onTap;
+  final ValueChanged<bool> onToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -212,7 +262,6 @@ class _UserRow extends StatelessWidget {
                     [
                       if (username.isNotEmpty) username,
                       roleLabel(role),
-                      if (!enabled) 'geblokkeerd',
                     ].join(' · '),
                     style: Theme.of(context).textTheme.bodySmall,
                     maxLines: 1,
@@ -221,10 +270,10 @@ class _UserRow extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 20,
-              color: LuxeColors.inkSoft,
+            Switch.adaptive(
+              value: enabled,
+              onChanged: canToggle ? onToggle : null,
+              activeThumbColor: LuxeColors.brass,
             ),
           ],
         ),
@@ -527,7 +576,6 @@ class _UserEditor extends StatelessWidget {
     final isInstallerAccount = role == AppRole.installer;
     final lockInstaller = isInstallerAccount && !actorIsInstaller;
     final canChangeRole = actorIsInstaller || !isInstallerAccount;
-    final enabled = user['enabled'] != false;
 
     final roleItems = <DropdownMenuItem<String>>[
       if (actorIsInstaller || isInstallerAccount)
@@ -579,27 +627,8 @@ class _UserEditor extends StatelessWidget {
                 }
               : null,
         ),
-        const SizedBox(height: 8),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: Text(
-            isInstallerAccount
-                ? 'Installer mag inloggen'
-                : 'Account actief',
-          ),
-          subtitle: isInstallerAccount && !actorIsInstaller
-              ? const Text('Zet uit om de installer te blokkeren')
-              : null,
-          value: enabled,
-          onChanged: isSelf
-              ? null
-              : (v) {
-                  user['enabled'] = v;
-                  onChanged();
-                },
-        ),
         if (!lockInstaller) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
           _FieldLabel(
             label: user['_new'] == true
                 ? 'Code'
@@ -638,9 +667,9 @@ class _UserEditor extends StatelessWidget {
           Text(
             role == AppRole.installer
                 ? 'Installer heeft alle toegang, inclusief technische configuratie. '
-                    'Dit account bestaat standaard; blokkeer het als de installer klaar is.'
+                    'Dit account bestaat standaard; zet de schakelaar in de lijst uit als de installer klaar is.'
                 : 'Super user (eigenaar) ziet alles in de app, behalve technische configuratie. '
-                    'Kan gebruikers en mede-superusers aanmaken, en de installer blokkeren.',
+                    'Kan gebruikers en mede-superusers aanmaken, en de installer in de lijst uitzetten.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: LuxeColors.inkSoft,
                 ),

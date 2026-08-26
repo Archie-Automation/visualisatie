@@ -1018,6 +1018,8 @@ export interface User {
     roomFunctions?: Record<string, "*" | string[]>;
     /** Device ids the user may see. `*` or omit = all that pass floor/room/function. */
     devices?: "*" | string[];
+    /** Home-dashboard scene ids. `*` or omit = all house scenes. */
+    scenes?: "*" | string[];
     canRelease?: "*" | string[];
     talkIntercoms?: "*" | string[];
     /** If false, the user can run scenes but cannot create/edit/delete them.

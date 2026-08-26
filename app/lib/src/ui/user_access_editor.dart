@@ -50,17 +50,25 @@ class AclNavFloor {
   final List<AclNavRoom> rooms;
 }
 
+class AclNavScene {
+  const AclNavScene({required this.id, required this.name});
+  final String id;
+  final String name;
+}
+
 class AclHouseExtras {
   const AclHouseExtras({
     this.cameras = const [],
     this.intercoms = const [],
     this.globalDevices = const [],
+    this.scenes = const [],
     this.hasAlarm = false,
   });
 
   final List<AclNavDevice> cameras;
   final List<AclNavDevice> intercoms;
   final List<AclNavDevice> globalDevices;
+  final List<AclNavScene> scenes;
   final bool hasAlarm;
 
   bool get isEmpty =>
@@ -74,6 +82,9 @@ class AclHouseExtras {
         intercoms: [for (final d in cfg.intercoms) AclNavDevice.fromDevice(d)],
         globalDevices: [
           for (final d in cfg.globalDevices) AclNavDevice.fromDevice(d)
+        ],
+        scenes: [
+          for (final s in cfg.scenes) AclNavScene(id: s.id, name: s.name),
         ],
         hasAlarm: cfg.satelEnabled,
       );
@@ -89,12 +100,24 @@ class AclHouseExtras {
       ].where((d) => d.id.isNotEmpty).toList();
     }
 
+    final sceneRaw = house['scenes'];
+    final scenes = <AclNavScene>[
+      if (sceneRaw is List)
+        for (final e in sceneRaw)
+          if (e is Map)
+            AclNavScene(
+              id: (e['id'] as String?) ?? '',
+              name: (e['name'] as String?) ?? (e['id'] as String?) ?? '',
+            ),
+    ].where((s) => s.id.isNotEmpty).toList();
+
     final satel = house['satel'];
     final satelOn = satel is Map && satel['enabled'] == true;
     return AclHouseExtras(
       cameras: list('cameras'),
       intercoms: list('intercoms'),
       globalDevices: list('devices'),
+      scenes: scenes,
       hasAlarm: satelOn,
     );
   }
@@ -205,6 +228,7 @@ class UserAccessEditor extends StatelessWidget {
       'rooms': '*',
       'functions': '*',
       'devices': '*',
+      'scenes': '*',
       'editScenes': true,
     };
     user['access'] = m;
@@ -273,11 +297,25 @@ class UserAccessEditor extends StatelessWidget {
     return _allows(_access()['functions'], 'alarm');
   }
 
-  void _commit(Set<String> granted, {bool? alarm}) {
+  Set<String> _scenesGranted() => {
+        for (final s in extras.scenes)
+          if (_allows(_access()['scenes'], s.id)) s.id,
+      };
+
+  void _setScenes(Set<String> scenes) => _commit(_granted(), scenes: scenes);
+
+  void _commit(Set<String> granted, {bool? alarm, Set<String>? scenes}) {
     final access = _access();
     final all = _allIds();
     final alarmOn = extras.hasAlarm ? (alarm ?? _alarmGranted()) : true;
     final allDevicesOn = all.every(granted.contains);
+    final scenesOn = scenes ?? _scenesGranted();
+    final allScenesOn = extras.scenes.isEmpty ||
+        extras.scenes.every((s) => scenesOn.contains(s.id));
+
+    access['scenes'] = extras.scenes.isEmpty || allScenesOn
+        ? '*'
+        : scenesOn.toList();
 
     if (allDevicesOn && alarmOn) {
       access['devices'] = '*';
@@ -355,6 +393,9 @@ class UserAccessEditor extends StatelessWidget {
     final allIds = _allIds();
     final allTri = _tri(allIds, granted);
     final alarmOn = _alarmGranted();
+    final scenesGranted = _scenesGranted();
+    final allScenesOn = extras.scenes.isEmpty ||
+        extras.scenes.every((s) => scenesGranted.contains(s.id));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -373,7 +414,7 @@ class UserAccessEditor extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           'Vink uit wat deze gebruiker niet mag zien. '
-          'Hele verdieping, kamer, functie of één apparaat. '
+          'Hele verdieping, kamer, functie, apparaat of een scene op de hoofdpagina. '
           'Voor gasten, housekeeping of kinderen.',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: LuxeColors.inkSoft,
@@ -383,18 +424,20 @@ class UserAccessEditor extends StatelessWidget {
         _AclNode(
           title: 'Alles',
           value: () {
-            final allOn = allTri == true && alarmOn;
-            final allOff =
-                allTri == false && (!extras.hasAlarm || !alarmOn);
+            final allOn = allTri == true && alarmOn && allScenesOn;
+            final allOff = allTri == false &&
+                (!extras.hasAlarm || !alarmOn) &&
+                (extras.scenes.isEmpty || scenesGranted.isEmpty);
             if (allOn) return true;
             if (allOff) return false;
             return null;
           }(),
           onChanged: (on) {
+            final allSceneIds = {for (final s in extras.scenes) s.id};
             if (on) {
-              _commit({...allIds}, alarm: true);
+              _commit({...allIds}, alarm: true, scenes: allSceneIds);
             } else {
-              _commit({}, alarm: false);
+              _commit({}, alarm: false, scenes: {});
             }
           },
           initiallyExpanded: true,
@@ -426,6 +469,30 @@ class UserAccessEditor extends StatelessWidget {
                         ),
                   ],
                 ),
+            if (extras.scenes.isNotEmpty)
+              _AclNode(
+                title: 'Scenes',
+                value: _tri(extras.scenes.map((s) => s.id), scenesGranted),
+                onChanged: (on) => _setScenes(
+                  on ? {for (final s in extras.scenes) s.id} : {},
+                ),
+                children: [
+                  for (final s in extras.scenes)
+                    _AclLeaf(
+                      title: s.name,
+                      value: scenesGranted.contains(s.id),
+                      onChanged: (v) {
+                        final next = {...scenesGranted};
+                        if (v) {
+                          next.add(s.id);
+                        } else {
+                          next.remove(s.id);
+                        }
+                        _setScenes(next);
+                      },
+                    ),
+                ],
+              ),
             if (!extras.isEmpty)
               _AclNode(
                 title: 'Huis',

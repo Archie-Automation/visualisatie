@@ -167,6 +167,10 @@ export function filterConfigForUser(cfg: HouseConfig, user: User): HouseConfig {
     : [];
   const devices = filterDevices(cfg.devices ?? [], null);
 
+  const scenes = (cfg.scenes ?? []).filter((s) =>
+    aclAllows(access.scenes, s.id)
+  );
+
   let satel = cfg.satel;
   if (satel && !houseFunctionAllowed(access, "alarm")) {
     satel = { ...satel, enabled: false };
@@ -178,7 +182,8 @@ export function filterConfigForUser(cfg: HouseConfig, user: User): HouseConfig {
     devices,
     cameras,
     intercoms,
-    satel
+    satel,
+    scenes
   };
 }
 
