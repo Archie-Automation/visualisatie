@@ -20,6 +20,47 @@ const ajv = new Ajv({ allErrors: true, strict: false });
 addFormats(ajv);
 const validate = ajv.compile(schemaJson);
 
+export const MIN_USER_CODE_LENGTH = 4;
+
+type UserLoginDraft = {
+  id?: string;
+  username?: string;
+  password?: unknown;
+};
+
+/** Unique inlognaam + code (min. 4) for new accounts. Call before hashing. */
+export function assertUserLoginCredentials(
+  users: UserLoginDraft[] | undefined,
+  previous: User[]
+): string | null {
+  if (!users) return null;
+  const prevIds = new Set(previous.map((u) => u.id));
+  const names = users.map((u) => (u.username ?? "").trim().toLowerCase());
+  if (names.some((n) => !n)) {
+    return "elke gebruiker heeft een inlognaam nodig";
+  }
+  if (new Set(names).size !== names.length) {
+    return "inlognaam moet uniek zijn";
+  }
+  for (const u of users) {
+    const name = (u.username ?? "").trim();
+    const plain = u.password;
+    if (
+      typeof plain === "string" &&
+      plain.length > 0 &&
+      plain.length < MIN_USER_CODE_LENGTH
+    ) {
+      return `code van "${name}" moet minstens ${MIN_USER_CODE_LENGTH} tekens zijn`;
+    }
+    if (!u.id || !prevIds.has(u.id)) {
+      if (typeof plain !== "string" || plain.length === 0) {
+        return `gebruiker "${name}" heeft geen code`;
+      }
+    }
+  }
+  return null;
+}
+
 export function stripSchemaKey(data: unknown): unknown {
   if (typeof data !== "object" || data === null) return data;
   const o = { ...(data as Record<string, unknown>) };
@@ -78,7 +119,7 @@ export function mergePasswordHashes(incoming: HouseConfig, previous: HouseConfig
 export function assertUsersHaveHashes(cfg: HouseConfig): string | null {
   for (const u of cfg.users ?? []) {
     if (!u.passwordHash?.trim()) {
-      return `Gebruiker "${u.username}" mist een passwordHash (bewaar bestaande hash of zet een bcrypt-hash).`;
+      return `gebruiker "${u.username}" heeft geen code`;
     }
   }
   return null;

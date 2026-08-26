@@ -79,7 +79,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('$e')),
             data: (cfg) {
+              final hideSpotify =
+                  _topic == _SettingsTopic.spotify && !auth.isStaff;
               final showMenu = _topic == null ||
+                  hideSpotify ||
                   (_topic == _SettingsTopic.tablet &&
                       !wallTabletDeviceSettingsApply);
               return Theme(
@@ -133,14 +136,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           setState(() => _topic = _SettingsTopic.tablet),
                     ),
                   ],
-                  Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
-                  _SettingsMenuTile(
-                    icon: Icons.library_music_outlined,
-                    title: 'Spotify',
-                    subtitle: 'Account voor dit huis',
-                    onTap: () =>
-                        setState(() => _topic = _SettingsTopic.spotify),
-                  ),
+                  if (auth.isStaff) ...[
+                    Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
+                    _SettingsMenuTile(
+                      icon: Icons.library_music_outlined,
+                      title: 'Spotify',
+                      subtitle: 'Account voor dit huis',
+                      onTap: () =>
+                          setState(() => _topic = _SettingsTopic.spotify),
+                    ),
+                  ],
                   if (auth.isStaff) ...[
                     Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
                     _SettingsMenuTile(

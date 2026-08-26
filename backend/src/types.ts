@@ -1016,6 +1016,8 @@ export interface User {
     functions?: "*" | string[];
     /** Per-room function slugs. `*` = whole room. Overrides `functions` for that room. */
     roomFunctions?: Record<string, "*" | string[]>;
+    /** Device ids the user may see. `*` or omit = all that pass floor/room/function. */
+    devices?: "*" | string[];
     canRelease?: "*" | string[];
     talkIntercoms?: "*" | string[];
     /** If false, the user can run scenes but cannot create/edit/delete them.

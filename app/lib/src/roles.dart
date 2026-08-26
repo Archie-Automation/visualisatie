@@ -49,3 +49,42 @@ const kHouseFunctionDefs = <HouseFunctionDef>[
   HouseFunctionDef('diverse', 'Diverse'),
   HouseFunctionDef('alarm', 'Alarm'),
 ];
+
+String functionSlugForDeviceType(String type) {
+  switch (type) {
+    case 'light_switch':
+    case 'light_dimmer':
+    case 'rgbw_ww':
+    case 'lutron_homeworks':
+      return 'verlichting';
+    case 'climate':
+    case 'ac':
+      return 'klimaat';
+    case 'shading':
+    case 'position_actuator':
+      return 'zonwering';
+    case 'fan':
+    case 'wtw':
+      return 'ventilatie';
+    case 'fireplace':
+      return 'openhaard';
+    case 'camera':
+      return 'cameras';
+    case 'intercom':
+      return 'intercom';
+    case 'media_sonos':
+    case 'media_bluesound':
+      return 'audio';
+    case 'melding':
+      return 'meldingen';
+    default:
+      return 'diverse';
+  }
+}
+
+String houseFunctionLabel(String slug) {
+  for (final f in kHouseFunctionDefs) {
+    if (f.slug == slug) return f.label;
+  }
+  return slug;
+}
