@@ -34,6 +34,7 @@ import '../satel_api.dart'
 import '../shading_subtype_glyph.dart';
 import '../theme.dart';
 import '../roles.dart';
+import '../user_credentials.dart';
 import '../ui/user_access_editor.dart';
 import '../ui/widgets/admin_full_restart_card.dart';
 import '../ui/widgets/admin_server_update_card.dart';
@@ -588,13 +589,22 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     if (house == null) return;
     setState(() => _saving = true);
     try {
+      final credErr = validateUsersLoginCredentials(_users());
+      if (credErr != null) {
+        if (!mounted) return;
+        setState(() => _saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(credErr), backgroundColor: Colors.red.shade800),
+        );
+        return;
+      }
       _stripEmptyPasswordFields();
       _normalizeHouseIntercoms();
-      await putInstallerHouse(token, house);
+      final payload = Map<String, dynamic>.from(house);
+      payload['users'] = usersPayloadForSave(_users());
+      await putInstallerHouse(token, payload);
       if (!mounted) return;
-      for (final u in _users()) {
-        u.remove('password');
-      }
+      clearNewUserFlags(_users());
       setState(() {});
       if (widget.useCustomerSession) {
         ref.invalidate(configProvider);
@@ -690,14 +700,16 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   void _addUser() {
     _users().add({
       'id': 'usr-${_uuid.v4()}',
-      'username': 'nieuw',
-      'displayName': 'Nieuwe gebruiker',
+      'username': '',
+      'displayName': '',
       'role': 'user',
       'passwordHash': '',
+      '_new': true,
       'access': {
         'floors': '*',
         'rooms': '*',
         'functions': '*',
+        'devices': '*',
         'editScenes': true,
       },
       'enabled': true,
@@ -2646,6 +2658,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       key: ValueKey(list[i]['id']),
       user: list[i],
       floors: aclFloorsFromHouseMaps(_floors()),
+      extras: AclHouseExtras.fromHouseMap(_house!),
       onChanged: () => setState(() {}),
       onDelete: () {
         list.removeAt(i);
@@ -2660,12 +2673,14 @@ class _InstallerUserForm extends StatefulWidget {
     super.key,
     required this.user,
     required this.floors,
+    required this.extras,
     required this.onChanged,
     required this.onDelete,
   });
 
   final Map<String, dynamic> user;
   final List<AclNavFloor> floors;
+  final AclHouseExtras extras;
   final VoidCallback onChanged;
   final VoidCallback onDelete;
 
@@ -2702,6 +2717,7 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
       'floors': '*',
       'rooms': '*',
       'functions': '*',
+      'devices': '*',
       'editScenes': true,
     };
     widget.user['access'] = m;
@@ -2727,8 +2743,19 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
         Text('Gebruiker', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 16),
         _BoundStrField('id', u, widget.onChanged),
-        _BoundStrField('username', u, widget.onChanged),
-        _BoundStrField('displayName', u, widget.onChanged),
+        _BoundStrField(
+          'username',
+          u,
+          widget.onChanged,
+          labelOverride: 'Inlognaam',
+          hintText: 'Uniek, waarmee deze persoon inlogt',
+        ),
+        _BoundStrField(
+          'displayName',
+          u,
+          widget.onChanged,
+          labelOverride: 'Weergavenaam',
+        ),
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: DropdownButtonFormField<String>(
@@ -2767,11 +2794,15 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
         TextField(
           controller: _password,
           obscureText: true,
-          decoration: const InputDecoration(
-            labelText: 'Nieuw wachtwoord (leeg = ongewijzigd)',
-            border: OutlineInputBorder(),
-            helperText:
-                'Voor een nieuw account is een wachtwoord verplicht vóór Opslaan.',
+          decoration: InputDecoration(
+            labelText: u['_new'] == true
+                ? 'Code'
+                : 'Nieuwe code (leeg = ongewijzigd)',
+            hintText: u['_new'] == true ? 'Minstens 4 tekens' : null,
+            border: const OutlineInputBorder(),
+            helperText: u['_new'] == true
+                ? 'Verplicht bij een nieuw account.'
+                : null,
           ),
           onChanged: (s) {
             if (s.isEmpty) {
@@ -2788,6 +2819,7 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
           UserAccessEditor(
             user: u,
             floors: widget.floors,
+            extras: widget.extras,
             onChanged: () {
               widget.onChanged();
               setState(() {});

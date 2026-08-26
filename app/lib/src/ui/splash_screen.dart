@@ -45,7 +45,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
 
-    _rotAnim = Tween<double>(begin: 0, end: pi).animate(
+    // Face-on ±90° — never flip past the edge to show the back of the logo.
+    _rotAnim = Tween<double>(begin: -pi / 2, end: pi / 2).animate(
       CurvedAnimation(parent: _rotCtrl, curve: Curves.easeInOut),
     );
 

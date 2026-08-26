@@ -81,6 +81,7 @@ import { normalizeHouseIntercomsRaw } from "./houseIntercoms";
 import {
   applyPlaintextPasswords,
   assertUsersHaveHashes,
+  assertUserLoginCredentials,
   mergePasswordHashes,
   mergeLutronTelnetPasswords,
   validateHouseJson,
@@ -509,6 +510,7 @@ export function buildRouter(
                 rooms: StarOrIds.optional(),
                 functions: StarOrIds.optional(),
                 roomFunctions: z.record(StarOrIds).optional(),
+                devices: StarOrIds.optional(),
                 canRelease: StarOrIds.optional(),
                 talkIntercoms: StarOrIds.optional(),
                 editScenes: z.boolean().optional()
@@ -524,10 +526,16 @@ export function buildRouter(
         .json({ error: "ongeldige gebruikerslijst", details: parsed.error.issues });
     }
 
+    const previous = getConfig();
+    const credErr = assertUserLoginCredentials(
+      parsed.data.users,
+      previous.users ?? []
+    );
+    if (credErr) return res.status(400).json({ error: credErr });
+
     const body = { users: parsed.data.users as unknown as User[] };
     await applyPlaintextPasswords(body);
 
-    const previous = getConfig();
     const nextUsers = body.users.map((u) =>
       canonicalizeStoredUser({
         ...u,
@@ -617,6 +625,19 @@ export function buildRouter(
   });
 
   r.put("/installer/house", requireAuth, requireAdmin, async (req, res) => {
+    const incomingUsers = (req.body as { users?: unknown })?.users;
+    const credErr = assertUserLoginCredentials(
+      Array.isArray(incomingUsers)
+        ? (incomingUsers as Array<{
+            id?: string;
+            username?: string;
+            password?: unknown;
+          }>)
+        : undefined,
+      getConfig().users ?? []
+    );
+    if (credErr) return res.status(400).json({ error: credErr });
+
     await applyPlaintextPasswords(req.body);
     normalizeHouseCamerasRaw(req.body);
     normalizeHouseIntercomsRaw(req.body);

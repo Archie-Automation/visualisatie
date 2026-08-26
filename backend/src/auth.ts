@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import type { NextFunction, Request, Response } from "express";
 import type { User } from "./types";
 import { getConfig } from "./config";
+import { aclAllows } from "./userAccess";
 import { logger } from "./logger";
 import {
   isInstallerRole,
@@ -126,6 +127,7 @@ export function canReleaseIntercom(
   if (!u) return isStaffRole(req.user?.role);
   if (!isUserEnabled(u)) return false;
   if (isStaffRole(u.role)) return true;
+  if (!aclAllows(u.access?.devices, intercomId)) return false;
   const acl = u.access?.canRelease;
   if (acl === "*") return true;
   if (Array.isArray(acl)) return acl.includes(intercomId);
@@ -140,6 +142,7 @@ export function canViewIntercom(
   const u = currentUser(req);
   if (!u) return isStaffRole(req.user?.role);
   if (isStaffRole(u.role)) return true;
+  if (!aclAllows(u.access?.devices, intercomId)) return false;
   const acl = u.access?.talkIntercoms;
   if (acl === undefined) return true;
   if (acl === "*") return true;

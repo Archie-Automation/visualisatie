@@ -28,6 +28,7 @@ export function functionSlugForDeviceType(type: string): HouseFunctionSlug {
     case "ac":
       return "klimaat";
     case "shading":
+    case "position_actuator":
       return "zonwering";
     case "fan":
     case "wtw":
@@ -110,7 +111,7 @@ function locateDevice(cfg: HouseConfig, deviceId: string): DevicePlace | null {
   return null;
 }
 
-/** Staff bypass ACL. Regular users need floor/room/function grants. */
+/** Staff bypass ACL. Regular users need floor/room/function/device grants. */
 export function userMayUseDevice(
   user: User | undefined,
   role: string | undefined,
@@ -122,6 +123,7 @@ export function userMayUseDevice(
   if (!hit) return false;
   const access = user?.access;
   if (!access) return true;
+  if (!aclAllows(access.devices, deviceId)) return false;
   if (hit.floorId && !aclAllows(access.floors, hit.floorId)) return false;
   if (hit.roomId && !aclAllows(access.rooms, hit.roomId)) return false;
   return functionAllowed(access, hit.roomId || null, hit.device.type);
@@ -135,7 +137,11 @@ export function filterConfigForUser(cfg: HouseConfig, user: User): HouseConfig {
     devices: Device[],
     roomId: string | null
   ): Device[] =>
-    devices.filter((d) => functionAllowed(access, roomId, d.type));
+    devices.filter(
+      (d) =>
+        aclAllows(access.devices, d.id) &&
+        functionAllowed(access, roomId, d.type)
+    );
 
   const floors = cfg.floors
     .filter((f) => aclAllows(access.floors, f.id))
@@ -144,27 +150,20 @@ export function filterConfigForUser(cfg: HouseConfig, user: User): HouseConfig {
         .filter((r) => aclAllows(access.rooms, r.id))
         .map((r) => {
           const devices = filterDevices(r.devices, r.id);
-          const fullyGranted =
-            functionsForRoom(access, r.id) === "*";
-          if (!fullyGranted && devices.length === 0) return null;
+          if (devices.length === 0) return null;
           return { ...r, devices };
         })
         .filter((r): r is NonNullable<typeof r> => r != null);
-      if (rooms.length === 0 && access.floors !== "*" && access.floors) {
-        return { ...f, rooms };
-      }
-      if (rooms.length === 0 && access.functions && access.functions !== "*") {
-        return null;
-      }
+      if (rooms.length === 0) return null;
       return { ...f, rooms };
     })
     .filter((f): f is NonNullable<typeof f> => f != null);
 
   const cameras = houseFunctionAllowed(access, "cameras")
-    ? cfg.cameras
+    ? (cfg.cameras ?? []).filter((d) => aclAllows(access.devices, d.id))
     : [];
   const intercoms = houseFunctionAllowed(access, "intercom")
-    ? cfg.intercoms
+    ? (cfg.intercoms ?? []).filter((d) => aclAllows(access.devices, d.id))
     : [];
   const devices = filterDevices(cfg.devices ?? [], null);
 
@@ -187,7 +186,8 @@ export function canonicalizeStoredUser(u: User): User {
   return {
     ...u,
     role: normalizeRole(u.role),
-    enabled: u.enabled !== false
+    enabled: u.enabled !== false,
+    username: u.username.trim()
   };
 }
 

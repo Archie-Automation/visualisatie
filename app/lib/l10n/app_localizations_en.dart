@@ -18,7 +18,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get loginUserLabel => 'Username';
 
   @override
-  String get loginPasswordLabel => 'Password';
+  String get loginPasswordLabel => 'Code';
 
   @override
   String get loginAction => 'Log in';

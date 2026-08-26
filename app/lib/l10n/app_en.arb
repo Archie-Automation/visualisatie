@@ -3,7 +3,7 @@
   "loginWelcomeTitle": "Welcome home.",
   "loginSubtitle": "Sign in to take control of the ambience.",
   "loginUserLabel": "Username",
-  "loginPasswordLabel": "Password",
+  "loginPasswordLabel": "Code",
   "loginAction": "Log in",
   "loginErrorBadCredentials": "Incorrect username or password",
   "loginErrorNetwork": "Cannot reach the server. Start the backend (port 4000) and try again.",

@@ -4,10 +4,39 @@ import '../models.dart';
 import '../roles.dart';
 import '../theme.dart';
 
-class AclNavRoom {
-  const AclNavRoom({required this.id, required this.name});
+class AclNavDevice {
+  const AclNavDevice({
+    required this.id,
+    required this.name,
+    required this.type,
+  });
+
   final String id;
   final String name;
+  final String type;
+
+  factory AclNavDevice.fromDevice(Device d) => AclNavDevice(
+        id: d.id,
+        name: d.name,
+        type: (d.raw['type'] as String?) ?? 'universal',
+      );
+
+  factory AclNavDevice.fromMap(Map<String, dynamic> m) => AclNavDevice(
+        id: (m['id'] as String?) ?? '',
+        name: (m['name'] as String?) ?? (m['id'] as String?) ?? '',
+        type: (m['type'] as String?) ?? 'universal',
+      );
+}
+
+class AclNavRoom {
+  const AclNavRoom({
+    required this.id,
+    required this.name,
+    this.devices = const [],
+  });
+  final String id;
+  final String name;
+  final List<AclNavDevice> devices;
 }
 
 class AclNavFloor {
@@ -21,13 +50,70 @@ class AclNavFloor {
   final List<AclNavRoom> rooms;
 }
 
+class AclHouseExtras {
+  const AclHouseExtras({
+    this.cameras = const [],
+    this.intercoms = const [],
+    this.globalDevices = const [],
+    this.hasAlarm = false,
+  });
+
+  final List<AclNavDevice> cameras;
+  final List<AclNavDevice> intercoms;
+  final List<AclNavDevice> globalDevices;
+  final bool hasAlarm;
+
+  bool get isEmpty =>
+      cameras.isEmpty &&
+      intercoms.isEmpty &&
+      globalDevices.isEmpty &&
+      !hasAlarm;
+
+  factory AclHouseExtras.fromConfig(HouseConfig cfg) => AclHouseExtras(
+        cameras: [for (final d in cfg.cameras) AclNavDevice.fromDevice(d)],
+        intercoms: [for (final d in cfg.intercoms) AclNavDevice.fromDevice(d)],
+        globalDevices: [
+          for (final d in cfg.globalDevices) AclNavDevice.fromDevice(d)
+        ],
+        hasAlarm: cfg.satelEnabled,
+      );
+
+  factory AclHouseExtras.fromHouseMap(Map<String, dynamic> house) {
+    List<AclNavDevice> list(String key) {
+      final raw = house[key];
+      if (raw is! List) return const [];
+      return [
+        for (final e in raw)
+          if (e is Map)
+            AclNavDevice.fromMap(Map<String, dynamic>.from(e)),
+      ].where((d) => d.id.isNotEmpty).toList();
+    }
+
+    final satel = house['satel'];
+    final satelOn = satel is Map && satel['enabled'] == true;
+    return AclHouseExtras(
+      cameras: list('cameras'),
+      intercoms: list('intercoms'),
+      globalDevices: list('devices'),
+      hasAlarm: satelOn,
+    );
+  }
+}
+
 List<AclNavFloor> aclFloorsFromConfig(HouseConfig cfg) {
   return [
     for (final f in cfg.floors)
       AclNavFloor(
         id: f.id,
         name: f.name,
-        rooms: [for (final r in f.rooms) AclNavRoom(id: r.id, name: r.name)],
+        rooms: [
+          for (final r in f.rooms)
+            AclNavRoom(
+              id: r.id,
+              name: r.name,
+              devices: [for (final d in r.devices) AclNavDevice.fromDevice(d)],
+            ),
+        ],
       ),
   ];
 }
@@ -45,6 +131,11 @@ List<AclNavFloor> aclFloorsFromHouseMaps(List<Map<String, dynamic>> floors) {
                 AclNavRoom(
                   id: raw['id'] as String,
                   name: (raw['name'] as String?) ?? raw['id'] as String,
+                  devices: [
+                    for (final d in (raw['devices'] as List?) ?? const [])
+                      if (d is Map && (d['id'] as String?)?.isNotEmpty == true)
+                        AclNavDevice.fromMap(Map<String, dynamic>.from(d)),
+                  ],
                 ),
           ],
         ),
@@ -58,6 +149,34 @@ List<String> _ids(dynamic v) {
   return const [];
 }
 
+bool _allows(dynamic list, String id) {
+  if (_isAll(list)) return true;
+  return _ids(list).contains(id);
+}
+
+bool? _tri(Iterable<String> ids, Set<String> granted) {
+  final list = ids.toList();
+  if (list.isEmpty) return true;
+  final n = list.where(granted.contains).length;
+  if (n == 0) return false;
+  if (n == list.length) return true;
+  return null;
+}
+
+Map<String, List<AclNavDevice>> _groupByFunction(List<AclNavDevice> devices) {
+  final grouped = <String, List<AclNavDevice>>{};
+  for (final d in devices) {
+    grouped.putIfAbsent(functionSlugForDeviceType(d.type), () => []).add(d);
+  }
+  final ordered = <String, List<AclNavDevice>>{};
+  for (final fn in kHouseFunctionDefs) {
+    final items = grouped.remove(fn.slug);
+    if (items != null && items.isNotEmpty) ordered[fn.slug] = items;
+  }
+  ordered.addAll(grouped);
+  return ordered;
+}
+
 /// Mutates [user]['access'] for a regular user (not staff).
 class UserAccessEditor extends StatelessWidget {
   const UserAccessEditor({
@@ -65,10 +184,12 @@ class UserAccessEditor extends StatelessWidget {
     required this.user,
     required this.floors,
     required this.onChanged,
+    this.extras = const AclHouseExtras(),
   });
 
   final Map<String, dynamic> user;
   final List<AclNavFloor> floors;
+  final AclHouseExtras extras;
   final VoidCallback onChanged;
 
   Map<String, dynamic> _access() {
@@ -83,45 +204,157 @@ class UserAccessEditor extends StatelessWidget {
       'floors': '*',
       'rooms': '*',
       'functions': '*',
+      'devices': '*',
       'editScenes': true,
     };
     user['access'] = m;
     return m;
   }
 
-  Map<String, dynamic> _roomFunctions(Map<String, dynamic> access) {
-    final rf = access['roomFunctions'];
-    if (rf is Map<String, dynamic>) return rf;
-    if (rf is Map) {
-      final m = Map<String, dynamic>.from(rf);
-      access['roomFunctions'] = m;
-      return m;
+  Iterable<AclNavDevice> _allDevices() sync* {
+    for (final f in floors) {
+      for (final r in f.rooms) {
+        yield* r.devices;
+      }
     }
-    final m = <String, dynamic>{};
-    access['roomFunctions'] = m;
-    return m;
+    yield* extras.cameras;
+    yield* extras.intercoms;
+    yield* extras.globalDevices;
+  }
+
+  Set<String> _allIds() => {for (final d in _allDevices()) d.id};
+
+  bool _deviceVisible(AclNavDevice d, {String? floorId, String? roomId}) {
+    final access = _access();
+    if (!_allows(access['devices'], d.id)) return false;
+    if (floorId != null &&
+        floorId.isNotEmpty &&
+        !_allows(access['floors'], floorId)) {
+      return false;
+    }
+    if (roomId != null &&
+        roomId.isNotEmpty &&
+        !_allows(access['rooms'], roomId)) {
+      return false;
+    }
+    final slug = functionSlugForDeviceType(d.type);
+    final rf = access['roomFunctions'];
+    if (roomId != null && rf is Map && rf.containsKey(roomId)) {
+      return _allows(rf[roomId], slug);
+    }
+    return _allows(access['functions'], slug);
+  }
+
+  Set<String> _granted() {
+    final granted = <String>{};
+    for (final f in floors) {
+      for (final r in f.rooms) {
+        for (final d in r.devices) {
+          if (_deviceVisible(d, floorId: f.id, roomId: r.id)) {
+            granted.add(d.id);
+          }
+        }
+      }
+    }
+    for (final d in extras.cameras) {
+      if (_deviceVisible(d)) granted.add(d.id);
+    }
+    for (final d in extras.intercoms) {
+      if (_deviceVisible(d)) granted.add(d.id);
+    }
+    for (final d in extras.globalDevices) {
+      if (_deviceVisible(d)) granted.add(d.id);
+    }
+    return granted;
+  }
+
+  bool _alarmGranted() {
+    if (!extras.hasAlarm) return true;
+    return _allows(_access()['functions'], 'alarm');
+  }
+
+  void _commit(Set<String> granted, {bool? alarm}) {
+    final access = _access();
+    final all = _allIds();
+    final alarmOn = extras.hasAlarm ? (alarm ?? _alarmGranted()) : true;
+    final allDevicesOn = all.every(granted.contains);
+
+    if (allDevicesOn && alarmOn) {
+      access['devices'] = '*';
+      access['floors'] = '*';
+      access['rooms'] = '*';
+      access['functions'] = '*';
+      access.remove('roomFunctions');
+      onChanged();
+      return;
+    }
+
+    access['devices'] = granted.toList();
+
+    final floorIds = <String>[
+      for (final f in floors)
+        if (f.rooms.any((r) => r.devices.any((d) => granted.contains(d.id))))
+          f.id,
+    ];
+    access['floors'] =
+        floorIds.length == floors.length && floors.isNotEmpty ? '*' : floorIds;
+
+    final allRooms = [for (final f in floors) ...f.rooms];
+    final roomIds = <String>[
+      for (final r in allRooms)
+        if (r.devices.any((d) => granted.contains(d.id))) r.id,
+    ];
+    access['rooms'] =
+        roomIds.length == allRooms.length && allRooms.isNotEmpty ? '*' : roomIds;
+
+    final fns = <String>{};
+    for (final d in _allDevices()) {
+      if (granted.contains(d.id)) {
+        fns.add(functionSlugForDeviceType(d.type));
+      }
+    }
+    if (alarmOn) fns.add('alarm');
+    access['functions'] = fns.toList();
+
+    final rf = <String, dynamic>{};
+    for (final r in allRooms) {
+      if (r.devices.isEmpty) continue;
+      final kept = r.devices.where((d) => granted.contains(d.id)).toList();
+      if (kept.isEmpty) continue;
+      if (kept.length == r.devices.length) {
+        rf[r.id] = '*';
+      } else {
+        rf[r.id] = {
+          for (final d in kept) functionSlugForDeviceType(d.type),
+        }.toList();
+      }
+    }
+    if (rf.isEmpty) {
+      access.remove('roomFunctions');
+    } else {
+      access['roomFunctions'] = rf;
+    }
+    onChanged();
+  }
+
+  void _setIds(Iterable<String> ids, bool on) {
+    final next = _granted();
+    if (on) {
+      next.addAll(ids);
+    } else {
+      next.removeAll(ids);
+    }
+    _commit(next);
   }
 
   @override
   Widget build(BuildContext context) {
     final access = _access();
-    final allFloors = _isAll(access['floors']);
-    final allRooms = _isAll(access['rooms']);
-    final allFunctions = _isAll(access['functions']);
     final editScenes = access['editScenes'] != false;
-    final floorIds = _ids(access['floors']).toSet();
-    final roomIds = _ids(access['rooms']).toSet();
-    final functionIds = _ids(access['functions']).toSet();
-    final roomFn = _roomFunctions(access);
-
-    final visibleFloors = allFloors
-        ? floors
-        : floors.where((f) => floorIds.contains(f.id)).toList();
-    final visibleRooms = [
-      for (final f in visibleFloors)
-        for (final r in f.rooms)
-          if (allRooms || roomIds.contains(r.id)) r,
-    ];
+    final granted = _granted();
+    final allIds = _allIds();
+    final allTri = _tri(allIds, granted);
+    final alarmOn = _alarmGranted();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -135,244 +368,207 @@ class UserAccessEditor extends StatelessWidget {
             onChanged();
           },
         ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Alle verdiepingen'),
-          value: allFloors,
-          onChanged: (v) {
-            access['floors'] = v ? '*' : <String>[];
-            onChanged();
-          },
-        ),
-        if (!allFloors)
-          ...floors.map(
-            (f) => CheckboxListTile(
-              contentPadding: EdgeInsets.zero,
-              dense: true,
-              title: Text(f.name),
-              value: floorIds.contains(f.id),
-              onChanged: (v) {
-                if (v == true) {
-                  floorIds.add(f.id);
-                } else {
-                  floorIds.remove(f.id);
-                }
-                access['floors'] = floorIds.toList();
-                onChanged();
-              },
-            ),
-          ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Alle kamers'),
-          subtitle: const Text('Binnen de gekozen verdiepingen'),
-          value: allRooms,
-          onChanged: (v) {
-            access['rooms'] = v ? '*' : <String>[];
-            onChanged();
-          },
-        ),
-        if (!allRooms)
-          ...[
-            for (final f in visibleFloors) ...[
-              Padding(
-                padding: const EdgeInsets.only(top: 8, bottom: 2),
-                child: Text(
-                  f.name,
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: LuxeColors.inkSoft,
-                      ),
-                ),
+        const SizedBox(height: 8),
+        Text('Zichtbaar in de app', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(
+          'Vink uit wat deze gebruiker niet mag zien. '
+          'Hele verdieping, kamer, functie of één apparaat. '
+          'Voor gasten, housekeeping of kinderen.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: LuxeColors.inkSoft,
               ),
-              for (final r in f.rooms)
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  dense: true,
-                  title: Text(r.name),
-                  value: roomIds.contains(r.id),
-                  onChanged: (v) {
-                    if (v == true) {
-                      roomIds.add(r.id);
-                    } else {
-                      roomIds.remove(r.id);
-                    }
-                    access['rooms'] = roomIds.toList();
-                    onChanged();
-                  },
-                ),
-            ],
-          ],
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Alle functies'),
-          subtitle: const Text('Verlichting, klimaat, camera\'s, …'),
-          value: allFunctions,
-          onChanged: (v) {
-            access['functions'] = v ? '*' : <String>[];
-            if (v) access.remove('roomFunctions');
-            onChanged();
-          },
         ),
-        if (!allFunctions) ...[
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              for (final fn in kHouseFunctionDefs)
-                FilterChip(
-                  label: Text(fn.label),
-                  selected: functionIds.contains(fn.slug),
-                  onSelected: (sel) {
-                    if (sel) {
-                      functionIds.add(fn.slug);
-                    } else {
-                      functionIds.remove(fn.slug);
-                    }
-                    access['functions'] = functionIds.toList();
-                    onChanged();
-                  },
-                ),
-            ],
-          ),
-          if (visibleRooms.isNotEmpty) ...[
-            const SizedBox(height: 16),
-            Text(
-              'Functies per kamer',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              'Standaard volgt de kamer de huisbrede functies. '
-              'Kies “hele kamer” of een subset om af te wijken.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: LuxeColors.inkSoft,
+        const SizedBox(height: 8),
+        _AclNode(
+          title: 'Alles',
+          value: () {
+            final allOn = allTri == true && alarmOn;
+            final allOff =
+                allTri == false && (!extras.hasAlarm || !alarmOn);
+            if (allOn) return true;
+            if (allOff) return false;
+            return null;
+          }(),
+          onChanged: (on) {
+            if (on) {
+              _commit({...allIds}, alarm: true);
+            } else {
+              _commit({}, alarm: false);
+            }
+          },
+          initiallyExpanded: true,
+          children: [
+            for (final f in floors)
+              if (f.rooms.any((r) => r.devices.isNotEmpty))
+                _AclNode(
+                  title: f.name,
+                  value: _tri(
+                    [for (final r in f.rooms) for (final d in r.devices) d.id],
+                    granted,
                   ),
-            ),
-            for (final r in visibleRooms)
-              _RoomFunctionTile(
-                room: r,
-                value: roomFn[r.id],
-                onChanged: (v) {
-                  if (v == null) {
-                    roomFn.remove(r.id);
+                  onChanged: (on) => _setIds(
+                    [for (final r in f.rooms) for (final d in r.devices) d.id],
+                    on,
+                  ),
+                  children: [
+                    for (final r in f.rooms)
+                      if (r.devices.isNotEmpty)
+                        _AclNode(
+                          title: r.name,
+                          value: _tri(r.devices.map((d) => d.id), granted),
+                          onChanged: (on) =>
+                              _setIds(r.devices.map((d) => d.id), on),
+                          children: [
+                            for (final e in _groupByFunction(r.devices).entries)
+                              _functionBranch(e.key, e.value, granted),
+                          ],
+                        ),
+                  ],
+                ),
+            if (!extras.isEmpty)
+              _AclNode(
+                title: 'Huis',
+                value: _tri([
+                  ...extras.cameras.map((d) => d.id),
+                  ...extras.intercoms.map((d) => d.id),
+                  ...extras.globalDevices.map((d) => d.id),
+                  if (extras.hasAlarm) '__alarm__',
+                ], {
+                  ...granted,
+                  if (alarmOn) '__alarm__',
+                }),
+                onChanged: (on) {
+                  final ids = [
+                    ...extras.cameras.map((d) => d.id),
+                    ...extras.intercoms.map((d) => d.id),
+                    ...extras.globalDevices.map((d) => d.id),
+                  ];
+                  final next = _granted();
+                  if (on) {
+                    next.addAll(ids);
                   } else {
-                    roomFn[r.id] = v;
+                    next.removeAll(ids);
                   }
-                  if (roomFn.isEmpty) {
-                    access.remove('roomFunctions');
-                  } else {
-                    access['roomFunctions'] = roomFn;
-                  }
-                  onChanged();
+                  _commit(next, alarm: on);
                 },
+                children: [
+                  if (extras.cameras.isNotEmpty)
+                    _functionBranch('cameras', extras.cameras, granted),
+                  if (extras.intercoms.isNotEmpty)
+                    _functionBranch('intercom', extras.intercoms, granted),
+                  for (final e in _groupByFunction(extras.globalDevices).entries)
+                    _functionBranch(e.key, e.value, granted),
+                  if (extras.hasAlarm)
+                    _AclLeaf(
+                      title: 'Alarm',
+                      value: alarmOn,
+                      onChanged: (v) => _commit(_granted(), alarm: v),
+                    ),
+                ],
               ),
           ],
-        ],
+        ),
+      ],
+    );
+  }
+
+  Widget _functionBranch(
+    String slug,
+    List<AclNavDevice> devices,
+    Set<String> granted,
+  ) {
+    return _AclNode(
+      title: houseFunctionLabel(slug),
+      value: _tri(devices.map((d) => d.id), granted),
+      onChanged: (on) => _setIds(devices.map((d) => d.id), on),
+      children: [
+        for (final d in devices)
+          _AclLeaf(
+            title: d.name,
+            value: granted.contains(d.id),
+            onChanged: (v) => _setIds([d.id], v),
+          ),
       ],
     );
   }
 }
 
-String _functionLabel(String slug) {
-  for (final f in kHouseFunctionDefs) {
-    if (f.slug == slug) return f.label;
+class _AclNode extends StatelessWidget {
+  const _AclNode({
+    required this.title,
+    required this.value,
+    required this.onChanged,
+    required this.children,
+    this.initiallyExpanded = false,
+  });
+
+  final String title;
+  final bool? value;
+  final ValueChanged<bool> onChanged;
+  final List<Widget> children;
+  final bool initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) {
+    if (children.isEmpty) {
+      return _AclLeaf(
+        title: title,
+        value: value ?? false,
+        onChanged: onChanged,
+      );
+    }
+    return Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        initiallyExpanded: initiallyExpanded,
+        tilePadding: EdgeInsets.zero,
+        childrenPadding: const EdgeInsets.only(left: 16),
+        title: Row(
+          children: [
+            SizedBox(
+              width: 32,
+              height: 32,
+              child: Checkbox(
+                tristate: true,
+                value: value,
+                onChanged: (_) => onChanged(value != true),
+              ),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                title,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+          ],
+        ),
+        children: children,
+      ),
+    );
   }
-  return slug;
 }
 
-class _RoomFunctionTile extends StatelessWidget {
-  const _RoomFunctionTile({
-    required this.room,
+class _AclLeaf extends StatelessWidget {
+  const _AclLeaf({
+    required this.title,
     required this.value,
     required this.onChanged,
   });
 
-  final AclNavRoom room;
-  final dynamic value;
-  final ValueChanged<dynamic> onChanged;
+  final String title;
+  final bool value;
+  final ValueChanged<bool> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final whole = value == '*';
-    final custom = value is List;
-    final selected = custom
-        ? (value as List).map((e) => e.toString()).toSet()
-        : <String>{};
-
-    return ExpansionTile(
-      tilePadding: EdgeInsets.zero,
-      title: Text(room.name),
-      subtitle: Text(
-        whole
-            ? 'Hele kamer'
-            : custom
-                ? selected.isEmpty
-                    ? 'Geen functies'
-                    : selected.map(_functionLabel).join(', ')
-                : 'Standaard (huisbreed)',
-      ),
-      children: [
-        RadioListTile<String>(
-          contentPadding: EdgeInsets.zero,
-          dense: true,
-          title: const Text('Standaard (huisbreed)'),
-          value: 'inherit',
-          groupValue: whole
-              ? 'whole'
-              : custom
-                  ? 'custom'
-                  : 'inherit',
-          onChanged: (_) => onChanged(null),
-        ),
-        RadioListTile<String>(
-          contentPadding: EdgeInsets.zero,
-          dense: true,
-          title: const Text('Hele kamer'),
-          value: 'whole',
-          groupValue: whole
-              ? 'whole'
-              : custom
-                  ? 'custom'
-                  : 'inherit',
-          onChanged: (_) => onChanged('*'),
-        ),
-        RadioListTile<String>(
-          contentPadding: EdgeInsets.zero,
-          dense: true,
-          title: const Text('Alleen deze functies'),
-          value: 'custom',
-          groupValue: whole
-              ? 'whole'
-              : custom
-                  ? 'custom'
-                  : 'inherit',
-          onChanged: (_) => onChanged(<String>[]),
-        ),
-        if (custom)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final fn in kHouseFunctionDefs)
-                  FilterChip(
-                    label: Text(fn.label),
-                    selected: selected.contains(fn.slug),
-                    onSelected: (sel) {
-                      final next = {...selected};
-                      if (sel) {
-                        next.add(fn.slug);
-                      } else {
-                        next.remove(fn.slug);
-                      }
-                      onChanged(next.toList());
-                    },
-                  ),
-              ],
-            ),
-          ),
-      ],
+    return CheckboxListTile(
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      title: Text(title),
+      value: value,
+      onChanged: (v) => onChanged(v ?? false),
     );
   }
 }

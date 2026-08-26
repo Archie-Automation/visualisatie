@@ -15,10 +15,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get loginSubtitle => 'Meld u aan om de sfeer over te nemen.';
 
   @override
-  String get loginUserLabel => 'Gebruiker';
+  String get loginUserLabel => 'Inlognaam';
 
   @override
-  String get loginPasswordLabel => 'Wachtwoord';
+  String get loginPasswordLabel => 'Code';
 
   @override
   String get loginAction => 'Inloggen';

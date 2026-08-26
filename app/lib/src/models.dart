@@ -662,6 +662,8 @@ class HouseConfig {
   final CurrentUser? me;
   /// Wandtablet idle / screensaver defaults uit house.json (`displayPanel`).
   final Map<String, dynamic>? displayPanelJson;
+  /// Satel / inbraakalarm aanwezig en aangezet in house.json.
+  final bool satelEnabled;
 
   const HouseConfig({
     required this.projectId,
@@ -676,6 +678,7 @@ class HouseConfig {
     required this.scenes,
     this.me,
     this.displayPanelJson,
+    this.satelEnabled = false,
   });
 
   factory HouseConfig.fromJson(Map<String, dynamic> j) {
@@ -709,6 +712,7 @@ class HouseConfig {
           .toList(),
       me: me,
       displayPanelJson: j['displayPanel'] as Map<String, dynamic>?,
+      satelEnabled: (j['satel'] as Map?)?['enabled'] == true,
     );
   }
 

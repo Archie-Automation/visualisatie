@@ -7,7 +7,9 @@ import '../models.dart';
 import '../roles.dart';
 import '../theme.dart';
 import '../user_api.dart';
+import '../user_credentials.dart';
 import 'user_access_editor.dart';
+import 'widgets/back_pill.dart';
 import 'widgets/glass_card.dart';
 
 class UsersAdminSection extends ConsumerStatefulWidget {
@@ -26,20 +28,11 @@ class _UsersAdminSectionState extends ConsumerState<UsersAdminSection> {
   List<Map<String, dynamic>>? _users;
   String? _error;
   bool _loading = true;
-  bool _saving = false;
-  String? _selectedId;
-  final _password = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _reload();
-  }
-
-  @override
-  void dispose() {
-    _password.dispose();
-    super.dispose();
   }
 
   Future<void> _reload() async {
@@ -55,49 +48,309 @@ class _UsersAdminSectionState extends ConsumerState<UsersAdminSection> {
       setState(() {
         _users = users;
         _loading = false;
-        if (_selectedId != null &&
-            users.every((u) => u['id'] != _selectedId)) {
-          _selectedId = null;
-        }
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString();
+        _error = e.toString().replaceFirst('Exception: ', '');
         _loading = false;
       });
     }
   }
 
-  Map<String, dynamic>? get _selected {
-    final id = _selectedId;
-    if (id == null) return null;
-    for (final u in _users ?? const []) {
-      if (u['id'] == id) return u;
+  Future<void> _openEditor({Map<String, dynamic>? existing}) async {
+    final users = _users;
+    final token = ref.read(authProvider).token;
+    if (users == null || token == null) return;
+    final changed = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _UserEditorSheet(
+        cfg: widget.cfg,
+        allUsers: [for (final u in users) _copyUser(u)],
+        draft: existing != null ? _copyUser(existing) : _freshUser(),
+        token: token,
+      ),
+    );
+    if (changed == true && mounted) await _reload();
+  }
+
+  Map<String, dynamic> _freshUser() => {
+        'id': 'usr-${_uuid.v4()}',
+        'username': '',
+        'displayName': '',
+        'role': 'user',
+        'enabled': true,
+        '_new': true,
+        'access': {
+          'floors': '*',
+          'rooms': '*',
+          'functions': '*',
+          'devices': '*',
+          'editScenes': true,
+        },
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.all(32),
+        child: Center(
+          child: SizedBox(
+            width: 24,
+            height: 24,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+        ),
+      );
     }
-    return null;
+    if (_users == null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(22, 8, 22, 8),
+        child: Text(_error ?? 'Geen gebruikers'),
+      );
+    }
+
+    final users = _users!;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(22, 5, 22, 9),
+      child: GlassCard(
+        padding: const EdgeInsets.fromLTRB(16, 12, 14, 12),
+        radius: 18,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.showTitle)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'GEBRUIKERS',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+              ),
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  _error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+            for (var i = 0; i < users.length; i++) ...[
+              if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+              _UserRow(
+                user: users[i],
+                onTap: () => _openEditor(existing: users[i]),
+              ),
+            ],
+            if (users.isNotEmpty)
+              Divider(height: 1, color: LuxeColors.lineSoft),
+            _AddUserRow(onTap: () => _openEditor()),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Map<String, dynamic> _copyUser(Map<String, dynamic> u) {
+  final copy = Map<String, dynamic>.from(u);
+  final access = copy['access'];
+  if (access is Map) {
+    final a = Map<String, dynamic>.from(access);
+    final rf = a['roomFunctions'];
+    if (rf is Map) a['roomFunctions'] = Map<String, dynamic>.from(rf);
+    copy['access'] = a;
+  }
+  return copy;
+}
+
+class _UserRow extends StatelessWidget {
+  const _UserRow({required this.user, required this.onTap});
+
+  final Map<String, dynamic> user;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final role = user['role'] as String? ?? 'user';
+    final enabled = user['enabled'] != false;
+    final name = (user['displayName'] as String?)?.trim();
+    final username = user['username'] as String? ?? '';
+    final title = (name == null || name.isEmpty) ? username : name;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(4, 8, 0, 8),
+        child: Row(
+          children: [
+            Icon(
+              isInstallerRole(role)
+                  ? Icons.construction_outlined
+                  : isSuperUserRole(role)
+                      ? Icons.admin_panel_settings_outlined
+                      : Icons.person_outline,
+              size: 18,
+              color: LuxeColors.brassDeep,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title.isEmpty ? 'Nieuwe gebruiker' : title,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    [
+                      if (username.isNotEmpty) username,
+                      roleLabel(role),
+                      if (!enabled) 'geblokkeerd',
+                    ].join(' · '),
+                    style: Theme.of(context).textTheme.bodySmall,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 20,
+              color: LuxeColors.inkSoft,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AddUserRow extends StatelessWidget {
+  const _AddUserRow({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(4, 10, 4, 8),
+        child: Row(
+          children: [
+            Icon(Icons.add_rounded, size: 20, color: LuxeColors.brassDeep),
+            const SizedBox(width: 10),
+            Text(
+              'Gebruiker toevoegen',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _UserEditorSheet extends ConsumerStatefulWidget {
+  const _UserEditorSheet({
+    required this.cfg,
+    required this.allUsers,
+    required this.draft,
+    required this.token,
+  });
+
+  final HouseConfig cfg;
+  final List<Map<String, dynamic>> allUsers;
+  final Map<String, dynamic> draft;
+  final String token;
+
+  @override
+  ConsumerState<_UserEditorSheet> createState() => _UserEditorSheetState();
+}
+
+class _UserEditorSheetState extends ConsumerState<_UserEditorSheet> {
+  late final Map<String, dynamic> _draft;
+  late final TextEditingController _password;
+  bool _saving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _draft = widget.draft;
+    _password = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _password.dispose();
+    super.dispose();
+  }
+
+  bool get _isNew => _draft['_new'] == true;
+
+  String? get _selfId {
+    final name = ref.read(authProvider).username;
+    if (name == null) return widget.cfg.me?.id;
+    for (final u in widget.allUsers) {
+      if (u['username'] == name) return u['id'] as String?;
+    }
+    return widget.cfg.me?.id;
+  }
+
+  List<Map<String, dynamic>> _mergedUsers({required bool deleting}) {
+    final id = _draft['id'];
+    if (deleting) {
+      return [for (final u in widget.allUsers) if (u['id'] != id) u];
+    }
+    final exists = widget.allUsers.any((u) => u['id'] == id);
+    if (!exists) return [...widget.allUsers, _draft];
+    return [
+      for (final u in widget.allUsers)
+        if (u['id'] == id) _draft else u,
+    ];
   }
 
   Future<void> _save() async {
-    final token = ref.read(authProvider).token;
-    final users = _users;
-    if (token == null || users == null) return;
+    final next = _mergedUsers(deleting: false);
+    for (final u in next) {
+      u['username'] = (u['username'] as String? ?? '').trim();
+    }
+    final credErr = validateUsersLoginCredentials(next);
+    if (credErr != null) {
+      setState(() => _error = credErr);
+      return;
+    }
+    await _persist(next);
+  }
+
+  Future<void> _delete() async {
+    if (_isNew) {
+      Navigator.of(context).pop(false);
+      return;
+    }
+    await _persist(_mergedUsers(deleting: true));
+  }
+
+  Future<void> _persist(List<Map<String, dynamic>> next) async {
     setState(() {
       _saving = true;
       _error = null;
     });
     try {
-      final saved = await saveHouseUsers(users: users, token: token);
-      if (!mounted) return;
-      _password.clear();
-      setState(() {
-        _users = saved;
-        _saving = false;
-      });
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Gebruikers opgeslagen')),
+      await saveHouseUsers(
+        users: usersPayloadForSave(next),
+        token: widget.token,
       );
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -107,216 +360,140 @@ class _UsersAdminSectionState extends ConsumerState<UsersAdminSection> {
     }
   }
 
-  void _addUser() {
-    final id = 'usr-${_uuid.v4()}';
-    final next = {
-      'id': id,
-      'username': 'nieuw',
-      'displayName': 'Nieuwe gebruiker',
-      'role': 'user',
-      'enabled': true,
-      'access': {
-        'floors': '*',
-        'rooms': '*',
-        'functions': '*',
-        'editScenes': true,
-      },
-    };
-    setState(() {
-      _users = [...?_users, next];
-      _selectedId = id;
-      _password.clear();
-    });
-  }
-
-  void _deleteSelected() {
-    final sel = _selected;
-    if (sel == null) return;
-    setState(() {
-      _users = [...?_users]..removeWhere((u) => u['id'] == sel['id']);
-      _selectedId = null;
-      _password.clear();
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
+    final mq = MediaQuery.of(context);
     final auth = ref.watch(authProvider);
-    if (_loading) {
-      return const Padding(
-        padding: EdgeInsets.all(32),
-        child: Center(child: CircularProgressIndicator()),
-      );
-    }
-    if (_users == null) {
-      return Padding(
-        padding: const EdgeInsets.all(22),
-        child: Text(_error ?? 'Geen gebruikers'),
-      );
-    }
+    final title = () {
+      final n = (_draft['displayName'] as String?)?.trim();
+      if (n != null && n.isNotEmpty) return n;
+      final u = (_draft['username'] as String?)?.trim();
+      if (u != null && u.isNotEmpty) return u;
+      return _isNew ? 'Nieuwe gebruiker' : 'Gebruiker';
+    }();
 
-    final selected = _selected;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (widget.showTitle)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(22, 8, 22, 0),
-            child: Text(
-              'Gebruikers',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
+    return Padding(
+      padding: EdgeInsets.only(bottom: mq.viewInsets.bottom),
+      child: SizedBox(
+        height: mq.size.height * 0.92,
+        child: Container(
+          decoration: BoxDecoration(
+            color: LuxeColors.cream,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+            boxShadow: LuxeShadows.lift,
           ),
-        if (_error != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(22, 8, 22, 0),
-            child: Text(
-              _error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(22, 8, 22, 9),
-          child: GlassCard(
-            padding: EdgeInsets.zero,
-            radius: 18,
+          child: SafeArea(
+            top: false,
             child: Column(
               children: [
-                for (var i = 0; i < _users!.length; i++) ...[
-                  if (i > 0)
-                    Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
-                  _UserTile(
-                    user: _users![i],
-                    selected: _users![i]['id'] == _selectedId,
-                    onTap: () {
-                      _password.clear();
-                      final u = _users![i];
-                      u.remove('password');
-                      setState(() => _selectedId = u['id'] as String);
-                    },
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
+                  child: SizedBox(
+                    height: HeaderIconButton.size,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        IgnorePointer(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: HeaderIconButton.size + 8),
+                            child: Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                color: LuxeColors.ink,
+                                height: 1.25,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: BackPill(
+                            onTap: () => Navigator.of(context).pop(false),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ],
+                ),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 8),
+                    child: Text(
+                      _error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+                    children: [
+                      _UserEditor(
+                        user: _draft,
+                        floors: aclFloorsFromConfig(widget.cfg),
+                        extras: AclHouseExtras.fromConfig(widget.cfg),
+                        actorIsInstaller: auth.isInstaller,
+                        isSelf: _draft['id'] == _selfId,
+                        password: _password,
+                        onChanged: () => setState(() {}),
+                        onDelete: _saving ? null : _delete,
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 12, 24, 18),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _saving
+                              ? null
+                              : () => Navigator.of(context).pop(false),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(52),
+                            shape: const StadiumBorder(),
+                          ),
+                          child: const Text('Annuleren'),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: _saving ? null : _save,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: LuxeColors.ink,
+                            foregroundColor: LuxeColors.onInk,
+                            disabledBackgroundColor:
+                                LuxeColors.ink.withValues(alpha: 0.28),
+                            minimumSize: const Size.fromHeight(52),
+                            shape: const StadiumBorder(),
+                          ),
+                          child: _saving
+                              ? SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: LuxeColors.onInk,
+                                  ),
+                                )
+                              : const Text('Opslaan'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(22, 0, 22, 12),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              FilledButton.icon(
-                onPressed: _addUser,
-                icon: const Icon(Icons.person_add_outlined, size: 18),
-                label: const Text('Toevoegen'),
-              ),
-              FilledButton(
-                onPressed: _saving ? null : _save,
-                child: _saving
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Opslaan'),
-              ),
-            ],
-          ),
-        ),
-        if (selected != null)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(22, 0, 22, 24),
-            child: GlassCard(
-              radius: 18,
-              padding: const EdgeInsets.fromLTRB(16, 12, 14, 16),
-              child: KeyedSubtree(
-                key: ValueKey(selected['id']),
-                child: _UserEditor(
-                  user: selected,
-                  floors: aclFloorsFromConfig(widget.cfg),
-                  actorIsInstaller: auth.isInstaller,
-                  isSelf: selected['id'] == _userIdFor(auth, _users!),
-                  password: _password,
-                  onChanged: () => setState(() {}),
-                  onDelete: _deleteSelected,
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  String? _userIdFor(AuthState auth, List<Map<String, dynamic>> users) {
-    final name = auth.username;
-    if (name == null) return null;
-    for (final u in users) {
-      if (u['username'] == name) return u['id'] as String?;
-    }
-    return widget.cfg.me?.id;
-  }
-}
-
-class _UserTile extends StatelessWidget {
-  const _UserTile({
-    required this.user,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final Map<String, dynamic> user;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final role = user['role'] as String? ?? 'user';
-    final enabled = user['enabled'] != false;
-    final name = (user['displayName'] as String?)?.trim();
-    final username = user['username'] as String? ?? '';
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 11, 10, 11),
-        child: Row(
-          children: [
-            Icon(
-              isInstallerRole(role)
-                  ? Icons.construction_outlined
-                  : isSuperUserRole(role)
-                      ? Icons.admin_panel_settings_outlined
-                      : Icons.person_outline,
-              color: selected ? LuxeColors.brass : LuxeColors.ink,
-              size: 20,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    name == null || name.isEmpty ? username : name,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  Text(
-                    [
-                      username,
-                      roleLabel(role),
-                      if (!enabled) 'geblokkeerd',
-                    ].join(' · '),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: LuxeColors.inkSoft,
-                        ),
-                  ),
-                ],
-              ),
-            ),
-            Icon(
-              Icons.chevron_right,
-              color: LuxeColors.inkSoft.withValues(alpha: 0.5),
-            ),
-          ],
         ),
       ),
     );
@@ -327,6 +504,7 @@ class _UserEditor extends StatelessWidget {
   const _UserEditor({
     required this.user,
     required this.floors,
+    required this.extras,
     required this.actorIsInstaller,
     required this.isSelf,
     required this.password,
@@ -336,11 +514,12 @@ class _UserEditor extends StatelessWidget {
 
   final Map<String, dynamic> user;
   final List<AclNavFloor> floors;
+  final AclHouseExtras extras;
   final bool actorIsInstaller;
   final bool isSelf;
   final TextEditingController password;
   final VoidCallback onChanged;
-  final VoidCallback onDelete;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -360,16 +539,12 @@ class _UserEditor extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          lockInstaller ? 'Installer' : 'Gebruiker',
-          style: Theme.of(context).textTheme.titleMedium,
-        ),
-        const SizedBox(height: 12),
         TextFormField(
           initialValue: user['username'] as String? ?? '',
           enabled: !lockInstaller,
           decoration: const InputDecoration(
-            labelText: 'Gebruikersnaam',
+            labelText: 'Inlognaam',
+            hintText: 'Uniek, waarmee deze persoon inlogt',
             border: OutlineInputBorder(),
           ),
           onChanged: (v) {
@@ -433,9 +608,12 @@ class _UserEditor extends StatelessWidget {
           TextField(
             controller: password,
             obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'Nieuw wachtwoord (leeg = ongewijzigd)',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: user['_new'] == true
+                  ? 'Code'
+                  : 'Nieuwe code (leeg = ongewijzigd)',
+              hintText: user['_new'] == true ? 'Minstens 4 tekens' : null,
+              border: const OutlineInputBorder(),
             ),
             onChanged: (s) {
               if (s.isEmpty) {
@@ -449,25 +627,24 @@ class _UserEditor extends StatelessWidget {
         ],
         if (role == AppRole.user) ...[
           const SizedBox(height: 16),
-          Text('Vrijgegeven toegang', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 4),
           Text(
-            'Functies, kamers of hele verdiepingen. Super user en installer zien altijd alles in de app.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: LuxeColors.inkSoft,
-                ),
+            'Vrijgegeven toegang',
+            style: Theme.of(context).textTheme.titleMedium,
           ),
           UserAccessEditor(
             user: user,
             floors: floors,
+            extras: extras,
             onChanged: onChanged,
           ),
         ] else ...[
           const SizedBox(height: 8),
           Text(
             role == AppRole.installer
-                ? 'Installer heeft alle toegang, inclusief technische configuratie.'
-                : 'Super user heeft alle toegang in de app, behalve technische configuratie.',
+                ? 'Installer heeft alle toegang, inclusief technische configuratie. '
+                    'Dit account bestaat standaard; blokkeer het als de installer klaar is.'
+                : 'Super user (eigenaar) ziet alles in de app, behalve technische configuratie. '
+                    'Kan gebruikers en mede-superusers aanmaken, en de installer blokkeren.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: LuxeColors.inkSoft,
                 ),

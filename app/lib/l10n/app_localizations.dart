@@ -119,7 +119,7 @@ abstract class AppLocalizations {
   /// No description provided for @loginPasswordLabel.
   ///
   /// In en, this message translates to:
-  /// **'Password'**
+  /// **'Code'**
   String get loginPasswordLabel;
 
   /// No description provided for @loginAction.
