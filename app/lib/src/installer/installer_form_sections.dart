@@ -6,6 +6,7 @@ import '../hvac_switch_lock.dart';
 import '../room_control_category.dart';
 import '../theme.dart';
 import '../ui/widgets/heater_icon.dart';
+import '../ui/widgets/luxe_form.dart';
 
 const _uuid = Uuid();
 
@@ -117,9 +118,8 @@ class KnxTelegramEditor extends StatelessWidget {
           },
         ),
         if (_roleIsBool(role))
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Waarde (aan)'),
+          LuxeSwitchRow(
+            title: 'Waarde (aan)',
             value: knx['value'] == true || knx['value'] == 1,
             onChanged: (v) {
               knx['value'] = v;
@@ -709,9 +709,8 @@ class _UniversalButtonCardState extends State<_UniversalButtonCard> {
               ),
               if ((b['statusGa'] as String?)?.trim().isNotEmpty == true)
                 if (_roleIsBool(action['role'] as String? ?? 'bit'))
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Status “aan” = bit 1'),
+                  LuxeSwitchRow(
+                    title: 'Status “aan” = bit 1',
                     value:
                         b['statusOnValue'] == true || b['statusOnValue'] == 1,
                     onChanged: (v) {
@@ -1834,17 +1833,10 @@ class _SectionToggle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(label,
-                style: Theme.of(context).textTheme.bodyMedium),
-          ),
-          Switch(
-            value: value,
-            onChanged: onChanged,
-          ),
-        ],
+      child: LuxeSwitchRow(
+        title: label,
+        value: value,
+        onChanged: onChanged,
       ),
     );
   }
@@ -1896,17 +1888,20 @@ class _InstallerStrFieldState extends State<_InstallerStrField> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: TextField(
-        controller: _c,
-        decoration: InputDecoration(
-          labelText: widget.label,
-          border: const OutlineInputBorder(),
-        ),
-        keyboardType: widget.number
-            ? const TextInputType.numberWithOptions(decimal: true)
-            : TextInputType.text,
-        onChanged: widget.onChanged,
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LuxeFieldLabel(widget.label),
+          TextField(
+            controller: _c,
+            decoration: luxeFilledDecoration(),
+            keyboardType: widget.number
+                ? const TextInputType.numberWithOptions(decimal: true)
+                : TextInputType.text,
+            onChanged: widget.onChanged,
+          ),
+        ],
       ),
     );
   }
@@ -2121,24 +2116,27 @@ class _InstallerDropdown extends StatelessWidget {
   Widget build(BuildContext context) {
     final v = options.contains(value) ? value : options.first;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: DropdownButtonFormField<String>(
-        key: ValueKey('$label-$v'),
-        initialValue: v,
-        decoration: InputDecoration(
-          labelText: label,
-          border: const OutlineInputBorder(),
-        ),
-        items: [
-          for (final o in options)
-            DropdownMenuItem(
-              value: o,
-              child: Text(optionLabels?[o] ?? o),
-            ),
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          LuxeFieldLabel(label),
+          DropdownButtonFormField<String>(
+            key: ValueKey('$label-$v'),
+            initialValue: v,
+            decoration: luxeFilledDecoration(),
+            items: [
+              for (final o in options)
+                DropdownMenuItem(
+                  value: o,
+                  child: Text(optionLabels?[o] ?? o),
+                ),
+            ],
+            onChanged: (x) {
+              if (x != null) onChanged(x);
+            },
+          ),
         ],
-        onChanged: (x) {
-          if (x != null) onChanged(x);
-        },
       ),
     );
   }
@@ -2817,9 +2815,8 @@ class _AcModeOptionEditor extends StatelessWidget {
                 onChanged();
               },
             ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Zichtbaar in app'),
+            LuxeSwitchRow(
+              title: 'Zichtbaar in app',
               value: visible,
               onChanged: onVisibilityChanged,
             ),
