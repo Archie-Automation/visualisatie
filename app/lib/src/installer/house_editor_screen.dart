@@ -2725,13 +2725,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                     roleLabel(list[i]['role'] as String?),
                   ].join(' · '),
                   selected: _sel.kind == _FocusKind.user && _sel.fi == i,
-                  trailing: Switch.adaptive(
+                  trailing: LuxeOnOffSwitch(
                     value: list[i]['enabled'] != false,
                     onChanged: (v) {
                       list[i]['enabled'] = v;
                       setState(() {});
                     },
-                    activeThumbColor: LuxeColors.brass,
                   ),
                   onTap: () => _selectFocus(_Focus.user(i)),
                 ),
@@ -6329,44 +6328,28 @@ class _SatelInstallerPanel extends ConsumerWidget {
           style: TextStyle(fontSize: 13, height: 1.5),
         ),
         const SizedBox(height: 28),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-            child: Row(
-              children: [
-                const Icon(Icons.power_settings_new_outlined, size: 20),
-                const SizedBox(width: 14),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Integratie inschakelen',
-                          style: TextStyle(fontWeight: FontWeight.w600)),
-                      SizedBox(height: 2),
-                      Text(
-                        'Zet aan om alarmpagina, ruimtesensoren en '
-                        'inlooptijd-overlay te activeren.',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                loading
-                    ? const SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : Switch(
-                        value: enabled,
-                        onChanged: (v) => ref
-                            .read(satelEnabledProvider.notifier)
-                            .setEnabled(v),
-                      ),
-              ],
+        if (loading)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
             ),
+          )
+        else
+          LuxeSwitchRow(
+            title: 'Integratie inschakelen',
+            subtitle:
+                'Zet aan om alarmpagina, ruimtesensoren en '
+                'inlooptijd-overlay te activeren.',
+            value: enabled,
+            onChanged: (v) =>
+                ref.read(satelEnabledProvider.notifier).setEnabled(v),
           ),
-        ),
         const SizedBox(height: 20),
         if (enabled) _SatelLiveStatus(),
         const SizedBox(height: 20),

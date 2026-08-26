@@ -23,6 +23,7 @@ import 'widgets/confirm_dialog.dart';
 import 'widgets/function_screen_header.dart';
 import 'widgets/glass_card.dart';
 import 'widgets/luxe_backdrop.dart';
+import 'widgets/luxe_form.dart';
 import 'installer_nav.dart';
 
 enum _SettingsTopic { appearance, schedules, tablet, spotify, users }
@@ -1572,10 +1573,9 @@ class _ScheduleRow extends StatelessWidget {
                 ),
                 onPressed: canEdit ? onRun : null,
               ),
-            Switch.adaptive(
+            LuxeOnOffSwitch(
               value: s.enabled,
               onChanged: canEdit ? onToggle : null,
-              activeThumbColor: LuxeColors.brass,
             ),
           ],
         ),

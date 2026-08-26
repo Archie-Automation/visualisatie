@@ -1,7 +1,29 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme.dart';
 import 'glass_card.dart';
+
+/// Compact toggle, same as tijdschema / account (not the Material yellow pill).
+class LuxeOnOffSwitch extends StatelessWidget {
+  const LuxeOnOffSwitch({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return CupertinoSwitch(
+      value: value,
+      onChanged: onChanged,
+      activeTrackColor: LuxeColors.brass,
+    );
+  }
+}
 
 /// Filled soft box used by Settings and Technische configuratie.
 InputDecoration luxeFilledDecoration({
@@ -85,10 +107,9 @@ class LuxeSwitchRow extends StatelessWidget {
               ],
             ),
           ),
-          Switch.adaptive(
+          LuxeOnOffSwitch(
             value: value,
             onChanged: onChanged,
-            activeThumbColor: LuxeColors.brass,
           ),
         ],
       ),

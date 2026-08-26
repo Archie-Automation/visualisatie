@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models.dart';
 import '../roles.dart';
 import '../theme.dart';
+import 'widgets/luxe_form.dart';
 
 class AclNavDevice {
   const AclNavDevice({
@@ -410,13 +411,12 @@ class UserAccessEditor extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyLarge,
                 ),
               ),
-              Switch.adaptive(
+              LuxeOnOffSwitch(
                 value: editScenes,
                 onChanged: (v) {
                   access['editScenes'] = v;
                   onChanged();
                 },
-                activeThumbColor: LuxeColors.brass,
               ),
             ],
           ),
