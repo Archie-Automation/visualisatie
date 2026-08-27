@@ -183,10 +183,16 @@ class SoftwareVersionStatus {
 final softwareVersionStatusProvider =
     FutureProvider.autoDispose<SoftwareVersionStatus?>((ref) async {
   final link = ref.keepAlive();
-  Timer(const Duration(minutes: 5), link.close);
+  Timer(const Duration(minutes: 2), link.close);
   try {
-    final res = await http
-        .get(Uri.parse('$apiBase/api/version'))
+    const res = await http
+        .get(
+          Uri.parse(
+            supportsAndroidApkUpdate
+                ? '$apiBase/api/version?refresh=1'
+                : '$apiBase/api/version',
+          ),
+        )
         .timeout(const Duration(seconds: 12));
     if (res.statusCode != 200) return null;
     final body = jsonDecode(res.body);
