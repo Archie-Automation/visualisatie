@@ -25,6 +25,15 @@ class KnxGaEntry {
       );
 }
 
+/// True when a form field is a KNX group address (search picker + name lookup).
+bool knxFieldLooksLikeGa({String? keyName, String? label}) {
+  final key = (keyName ?? '').trim();
+  if (key == 'ga' || key == 'statusGa' || key == 'status_ga') return true;
+  final l = (label ?? '').toLowerCase();
+  if (l.contains('groepsadres') || l.contains('groepadres')) return true;
+  return RegExp(r'\bga\b').hasMatch(l);
+}
+
 /// Process-wide holder for the imported GA catalog. Loaded once when the
 /// installer house editor opens, then read by the GA search fields so the
 /// installer can look up the right address by name when wiring any device

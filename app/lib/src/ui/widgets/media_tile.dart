@@ -481,30 +481,31 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
           ),
         ),
         actions: [
-          // Zoekknop â€” bij Bluesound (BluOS stelt de gekoppelde diensten lokaal
-          // beschikbaar) of zodra Spotify verbonden is (dan kan ook Sonos via
-          // Spotify Connect doorzocht/afgespeeld worden). Sonos zonder Spotify
-          // heeft alleen favorieten, dus daar blijft de knop weg.
-          if (thisDevice != null &&
-              (thisDevice.type == DeviceType.mediaBluesound ||
-                  (ref.watch(spotifyStatusProvider).value?.connected ?? false)))
-            IconButton(
-              icon: const Icon(Icons.search_rounded),
-              iconSize: context.isPhone ? 24 : 30,
-              tooltip: 'Zoek muziek',
-              onPressed: () => showModalBottomSheet<void>(
-                context: context,
-                isScrollControlled: true,
-                useSafeArea: true,
-                backgroundColor: Colors.transparent,
-                builder: (_) => MediaSearchSheet(
-                  deviceId: deviceId,
-                  deviceName: thisDevice!.name,
-                  api: api,
-                  isSonos: thisDevice.type == DeviceType.mediaSonos,
+          // Zelfde chrome als terug/groep: een gewone IconButton volgt het
+          // licht-thema (donkere inkt) en verdwijnt op deze donkere speler.
+          Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: Center(
+              child: _DarkCtl(
+                icon: Icons.search_rounded,
+                size: _playerCtlSize,
+                onTap: () => showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  useSafeArea: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => MediaSearchSheet(
+                    deviceId: deviceId,
+                    deviceName: thisDevice?.name ?? state.brand.label,
+                    api: api,
+                    isSonos: thisDevice?.type == DeviceType.mediaSonos ||
+                        (thisDevice == null &&
+                            state.brand == MediaBrand.sonos),
+                  ),
                 ),
               ),
             ),
+          ),
           // Koppelknop in de AppBar — ook zichtbaar bij gestopte speler
           if (sameZones.isNotEmpty && thisDevice != null)
             Padding(

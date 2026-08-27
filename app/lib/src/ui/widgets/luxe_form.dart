@@ -222,3 +222,74 @@ class LuxeListCard extends StatelessWidget {
     );
   }
 }
+
+/// Section header matching Settings: icon + small-caps title + optional hint.
+class LuxeSectionTitle extends StatelessWidget {
+  const LuxeSectionTitle({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.trailing,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Icon(icon, color: LuxeColors.ink, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title.toUpperCase(),
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+                if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w400,
+                          color: LuxeColors.inkSoft,
+                        ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (trailing != null) trailing!,
+        ],
+      ),
+    );
+  }
+}
+
+/// Nested editor block (WTW-knop, AC-modus) — same glass as Settings rows.
+class LuxeInsetCard extends StatelessWidget {
+  const LuxeInsetCard({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: GlassCard(
+        radius: 14,
+        padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+        shadows: const [],
+        child: child,
+      ),
+    );
+  }
+}

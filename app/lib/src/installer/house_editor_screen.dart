@@ -1754,6 +1754,25 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             'onOff': {'ga': '1/1/1'},
           },
         };
+      case 'wtw':
+        return {
+          'id': id,
+          'name': 'WTW',
+          'type': 'wtw',
+          'wtw': {
+            'buttons': <Map<String, dynamic>>[],
+            'status': <Map<String, dynamic>>[],
+          },
+        };
+      case 'melding':
+        return {
+          'id': id,
+          'name': 'Meldingen',
+          'type': 'melding',
+          'melding': {
+            'items': <Map<String, dynamic>>[],
+          },
+        };
       case 'universal':
         return {
           'id': id,
@@ -1767,7 +1786,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       case 'lutron_homeworks':
         return {
           'id': id,
-          'name': 'Lutron ? KNX',
+          'name': 'Lutron → KNX',
           'type': 'lutron_homeworks',
           'lutronHomeworks': <String, dynamic>{
             'zoneAddress': '',
@@ -3631,13 +3650,12 @@ class _BoundStrFieldState extends State<_BoundStrField> {
     super.dispose();
   }
 
-  /// Auto-detect GA fields (keyName `ga` or a "Groepsadres" label) so every
-  /// device GA input gets the search picker, in addition to explicit gaSearch.
   bool get _gaSearchEnabled {
     if (widget.gaSearch) return true;
-    if (widget.keyName == 'ga') return true;
-    final l = widget.labelOverride?.toLowerCase() ?? '';
-    return l.startsWith('groepsadres') || l.startsWith('groepadres');
+    return knxFieldLooksLikeGa(
+      keyName: widget.keyName,
+      label: widget.labelOverride,
+    );
   }
 
   Future<void> _pickGa() async {
@@ -4475,28 +4493,13 @@ class _FireplaceInstallerSection extends StatelessWidget {
     final onOff = _ensureOnOff(fp);
     final theme = Theme.of(context);
 
-    return Padding(
-      padding: const EdgeInsets.only(top: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Openhaard (KNX)', style: theme.textTheme.titleSmall),
-          const SizedBox(height: 6),
-          Text(
-            'Kies hoe de haard op de bus zit. Vul groepsadressen in (vorm x/y/z). '
-            'Geen programmeerwerk ? alleen configureren.',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.hintColor,
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<_FireplaceOpMode>(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const LuxeFieldLabel('Werking'),
+        DropdownButtonFormField<_FireplaceOpMode>(
             key: ValueKey('fp-mode-${device['id']}-$mode'),
-            decoration: const InputDecoration(
-              labelText: 'Werking',
-              border: OutlineInputBorder(),
-            ),
+            decoration: luxeFilledDecoration(),
             initialValue: mode,
             items: const [
               DropdownMenuItem(
@@ -4788,8 +4791,7 @@ class _FireplaceInstallerSection extends StatelessWidget {
               );
             },
           ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -4902,185 +4904,284 @@ class _DeviceForm extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final type = device['type'] as String? ?? '';
+    final typeLabel = _deviceTypeLabels[type] ?? type;
+    final lutronOnly =
+        device['control'] == 'lutron' && !_deviceHasKnxGa(device);
+    final showBus = type == 'light_switch' ||
+        type == 'light_dimmer' ||
+        type == 'shading';
+    final knxLight = (type == 'light_switch' || type == 'light_dimmer') &&
+        device['control'] != 'lutron';
+    final shadingGa = type == 'position_actuator' ||
+        (type == 'shading' && device['control'] != 'lutron');
+    const typed = {
+      'climate',
+      'rgbw_ww',
+      'shading',
+      'position_actuator',
+      'media_sonos',
+      'media_bluesound',
+      'camera',
+      'intercom',
+      'fireplace',
+      'ac',
+      'fan',
+      'universal',
+      'wtw',
+      'melding',
+      'lutron_homeworks',
+    };
+    final showTypeCard = knxLight || shadingGa || typed.contains(type);
+
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.only(top: 8, bottom: 36),
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text('Apparaat ($type)',
-                  style: Theme.of(context).textTheme.titleLarge),
-            ),
-            if (onCopy != null)
-              IconButton(
-                tooltip: 'Kopiëren (Ctrl+C)',
-                icon: const Icon(Icons.copy_outlined),
-                onPressed: onCopy,
+        LuxeListCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              LuxeSectionTitle(
+                icon: _deviceFormIcon(type),
+                title: 'Apparaat',
+                subtitle: typeLabel,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (onCopy != null)
+                      IconButton(
+                        tooltip: 'Kopiëren (Ctrl+C)',
+                        icon: const Icon(Icons.copy_outlined),
+                        onPressed: onCopy,
+                      ),
+                    IconButton(
+                      tooltip: 'Plakken eronder (Ctrl+V)',
+                      icon: const Icon(Icons.content_paste_outlined),
+                      onPressed: onPaste,
+                    ),
+                  ],
+                ),
               ),
-            IconButton(
-              tooltip: 'Plakken eronder (Ctrl+V)',
-              icon: const Icon(Icons.content_paste_outlined),
-              onPressed: onPaste,
-            ),
-          ],
+              _BoundStrField('id', device, onChanged),
+              _BoundStrField('name', device, onChanged,
+                  labelOverride: 'Naam'),
+              LuxeSwitchRow(
+                title: 'Toon als favoriet op het dashboard',
+                subtitle:
+                    'Standaard-instelling voor alle gebruikers. '
+                    'Gebruikers kunnen dit daarna zelf aanpassen met de ster-knop.',
+                value: device['favorite'] as bool? ?? false,
+                onChanged: (v) {
+                  device['favorite'] = v;
+                  onChanged();
+                },
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 16),
-        _BoundStrField('id', device, onChanged),
-        _BoundStrField('name', device, onChanged),
-        LuxeSwitchRow(
-          title: 'Toon als favoriet op het dashboard',
-          subtitle:
-              'Standaard-instelling voor alle gebruikers. '
-              'Gebruikers kunnen dit daarna zelf aanpassen met de ster-knop.',
-          value: device['favorite'] as bool? ?? false,
-          onChanged: (v) {
-            device['favorite'] = v;
-            onChanged();
-          },
-        ),
-        if (type == 'light_switch' || type == 'light_dimmer' || type == 'shading')
-          _DeviceBusControlSection(
-            device: device,
-            onChanged: onChanged,
-            lutronOnly: device['control'] == 'lutron' && !_deviceHasKnxGa(device),
-          ),
-        if (type == 'position_actuator' ||
-            (type == 'shading' && device['control'] != 'lutron'))
-          _ShadingLikeGaSection(device: device, onChanged: onChanged)
-        else if ((type == 'light_switch' ||
-                type == 'light_dimmer' ||
-                type == 'rgbw_ww') &&
-            device['control'] != 'lutron')
-          _GaSection(device: device, onChanged: onChanged),
-        if (type == 'climate')
-          ClimateInstallerSection(
-            key: ValueKey('${device['id']}-climate'),
-            device: device,
-            onChanged: onChanged,
-          ),
-        if (type == 'rgbw_ww')
-          RgbwWwInstallerSection(
-            key: ValueKey('${device['id']}-rgbwWw'),
-            device: device,
-            onChanged: onChanged,
-          ),
-        if (type == 'shading') ...[
-          _ShadingSubtypeSection(device: device, onChanged: onChanged),
-          _ShadingUiSection(device: device, onChanged: onChanged),
-        ],
-        if (type == 'position_actuator')
-          _ShadingUiSection(
-            device: device,
-            onChanged: onChanged,
-            title: 'Bediening in klant-app',
-          ),
-        if (type == 'media_sonos') ...[
-          _NestedStringFields(
-            label: 'Sonos',
-            jsonKey: 'sonos',
-            device: device,
-            fields: const ['host', 'room'],
-            intFields: const {'port'},
-            onChanged: onChanged,
-          ),
-          if (getInstallerToken != null)
-            _SonosProbeCard(device: device, getToken: getInstallerToken!),
-        ],
-        if (type == 'media_bluesound')
-          _NestedStringFields(
-            label: 'Bluesound',
-            jsonKey: 'bluesound',
-            device: device,
-            fields: const ['host'],
-            intFields: const {'port'},
-            onChanged: onChanged,
-          ),
-        if (type == 'camera') ...[
-          _CameraInstallerSection(device: device, onChanged: onChanged),
-          _RtspDeviceExtra(
-            device: device,
-            nestedKey: 'camera',
-            includeRepublish: true,
-            onChanged: onChanged,
-          ),
-        ],
-        if (type == 'intercom') ...[
-          _IntercomKnxExtras(device: device, onChanged: onChanged),
-          _NestedStringFields(
-            label: 'Intercom ? stream-URL?s',
-            jsonKey: 'intercom',
-            device: device,
-            fields: const ['rtsp', 'path', 'aspect'],
-            onChanged: onChanged,
-          ),
-          _RtspDeviceExtra(
-            device: device,
-            nestedKey: 'intercom',
-            includeRepublish: false,
-            onChanged: onChanged,
-          ),
-        ],
-        if (type == 'fireplace')
-          _FireplaceInstallerSection(
-            key: ValueKey('${device['id']}-fireplace'),
-            device: device,
-            onChanged: onChanged,
-          ),
-        if (type == 'ac')
-          AcInstallerSection(
-            key: ValueKey('${device['id']}-ac'),
-            device: device,
-            onChanged: onChanged,
-          ),
-        if (type == 'fan')
-          FanInstallerSection(
-            key: ValueKey('${device['id']}-fan'),
-            device: device,
-            onChanged: onChanged,
-          ),
-        if (type == 'universal')
-          UniversalPanelInstallerSection(
-            key: ValueKey('${device['id']}-universal'),
-            device: device,
-            onChanged: onChanged,
-          ),
-        if (type == 'wtw')
-          WtwInstallerSection(
-            key: ValueKey('${device['id']}-wtw'),
-            device: device,
-            onChanged: onChanged,
-          ),
-        if (type == 'melding')
-          MeldingInstallerSection(
-            key: ValueKey('${device['id']}-melding'),
-            device: device,
-            onChanged: onChanged,
-          ),
-        if (type == 'lutron_homeworks') ...[
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Text(
-              'Telnet en de centrale Lutron-koppeling stel je in via Lutron QSX/QS Processor '
-              'in de boom. Hier kun je optioneel extra keypad?KNX mappings zetten.',
-              style: Theme.of(context).textTheme.bodySmall,
+        if (showBus)
+          LuxeListCard(
+            child: _DeviceBusControlSection(
+              device: device,
+              onChanged: onChanged,
+              lutronOnly: lutronOnly,
             ),
           ),
-          LutronButtonToKnxListEditor(
-            parent: _ensureChildMap(device, 'lutronHomeworks'),
-            onChanged: onChanged,
+        if (showTypeCard)
+        LuxeListCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              LuxeSectionTitle(
+                icon: Icons.tune_outlined,
+                title: _deviceConfigTitle(type),
+                subtitle: _deviceConfigSubtitle(type),
+              ),
+              if (shadingGa)
+                _ShadingLikeGaSection(device: device, onChanged: onChanged)
+              else if (knxLight)
+                _LightLikeGaSection(device: device, onChanged: onChanged),
+              if (type == 'climate')
+                ClimateInstallerSection(
+                  key: ValueKey('${device['id']}-climate'),
+                  device: device,
+                  onChanged: onChanged,
+                ),
+              if (type == 'rgbw_ww')
+                RgbwWwInstallerSection(
+                  key: ValueKey('${device['id']}-rgbwWw'),
+                  device: device,
+                  onChanged: onChanged,
+                ),
+              if (type == 'shading') ...[
+                _ShadingSubtypeSection(device: device, onChanged: onChanged),
+                _ShadingUiSection(device: device, onChanged: onChanged),
+              ],
+              if (type == 'position_actuator')
+                _ShadingUiSection(
+                  device: device,
+                  onChanged: onChanged,
+                  title: 'Bediening in klant-app',
+                ),
+              if (type == 'media_sonos') ...[
+                _NestedStringFields(
+                  label: 'Sonos',
+                  jsonKey: 'sonos',
+                  device: device,
+                  fields: const ['host', 'room'],
+                  intFields: const {'port'},
+                  onChanged: onChanged,
+                ),
+                if (getInstallerToken != null)
+                  _SonosProbeCard(
+                      device: device, getToken: getInstallerToken!),
+              ],
+              if (type == 'media_bluesound')
+                _NestedStringFields(
+                  label: 'Bluesound',
+                  jsonKey: 'bluesound',
+                  device: device,
+                  fields: const ['host'],
+                  intFields: const {'port'},
+                  onChanged: onChanged,
+                ),
+              if (type == 'camera') ...[
+                _CameraInstallerSection(
+                    device: device, onChanged: onChanged),
+                _RtspDeviceExtra(
+                  device: device,
+                  nestedKey: 'camera',
+                  includeRepublish: true,
+                  onChanged: onChanged,
+                ),
+              ],
+              if (type == 'intercom') ...[
+                _IntercomKnxExtras(device: device, onChanged: onChanged),
+                _NestedStringFields(
+                  label: 'Stream-URL\'s',
+                  jsonKey: 'intercom',
+                  device: device,
+                  fields: const ['rtsp', 'path', 'aspect'],
+                  onChanged: onChanged,
+                ),
+                _RtspDeviceExtra(
+                  device: device,
+                  nestedKey: 'intercom',
+                  includeRepublish: false,
+                  onChanged: onChanged,
+                ),
+              ],
+              if (type == 'fireplace')
+                _FireplaceInstallerSection(
+                  key: ValueKey('${device['id']}-fireplace'),
+                  device: device,
+                  onChanged: onChanged,
+                ),
+              if (type == 'ac')
+                AcInstallerSection(
+                  key: ValueKey('${device['id']}-ac'),
+                  device: device,
+                  onChanged: onChanged,
+                ),
+              if (type == 'fan')
+                FanInstallerSection(
+                  key: ValueKey('${device['id']}-fan'),
+                  device: device,
+                  onChanged: onChanged,
+                ),
+              if (type == 'universal')
+                UniversalPanelInstallerSection(
+                  key: ValueKey('${device['id']}-universal'),
+                  device: device,
+                  onChanged: onChanged,
+                ),
+              if (type == 'wtw')
+                WtwInstallerSection(
+                  key: ValueKey('${device['id']}-wtw'),
+                  device: device,
+                  onChanged: onChanged,
+                ),
+              if (type == 'melding')
+                MeldingInstallerSection(
+                  key: ValueKey('${device['id']}-melding'),
+                  device: device,
+                  onChanged: onChanged,
+                ),
+              if (type == 'lutron_homeworks') ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(
+                    'Telnet en de centrale Lutron-koppeling stel je in via Lutron QSX/QS Processor '
+                    'in de boom. Hier kun je optioneel extra keypad → KNX mappings zetten.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+                LutronButtonToKnxListEditor(
+                  parent: _ensureChildMap(device, 'lutronHomeworks'),
+                  onChanged: onChanged,
+                ),
+              ],
+            ],
           ),
-        ],
-        const SizedBox(height: 24),
-        OutlinedButton.icon(
-          onPressed: onDelete,
-          icon: const Icon(Icons.delete_outline),
-          label: const Text('Apparaat verwijderen'),
-          style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(22, 12, 22, 0),
+          child: OutlinedButton.icon(
+            onPressed: onDelete,
+            icon: const Icon(Icons.delete_outline),
+            label: const Text('Apparaat verwijderen'),
+            style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+          ),
         ),
       ],
     );
   }
 }
+
+IconData _deviceFormIcon(String type) => switch (type) {
+      'light_switch' || 'light_dimmer' || 'rgbw_ww' =>
+        Icons.lightbulb_outline,
+      'shading' => Icons.blinds_outlined,
+      'position_actuator' => Icons.sensor_window_outlined,
+      'climate' => Icons.thermostat_outlined,
+      'fireplace' => Icons.local_fire_department_outlined,
+      'ac' => Icons.ac_unit_outlined,
+      'fan' => Icons.air,
+      'universal' => Icons.grid_view_outlined,
+      'wtw' => Icons.hvac_outlined,
+      'melding' => Icons.notifications_outlined,
+      'media_sonos' || 'media_bluesound' => Icons.speaker_outlined,
+      'camera' => Icons.videocam_outlined,
+      'intercom' => Icons.doorbell_outlined,
+      'lutron_homeworks' => Icons.dialpad_outlined,
+      _ => Icons.devices_outlined,
+    };
+
+String _deviceConfigTitle(String type) => switch (type) {
+      'media_sonos' || 'media_bluesound' => 'Verbinding',
+      'camera' || 'intercom' => 'Stream & koppeling',
+      'lutron_homeworks' => 'Keypad → KNX',
+      _ => 'Groepadressen & opties',
+    };
+
+String _deviceConfigSubtitle(String type) => switch (type) {
+      'light_switch' || 'light_dimmer' =>
+        'Zelfde velden als bij zonwering: schrijven, optioneel status, zoeken in de GA-catalogus.',
+      'rgbw_ww' =>
+        'Modus en groepadressen. Zoek elk adres in de geïmporteerde catalogus.',
+      'shading' || 'position_actuator' =>
+        'Jaloezie-object: schrijf- en statusadressen, plus weergave in de app.',
+      'climate' || 'ac' || 'fan' || 'fireplace' =>
+        'Vul per functie het groepadres in. Status-GA\'s zijn optioneel.',
+      'universal' || 'wtw' || 'melding' =>
+        'Zelfde opbouw: label, groepadres, DPT/waarde — met zoeken in de catalogus.',
+      'media_sonos' || 'media_bluesound' =>
+        'Host en poort van deze speler in het netwerk.',
+      'camera' || 'intercom' =>
+        'RTSP/URL en optionele KNX-groepadressen voor bel of deuropener.',
+      'lutron_homeworks' =>
+        'Optionele extra mappings. Telnet staat onder de Lutron-processor.',
+      _ => 'Type-specifieke instellingen.',
+    };
 
 /// Camera: RTSP + optional preview stream; auto profile for live.
 class _CameraInstallerSection extends ConsumerStatefulWidget {
@@ -5837,10 +5938,6 @@ class _ShadingLikeGaSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 8),
-        Text('Groepadressen (jaloezie-object)',
-            style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 4),
         Text(
           isPosition
               ? 'Zelfde KNX-object als zonwering: percentage positie, '
@@ -5849,7 +5946,7 @@ class _ShadingLikeGaSection extends StatelessWidget {
               : 'KNX jaloezie / zonwering: schrijf- en leesadressen.',
           style: Theme.of(context).textTheme.bodySmall,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         for (final (fieldKey, label, optional) in _fields)
           _BoundStrField(
             fieldKey,
@@ -5858,6 +5955,8 @@ class _ShadingLikeGaSection extends StatelessWidget {
             key: ValueKey('ga-${device['id']}-$fieldKey'),
             labelOverride: optional ? '$label (optioneel)' : label,
             emptyMeansRemove: optional,
+            gaSearch: true,
+            gaDptHint: _gaDptHint(fieldKey),
           ),
       ],
     );
@@ -5885,73 +5984,98 @@ String? _gaDptHint(String role) {
   return m[role];
 }
 
-class _GaSection extends StatelessWidget {
-  const _GaSection({required this.device, required this.onChanged});
+class _LightLikeGaSection extends StatelessWidget {
+  const _LightLikeGaSection({required this.device, required this.onChanged});
   final Map<String, dynamic> device;
   final VoidCallback onChanged;
 
+  Map<String, dynamic> _gaMap() {
+    final ga = device['ga'];
+    if (ga is Map<String, dynamic>) return ga;
+    final m = <String, dynamic>{};
+    device['ga'] = m;
+    return m;
+  }
+
+  static const _switchFields = <(String key, String label, bool optional)>[
+    ('switch', 'Aan / uit (schrijven)', false),
+    ('switch_status', 'Aan / uit status (lezen)', true),
+  ];
+
+  static const _dimmerFields = <(String key, String label, bool optional)>[
+    ('switch', 'Aan / uit (schrijven)', false),
+    ('switch_status', 'Aan / uit status (lezen)', true),
+    ('dim_value', 'Dimwaarde % (schrijven)', false),
+    ('dim_status', 'Dimwaarde status (lezen)', true),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    final ga = device['ga'];
-    Map<String, dynamic> gam;
-    if (ga is Map<String, dynamic>) {
-      gam = ga;
-    } else {
-      gam = {};
-      device['ga'] = gam;
-    }
+    final ga = _gaMap();
+    final fields = device['type'] == 'light_dimmer' ? _dimmerFields : _switchFields;
+    final known = {for (final f in fields) f.$1};
+    final extra = ga.keys.where((k) => !known.contains(k)).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 8),
-        Text('Groepadressen', style: Theme.of(context).textTheme.titleSmall),
-        for (final k in gam.keys.toList())
+        for (final (fieldKey, label, optional) in fields)
+          _BoundStrField(
+            fieldKey,
+            ga,
+            onChanged,
+            key: ValueKey('ga-${device['id']}-$fieldKey'),
+            labelOverride: optional ? '$label (optioneel)' : label,
+            emptyMeansRemove: optional,
+            gaSearch: true,
+            gaDptHint: _gaDptHint(fieldKey),
+          ),
+        for (final k in extra)
           _BoundStrField(
             k,
-            gam,
+            ga,
             onChanged,
             key: ValueKey('ga-${device['id']}-$k'),
             gaSearch: true,
             gaDptHint: _gaDptHint(k),
+            emptyMeansRemove: true,
           ),
-        TextButton.icon(
-          onPressed: () async {
-            final role = await _prompt(context, 'Rol (bv. switch)');
+        LuxeAddRow(
+          label: 'Extra GA-regel',
+          onTap: () async {
+            final role = await _promptInstallerText(context, 'Rol (bv. switch)');
             if (!context.mounted) return;
-            final addr = await _prompt(context, 'GA (x/y/z)');
+            final addr = await _promptInstallerText(context, 'GA (x/y/z)');
             if (!context.mounted) return;
             if (role != null &&
                 role.isNotEmpty &&
                 addr != null &&
                 addr.isNotEmpty) {
-              gam[role] = addr;
+              ga[role] = addr;
               onChanged();
             }
           },
-          icon: const Icon(Icons.add, size: 18),
-          label: const Text('GA-regel toevoegen'),
         ),
       ],
     );
   }
+}
 
-  static Future<String?> _prompt(BuildContext context, String label) async {
-    final c = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(label),
-        content: TextField(controller: c, autofocus: true),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuleer')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, c.text.trim()),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
+Future<String?> _promptInstallerText(BuildContext context, String label) async {
+  final c = TextEditingController();
+  return showDialog<String>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: Text(label),
+      content: TextField(controller: c, autofocus: true),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuleer')),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, c.text.trim()),
+          child: const Text('OK'),
+        ),
+      ],
+    ),
+  );
 }
 
 class _NestedStringFields extends StatelessWidget {
