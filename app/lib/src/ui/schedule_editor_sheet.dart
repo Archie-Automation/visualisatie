@@ -113,7 +113,7 @@ class _Draft {
         ..notAfter = notAfter;
 
   static _Draft fresh() => _Draft(
-        name: 'Nieuw tijdschema',
+        name: '',
         enabled: true,
         kind: _TriggerKind.time,
         time: const TimeOfDay(hour: 18, minute: 0),
@@ -787,6 +787,7 @@ class _ScheduleEditorSheetState
         _NameField(
           key: ValueKey('name-$_selectedId'),
           initial: d.name,
+          autofocus: true,
           onChanged: (v) => setState(() => d.name = v),
         ),
       ],
@@ -1205,9 +1206,15 @@ class _SubBlock extends StatelessWidget {
 }
 
 class _NameField extends StatefulWidget {
-  const _NameField({super.key, required this.initial, required this.onChanged});
+  const _NameField({
+    super.key,
+    required this.initial,
+    required this.onChanged,
+    this.autofocus = false,
+  });
   final String initial;
   final ValueChanged<String> onChanged;
+  final bool autofocus;
   @override
   State<_NameField> createState() => _NameFieldState();
 }
@@ -1230,8 +1237,14 @@ class _NameFieldState extends State<_NameField> {
   Widget build(BuildContext context) {
     return TextField(
       controller: _ctl,
+      autofocus: widget.autofocus,
       textCapitalization: TextCapitalization.sentences,
-      decoration: _boxDecoration(hint: 'Naam van dit schema'),
+      decoration: _boxDecoration(hint: 'Naam tijdschema').copyWith(
+        hintStyle: TextStyle(
+          color: LuxeColors.inkSoft.withValues(alpha: 0.45),
+          fontWeight: FontWeight.w400,
+        ),
+      ),
       onChanged: widget.onChanged,
     );
   }
