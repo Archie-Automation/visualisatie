@@ -28,7 +28,7 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
       builder: (ctx) => AlertDialog(
         title: const Text('Server bijwerken?'),
         content: const Text(
-          'De NUC haalt de nieuwste versie van GitHub en bouwt de software opnieuw. '
+          'De server haalt de nieuwste software op en installeert die opnieuw. '
           'Dat duurt 10–20 minuten. Het huis blijft werken tot een korte herstart aan het eind. '
           'Huisconfiguratie en wachtwoorden blijven bewaard.',
         ),
@@ -107,11 +107,10 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
           'Daarna kun je vanaf deze app bijwerken.';
     } else if (newer) {
       body = latest == null
-          ? 'Er staat een nieuwere versie op GitHub.'
-          : 'GitHub heeft $latest.';
+          ? 'Er is een nieuwere versie beschikbaar.'
+          : 'Er is een nieuwere versie ($latest).';
     } else {
-      body =
-          'Gelijk met GitHub. Je kunt toch opnieuw bouwen als iets vastzit.';
+      body = 'Dit is de laatste versie.';
     }
 
     return GlassCard(
@@ -140,7 +139,7 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
           ),
           if (newer && latest != null && latest.isNotEmpty) ...[
             const SizedBox(height: 10),
-            Text('GITHUB', style: Theme.of(context).textTheme.labelLarge),
+            Text('NIEUWE VERSIE', style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 4),
             Text(
               latest,
@@ -173,7 +172,7 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
               label: Text(
                 _busy
                     ? 'Bezig…'
-                    : (newer ? 'Server bijwerken van GitHub' : 'Opnieuw bouwen'),
+                    : (newer ? 'Server bijwerken' : 'Opnieuw bouwen'),
               ),
               onPressed: _busy || !agentReady ? null : _confirmAndUpdate,
             ),
