@@ -20,6 +20,24 @@ import type {
 /** Max hits kept per result section before the UI gets noisy. */
 const SONOS_SECTION_LIMIT = 20;
 
+/** Sonos Radio "Ontdekken"/"Discover" is a browse hub, not a playable station. */
+function isSonosRadioDiscoverHub(title: string, uri?: string): boolean {
+  const t = title
+    .toLowerCase()
+    .replace(/[\u2013\u2014]/g, " ")
+    .replace(/[:\-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (
+    t.includes("sonos radio") &&
+    (t.includes("ontdekken") || t.includes("discover"))
+  ) {
+    return true;
+  }
+  const u = (uri ?? "").toLowerCase();
+  return u.includes("sonos") && u.includes("radio") && u.includes("discover");
+}
+
 /* ------------------------------------------------------------------ *
  *  Type shim. The `sonos` package ships no typings — we only need a  *
  *  small slice of its surface.                                       *
@@ -315,7 +333,12 @@ export class SonosDriver {
       const base = `http://${this.device.sonos.host}:${this.device.sonos.port ?? 1400}`;
       const sonosBase2 = `http://${this.device.sonos.host}:${this.device.sonos.port ?? 1400}`;
       return favs.items
-        .filter((f) => f.title && f.title.trim().length > 0)
+        .filter(
+          (f) =>
+            f.title &&
+            f.title.trim().length > 0 &&
+            !isSonosRadioDiscoverHub(f.title, f.uri)
+        )
         .map((f) => {
           const rawImg = f.albumArtURI;
           const absImg = rawImg
@@ -425,7 +448,12 @@ export class SonosDriver {
     try {
       const favs = await client.getFavorites();
       const hits = (favs.items ?? [])
-        .filter((f) => f.title && f.title.toLowerCase().includes(needle))
+        .filter(
+          (f) =>
+            f.title &&
+            f.title.toLowerCase().includes(needle) &&
+            !isSonosRadioDiscoverHub(f.title, f.uri)
+        )
         .map((f) => buildResult("favorite", f.title, undefined, f.albumArtURI, f.uri, base))
         .filter((r): r is MediaSearchResult => r !== null);
       if (hits.length) {
