@@ -21,7 +21,7 @@ export interface GithubAndroidApkInfo {
 export interface GithubLatestInfo extends AppVersionInfo {
   tag: string;
   htmlUrl: string | null;
-  source: "release" | "tag";
+  source: "release" | "tag" | "branch";
   checkedAt: string;
   androidApk: GithubAndroidApkInfo | null;
 }
@@ -32,7 +32,8 @@ type Cache = {
   error?: string;
 };
 
-const CACHE_MS = 60 * 60 * 1000; // 1 hour
+const CACHE_MS = 2 * 60 * 1000; // 2 min — a git push must show up on the tablet quickly
+const ANDROID_LATEST_TAG = "android-latest";
 let cache: Cache | null = null;
 let inflight: Promise<GithubLatestInfo | null> | null = null;
 
@@ -113,6 +114,78 @@ function infoFromTag(
   };
 }
 
+function versionRawFromRelease(b: Record<string, unknown>): string | null {
+  const name = typeof b.name === "string" ? b.name.trim() : "";
+  const tag = typeof b.tag_name === "string" ? b.tag_name.trim() : "";
+  if (/^v?\d+\.\d+/i.test(name)) return stripV(name);
+  if (/^v?\d+\.\d+/i.test(tag)) return stripV(tag);
+  return null;
+}
+
+function infoFromRelease(
+  b: Record<string, unknown>,
+  source: GithubLatestInfo["source"]
+): GithubLatestInfo | null {
+  const raw = versionRawFromRelease(b);
+  if (!raw) return null;
+  const tag =
+    (typeof b.tag_name === "string" && b.tag_name.trim()) || raw;
+  const htmlUrl = typeof b.html_url === "string" ? b.html_url : null;
+  const parsed = parseVersion(raw);
+  return {
+    ...parsed,
+    tag,
+    htmlUrl,
+    source,
+    checkedAt: new Date().toISOString(),
+    androidApk: pickAndroidApk(b.assets)
+  };
+}
+
+function pickNewer(
+  a: GithubLatestInfo | null,
+  b: GithubLatestInfo | null
+): GithubLatestInfo | null {
+  if (!a) return b;
+  if (!b) return a;
+  return compareVersion(a, b) < 0 ? b : a;
+}
+
+async function fetchBranchPubspec(repo: string): Promise<GithubLatestInfo | null> {
+  for (const ref of ["main", "master"] as const) {
+    const url = `https://api.github.com/repos/${repo}/contents/app/pubspec.yaml?ref=${ref}`;
+    const res = await fetch(url, {
+      headers: { ...headers(), Accept: "application/vnd.github.raw" }
+    });
+    if (!res.ok) continue;
+    const text = await res.text();
+    const m = text.match(/^version:\s*(\S+)/m);
+    if (!m) continue;
+    const parsed = parseVersion(m[1]);
+    logger.info({ version: parsed.version, ref }, "github: pubspec op default branch");
+    return {
+      ...parsed,
+      tag: parsed.version,
+      htmlUrl: `https://github.com/${repo}/blob/${ref}/app/pubspec.yaml`,
+      source: "branch",
+      checkedAt: new Date().toISOString(),
+      androidApk: null
+    };
+  }
+  return null;
+}
+
+async function fetchReleaseByTag(
+  repo: string,
+  tag: string
+): Promise<GithubLatestInfo | null> {
+  const rel = await ghJson(
+    `https://api.github.com/repos/${repo}/releases/tags/${encodeURIComponent(tag)}`
+  );
+  if (!rel.ok || !rel.body || typeof rel.body !== "object") return null;
+  return infoFromRelease(rel.body as Record<string, unknown>, "release");
+}
+
 async function fetchLatestUncached(): Promise<GithubLatestInfo | null> {
   const repo = githubRepo();
   if (!repo || !repo.includes("/")) {
@@ -120,61 +193,78 @@ async function fetchLatestUncached(): Promise<GithubLatestInfo | null> {
     return null;
   }
 
+  const branch = await fetchBranchPubspec(repo);
+  const rolling = await fetchReleaseByTag(repo, ANDROID_LATEST_TAG);
+
   const releaseUrl = `https://api.github.com/repos/${repo}/releases/latest`;
   const rel = await ghJson(releaseUrl);
+  let official: GithubLatestInfo | null = null;
   if (rel.ok && rel.body && typeof rel.body === "object") {
-    const b = rel.body as Record<string, unknown>;
-    const tag = typeof b.tag_name === "string" ? b.tag_name : "";
-    if (tag) {
-      const htmlUrl = typeof b.html_url === "string" ? b.html_url : null;
-      const androidApk = pickAndroidApk(b.assets);
-      return infoFromTag(tag, htmlUrl, "release", androidApk);
-    }
-  }
-  if (rel.status !== 404) {
+    official = infoFromRelease(rel.body as Record<string, unknown>, "release");
+  } else if (rel.status !== 404) {
     logger.warn(
       { status: rel.status, repo },
-      "GitHub releases/latest mislukt — probeer tags"
+      "GitHub releases/latest mislukt"
     );
-  } else {
+  } else if (!githubToken()) {
     logger.info(
       { repo },
       "Geen GitHub release (404). Bij privé-repo: zet GITHUB_TOKEN in docker/.env"
     );
   }
 
-  const tagsUrl = `https://api.github.com/repos/${repo}/tags?per_page=30`;
-  const tags = await ghJson(tagsUrl);
-  if (!tags.ok || !Array.isArray(tags.body)) {
-    logger.warn(
-      {
-        status: tags.status,
-        repo,
-        hint:
-          tags.status === 404
-            ? "Repo privé of onbekend — GITHUB_TOKEN of GITHUB_REPO controleren"
-            : undefined
-      },
-      "GitHub tags ophalen mislukt — geen latest-versie"
-    );
-    return null;
+  const newest = pickNewer(pickNewer(branch, official), rolling);
+  if (!newest) {
+    const tagsUrl = `https://api.github.com/repos/${repo}/tags?per_page=30`;
+    const tags = await ghJson(tagsUrl);
+    if (!tags.ok || !Array.isArray(tags.body)) {
+      logger.warn(
+        {
+          status: tags.status,
+          repo,
+          hint:
+            tags.status === 404
+              ? "Repo privé of onbekend — GITHUB_TOKEN of GITHUB_REPO controleren"
+              : undefined
+        },
+        "GitHub tags ophalen mislukt — geen latest-versie"
+      );
+      return null;
+    }
+    let best: GithubLatestInfo | null = null;
+    for (const item of tags.body) {
+      if (!item || typeof item !== "object") continue;
+      const name = (item as { name?: string }).name;
+      if (!name || typeof name !== "string") continue;
+      if (!/^v?\d+\.\d+/i.test(name.trim())) continue;
+      const cand = infoFromTag(
+        name,
+        `https://github.com/${repo}/releases/tag/${encodeURIComponent(name)}`,
+        "tag"
+      );
+      best = pickNewer(best, cand);
+    }
+    return best;
   }
 
-  let best: GithubLatestInfo | null = null;
-  for (const item of tags.body) {
-    if (!item || typeof item !== "object") continue;
-    const name = (item as { name?: string }).name;
-    if (!name || typeof name !== "string") continue;
-    // Skip non-semver-ish tags
-    if (!/^v?\d+\.\d+/i.test(name.trim())) continue;
-    const cand = infoFromTag(
-      name,
-      `https://github.com/${repo}/releases/tag/${encodeURIComponent(name)}`,
-      "tag"
-    );
-    if (!best || compareVersion(best, cand) < 0) best = cand;
-  }
-  return best;
+  // Only offer an APK that is at least as new as git HEAD (pubspec).
+  // Otherwise the tablet would download an older build and Android refuses it.
+  const apkSource = pickNewer(
+    rolling?.androidApk ? rolling : null,
+    official?.androidApk ? official : null
+  );
+  const branchVer = branch ?? newest;
+  const apkUsable =
+    apkSource?.androidApk &&
+    compareVersion(apkSource, branchVer) >= 0
+      ? apkSource.androidApk
+      : null;
+
+  return {
+    ...newest,
+    androidApk: apkUsable,
+    checkedAt: new Date().toISOString()
+  };
 }
 
 /** Positive if b is newer than a. */

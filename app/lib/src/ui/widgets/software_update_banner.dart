@@ -104,6 +104,7 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
     // Native tablet: tap anywhere on the strip to install. FilledButton/InkWell
     // often eats the first touch on PoE wall panels.
     final canInstallApk = supportsAndroidApkUpdate &&
+        status.latest?.androidApk?.available == true &&
         (status.androidApkUpdateAvailable || status.clientStale);
     if (canInstallApk) {
       final latest = status.latest;
@@ -122,6 +123,14 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
         onAction:
             _installing ? null : () => _installApk(latest?.androidApk),
         progress: _installing ? (_progress ?? 0) : null,
+      );
+    }
+
+    if (supportsAndroidApkUpdate && status.clientStale) {
+      return _Banner(
+        message: status.running.version.isEmpty
+            ? 'Nieuwe software op de server. Tablet-APK ontbreekt nog op GitHub (release android-latest).'
+            : 'Nieuwe software (${status.running.version}) op de server. Tablet-APK ontbreekt nog op GitHub (release android-latest).',
       );
     }
 
