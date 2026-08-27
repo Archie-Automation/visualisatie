@@ -185,7 +185,7 @@ final softwareVersionStatusProvider =
   final link = ref.keepAlive();
   Timer(const Duration(minutes: 2), link.close);
   try {
-    const res = await http
+    final res = await http
         .get(
           Uri.parse(
             supportsAndroidApkUpdate

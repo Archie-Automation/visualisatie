@@ -10,8 +10,10 @@ WORKDIR /src/app
 COPY app/pubspec.yaml ./
 RUN flutter pub get
 COPY app/ ./
+# Keep this command identical to .github/workflows/ci.yml (flutter-web job).
 # Use pubspec version as APP_VERSION (no bump during image build).
 RUN VERSION="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | tr -d '\r')" \
+  && test -n "$VERSION" \
   && flutter build web --release \
        --dart-define=API_BASE= \
        --dart-define=APP_VERSION="$VERSION" \

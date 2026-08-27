@@ -1,0 +1,13 @@
+---
+description: Dart must compile; never const on await; verify before push
+globs: "**/*.dart"
+alwaysApply: true
+---
+
+# Dart compile gate
+
+The NUC image runs `flutter build web`. Invalid Dart is not a “lint”, it is a failed deploy.
+
+- Never write `const` for a runtime value. `await`, `http.get`, `jsonDecode`, `ref.watch`, and any other call is `final`, not `const`.
+- After editing Dart, run `flutter analyze` on the touched files. A compile error must not be committed.
+- Do not push to `main` until that analyze is clean for errors. GitHub Actions compiles the same web release as Docker; the NUC is not the first compiler.
