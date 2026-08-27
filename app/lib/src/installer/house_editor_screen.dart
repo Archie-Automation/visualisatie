@@ -1308,6 +1308,15 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     _selectFocus(_Focus.cameraDetail(_cameras().length - 1));
   }
 
+  static String _cameraListSubtitle(Map<String, dynamic> cam) {
+    final o = cam['camera'];
+    final rtsp = o is Map ? (o['rtsp'] as String?)?.trim() ?? '' : '';
+    if (rtsp.isEmpty) return 'Nog geen stream-URL';
+    final u = Uri.tryParse(rtsp);
+    if (u != null && u.host.isNotEmpty) return u.host;
+    return 'Stream ingesteld';
+  }
+
   Widget _camerasInstallerPanel(BuildContext context) {
     final list = _cameras();
     return ListView(
@@ -1316,7 +1325,8 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         Padding(
           padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
           child: Text(
-            'Camera\'s horen bij het hele project, niet bij een kamer.',
+            'Voeg een camera toe met een naam en de stream-URL. '
+            'Ze horen bij het hele huis, niet bij één kamer.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: LuxeColors.inkSoft,
                 ),
@@ -1341,7 +1351,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   title: list[i]['name'] as String? ??
                       list[i]['id'] as String? ??
                       '',
-                  subtitle: list[i]['id'] as String?,
+                  subtitle: _cameraListSubtitle(list[i]),
                   selected: _sel.kind == _FocusKind.cameraDetail && _sel.ci == i,
                   onTap: () => _selectFocus(_Focus.cameraDetail(i)),
                 ),
@@ -1687,10 +1697,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           'id': id,
           'name': 'Camera',
           'type': 'camera',
-          'camera': {
-            'rtsp':
-                'rtsp://gebruiker:wachtwoord@192.168.1.10:554/stream',
-          },
+          'camera': {'rtsp': ''},
         };
       case 'intercom':
         return {
@@ -4961,9 +4968,10 @@ class _DeviceForm extends StatelessWidget {
                   ],
                 ),
               ),
-              _BoundStrField('id', device, onChanged),
               _BoundStrField('name', device, onChanged,
                   labelOverride: 'Naam'),
+              if (type != 'camera')
+                _BoundStrField('id', device, onChanged),
               LuxeSwitchRow(
                 title: 'Toon als favoriet op het dashboard',
                 subtitle:
@@ -5044,16 +5052,9 @@ class _DeviceForm extends StatelessWidget {
                   intFields: const {'port'},
                   onChanged: onChanged,
                 ),
-              if (type == 'camera') ...[
+              if (type == 'camera')
                 _CameraInstallerSection(
                     device: device, onChanged: onChanged),
-                _RtspDeviceExtra(
-                  device: device,
-                  nestedKey: 'camera',
-                  includeRepublish: true,
-                  onChanged: onChanged,
-                ),
-              ],
               if (type == 'intercom') ...[
                 _IntercomKnxExtras(device: device, onChanged: onChanged),
                 _NestedStringFields(
@@ -5158,7 +5159,8 @@ IconData _deviceFormIcon(String type) => switch (type) {
 
 String _deviceConfigTitle(String type) => switch (type) {
       'media_sonos' || 'media_bluesound' => 'Verbinding',
-      'camera' || 'intercom' => 'Stream & koppeling',
+      'camera' => 'Beeld',
+      'intercom' => 'Stream & koppeling',
       'lutron_homeworks' => 'Keypad → KNX',
       _ => 'Groepadressen & opties',
     };
@@ -5176,14 +5178,16 @@ String _deviceConfigSubtitle(String type) => switch (type) {
         'Zelfde opbouw: label, groepadres, DPT/waarde — met zoeken in de catalogus.',
       'media_sonos' || 'media_bluesound' =>
         'Host en poort van deze speler in het netwerk.',
-      'camera' || 'intercom' =>
+      'camera' =>
+        'Alleen de stream-URL is nodig — dezelfde link als in VLC.',
+      'intercom' =>
         'RTSP/URL en optionele KNX-groepadressen voor bel of deuropener.',
       'lutron_homeworks' =>
         'Optionele extra mappings. Telnet staat onder de Lutron-processor.',
       _ => 'Type-specifieke instellingen.',
     };
 
-/// Camera: RTSP + optional preview stream; auto profile for live.
+/// Camera: naam staat in de apparaatkaart; hier alleen de stream-URL.
 class _CameraInstallerSection extends ConsumerStatefulWidget {
   const _CameraInstallerSection({
     required this.device,
@@ -5210,100 +5214,21 @@ class _CameraInstallerSectionState extends ConsumerState<_CameraInstallerSection
   @override
   Widget build(BuildContext context) {
     final m = _m;
-    final hintStyle = Theme.of(context).textTheme.bodySmall?.copyWith(
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 8),
-        Text('Camera-stream',
-            style: Theme.of(context).textTheme.titleSmall),
-        Padding(
-          padding: const EdgeInsets.only(top: 4, bottom: 8),
-          child: Text(
-            'RTSP van camera, recorder/NVR of Surveillance Station (deel stream-pad). '
-            'Werkt hetzelfde als in VLC — plak de volledige url incl. login.',
-            style: hintStyle,
-          ),
-        ),
         _BoundStrField(
           'rtsp',
           m,
           widget.onChanged,
-          labelOverride: 'Live RTSP-URL (hoofdstream)',
-          maxLines: 4,
-          hintText: 'rtsp://syno:…@192.168.1.22:554/Sms=8.unicast',
-        ),
-        const SizedBox(height: 8),
-        _BoundStrField(
-          'previewRtsp',
-          m,
-          widget.onChanged,
-          labelOverride: 'Preview RTSP (optioneel, snellere thumbnails)',
+          labelOverride: 'Stream-URL',
           maxLines: 3,
-          hintText: 'Substream / lage kwaliteit — leeg = zelfde als live',
-          emptyMeansRemove: true,
+          hintText: 'rtsp://gebruiker:wachtwoord@192.168.1.10:554/stream',
         ),
         const SizedBox(height: 8),
         _CameraStreamProbePanel(
           rtsp: (m['rtsp'] as String?) ?? '',
-          previewRtsp: (m['previewRtsp'] as String?) ?? '',
-          codec: (m['codec'] as String?) ?? '',
           token: _installerToken(),
-        ),
-        Theme(
-          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-          child: ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            childrenPadding: const EdgeInsets.only(bottom: 4),
-            title: Text(
-              'Optioneel ? meestal leeg laten',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            subtitle: Text(
-              'Path, beeldverhouding, directe HLS',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Text(
-                  'Path = korte naam voor de mediaserver (go2rtc), niet het '
-                  'camera-pad uit uw RTSP-link. Leeg = automatisch op basis van '
-                  'dit apparaat.\n\n'
-                  'Aspect = bijv. 16:9. Leeg = 16:9 in de app.\n\n'
-                  'Directe HLS = alleen als u al een werkende .m3u8-url heeft '
-                  'zonder deze server.',
-                  style: hintStyle,
-                ),
-              ),
-              _BoundStrField(
-                'path',
-                m,
-                widget.onChanged,
-                labelOverride: 'Path (streamnaam server)',
-                hintText: 'Leeg laten',
-                emptyMeansRemove: true,
-              ),
-              _BoundStrField(
-                'aspect',
-                m,
-                widget.onChanged,
-                labelOverride: 'Aspect',
-                hintText: '16:9',
-                emptyMeansRemove: true,
-              ),
-              _BoundStrField(
-                'directHls',
-                m,
-                widget.onChanged,
-                labelOverride: 'Directe HLS-URL',
-                maxLines: 2,
-                emptyMeansRemove: true,
-              ),
-            ],
-          ),
         ),
       ],
     );
@@ -5319,14 +5244,10 @@ class _CameraInstallerSectionState extends ConsumerState<_CameraInstallerSection
 class _CameraStreamProbePanel extends StatefulWidget {
   const _CameraStreamProbePanel({
     required this.rtsp,
-    required this.previewRtsp,
-    required this.codec,
     required this.token,
   });
 
   final String rtsp;
-  final String previewRtsp;
-  final String codec;
   final String? token;
 
   @override
@@ -5343,7 +5264,7 @@ class _CameraStreamProbePanelState extends State<_CameraStreamProbePanel> {
     final token = widget.token;
     if (token == null) return;
     if (widget.rtsp.trim().isEmpty) {
-      setState(() => _err = 'Vul eerst een live RTSP-URL in');
+      setState(() => _err = 'Vul eerst de stream-URL in');
       return;
     }
     setState(() {
@@ -5355,8 +5276,6 @@ class _CameraStreamProbePanelState extends State<_CameraStreamProbePanel> {
       final r = await postInstallerCameraProbe(
         token,
         rtsp: widget.rtsp.trim(),
-        previewRtsp: widget.previewRtsp.trim(),
-        codec: widget.codec.trim(),
       );
       if (!mounted) return;
       setState(() => _result = r);
@@ -5371,6 +5290,21 @@ class _CameraStreamProbePanelState extends State<_CameraStreamProbePanel> {
   @override
   Widget build(BuildContext context) {
     final r = _result;
+    final live = r?.live;
+    String? status;
+    Color? statusColor;
+    if (live != null) {
+      if (live.ok) {
+        final res = live.width != null && live.height != null
+            ? ' · ${live.width}×${live.height}'
+            : '';
+        status = 'Beeld OK$res';
+      } else {
+        status =
+            'Geen beeld. Controleer de URL, gebruikersnaam en wachtwoord.';
+        statusColor = Colors.red.shade700;
+      }
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -5383,44 +5317,24 @@ class _CameraStreamProbePanelState extends State<_CameraStreamProbePanel> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
               : const Icon(Icons.videocam_outlined, size: 18),
-          label: const Text('Stream testen'),
+          label: const Text('Verbinding testen'),
         ),
         if (_err != null)
           Padding(
             padding: const EdgeInsets.only(top: 8),
             child: Text(_err!, style: TextStyle(color: Colors.red.shade700)),
           ),
-        if (r != null) ...[
-          const SizedBox(height: 8),
-          _probeLine('Live', r.live),
-          if (r.preview != null) _probeLine('Preview', r.preview!),
+        if (status != null)
           Padding(
-            padding: const EdgeInsets.only(top: 6),
+            padding: const EdgeInsets.only(top: 8),
             child: Text(
-              'Aanbevolen: FFmpeg live=${r.recommended.go2rtcFfmpeg}, '
-              'alleen video=${r.recommended.go2rtcVideoOnly}',
-              style: Theme.of(context).textTheme.bodySmall,
+              status,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: statusColor,
+                  ),
             ),
           ),
-        ],
       ],
-    );
-  }
-
-  Widget _probeLine(String label, InstallerCameraProbeResult p) {
-    final ok = p.ok;
-    final res = p.width != null && p.height != null
-        ? '${p.width}×${p.height}'
-        : '?';
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Text(
-        '$label: ${ok ? "OK" : "mislukt"} · ${p.latencyMs}ms · $res · '
-        '${p.profileLabel}${p.error != null ? " — ${p.error}" : ""}',
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: ok ? null : Colors.red.shade700,
-            ),
-      ),
     );
   }
 }
