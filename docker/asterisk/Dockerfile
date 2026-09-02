@@ -1,11 +1,12 @@
-FROM debian:bookworm-slim
+FROM ubuntu:24.04
 
-# policy-rc.d: Debian postinst mag Asterisk niet via systemd starten in Docker
-# (dat laat `apt-get install asterisk` anders falen → hele compose-update stuk).
+# Debian Bookworm heeft geen Asterisk-pakket. Ubuntu 24.04 universe wel (20 LTS).
+# policy-rc.d: postinst mag systemd niet starten in Docker.
+ENV DEBIAN_FRONTEND=noninteractive
 RUN printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d \
   && chmod +x /usr/sbin/policy-rc.d \
   && apt-get update \
-  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+  && apt-get install -y --no-install-recommends \
     asterisk \
     ca-certificates \
   && rm -rf /var/lib/apt/lists/* \
