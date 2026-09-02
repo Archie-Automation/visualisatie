@@ -225,10 +225,13 @@ run_update() {
 
   ST_STATE=running ST_STEP=build ST_MESSAGE="Software bouwen. Dit duurt 10–20 minuten. Het huis blijft werken tot de herstart aan het eind." write_status
 
-  if ! ( cd "$DOCKER_DIR" && $DOCKER compose --env-file .env up -d --build >>"$LOG" 2>&1 ); then
-    ST_STATE=error ST_STEP=build ST_MESSAGE="Bouwen of starten mislukt. Zie docker/data/update-agent.log op de NUC." ST_ERROR="compose_failed" ST_FINISHED=1 write_status
-    log "fail compose_failed"
+  if ! ( cd "$DOCKER_DIR" && $DOCKER compose --env-file .env up -d --build knx-stack >>"$LOG" 2>&1 ); then
+    ST_STATE=error ST_STEP=build ST_MESSAGE="App bouwen/starten mislukt. Zie docker/data/update-agent.log op de NUC." ST_ERROR="compose_failed" ST_FINISHED=1 write_status
+    log "fail compose_failed knx-stack"
     return 1
+  fi
+  if ! ( cd "$DOCKER_DIR" && $DOCKER compose --env-file .env up -d --build asterisk >>"$LOG" 2>&1 ); then
+    log "warn asterisk compose failed (app is up)"
   fi
 
   ST_STATE=success ST_STEP= ST_MESSAGE="Server is bijgewerkt." ST_CLEAR_ERROR=1 ST_FINISHED=1 write_status

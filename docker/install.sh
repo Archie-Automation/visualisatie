@@ -158,7 +158,13 @@ if command -v ufw >/dev/null 2>&1; then
     $SUDO_UFW ufw allow 8089/tcp comment "Archie OS SIP WSS" >/dev/null 2>&1 || true
 fi
 
-$DOCKER compose --env-file .env up -d --build
+# Eerst de app; Asterisk daarna. Zo blijft het huis updaten als VoIP-image faalt.
+$DOCKER compose --env-file .env up -d --build knx-stack
+if $DOCKER compose --env-file .env up -d --build asterisk; then
+  ok "Asterisk (SIP) gestart"
+else
+  warn "Asterisk-image bouwde niet. App draait wel; intercom-SIP volgt later."
+fi
 
 # ── Update-agent (server bijwerken vanaf de tablet) ─────────────────────────
 install_update_agent() {
