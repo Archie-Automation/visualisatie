@@ -186,25 +186,20 @@ run_update() {
   log "git fetch url=$fetch_url branch=$branch token=$([ -n "$tok" ] && echo yes || echo no)"
 
   git_err="$(mktemp)"
-  if [ -z "$tok" ]; then
-    restore_secrets
-    rm -f "$git_err"
-    ST_STATE=error ST_STEP=git ST_MESSAGE="GITHUB_TOKEN ontbreekt in docker/.env. Zonder token kan de privé-repo niet worden opgehaald." ST_ERROR="git_token_missing" ST_FINISHED=1 write_status
-    log "fail git_token_missing"
-    return 1
-  fi
-
+  fetch_ok=0
   case "$fetch_url" in
     https://github.com/*)
-      fetch_ok=1
-      if ! git_with_token "$tok" -C "$ROOT" fetch --prune "$fetch_url" "+refs/heads/${branch}:refs/remotes/origin/${branch}" >"$git_err" 2>&1; then
-        fetch_ok=0
+      if git_with_token "$tok" -C "$ROOT" fetch --prune "$fetch_url" "+refs/heads/${branch}:refs/remotes/origin/${branch}" >"$git_err" 2>&1; then
+        fetch_ok=1
+      elif [ -n "$tok" ] && git_with_token "" -C "$ROOT" fetch --prune "$fetch_url" "+refs/heads/${branch}:refs/remotes/origin/${branch}" >"$git_err" 2>&1; then
+        # Public repo: expired/wrong GITHUB_TOKEN would 401; anonymous HTTPS works.
+        log "git fetch ok anonymously (token unused or rejected)"
+        fetch_ok=1
       fi
       ;;
     *)
-      fetch_ok=1
-      if ! git_with_token "$tok" -C "$ROOT" fetch --prune origin >"$git_err" 2>&1; then
-        fetch_ok=0
+      if git_with_token "$tok" -C "$ROOT" fetch --prune origin >"$git_err" 2>&1; then
+        fetch_ok=1
       fi
       ;;
   esac
@@ -212,7 +207,7 @@ run_update() {
     append_log_redacted "$tok" "$git_err"
     rm -f "$git_err"
     restore_secrets
-    ST_STATE=error ST_STEP=git ST_MESSAGE="GitHub weigerde de token of er is geen netwerk. Zet een geldige GITHUB_TOKEN (rechten: repo) in docker/.env." ST_ERROR="git_fetch_failed" ST_FINISHED=1 write_status
+    ST_STATE=error ST_STEP=git ST_MESSAGE="GitHub ophalen mislukt (netwerk, of een oude git-login op de NUC). Op de NUC: GIT_TERMINAL_PROMPT=0 git -c credential.helper= fetch origin" ST_ERROR="git_fetch_failed" ST_FINISHED=1 write_status
     log "fail git_fetch_failed"
     return 1
   fi

@@ -174,7 +174,7 @@ git pull          # of nieuwe ZIP uitpakken over de map (house.json niet wissen)
 | Script: “Docker ontbreekt” | Antwoord **J**, of herstart na Docker-install |
 | Pagina niet bereikbaar | VM-IP / Proxmox-bridge / zelfde LAN |
 | Geen GitHub-melding | Release/tag aangemaakt? Repo publiek of `GITHUB_TOKEN`? Internet vanaf VM? |
-| **GitHub ophalen mislukt** | `GITHUB_TOKEN` in `docker/.env` (classic PAT, recht `repo`). Daarna op de NUC: `git fetch` testen. De tablet-updater kan een kapotte token niet zelf repareren. |
+| **GitHub ophalen mislukt** | Repo public: geen token nodig. Op de NUC: `GIT_TERMINAL_PROMPT=0 git -c credential.helper= fetch origin`. Oude/verkeerde `GITHUB_TOKEN` of opgeslagen git-login geeft 401, ook op een public repo. |
 | Tablet: geen **Installeren** | Release heeft `.apk`-asset? `latest.androidApk` in `/api/version`? App gebouwd met `--dart-define=APP_VERSION=…` (niet `dev`)? |
 | Tablet: installatie geweigerd | “Onbekende apps installeren” toestaan voor Archie OS; zelfde signing als vorige APK |
 | Leeg scherm / oude app | Tab sluiten of banner **Vernieuwen** |
