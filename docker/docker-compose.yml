@@ -31,6 +31,8 @@ services:
       - LOG_STORE_PATH=/data/logs.db
       - HVAC_LOCK_STORE_PATH=/data/hvac-locks.json
       - SPOTIFY_STORE_PATH=/data/spotify.json
+      - ASTERISK_CONF_DIR=/data/asterisk
+      - ASTERISK_AMI_HOST=127.0.0.1
       - GITHUB_REPO=${GITHUB_REPO:-Archie-Automation/visualisatie}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
     volumes:
@@ -38,3 +40,16 @@ services:
       - ../config:/config
       - ./go2rtc:/media
       - ./data:/data
+
+  asterisk:
+    build:
+      context: ./asterisk
+      dockerfile: Dockerfile
+    image: archie-os-asterisk:latest
+    container_name: archie-os-asterisk
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./data/asterisk:/etc/asterisk
+      - ./data/certs:/data/certs:ro
+

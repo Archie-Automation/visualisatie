@@ -4,14 +4,20 @@ import { effectiveIntercomReleaseMode } from "./intercomReleaseMode";
 import { logger } from "./logger";
 import type { HouseConfig, IntercomDevice } from "./types";
 import type { KnxBus } from "./knxBus";
+import { releaseDoorViaHttp } from "./voip/httpRelease";
 
-/** KNX-puls op deur-open-GA, of DoorBird LAN `open-door.cgi`. */
+/** KNX-puls, DoorBird LAN, of generieke HTTP. */
 export async function releaseDoor(
   ic: IntercomDevice,
   bus: KnxBus
 ): Promise<void> {
-  if (effectiveIntercomReleaseMode(ic) === "doorbird") {
+  const mode = effectiveIntercomReleaseMode(ic);
+  if (mode === "doorbird") {
     await releaseDoorViaDoorbird(ic);
+    return;
+  }
+  if (mode === "http") {
+    await releaseDoorViaHttp(ic);
     return;
   }
 

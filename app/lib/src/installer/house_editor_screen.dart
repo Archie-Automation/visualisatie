@@ -47,6 +47,7 @@ import 'installer_api.dart';
 import 'installer_auth.dart';
 import 'installer_form_sections.dart';
 import 'knx_ga_catalog.dart';
+import 'voip_installer_section.dart';
 
 const _deviceTypesKnx = [
   'light_switch',
@@ -1513,6 +1514,19 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
+          child: VoipInstallerSection(
+            house: _house!,
+            onChanged: () => setState(() {}),
+            getToken: () async {
+              if (widget.useCustomerSession) {
+                return ref.read(authProvider).token;
+              }
+              return ref.read(installerAuthProvider).token;
+            },
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 0, 28, 8),
           child: Text(
             'Intercom hoort bij het hele project, niet bij een kamer.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -2782,11 +2796,13 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     }
     return _InstallerUserForm(
       key: ValueKey(list[i]['id']),
+      house: _house!,
       user: list[i],
       floors: aclFloorsFromHouseMaps(_floors()),
       extras: AclHouseExtras.fromHouseMap(_house!),
       onChanged: () => setState(() {}),
       onDelete: () {
+        unbindSipFromUser(_house!, list[i]);
         list.removeAt(i);
         setState(() => _sel = const _Focus.users());
       },
@@ -2797,6 +2813,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
 class _InstallerUserForm extends StatefulWidget {
   const _InstallerUserForm({
     super.key,
+    required this.house,
     required this.user,
     required this.floors,
     required this.extras,
@@ -2804,6 +2821,7 @@ class _InstallerUserForm extends StatefulWidget {
     required this.onDelete,
   });
 
+  final Map<String, dynamic> house;
   final Map<String, dynamic> user;
   final List<AclNavFloor> floors;
   final AclHouseExtras extras;
@@ -2935,6 +2953,75 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
                   widget.onChanged();
                 },
               ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              LuxeSwitchRow(
+                title: 'SIP-toestel',
+                subtitle: ensureVoipMap(widget.house)['enabled'] == true
+                    ? (sipEndpointForUser(widget.house, u) != null
+                        ? 'Dit account is dit paneel of deze telefoon. Niet op een tweede toestel gebruiken.'
+                        : 'Aan = uniek SIP-nummer voor dit inlogaccount. Uit = geen SIP.')
+                    : 'Zet eerst de eigen SIP-server aan bij Intercom.',
+                value: sipEndpointForUser(widget.house, u) != null,
+                onChanged: ensureVoipMap(widget.house)['enabled'] == true
+                    ? (v) {
+                        if (v) {
+                          bindSipToUser(widget.house, u);
+                        } else {
+                          unbindSipFromUser(widget.house, u);
+                        }
+                        widget.onChanged();
+                        setState(() {});
+                      }
+                    : null,
+              ),
+              if (sipEndpointForUser(widget.house, u) != null) ...[
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  initialValue:
+                      (sipEndpointForUser(widget.house, u)!['type'] as String?) ==
+                              'phone'
+                          ? 'phone'
+                          : 'panel',
+                  decoration: luxeFilledDecoration(hint: 'Type'),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'panel',
+                      child: Text('Paneel / app'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'phone',
+                      child: Text('SIP-telefoon'),
+                    ),
+                  ],
+                  onChanged: (v) {
+                    final ep = sipEndpointForUser(widget.house, u);
+                    if (ep == null || v == null) return;
+                    ep['type'] = v;
+                    widget.onChanged();
+                    setState(() {});
+                  },
+                ),
+                const SizedBox(height: 8),
+                Builder(
+                  builder: (context) {
+                    final ep = sipEndpointForUser(widget.house, u)!;
+                    return SelectableText(
+                      'SIP-nummer: ${ep['ext'] ?? '(wordt bij opslaan gezet)'}\n'
+                      'Wachtwoord: ${ep['password'] ?? ''}',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            fontFamily: 'monospace',
+                          ),
+                    );
+                  },
+                ),
+              ],
             ],
           ),
         ),
@@ -5562,103 +5649,92 @@ class _IntercomKnxExtras extends StatelessWidget {
     final doorbell = _ensureChildMap(o, 'doorbell');
     final release = _ensureChildMap(o, 'release');
     final doorbird = _ensureChildMap(o, 'doorbird');
-    final sip = _ensureChildMap(o, 'sip');
     final kind = (o['kind'] as String?) ?? 'doorbird';
-    final isSip = kind == 'sip';
-    final isTwoN = kind == 'twoN';
+    const kinds = <String, String>{
+      'doorbird': 'DoorBird',
+      'twoN': '2N',
+      'axis': 'Axis',
+      'mobotix': 'Mobotix',
+      'siedle': 'Siedle (SIP-modellen)',
+      'comelit': 'Comelit (SIP-modellen)',
+      'unifi': 'UniFi (meestal geen SIP)',
+      'other': 'Overig SIP',
+      'sip': 'SIP (legacy)',
+    };
     final doorMode = (o['releaseMode'] as String?) ?? 'knx';
     final doorViaDoorbird = doorMode == 'doorbird';
+    final doorViaHttp = doorMode == 'http';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 12),
         Text(
-          isSip
-              ? 'SIP-intercom: audio en video lopen via uw PBX (Asterisk/FreePBX). '
-                  'De app registreert op de WebSocket van de server en toont inkomende oproepen. '
-                  'Deuropen kan nog steeds via KNX of DoorBird-API (zie onder).'
-              : isTwoN
-                  ? '2N: gebruik meestal een SIP-trunk naar uw centrale; vul hieronder SIP in '
-                      'of laat de stream-URL?s staan voor beeld naast het gesprek.'
-                  : 'DoorBird: livebeeld en terugspreken kunnen via RTSP/go2rtc (hieronder); '
-                      'deuropen via KNX of DoorBird HTTP.',
+          kind == 'unifi'
+              ? 'UniFi Protect-deurbel is meestal geen SIP-toestel. Gebruik RTSP + webhook, of UniFi Talk apart.'
+              : kind == 'siedle' || kind == 'comelit'
+                  ? 'Alleen IP-modellen mét SIP. Oudere bus-systemen (Vario/Simplebus) koppelen hier niet.'
+                  : 'Zet het deurstation als SIP-client op de eigen server (Intercom → VoIP). '
+                      'Beeld blijft optioneel via RTSP. Deur via KNX, HTTP of DoorBird-API.',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12),
         ),
         const SizedBox(height: 16),
-        Text('Intercom-type', style: Theme.of(context).textTheme.titleSmall),
+        Text('Merk', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
-        Text('Bron van het gesprek', style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 8),
-        SegmentedButton<String>(
-          segments: const [
-            ButtonSegment<String>(
-              value: 'doorbird',
-              label: Text('DoorBird'),
-              icon: Icon(Icons.videocam_outlined, size: 18),
-            ),
-            ButtonSegment<String>(
-              value: 'twoN',
-              label: Text('2N'),
-              icon: Icon(Icons.apartment_outlined, size: 18),
-            ),
-            ButtonSegment<String>(
-              value: 'sip',
-              label: Text('SIP'),
-              icon: Icon(Icons.dialer_sip, size: 18),
-            ),
+        DropdownButtonFormField<String>(
+          initialValue: kinds.containsKey(kind) ? kind : 'other',
+          decoration: luxeFilledDecoration(),
+          items: [
+            for (final e in kinds.entries)
+              DropdownMenuItem(value: e.key, child: Text(e.value)),
           ],
-          emptySelectionAllowed: false,
-          showSelectedIcon: false,
-          selected: {kind},
-          onSelectionChanged: (Set<String> next) {
-            if (next.isEmpty) return;
-            o['kind'] = next.first;
+          onChanged: (v) {
+            if (v == null) return;
+            o['kind'] = v;
             onChanged();
           },
         ),
-        if (isSip) ...[
-          const SizedBox(height: 16),
-          Text('SIP-registratie (WebSocket)', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 8),
-          _BoundStrField(
-            'webSocketUrl',
-            sip,
-            onChanged,
-            labelOverride: 'WebSocket-URL (wss://?)',
-            key: ValueKey('sip-ws-${device['id']}'),
+        const SizedBox(height: 16),
+        Text('SIP-inlog voor dit station',
+            style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 8),
+        SelectableText(
+          'Toestel: ${(o['sipExt'] as String?)?.isNotEmpty == true ? o['sipExt'] : '(wordt bij opslaan gezet)'}\n'
+          'Wachtwoord: ${(o['sipPassword'] as String?) ?? ''}',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontFamily: 'monospace',
+              ),
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(
+                text:
+                    'ext=${o['sipExt'] ?? ''}\nuser=${o['sipExt'] ?? ''}\npass=${o['sipPassword'] ?? ''}\nport=5060',
+              ));
+            },
+            icon: const Icon(Icons.copy, size: 16),
+            label: const Text('Kopieer SIP-inlog'),
           ),
-          _BoundStrField(
-            'uri',
-            sip,
-            onChanged,
-            labelOverride: 'SIP-URI (bijv. sip:1001@pbx.lan)',
-            key: ValueKey('sip-uri-${device['id']}'),
-          ),
-          _BoundStrField(
-            'authorizationUser',
-            sip,
-            onChanged,
-            labelOverride: 'Auth-gebruiker (optioneel)',
-            key: ValueKey('sip-auth-${device['id']}'),
-          ),
-          _BoundStrField(
-            'password',
-            sip,
-            onChanged,
-            labelOverride: 'SIP-wachtwoord',
-            key: ValueKey('sip-pass-${device['id']}'),
-          ),
-          _BoundStrField(
-            'displayName',
-            sip,
-            onChanged,
-            labelOverride: 'Weergavenaam (optioneel)',
-            key: ValueKey('sip-dn-${device['id']}'),
-          ),
-        ],
+        ),
+        _BoundStrField(
+          'ringGroupId',
+          o,
+          onChanged,
+          labelOverride: 'Oproepgroep-id (Intercom → VoIP)',
+          key: ValueKey('ringgrp-${device['id']}'),
+        ),
+        _BoundStrField(
+          'dtmfDigit',
+          o,
+          onChanged,
+          labelOverride: 'DTMF deuropen (leeg = uit, standaard #)',
+          emptyMeansRemove: true,
+          key: ValueKey('dtmf-${device['id']}'),
+        ),
         const SizedBox(height: 20),
-        Text('Deur / poort open (KNX is alleen hiervoor)',
+        Text('Deur / poort open',
             style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
         SegmentedButton<String>(
@@ -5670,8 +5746,13 @@ class _IntercomKnxExtras extends StatelessWidget {
             ),
             ButtonSegment<String>(
               value: 'doorbird',
-              label: Text('DoorBird API'),
+              label: Text('DoorBird'),
               icon: Icon(Icons.lock_open, size: 18),
+            ),
+            ButtonSegment<String>(
+              value: 'http',
+              label: Text('HTTP'),
+              icon: Icon(Icons.http, size: 18),
             ),
           ],
           emptySelectionAllowed: false,
@@ -5691,7 +5772,7 @@ class _IntercomKnxExtras extends StatelessWidget {
           labelOverride: 'Deurbel KNX (optioneel, voor busmonitor)',
           key: ValueKey('db-${device['id']}'),
         ),
-        if (!doorViaDoorbird) ...[
+        if (!doorViaDoorbird && !doorViaHttp) ...[
           _BoundStrField(
             'ga',
             release,
@@ -5768,6 +5849,36 @@ class _IntercomKnxExtras extends StatelessWidget {
             onChanged,
             labelOverride: 'Relay r= (standaard 1)',
             key: ValueKey('dbird-relay-${device['id']}'),
+          ),
+        ],
+        if (doorViaHttp) ...[
+          const SizedBox(height: 8),
+          Text(
+            'GET of POST naar een URL op het LAN (2N switch, Axis VAPIX, …). '
+            'Gebruikersnaam mag in de URL: http://user:pass@192.168.1.50/...',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11),
+          ),
+          _BoundStrField(
+            'url',
+            _ensureChildMap(o, 'httpRelease'),
+            onChanged,
+            labelOverride: 'HTTP-URL',
+            key: ValueKey('http-url-${device['id']}'),
+          ),
+          _BoundStrField(
+            'method',
+            _ensureChildMap(o, 'httpRelease'),
+            onChanged,
+            labelOverride: 'Methode (GET of POST)',
+            key: ValueKey('http-method-${device['id']}'),
+          ),
+          _BoundStrField(
+            'body',
+            _ensureChildMap(o, 'httpRelease'),
+            onChanged,
+            labelOverride: 'Body (alleen POST, optioneel)',
+            emptyMeansRemove: true,
+            key: ValueKey('http-body-${device['id']}'),
           ),
         ],
         const SizedBox(height: 20),

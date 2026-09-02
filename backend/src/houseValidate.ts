@@ -226,6 +226,12 @@ export function validateRgbwWwSemantics(cfg: HouseConfig): string[] {
 export function validateIntercomSemantics(cfg: HouseConfig): string[] {
   const issues: string[] = [];
   for (const d of cfg.intercoms ?? []) {
+    if (effectiveIntercomReleaseMode(d) === "http") {
+      if (!d.intercom.httpRelease?.url?.trim()) {
+        issues.push(`Intercom "${d.name}" (${d.id}): HTTP-deuropen URL ontbreekt.`);
+      }
+      continue;
+    }
     if (effectiveIntercomReleaseMode(d) !== "doorbird") continue;
     const db = d.intercom.doorbird;
     if (!db?.host?.trim()) {
@@ -240,6 +246,54 @@ export function validateIntercomSemantics(cfg: HouseConfig): string[] {
       issues.push(`Intercom "${d.name}" (${d.id}): DoorBird-wachtwoord ontbreekt.`);
     }
   }
+  return issues;
+}
+
+/** Indoor SIP: only created users, each account used once. */
+export function validateVoipSemantics(cfg: HouseConfig): string[] {
+  if (cfg.voip?.enabled !== true) return [];
+  const issues: string[] = [];
+  const users = cfg.users ?? [];
+  const userById = new Map(users.map((u) => [u.id, u]));
+  const seenUser = new Set<string>();
+  const seenEp = new Set<string>();
+
+  for (const ep of cfg.voip.endpoints ?? []) {
+    const uid = ep.userId?.trim();
+    if (!uid) {
+      issues.push(`SIP-toestel "${ep.name}" (${ep.id}): geen gebruiker gekoppeld.`);
+      continue;
+    }
+    if (!userById.has(uid)) {
+      issues.push(
+        `SIP-toestel "${ep.name}" (${ep.id}): gebruiker ${uid} bestaat niet.`
+      );
+      continue;
+    }
+    if (seenUser.has(uid)) {
+      issues.push(
+        `Gebruiker "${userById.get(uid)?.username ?? uid}" heeft meer dan één SIP-toestel.`
+      );
+    }
+    seenUser.add(uid);
+    seenEp.add(ep.id);
+  }
+
+  const seenSip = new Set<string>();
+  for (const u of users) {
+    const sid = u.sipEndpointId?.trim();
+    if (!sid) continue;
+    if (seenSip.has(sid)) {
+      issues.push(`SIP-account ${sid} is aan meerdere gebruikers gekoppeld.`);
+    }
+    seenSip.add(sid);
+    if (!seenEp.has(sid) && !(cfg.voip.endpoints ?? []).some((e) => e.id === sid)) {
+      issues.push(
+        `Gebruiker "${u.username}" verwijst naar onbekend SIP-toestel ${sid}.`
+      );
+    }
+  }
+
   return issues;
 }
 

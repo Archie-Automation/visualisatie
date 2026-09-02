@@ -27,10 +27,15 @@ type Outgoing =
       type: "intercom.ring";
       payload: { intercomId: string; name: string; ts: number };
     }
+  | {
+      type: "intercom.cleared";
+      payload: { intercomId: string };
+    }
   | { type: "config_changed"; payload: { version: number } };
 
 export interface WsHub {
   broadcastIntercomRing(intercomId: string): void;
+  broadcastIntercomCleared(intercomId: string): void;
   broadcastConfigChanged(version: number): void;
   close(): Promise<void>;
 }
@@ -128,6 +133,12 @@ export function attachWebSocket(
       broadcastAll({
         type: "intercom.ring",
         payload: { intercomId: found.id, name: found.name, ts: Date.now() }
+      });
+    },
+    broadcastIntercomCleared(intercomId: string) {
+      broadcastAll({
+        type: "intercom.cleared",
+        payload: { intercomId }
       });
     },
     broadcastConfigChanged(version: number) {

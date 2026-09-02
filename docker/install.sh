@@ -82,7 +82,7 @@ if ! docker info >/dev/null 2>&1; then
 fi
 
 # ── Mappen ──────────────────────────────────────────────────────────────────
-mkdir -p "$ROOT/config" ./go2rtc ./data
+mkdir -p "$ROOT/config" ./go2rtc ./data ./data/asterisk ./data/certs
 ok "Mappen klaar (config, data, go2rtc)"
 
 # ── .env ────────────────────────────────────────────────────────────────────
@@ -152,6 +152,10 @@ if command -v ufw >/dev/null 2>&1; then
   fi
   $SUDO_UFW ufw status 2>/dev/null | grep -q "Status: active" && \
     $SUDO_UFW ufw allow 4443/tcp comment "Archie OS Spotify HTTPS" >/dev/null 2>&1 || true
+  $SUDO_UFW ufw status 2>/dev/null | grep -q "Status: active" && \
+    $SUDO_UFW ufw allow 5060/udp comment "Archie OS SIP" >/dev/null 2>&1 || true
+  $SUDO_UFW ufw status 2>/dev/null | grep -q "Status: active" && \
+    $SUDO_UFW ufw allow 8089/tcp comment "Archie OS SIP WSS" >/dev/null 2>&1 || true
 fi
 
 $DOCKER compose --env-file .env up -d --build

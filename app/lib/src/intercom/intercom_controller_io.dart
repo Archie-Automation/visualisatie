@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -10,9 +12,10 @@ typedef IntercomRingAlignCallback = void Function(IntercomRing ring);
 
 /// SIP User-Agent voor inkomende intercom-oproepen (iOS / Android / desktop).
 class IntercomController extends ChangeNotifier implements SipUaHelperListener {
-  IntercomController({this.onAlignKnxRing});
+  IntercomController({this.onAlignKnxRing, this.onAnsweredElsewhere});
 
   final IntercomRingAlignCallback? onAlignKnxRing;
+  final VoidCallback? onAnsweredElsewhere;
 
   final SIPUAHelper _helper = SIPUAHelper();
   bool _listenerAttached = false;
@@ -26,12 +29,15 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
   bool _muted = false;
   String? boundIntercomId;
   bool _ringAlignSentForThisCall = false;
+  bool _localTerminate = false;
+  Timer? _elsewhereTimer;
 
   IntercomSipPhase get phase => _phase;
   String? get remoteLabel => _remoteLabel;
   MediaStream? get remoteStream => _remoteStream;
   MediaStream? get localStream => _localStream;
   bool get muted => _muted;
+  bool get isStarted => _started;
 
   /// Registratie starten vanuit `house.json` → `intercom.sip` (WebSocket + URI + auth).
   Future<void> startFromHouseIntercom({
@@ -62,6 +68,31 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
       ..userAgent = 'ArchieOS-Intercom'
       ..register = true;
 
+    await start(settings);
+  }
+
+  Future<void> startFromVoip(
+    Map<String, dynamic> sip, {
+    String? intercomId,
+  }) async {
+    final ws = (sip['webSocketUrl'] as String?)?.trim();
+    final uri = (sip['uri'] as String?)?.trim();
+    final password = (sip['password'] as String?) ?? '';
+    final authUser = (sip['authorizationUser'] as String?)?.trim();
+    final displayName = (sip['displayName'] as String?)?.trim();
+    if (ws == null || ws.isEmpty || uri == null || uri.isEmpty) return;
+    boundIntercomId = intercomId;
+    final settings = UaSettings()
+      ..transportType = TransportType.WS
+      ..webSocketUrl = ws
+      ..uri = uri
+      ..password = password
+      ..authorizationUser =
+          (authUser != null && authUser.isNotEmpty) ? authUser : null
+      ..displayName =
+          (displayName != null && displayName.isNotEmpty) ? displayName : 'Paneel'
+      ..userAgent = 'ArchieOS-Intercom'
+      ..register = true;
     await start(settings);
   }
 
@@ -138,12 +169,16 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
   }
 
   void declineCall() {
+    _localTerminate = true;
+    _elsewhereTimer?.cancel();
     _activeCall?.hangup({'status_code': 603});
     _resetCall();
     notifyListeners();
   }
 
   void hangup() {
+    _localTerminate = true;
+    _elsewhereTimer?.cancel();
     _activeCall?.hangup({'status_code': 603});
     _resetCall();
     notifyListeners();
@@ -162,6 +197,8 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
   }
 
   void _resetCall() {
+    _elsewhereTimer?.cancel();
+    _elsewhereTimer = null;
     _activeCall = null;
     _phase = IntercomSipPhase.idle;
     _remoteLabel = null;
@@ -170,6 +207,21 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
     _localStream = null;
     _muted = false;
     _ringAlignSentForThisCall = false;
+    _localTerminate = false;
+  }
+
+  void _onRemoteCancelWhileRinging() {
+    _activeCall = null;
+    _phase = IntercomSipPhase.answeredElsewhere;
+    _localStream?.getTracks().forEach((t) => t.stop());
+    _localStream = null;
+    _remoteStream = null;
+    onAnsweredElsewhere?.call();
+    _elsewhereTimer?.cancel();
+    _elsewhereTimer = Timer(const Duration(seconds: 3), () {
+      _resetCall();
+      notifyListeners();
+    });
   }
 
   void _maybeAlignRing(Call call) {
@@ -225,7 +277,12 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
         break;
       case CallStateEnum.ENDED:
       case CallStateEnum.FAILED:
-        _resetCall();
+        final ringing = _phase == IntercomSipPhase.ringing;
+        if (ringing && !_localTerminate) {
+          _onRemoteCancelWhileRinging();
+        } else {
+          _resetCall();
+        }
         break;
       default:
         break;

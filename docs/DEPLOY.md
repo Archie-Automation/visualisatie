@@ -186,9 +186,11 @@ git pull          # of nieuwe ZIP uitpakken over de map (house.json niet wissen)
 | Pad op host | Inhoud |
 |-------------|--------|
 | `config/house.json` | Huis (devices) — blijft bij updates |
-| `docker/data/` | Logs, locks, tokens |
+| `docker/data/` | Logs, locks, tokens, **Asterisk-config** (`asterisk/`) |
 | `docker/go2rtc/` | Camera-stream config |
 | `docker/.env` | Geheim + URL’s + GitHub — niet delen |
+
+Compose draait **twee** services: `knx-stack` (app + API + go2rtc) en `asterisk` (SIP). Beide `network_mode: host`. SIP UDP **5060**, WSS **8089**, RTP 10000–10100.
 
 - Health: `curl -s http://127.0.0.1:4000/api/health`
 - Versie: `curl -s http://127.0.0.1:4000/api/version`

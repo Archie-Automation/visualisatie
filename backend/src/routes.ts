@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import fs from "node:fs";
 import { Readable } from "node:stream";
 import { Router } from "express";
 import { z } from "zod";
@@ -88,10 +89,19 @@ import {
   validateHouseJson,
   validateFireplaceSemantics,
   validateIntercomSemantics,
+  validateVoipSemantics,
   validateRgbwWwSemantics,
   validateLutronSemantics,
   validateLutronLoadOutputSemantics
 } from "./houseValidate";
+import { mergeVoipSecrets, normalizeVoip } from "./voip/normalize";
+import { randomSipPassword } from "./voip/secrets";
+import {
+  resolveUserEndpoint,
+  syncVoipFromConfig,
+  voipAmiUp,
+  voipRegisteredExts
+} from "./voip/manager";
 
 function stripHash(u: User): User {
   // Keep the shape but blank out the hash. Clients should never see it.
@@ -179,9 +189,18 @@ function publicConfig(cfg: HouseConfig, role: string, userId?: string) {
         }
       : undefined;
 
+  const voipSafe = rest.voip
+    ? {
+        ...rest.voip,
+        amiSecret: "",
+        endpoints: (rest.voip.endpoints ?? []).map((e) => ({ ...e, password: "" }))
+      }
+    : undefined;
+
   const scrubbed = {
     ...rest,
     ...(lutronSafe ? { lutron: lutronSafe } : {}),
+    ...(voipSafe ? { voip: voipSafe } : {}),
     users: mePublic,
     cameras: cameras.map((d) => {
       const { rtsp: _r, sources: _s, ...safe } = d.camera;
@@ -193,12 +212,19 @@ function publicConfig(cfg: HouseConfig, role: string, userId?: string) {
         | { password?: string; [k: string]: unknown }
         | undefined;
       const sip = restIc.sip as { password?: string; [k: string]: unknown } | undefined;
+      const httpRelease = restIc.httpRelease as
+        | { headers?: Record<string, string>; [k: string]: unknown }
+        | undefined;
       const safeIntercom = {
         ...restIc,
+        sipPassword: restIc.sipPassword ? "" : restIc.sipPassword,
         ...(doorbird && typeof doorbird === "object"
           ? { doorbird: { ...doorbird, password: "" } }
           : {}),
-        ...(sip && typeof sip === "object" ? { sip: { ...sip, password: "" } } : {})
+        ...(sip && typeof sip === "object" ? { sip: { ...sip, password: "" } } : {}),
+        ...(httpRelease && typeof httpRelease === "object"
+          ? { httpRelease: { ...httpRelease, headers: {} } }
+          : {})
       } as typeof d.intercom;
       return { ...d, intercom: safeIntercom };
     }),
@@ -241,6 +267,7 @@ function installerHouseForClient(cfg: HouseConfig): HouseConfig {
   });
   const hlTel = copy.lutron?.telnet;
   if (hlTel && hlTel.password != null) hlTel.password = "";
+  if (copy.voip) copy.voip.amiSecret = "";
   return copy;
 }
 
@@ -577,6 +604,7 @@ export function buildRouter(
   r.post("/config/reload", requireAuth, requireAdmin, async (_req, res) => {
     const cfg = loadConfig();
     syncGo2rtcProcessAfterConfigWritten(writeGo2rtcConfig(cfg));
+    void syncVoipFromConfig(cfg);
     scheduler.reschedule();
     logSampler.refresh();
     media.rebuild(cfg);
@@ -652,6 +680,8 @@ export function buildRouter(
     const next = parsed.data;
     mergePasswordHashes(next, getConfig());
     mergeLutronTelnetPasswords(next, getConfig());
+    mergeVoipSecrets(next, getConfig());
+    normalizeVoip(next);
     const userErr = assertUsersHaveHashes(next);
     if (userErr) return res.status(400).json({ error: userErr });
     const fpIssues = validateFireplaceSemantics(next);
@@ -661,6 +691,10 @@ export function buildRouter(
     const icIssues = validateIntercomSemantics(next);
     if (icIssues.length > 0) {
       return res.status(400).json({ error: "validation failed", issues: icIssues });
+    }
+    const voipIssues = validateVoipSemantics(next);
+    if (voipIssues.length > 0) {
+      return res.status(400).json({ error: "validation failed", issues: voipIssues });
     }
     const rgbIssues = validateRgbwWwSemantics(next);
     if (rgbIssues.length > 0) {
@@ -676,6 +710,7 @@ export function buildRouter(
     }
     persistConfig(next);
     syncGo2rtcProcessAfterConfigWritten(writeGo2rtcConfig(getConfig()));
+    void syncVoipFromConfig(getConfig());
     scheduler.reschedule();
     logSampler.refresh();
     media.rebuild(getConfig());
@@ -987,6 +1022,84 @@ export function buildRouter(
     if (!ic.intercom.sip || ic.intercom.kind !== "sip")
       return res.status(404).json({ error: "no SIP config for this intercom" });
     res.json({ sip: ic.intercom.sip });
+  });
+
+  const lanHost = (req: import("express").Request): string => {
+    const env = (process.env.PUBLIC_API_BASE ?? "").replace(/\/+$/, "");
+    if (env) {
+      try {
+        const u = new URL(env.includes("://") ? env : `http://${env}`);
+        if (u.hostname) return u.hostname;
+      } catch {
+        /* ignore */
+      }
+    }
+    return (req.get("x-forwarded-host") ?? req.get("host") ?? "127.0.0.1")
+      .split(",")[0]
+      ?.trim()
+      .replace(/:\d+$/, "") || "127.0.0.1";
+  };
+
+  const voipWebSocketUrl = (req: import("express").Request, cfg: HouseConfig): string => {
+    const host = lanHost(req);
+    const cert = process.env.TLS_CERT_PATH?.trim() || "/data/certs/tls.crt";
+    const useWss = !!(cert && fs.existsSync(cert));
+    if (useWss) return `wss://${host}:${cfg.voip?.wssPort ?? 8089}/ws`;
+    return `ws://${host}:${cfg.voip?.wsPort ?? 8088}/ws`;
+  };
+
+  r.get("/voip/me", requireAuth, (req: AuthedRequest, res) => {
+    const cfg = getConfig();
+    if (!cfg.voip?.enabled) return res.json({ enabled: false });
+    const ep = resolveUserEndpoint(cfg, req.user?.sub);
+    if (!ep) return res.json({ enabled: true, sip: null });
+    const host = lanHost(req);
+    res.json({
+      enabled: true,
+      endpointId: ep.id,
+      sip: {
+        webSocketUrl: voipWebSocketUrl(req, cfg),
+        uri: `sip:${ep.ext}@${host}`,
+        authorizationUser: ep.ext,
+        password: ep.password,
+        displayName: ep.name
+      }
+    });
+  });
+
+  r.get("/voip/status", requireAuth, requireAdmin, (_req, res) => {
+    const cfg = getConfig();
+    const regs = new Set(voipRegisteredExts());
+    res.json({
+      enabled: cfg.voip?.enabled === true,
+      amiUp: voipAmiUp(),
+      sipPort: cfg.voip?.sipPort ?? 5060,
+      endpoints: (cfg.voip?.endpoints ?? []).map((e) => ({
+        id: e.id,
+        name: e.name,
+        ext: e.ext,
+        type: e.type,
+        userId: e.userId,
+        registered: regs.has(e.ext)
+      })),
+      intercoms: collectIntercoms(cfg).map((ic) => ({
+        id: ic.id,
+        name: ic.name,
+        ext: ic.intercom.sipExt ?? "",
+        registered: !!(ic.intercom.sipExt && regs.has(ic.intercom.sipExt))
+      }))
+    });
+  });
+
+  r.post("/voip/endpoints/:id/password", requireAuth, requireAdmin, (req: AuthedRequest, res) => {
+    const id = req.params.id;
+    const cfg = getConfig();
+    const ep = cfg.voip?.endpoints?.find((e) => e.id === id);
+    if (!ep) return res.status(404).json({ error: "onbekend toestel" });
+    ep.password = randomSipPassword();
+    persistConfig(cfg);
+    void syncVoipFromConfig(getConfig());
+    res.json({ ok: true, password: ep.password });
   });
 
   /**
