@@ -1,9 +1,12 @@
 FROM debian:bookworm-slim
 
-RUN apt-get update \
+# policy-rc.d: Debian postinst mag Asterisk niet via systemd starten in Docker
+# (dat laat `apt-get install asterisk` anders falen → hele compose-update stuk).
+RUN printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d \
+  && chmod +x /usr/sbin/policy-rc.d \
+  && apt-get update \
   && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     asterisk \
-    asterisk-modules \
     ca-certificates \
   && rm -rf /var/lib/apt/lists/* \
   && mkdir -p /etc/asterisk /var/run/asterisk /var/log/asterisk
