@@ -1,4 +1,12 @@
-# Intercom (door station) integration
+# Intercom
+
+**Indoor SIP:** alleen aangemaakte gebruikers. Elk inlogaccount is hoogstens één toestel (paneel, telefoon of app). Geen gedeeld “App / telefoons”-nummer. Log in op dat paneel met dat account.
+
+Eigen SIP-server (Asterisk op de NUC) plus optioneel RTSP-beeld, zoals ThinkNX. Installer: **Intercom** → VoIP aan, koppel gebruikers als toestel, oproepgroepen, deurstation met SIP-inlogkaart. Deur open via KNX, DoorBird-API, generieke HTTP, of DTMF tijdens het gesprek.
+
+Zonder VoIP blijft het oude pad: KNX-deurbel of webhook → overlay, talk via go2rtc-backchannel.
+
+**Niet SIP:** UniFi Protect-deurbel (RTSP + webhook). Siedle/Comelit zonder SIP: niet koppelen. WhatsApp-bellen bestaat niet in de Cloud API — geen vervanger voor deze PBX.
 
 The intercom is a first-class device type, distinct from a camera. Where a camera is view-only, an intercom always has:
 

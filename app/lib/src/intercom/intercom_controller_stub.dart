@@ -8,9 +8,10 @@ typedef IntercomRingAlignCallback = void Function(IntercomRing ring);
 
 /// Geen SIP op Flutter Web (sip_ua compileert daar niet); zelfde API, alles no-op.
 class IntercomController extends ChangeNotifier {
-  IntercomController({this.onAlignKnxRing});
+  IntercomController({this.onAlignKnxRing, this.onAnsweredElsewhere});
 
   final IntercomRingAlignCallback? onAlignKnxRing;
+  final VoidCallback? onAnsweredElsewhere;
 
   IntercomSipPhase _phase = IntercomSipPhase.idle;
   String? boundIntercomId;
@@ -20,10 +21,18 @@ class IntercomController extends ChangeNotifier {
   MediaStream? get remoteStream => null;
   MediaStream? get localStream => null;
   bool get muted => false;
+  bool get isStarted => false;
 
   Future<void> startFromHouseIntercom({
     required String intercomId,
     required Map<String, dynamic> houseIntercom,
+  }) async {
+    debugPrint('IntercomController: SIP-intercom niet beschikbaar op web.');
+  }
+
+  Future<void> startFromVoip(
+    Map<String, dynamic> sip, {
+    String? intercomId,
   }) async {
     debugPrint('IntercomController: SIP-intercom niet beschikbaar op web.');
   }

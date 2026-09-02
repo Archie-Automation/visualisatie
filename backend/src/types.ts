@@ -428,9 +428,18 @@ export interface CameraDevice extends DeviceBase {
   camera: CameraConfig;
 }
 
-export type IntercomKind = "doorbird" | "twoN" | "sip";
+export type IntercomKind =
+  | "doorbird"
+  | "twoN"
+  | "sip"
+  | "axis"
+  | "mobotix"
+  | "siedle"
+  | "comelit"
+  | "unifi"
+  | "other";
 
-/** SIP WebSocket-registratie (Asterisk / FreePBX); wachtwoord blijft op de server. */
+/** Legacy: app registreerde als de intercom op een externe PBX. */
 export interface IntercomSipConfig {
   webSocketUrl?: string;
   uri?: string;
@@ -439,7 +448,50 @@ export interface IntercomSipConfig {
   displayName?: string;
 }
 
-export type IntercomReleaseMode = "knx" | "doorbird";
+export type IntercomReleaseMode = "knx" | "doorbird" | "http";
+
+export type VoipEndpointType = "panel" | "phone" | "app";
+
+export interface VoipEndpoint {
+  id: string;
+  name: string;
+  type: VoipEndpointType;
+  ext: string;
+  password: string;
+  /** House-user id. One SIP identity per login; never shared. */
+  userId?: string;
+}
+
+export interface VoipCallGroup {
+  id: string;
+  name: string;
+  ext: string;
+  memberIds: string[];
+  timeoutSec?: number;
+}
+
+/** Eigen Asterisk-PBX op de NUC. Wachtwoorden blijven server-side. */
+export interface VoipConfig {
+  enabled?: boolean;
+  bindIp?: string;
+  sipPort?: number;
+  wsPort?: number;
+  wssPort?: number;
+  rtpStart?: number;
+  rtpEnd?: number;
+  /** AMI-secret, nooit naar clients. */
+  amiSecret?: string;
+  endpoints?: VoipEndpoint[];
+  groups?: VoipCallGroup[];
+}
+
+export interface IntercomHttpRelease {
+  method?: "GET" | "POST";
+  url: string;
+  headers?: Record<string, string>;
+  body?: string;
+  insecureTls?: boolean;
+}
 
 /** DoorBird LAN-API (open-door.cgi); credentials blijven op de server in house.json. */
 export interface IntercomDoorbirdConfig {
@@ -472,6 +524,14 @@ export interface IntercomConfig {
   };
   doorbird?: IntercomDoorbirdConfig;
   sip?: IntercomSipConfig;
+  /** Extensie waarop dit deurstation inlogt op de eigen PBX. */
+  sipExt?: string;
+  sipPassword?: string;
+  /** Oproepgroep die bij aanbellen gaat. */
+  ringGroupId?: string;
+  /** DTMF-toets tijdens het gesprek (leeg = uit). Standaard "#". */
+  dtmfDigit?: string;
+  httpRelease?: IntercomHttpRelease;
   /**
    * Optionele passcode voor de HTTP ring-webhook (`POST /api/webhooks/ring/:id`).
    * Configureer dezelfde code in DoorBird / 2N als webhook-URL-parameter `passcode`.
@@ -1009,6 +1069,8 @@ export interface User {
   passwordHash: string;
   /** If false, login is rejected. Super user uses this to block the installer. */
   enabled?: boolean;
+  /** Indoor SIP-toestel voor deze login (voip.endpoints id). Uniek: elk account hoogstens één toestel. */
+  sipEndpointId?: string;
   access?: {
     floors?: "*" | string[];
     rooms?: "*" | string[];
@@ -1058,6 +1120,8 @@ export interface HouseConfig {
   cameras?: CameraDevice[];
   /** Deurbel / intercom (not tied to a room). */
   intercoms?: IntercomDevice[];
+  /** Eigen SIP-PBX (Asterisk): toestellen + oproepgroepen. */
+  voip?: VoipConfig;
   users?: User[];
   /** Global (house-wide) scenes — rendered on the dashboard. */
   scenes?: Scene[];

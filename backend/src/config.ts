@@ -6,6 +6,7 @@ import { normalizeHouseIntercoms } from "./houseIntercoms";
 import { effectiveIntercomReleaseMode } from "./intercomReleaseMode";
 import { logger } from "./logger";
 import type { Device, HouseConfig, GA } from "./types";
+import { normalizeVoip } from "./voip/normalize";
 
 let cached: HouseConfig | null = null;
 let configVersion = 0;
@@ -18,6 +19,7 @@ export function loadConfig(): HouseConfig {
   const parsed = JSON.parse(raw) as HouseConfig;
   normalizeHouseCameras(parsed);
   normalizeHouseIntercoms(parsed);
+  normalizeVoip(parsed);
   cached = parsed;
   configVersion++;
   logger.info(
@@ -45,6 +47,7 @@ export function getConfigVersion(): number {
 export function persistConfig(next: HouseConfig): void {
   normalizeHouseCameras(next);
   normalizeHouseIntercoms(next);
+  normalizeVoip(next);
   const tmp = `${configPath}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(next, null, 2), "utf-8");
   fs.renameSync(tmp, configPath);

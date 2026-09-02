@@ -87,6 +87,7 @@
       "items": { "$ref": "#/definitions/intercomDevice" },
       "description": "Doorbell / intercom at project level; not listed under rooms."
     },
+    "voip": { "$ref": "#/definitions/voipConfig" },
     "users": {
       "type": "array",
       "items": { "$ref": "#/definitions/user" }
@@ -541,13 +542,30 @@
             },
             "releaseMode": {
               "type": "string",
-              "enum": ["knx", "doorbird"],
-              "description": "Alleen deur/poort: KNX-puls of DoorBird HTTP."
+              "enum": ["knx", "doorbird", "http"],
+              "description": "Deur/poort: KNX-puls, DoorBird HTTP of generieke HTTP."
             },
             "kind": {
               "type": "string",
-              "enum": ["doorbird", "twoN", "sip"],
-              "description": "Intercom-gesprek (geen KNX)."
+              "enum": ["doorbird", "twoN", "sip", "axis", "mobotix", "siedle", "comelit", "unifi", "other"],
+              "description": "Merkhulp voor SIP-inlog en HTTP-presets (geen apart mediapad)."
+            },
+            "sipExt": { "type": "string" },
+            "sipPassword": { "type": "string" },
+            "ringGroupId": { "type": "string" },
+            "dtmfDigit": { "type": "string", "maxLength": 4 },
+            "httpRelease": {
+              "type": "object",
+              "properties": {
+                "method": { "type": "string", "enum": ["GET", "POST"] },
+                "url": { "type": "string" },
+                "headers": {
+                  "type": "object",
+                  "additionalProperties": { "type": "string" }
+                },
+                "body": { "type": "string" },
+                "insecureTls": { "type": "boolean" }
+              }
             },
             "sip": {
               "type": "object",
@@ -1138,6 +1156,53 @@
         "pulseMs": { "type": "integer", "minimum": 50, "maximum": 3000 }
       }
     },
+    "voipConfig": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "bindIp": { "type": "string" },
+        "sipPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "wsPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "wssPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "rtpStart": { "type": "integer", "minimum": 1024, "maximum": 65535 },
+        "rtpEnd": { "type": "integer", "minimum": 1024, "maximum": 65535 },
+        "amiSecret": { "type": "string" },
+        "endpoints": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/voipEndpoint" }
+        },
+        "groups": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/voipCallGroup" }
+        }
+      }
+    },
+    "voipEndpoint": {
+      "type": "object",
+      "required": ["id", "name", "type", "ext", "password"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["panel", "phone", "app"] },
+        "ext": { "type": "string" },
+        "password": { "type": "string" },
+        "userId": {
+          "type": "string",
+          "description": "House user id. Each SIP account is used by exactly one login."
+        }
+      }
+    },
+    "voipCallGroup": {
+      "type": "object",
+      "required": ["id", "name", "ext", "memberIds"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "ext": { "type": "string" },
+        "memberIds": { "type": "array", "items": { "type": "string" } },
+        "timeoutSec": { "type": "integer", "minimum": 5, "maximum": 120 }
+      }
+    },
     "user": {
       "type": "object",
       "required": ["id", "username", "role", "passwordHash"],
@@ -1151,6 +1216,10 @@
         },
         "passwordHash": { "type": "string" },
         "enabled": { "type": "boolean" },
+        "sipEndpointId": {
+          "type": "string",
+          "description": "voip.endpoints id. Unique: at most one user per endpoint."
+        },
         "access": {
           "type": "object",
           "properties": {

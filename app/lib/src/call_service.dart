@@ -158,8 +158,13 @@ final callServiceListenerProvider = Provider<void>((ref) {
   ref.listen<IntercomRing?>(intercomRingProvider, (prev, next) {
     final svc = CallService.instance;
     if (svc == null) return;
-    if (next != null && (prev?.ts != next.ts)) {
+    if (next != null &&
+        !next.answeredElsewhere &&
+        (prev == null || prev.ts != next.ts || prev.answeredElsewhere)) {
       svc.showIncoming(next);
+    }
+    if (next != null && next.answeredElsewhere) {
+      svc.end(next.intercomId);
     }
     if (next == null && prev != null) {
       svc.end(prev.intercomId);

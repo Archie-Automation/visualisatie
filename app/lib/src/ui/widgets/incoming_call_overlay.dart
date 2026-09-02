@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api.dart';
+import '../../intercom/intercom_sip_providers.dart';
+import '../../intercom/intercom_sip_types.dart';
 import '../../theme.dart';
 import '../app_nav.dart';
 
@@ -51,29 +53,39 @@ class _IncomingCallOverlayState extends ConsumerState<IncomingCallOverlay> {
 
   @override
   Widget build(BuildContext context) {
+    final sip = ref.read(intercomSipControllerProvider);
     final ring = ref.watch(intercomRingProvider);
+    return ListenableBuilder(
+      listenable: sip,
+      builder: (context, _) {
+        final ringing = ring != null && !ring.answeredElsewhere;
+        final showBanner = ring != null && sip.phase == IntercomSipPhase.idle;
 
-    if (ring != null && ring.ts != _lastHandledTs) {
-      _lastHandledTs = ring.ts;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _startHaptics());
-    } else if (ring == null && _hapticTimer != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _stopHaptics());
-    }
+        if (ringing && ring.ts != _lastHandledTs) {
+          _lastHandledTs = ring.ts;
+          WidgetsBinding.instance.addPostFrameCallback((_) => _startHaptics());
+        } else if (!ringing && _hapticTimer != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _stopHaptics());
+        }
 
-    return Stack(
-      children: [
-        widget.child,
-        AnimatedSlide(
-          duration: const Duration(milliseconds: 280),
-          curve: Curves.easeOutCubic,
-          offset: ring == null ? const Offset(0, -1.2) : Offset.zero,
-          child: AnimatedOpacity(
-            duration: const Duration(milliseconds: 220),
-            opacity: ring == null ? 0 : 1,
-            child: ring == null ? const SizedBox.shrink() : _Banner(ring: ring),
-          ),
-        ),
-      ],
+        return Stack(
+          children: [
+            widget.child,
+            AnimatedSlide(
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeOutCubic,
+              offset: showBanner ? Offset.zero : const Offset(0, -1.2),
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 220),
+                opacity: showBanner ? 1 : 0,
+                child: !showBanner
+                    ? const SizedBox.shrink()
+                    : _Banner(ring: ring),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -86,7 +98,7 @@ class _Banner extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     return SafeArea(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(24, 20, 24, 0),
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
         child: Material(
           color: Colors.transparent,
           child: Container(
@@ -115,20 +127,25 @@ class _Banner extends ConsumerWidget {
             ),
             child: Row(
               children: [
-                _RingIcon(),
+                ring.answeredElsewhere
+                    ? Icon(Icons.call_end, color: LuxeColors.brass, size: 28)
+                    : const _RingIcon(),
                 const SizedBox(width: 18),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('INKOMENDE OPROEP',
+                      Text(
+                          ring.answeredElsewhere
+                              ? 'OPGENOMEN ELDERS'
+                              : 'INKOMENDE OPROEP',
                           style: TextStyle(
                             color: LuxeColors.brassGlow,
                             fontSize: 10,
                             letterSpacing: 2.8,
                             fontWeight: FontWeight.w600,
                           )),
-                      SizedBox(height: 6),
+                      const SizedBox(height: 6),
                       Text(ring.name,
                           style: const TextStyle(
                             color: Colors.white,
@@ -138,13 +155,14 @@ class _Banner extends ConsumerWidget {
                     ],
                   ),
                 ),
+                if (!ring.answeredElsewhere) ...[
                 _round(
                   icon: Icons.call_end,
                   color: LuxeColors.danger,
                   onTap: () =>
                       ref.read(intercomRingProvider.notifier).clear(),
                 ),
-                SizedBox(width: 12),
+                const SizedBox(width: 12),
                 _round(
                   icon: Icons.call,
                   color: LuxeColors.brass,
@@ -153,6 +171,7 @@ class _Banner extends ConsumerWidget {
                     appOpen(context, '/intercom/${ring.intercomId}');
                   },
                 ),
+                ],
               ],
             ),
           ),

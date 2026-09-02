@@ -59,7 +59,8 @@ class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen> {
   }
 
   Future<void> _openDoor() async {
-    final id = widget.controller.boundIntercomId;
+    final id = widget.controller.boundIntercomId ??
+        ref.read(intercomRingProvider)?.intercomId;
     if (id == null) return;
     final auth = ref.read(authProvider);
     final messenger = ScaffoldMessenger.of(context);
@@ -112,9 +113,11 @@ class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen> {
                 ),
               SizedBox(height: 12),
               Text(
-                phase == IntercomSipPhase.ringing
-                    ? 'INKOMENDE SIP-OPROEP'
-                    : 'GESPREK',
+                switch (phase) {
+                  IntercomSipPhase.answeredElsewhere => 'OPGENOMEN ELDERS',
+                  IntercomSipPhase.ringing => 'INKOMENDE SIP-OPROEP',
+                  _ => 'GESPREK',
+                },
                 style: TextStyle(
                   color: LuxeColors.brassGlow,
                   fontSize: 11,
@@ -160,7 +163,18 @@ class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen> {
                 spacing: 16,
                 runSpacing: 16,
                 children: [
-                  if (phase == IntercomSipPhase.ringing) ...[
+                  if (phase == IntercomSipPhase.answeredElsewhere)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(
+                        'Iemand anders heeft opgenomen',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 14,
+                        ),
+                      ),
+                    )
+                  else if (phase == IntercomSipPhase.ringing) ...[
                     _RoundAction(
                       label: 'Weigeren',
                       icon: Icons.call_end,

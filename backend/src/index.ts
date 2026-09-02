@@ -24,6 +24,12 @@ import {
   logStartupConnectivityReport
 } from "./startupConnectivity";
 import { appVersionInfo } from "./version";
+import {
+  setVoipBus,
+  setVoipHub,
+  startVoipAmiWatch,
+  syncVoipFromConfig
+} from "./voip/manager";
 
 function main() {
   const cfg = loadConfig();
@@ -131,6 +137,12 @@ function main() {
 
   const server = http.createServer(app);
   const wsHub = attachWebSocket(server, bus, media);
+  setVoipHub(wsHub);
+  setVoipBus(bus);
+  void syncVoipFromConfig(cfg).catch((err) => {
+    logger.warn({ err }, "VoIP/Asterisk-sync bij start mislukt");
+  });
+  startVoipAmiWatch();
   const scheduler = startScheduler(bus, media);
   app.use(
     "/api",

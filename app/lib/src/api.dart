@@ -415,6 +415,8 @@ class BusController extends Notifier<BusState> {
                     name: p['name'] as String,
                     ts: p['ts'] as int,
                   ));
+            case 'intercom.cleared':
+              ref.read(intercomRingProvider.notifier).markAnsweredElsewhere();
             case 'config_changed':
               ref.invalidate(configProvider);
           }
@@ -501,22 +503,48 @@ class IntercomRing {
   final String intercomId;
   final String name;
   final int ts;
+  final bool answeredElsewhere;
   const IntercomRing({
     required this.intercomId,
     required this.name,
     required this.ts,
+    this.answeredElsewhere = false,
   });
+
+  IntercomRing copyWith({bool? answeredElsewhere}) => IntercomRing(
+        intercomId: intercomId,
+        name: name,
+        ts: ts,
+        answeredElsewhere: answeredElsewhere ?? this.answeredElsewhere,
+      );
 }
 
 class IntercomRingController extends Notifier<IntercomRing?> {
+  Timer? _autoClear;
+
   @override
-  IntercomRing? build() => null;
+  IntercomRing? build() {
+    ref.onDispose(() => _autoClear?.cancel());
+    return null;
+  }
 
   void push(IntercomRing r) {
+    _autoClear?.cancel();
     state = r;
   }
 
+  /// Bel stopt; popup blijft ±3 s met “Opgenomen elders”.
+  void markAnsweredElsewhere() {
+    final cur = state;
+    if (cur == null || cur.answeredElsewhere) return;
+    state = cur.copyWith(answeredElsewhere: true);
+    _autoClear?.cancel();
+    _autoClear = Timer(const Duration(seconds: 3), clear);
+  }
+
   void clear() {
+    _autoClear?.cancel();
+    _autoClear = null;
     state = null;
   }
 }

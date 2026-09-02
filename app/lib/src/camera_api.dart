@@ -165,6 +165,20 @@ Future<Map<String, dynamic>?> fetchIntercomSipConfig({
   }
 }
 
+/// SIP-inlog van de ingelogde gebruiker op de eigen PBX.
+Future<Map<String, dynamic>?> fetchVoipMe({required String token}) async {
+  try {
+    final res = await http.get(
+      Uri.parse('$apiBase/api/voip/me'),
+      headers: {'authorization': 'Bearer $token'},
+    );
+    if (res.statusCode != 200) return null;
+    return _deepCastMap(jsonDecode(res.body) as Map);
+  } catch (_) {
+    return null;
+  }
+}
+
 Map<String, dynamic> _deepCastMap(Map raw) =>
     raw.map((k, v) => MapEntry(k as String, _deepCastValue(v)));
 
