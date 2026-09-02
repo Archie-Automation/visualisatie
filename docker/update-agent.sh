@@ -92,17 +92,57 @@ github_token() {
   if [ ! -f "$envf" ]; then
     return
   fi
-  # Strip optional quotes. Do not echo elsewhere.
-  grep '^GITHUB_TOKEN=' "$envf" 2>/dev/null | head -n 1 | cut -d= -f2- | tr -d '\r' | sed 's/^["'\'']//;s/["'\'']$//' || true
+  # Strip optional quotes / CR. Do not echo elsewhere.
+  grep '^GITHUB_TOKEN=' "$envf" 2>/dev/null | head -n 1 | cut -d= -f2- | tr -d '\r' | sed 's/^["'\'']//;s/["'\'']$//;s/[[:space:]]*$//' || true
+}
+
+# HTTPS URL of origin, even if the remote is git@github.com (SSH has no token).
+origin_https() {
+  url="$(git -C "$ROOT" remote get-url origin 2>/dev/null || echo "")"
+  url="$(printf '%s' "$url" | tr -d '\r')"
+  case "$url" in
+    git@github.com:*)
+      printf 'https://github.com/%s' "${url#git@github.com:}"
+      ;;
+    ssh://git@github.com/*)
+      printf 'https://github.com/%s' "${url#ssh://git@github.com/}"
+      ;;
+    https://*@github.com/*)
+      printf 'https://github.com/%s' "${url#*github.com/}"
+      ;;
+    *)
+      printf '%s' "$url"
+      ;;
+  esac
+}
+
+append_log_redacted() {
+  tok="$1"
+  src="$2"
+  python3 - "$tok" "$src" >> "$LOG" <<'PY' || cat "$src" >> "$LOG"
+import sys
+from pathlib import Path
+tok = sys.argv[1]
+text = Path(sys.argv[2]).read_text(encoding="utf-8", errors="replace")
+if tok:
+    text = text.replace(tok, "[token]")
+sys.stdout.write(text if text.endswith("\n") else text + "\n")
+PY
 }
 
 git_with_token() {
   tok="$1"
   shift
+  # Disable stored credentials: a second Authorization: Basic header makes GitHub
+  # reject the Bearer token (typical on a NUC that once ran gh/git login).
   if [ -n "$tok" ]; then
-    git -c "http.extraHeader=Authorization: Bearer $tok" "$@"
+    GIT_TERMINAL_PROMPT=0 git \
+      -c credential.helper= \
+      -c credential.username=x-access-token \
+      -c "http.extraHeader=Authorization: Bearer ${tok}" \
+      "$@"
   else
-    git "$@"
+    GIT_TERMINAL_PROMPT=0 git -c credential.helper= "$@"
   fi
 }
 
@@ -142,13 +182,41 @@ run_update() {
   if [ "$branch" = "HEAD" ] || [ -z "$branch" ]; then
     branch=main
   fi
+  fetch_url="$(origin_https)"
+  log "git fetch url=$fetch_url branch=$branch token=$([ -n "$tok" ] && echo yes || echo no)"
 
-  if ! git_with_token "$tok" -C "$ROOT" fetch origin; then
+  git_err="$(mktemp)"
+  if [ -z "$tok" ]; then
     restore_secrets
-    ST_STATE=error ST_STEP=git ST_MESSAGE="GitHub ophalen mislukt (token of netwerk)." ST_ERROR="git_fetch_failed" ST_FINISHED=1 write_status
+    rm -f "$git_err"
+    ST_STATE=error ST_STEP=git ST_MESSAGE="GITHUB_TOKEN ontbreekt in docker/.env. Zonder token kan de privé-repo niet worden opgehaald." ST_ERROR="git_token_missing" ST_FINISHED=1 write_status
+    log "fail git_token_missing"
+    return 1
+  fi
+
+  case "$fetch_url" in
+    https://github.com/*)
+      fetch_ok=1
+      if ! git_with_token "$tok" -C "$ROOT" fetch --prune "$fetch_url" "+refs/heads/${branch}:refs/remotes/origin/${branch}" >"$git_err" 2>&1; then
+        fetch_ok=0
+      fi
+      ;;
+    *)
+      fetch_ok=1
+      if ! git_with_token "$tok" -C "$ROOT" fetch --prune origin >"$git_err" 2>&1; then
+        fetch_ok=0
+      fi
+      ;;
+  esac
+  if [ "$fetch_ok" -eq 0 ]; then
+    append_log_redacted "$tok" "$git_err"
+    rm -f "$git_err"
+    restore_secrets
+    ST_STATE=error ST_STEP=git ST_MESSAGE="GitHub weigerde de token of er is geen netwerk. Zet een geldige GITHUB_TOKEN (rechten: repo) in docker/.env." ST_ERROR="git_fetch_failed" ST_FINISHED=1 write_status
     log "fail git_fetch_failed"
     return 1
   fi
+  rm -f "$git_err"
 
   # GitHub is source of truth for code. house.json and docker/.env are restored after.
   if ! git_with_token "$tok" -C "$ROOT" reset --hard "origin/$branch"; then
@@ -162,8 +230,8 @@ run_update() {
 
   ST_STATE=running ST_STEP=build ST_MESSAGE="Software bouwen. Dit duurt 10–20 minuten. Het huis blijft werken tot de herstart aan het eind." write_status
 
-  if ! ( cd "$DOCKER_DIR" && $DOCKER compose --env-file .env up -d --build ); then
-    ST_STATE=error ST_STEP=build ST_MESSAGE="Bouwen of starten mislukt. Zie update-agent.log op de NUC." ST_ERROR="compose_failed" ST_FINISHED=1 write_status
+  if ! ( cd "$DOCKER_DIR" && $DOCKER compose --env-file .env up -d --build >>"$LOG" 2>&1 ); then
+    ST_STATE=error ST_STEP=build ST_MESSAGE="Bouwen of starten mislukt. Zie docker/data/update-agent.log op de NUC." ST_ERROR="compose_failed" ST_FINISHED=1 write_status
     log "fail compose_failed"
     return 1
   fi
