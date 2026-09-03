@@ -1,4 +1,5 @@
 # Build a release APK for tablet sideload / GitHub rolling release `android-latest`.
+# Push naar main doet hetzelfde in GitHub Actions (zelfde pubspec-versie als de server).
 # Usage:
 #   .\build_release_apk.ps1
 #   .\build_release_apk.ps1 -ApiBase http://192.168.1.50:4000

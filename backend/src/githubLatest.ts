@@ -266,6 +266,7 @@ async function fetchLatestUncached(): Promise<GithubLatestInfo | null> {
 
   // Only offer an APK that is at least as new as git HEAD (pubspec).
   // Otherwise the tablet would download an older build and Android refuses it.
+  // CI sets release title to the same pubspec version as the server.
   const apkSource = pickNewer(
     rolling?.androidApk ? rolling : null,
     official?.androidApk ? official : null

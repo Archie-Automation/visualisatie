@@ -96,6 +96,87 @@ github_token() {
   grep '^GITHUB_TOKEN=' "$envf" 2>/dev/null | head -n 1 | cut -d= -f2- | tr -d '\r' | sed 's/^["'\'']//;s/["'\'']$//;s/[[:space:]]*$//' || true
 }
 
+github_repo() {
+  repo="$(grep '^GITHUB_REPO=' "$DOCKER_DIR/.env" 2>/dev/null | head -n 1 | cut -d= -f2- | tr -d '\r' | sed 's/^["'\'']//;s/["'\'']$//;s/[[:space:]]*$//' || true)"
+  if [ -z "$repo" ]; then
+    repo="Archie-Automation/visualisatie"
+  fi
+  printf '%s' "$repo"
+}
+
+ensure_git_origin() {
+  command -v git >/dev/null 2>&1 || return 1
+  repo="$(github_repo)"
+  if [ ! -d "$ROOT/.git" ]; then
+    git -C "$ROOT" init >/dev/null 2>&1 || return 1
+  fi
+  git -C "$ROOT" remote remove origin >/dev/null 2>&1 || true
+  git -C "$ROOT" remote add origin "https://github.com/${repo}.git" >/dev/null 2>&1 || \
+    git -C "$ROOT" remote set-url origin "https://github.com/${repo}.git"
+}
+
+download_url() {
+  dest="$1"
+  url="$2"
+  tok="$3"
+  if command -v curl >/dev/null 2>&1; then
+    if [ -n "$tok" ]; then
+      curl -fsSL --max-time 180 \
+        -H "Authorization: Bearer ${tok}" \
+        -H "Accept: application/vnd.github+json" \
+        -H "User-Agent: archie-os-update-agent" \
+        -o "$dest" "$url"
+    else
+      curl -fsSL --max-time 180 \
+        -H "User-Agent: archie-os-update-agent" \
+        -o "$dest" "$url"
+    fi
+  elif command -v wget >/dev/null 2>&1; then
+    if [ -n "$tok" ]; then
+      wget -q --timeout=180 --header="Authorization: Bearer ${tok}" --header="Accept: application/vnd.github+json" -O "$dest" "$url"
+    else
+      wget -q --timeout=180 -O "$dest" "$url"
+    fi
+  else
+    return 1
+  fi
+}
+
+# ZIP/USB installs have no .git. GitHub tarball still yields a full tree.
+apply_github_tarball() {
+  branch="$1"
+  tok="$2"
+  repo="$(github_repo)"
+  tmp="$(mktemp -d)"
+  tgz="$tmp/src.tgz"
+  api_url="https://api.github.com/repos/${repo}/tarball/${branch}"
+  cd_url="https://codeload.github.com/${repo}/tar.gz/refs/heads/${branch}"
+  got=0
+  if [ -n "$tok" ] && download_url "$tgz" "$api_url" "$tok"; then
+    got=1
+  elif download_url "$tgz" "$api_url" ""; then
+    got=1
+  elif download_url "$tgz" "$cd_url" ""; then
+    got=1
+  fi
+  if [ "$got" -eq 0 ] || [ ! -s "$tgz" ]; then
+    rm -rf "$tmp"
+    return 1
+  fi
+  mkdir -p "$tmp/src"
+  if ! tar -xzf "$tgz" -C "$tmp/src"; then
+    rm -rf "$tmp"
+    return 1
+  fi
+  inner="$(find "$tmp/src" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+  if [ -z "$inner" ]; then
+    rm -rf "$tmp"
+    return 1
+  fi
+  tar -C "$inner" -cf - . | tar -C "$ROOT" -xf -
+  rm -rf "$tmp"
+}
+
 # HTTPS URL of origin, even if the remote is git@github.com (SSH has no token).
 origin_https() {
   url="$(git -C "$ROOT" remote get-url origin 2>/dev/null || echo "")"
@@ -178,50 +259,78 @@ run_update() {
   }
 
   tok="$(github_token)"
-  branch="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
-  if [ "$branch" = "HEAD" ] || [ -z "$branch" ]; then
-    branch=main
+  branch=main
+  if command -v git >/dev/null 2>&1 && [ -d "$ROOT/.git" ]; then
+    cur="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
+    if [ -n "$cur" ] && [ "$cur" != "HEAD" ]; then
+      branch="$cur"
+    fi
   fi
-  fetch_url="$(origin_https)"
-  log "git fetch url=$fetch_url branch=$branch token=$([ -n "$tok" ] && echo yes || echo no)"
 
+  code_ok=0
   git_err="$(mktemp)"
-  fetch_ok=0
-  case "$fetch_url" in
-    https://github.com/*)
-      if git_with_token "$tok" -C "$ROOT" fetch --prune "$fetch_url" "+refs/heads/${branch}:refs/remotes/origin/${branch}" >"$git_err" 2>&1; then
-        fetch_ok=1
-      elif [ -n "$tok" ] && git_with_token "" -C "$ROOT" fetch --prune "$fetch_url" "+refs/heads/${branch}:refs/remotes/origin/${branch}" >"$git_err" 2>&1; then
-        # Public repo: expired/wrong GITHUB_TOKEN would 401; anonymous HTTPS works.
-        log "git fetch ok anonymously (token unused or rejected)"
-        fetch_ok=1
+  if command -v git >/dev/null 2>&1; then
+    if [ ! -d "$ROOT/.git" ]; then
+      log "no .git in $ROOT — git init + origin"
+      ST_STATE=running ST_STEP=git ST_MESSAGE="Koppelen aan GitHub…" write_status
+      ensure_git_origin || log "git init/origin failed"
+    fi
+    fetch_url="$(origin_https)"
+    if [ -z "$fetch_url" ]; then
+      fetch_url="https://github.com/$(github_repo).git"
+      ensure_git_origin || true
+    fi
+    log "git fetch url=$fetch_url branch=$branch token=$([ -n "$tok" ] && echo yes || echo no)"
+    case "$fetch_url" in
+      https://github.com/*)
+        if git_with_token "$tok" -C "$ROOT" fetch --prune "$fetch_url" "+refs/heads/${branch}:refs/remotes/origin/${branch}" >"$git_err" 2>&1; then
+          code_ok=1
+        elif [ -n "$tok" ] && git_with_token "" -C "$ROOT" fetch --prune "$fetch_url" "+refs/heads/${branch}:refs/remotes/origin/${branch}" >"$git_err" 2>&1; then
+          log "git fetch ok anonymously (token unused or rejected)"
+          code_ok=1
+        fi
+        ;;
+      *)
+        if git_with_token "$tok" -C "$ROOT" fetch --prune origin >"$git_err" 2>&1; then
+          code_ok=1
+        fi
+        ;;
+    esac
+    if [ "$code_ok" -eq 1 ]; then
+      if git_with_token "$tok" -C "$ROOT" reset --hard "origin/$branch" >>"$git_err" 2>&1; then
+        log "git ok branch=$branch"
+      else
+        log "git reset failed — tarball fallback"
+        code_ok=0
       fi
-      ;;
-    *)
-      if git_with_token "$tok" -C "$ROOT" fetch --prune origin >"$git_err" 2>&1; then
-        fetch_ok=1
-      fi
-      ;;
-  esac
-  if [ "$fetch_ok" -eq 0 ]; then
-    append_log_redacted "$tok" "$git_err"
-    rm -f "$git_err"
-    restore_secrets
-    ST_STATE=error ST_STEP=git ST_MESSAGE="GitHub ophalen mislukt (netwerk, of een oude git-login op de NUC). Op de NUC: GIT_TERMINAL_PROMPT=0 git -c credential.helper= fetch origin" ST_ERROR="git_fetch_failed" ST_FINISHED=1 write_status
-    log "fail git_fetch_failed"
-    return 1
+    else
+      append_log_redacted "$tok" "$git_err"
+      log "git fetch failed — tarball fallback"
+    fi
+  else
+    log "git not installed — tarball fallback"
   fi
   rm -f "$git_err"
 
-  # GitHub is source of truth for code. house.json and docker/.env are restored after.
-  if ! git_with_token "$tok" -C "$ROOT" reset --hard "origin/$branch"; then
+  if [ "$code_ok" -eq 0 ]; then
+    ST_STATE=running ST_STEP=git ST_MESSAGE="Code ophalen van GitHub…" write_status
+    if apply_github_tarball "$branch" "$tok"; then
+      code_ok=1
+      log "tarball ok branch=$branch"
+      ensure_git_origin || true
+    fi
+  fi
+
+  if [ "$code_ok" -eq 0 ]; then
     restore_secrets
-    ST_STATE=error ST_STEP=git ST_MESSAGE="Git reset mislukt." ST_ERROR="git_reset_failed" ST_FINISHED=1 write_status
-    log "fail git_reset_failed"
+    ST_STATE=error ST_STEP=git ST_MESSAGE="GitHub ophalen mislukt. De NUC kan GitHub niet bereiken (netwerk) of de repo is privé zonder geldige GITHUB_TOKEN." ST_ERROR="git_fetch_failed" ST_FINISHED=1 write_status
+    log "fail git_fetch_failed"
     return 1
   fi
+
+  # GitHub is source of truth for code. house.json and docker/.env are restored after.
   restore_secrets
-  log "git ok branch=$branch"
+  log "code ok branch=$branch"
 
   ST_STATE=running ST_STEP=build ST_MESSAGE="Software bouwen. Dit duurt 10–20 minuten. Het huis blijft werken tot de herstart aan het eind." write_status
 
@@ -236,6 +345,7 @@ run_update() {
 
   ST_STATE=success ST_STEP= ST_MESSAGE="Server is bijgewerkt." ST_CLEAR_ERROR=1 ST_FINISHED=1 write_status
   log "update success"
+  NEED_REEXEC=1
   return 0
 }
 
@@ -261,8 +371,13 @@ except Exception:
 PY
 )"
       rm -f "$REQUEST"
+      NEED_REEXEC=0
       run_update "$requested_by" || true
       rmdir "$LOCK" 2>/dev/null || true
+      if [ "${NEED_REEXEC:-0}" = 1 ]; then
+        log "re-exec agent so next tablet update uses the new script"
+        exec /bin/sh "$DOCKER_DIR/update-agent.sh"
+      fi
     fi
   else
     heartbeat

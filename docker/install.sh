@@ -85,6 +85,23 @@ fi
 mkdir -p "$ROOT/config" ./go2rtc ./data ./data/asterisk ./data/certs
 ok "Mappen klaar (config, data, go2rtc)"
 
+# ── Git (tablet/telefoon “Server bijwerken”) ────────────────────────────────
+if ! command -v git >/dev/null 2>&1; then
+  warn "Git ontbreekt — nodig om vanaf tablet/telefoon te updaten."
+  if [ "$(id -u)" -eq 0 ]; then
+    apt-get update -y && apt-get install -y git
+  elif command -v sudo >/dev/null 2>&1; then
+    sudo apt-get update -y && sudo apt-get install -y git
+  else
+    warn "Installeer git handmatig: sudo apt install git"
+  fi
+fi
+if command -v git >/dev/null 2>&1; then
+  ok "Git is beschikbaar"
+else
+  warn "Zonder git valt de tablet-update terug op een GitHub-zip; curl moet dan werken."
+fi
+
 # ── .env ────────────────────────────────────────────────────────────────────
 LAN_IP="$(detect_lan_ip)"
 if ! test -f .env; then
@@ -116,6 +133,16 @@ else
       ok "PUBLIC_API_BASE bijgewerkt"
     fi
   fi
+fi
+
+# ZIP/USB-install heeft geen .git — dan faalt de tablet-knop. Eenmalig koppelen.
+if command -v git >/dev/null 2>&1 && [ ! -d "$ROOT/.git" ]; then
+  git_repo="$(grep '^GITHUB_REPO=' .env 2>/dev/null | head -n 1 | cut -d= -f2- | tr -d '\r' | sed 's/^["'\'']//;s/["'\'']$//;s/[[:space:]]*$//' || true)"
+  [ -n "$git_repo" ] || git_repo="Archie-Automation/visualisatie"
+  git -C "$ROOT" init >/dev/null
+  git -C "$ROOT" remote remove origin >/dev/null 2>&1 || true
+  git -C "$ROOT" remote add origin "https://github.com/${git_repo}.git"
+  ok "Map gekoppeld aan GitHub — ‘Server bijwerken’ in de app haalt hierna code op"
 fi
 
 # ── Huisconfig ──────────────────────────────────────────────────────────────
@@ -212,7 +239,8 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
   $SUDO systemctl daemon-reload
-  $SUDO systemctl enable --now archie-os-update-agent.service
+  $SUDO systemctl enable archie-os-update-agent.service
+  $SUDO systemctl restart archie-os-update-agent.service
   ok "Update-agent actief (server bijwerken vanaf de tablet, als admin)"
 }
 install_update_agent

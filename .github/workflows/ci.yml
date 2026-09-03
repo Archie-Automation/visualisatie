@@ -45,3 +45,42 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npm run build
+
+  # Same pubspec version as the server. APK is a GitHub Release asset, not a git blob.
+  android-apk:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [flutter-web, backend]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - name: Release APK
+        run: |
+          VERSION="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | tr -d '\r')"
+          test -n "$VERSION"
+          flutter build apk --release \
+            --dart-define=API_BASE= \
+            --dart-define=APP_VERSION="$VERSION"
+      - name: Publish android-latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          VERSION="$(sed -n 's/^version:[[:space:]]*//p' app/pubspec.yaml | tr -d '\r')"
+          cp app/build/app/outputs/flutter-apk/app-release.apk archie-os.apk
+          NOTES="Server + tablet ${VERSION}. NUC: Server bijwerken. Tablet: Installeren."
+          if gh release view android-latest >/dev/null 2>&1; then
+            gh release edit android-latest --title "$VERSION" --prerelease --notes "$NOTES"
+            gh release upload android-latest archie-os.apk --clobber
+          else
+            gh release create android-latest archie-os.apk --prerelease --title "$VERSION" --notes "$NOTES"
+          fi
