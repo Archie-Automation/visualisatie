@@ -211,20 +211,42 @@ sys.stdout.write(text if text.endswith("\n") else text + "\n")
 PY
 }
 
+# GitHub git-over-https wants Basic x-access-token in the URL.
+# Authorization: Bearer extraHeader is ignored; git then prompts for a username
+# and fails with GIT_TERMINAL_PROMPT=0 ("oude git-login").
+github_https_with_token() {
+  url="$1"
+  tok="$2"
+  case "$url" in
+    https://github.com/*)
+      if [ -n "$tok" ]; then
+        printf 'https://x-access-token:%s@github.com/%s' "$tok" "${url#https://github.com/}"
+        return
+      fi
+      ;;
+  esac
+  printf '%s' "$url"
+}
+
 git_with_token() {
   tok="$1"
   shift
-  # Disable stored credentials: a second Authorization: Basic header makes GitHub
-  # reject the Bearer token (typical on a NUC that once ran gh/git login).
-  if [ -n "$tok" ]; then
-    GIT_TERMINAL_PROMPT=0 git \
-      -c credential.helper= \
-      -c credential.username=x-access-token \
-      -c "http.extraHeader=Authorization: Bearer ${tok}" \
-      "$@"
-  else
+  if [ -z "$tok" ]; then
     GIT_TERMINAL_PROMPT=0 git -c credential.helper= "$@"
+    return $?
   fi
+  # Inject token into https://github.com/… args only. Never log this argv.
+  cmd="GIT_TERMINAL_PROMPT=0 git -c credential.helper="
+  for a in "$@"; do
+    case "$a" in
+      https://github.com/*)
+        a="$(github_https_with_token "$a" "$tok")"
+        ;;
+    esac
+    q=$(printf '%s' "$a" | sed "s/'/'\\\\''/g")
+    cmd="$cmd '$q'"
+  done
+  eval "$cmd"
 }
 
 run_update() {
