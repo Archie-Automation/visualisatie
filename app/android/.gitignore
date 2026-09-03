@@ -12,3 +12,7 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Sideload key for NUC tablets (private repo, not Play Store). Same key in CI.
+!key.properties
+!sideload.jks
