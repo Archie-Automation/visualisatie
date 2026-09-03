@@ -366,7 +366,8 @@ export function buildRouter(
                   available: true,
                   name: latest.androidApk.name,
                   sizeBytes: latest.androidApk.sizeBytes,
-                  downloadPath: "/api/app/android.apk"
+                  downloadPath: "/api/app/android.apk",
+                  version: latest.androidApk.version ?? null
                 }
               : null
           }
