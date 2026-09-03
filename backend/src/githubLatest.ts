@@ -65,7 +65,24 @@ function stripV(tag: string): string {
 }
 
 async function ghJson(url: string): Promise<{ ok: boolean; status: number; body: unknown }> {
-  const res = await fetch(url, { headers: headers() });
+  let res = await fetch(url, { headers: headers() });
+
+  // If the token caused a 401/403, retry without auth (for public repos or
+  // when the stored token is expired). A missing token is the most common
+  // cause of "GitHub ophalen mislukt" on an otherwise healthy network.
+  if ((res.status === 401 || res.status === 403) && githubToken()) {
+    logger.warn(
+      { status: res.status, url },
+      "GitHub token geweigerd – opnieuw zonder token (publieke repo)"
+    );
+    const anonHeaders: Record<string, string> = {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "archie-os-version-check",
+      "X-GitHub-Api-Version": "2022-11-28"
+    };
+    res = await fetch(url, { headers: anonHeaders });
+  }
+
   let body: unknown = null;
   try {
     body = await res.json();
@@ -296,11 +313,22 @@ export async function getGithubLatest(
       cache = { atMs: Date.now(), value };
       return value;
     } catch (err) {
-      logger.warn({ err }, "GitHub latest ophalen mislukt");
+      const msg = err instanceof Error ? err.message : String(err);
+      const isNetworkErr =
+        msg.includes("ENOTFOUND") ||
+        msg.includes("ECONNREFUSED") ||
+        msg.includes("fetch failed") ||
+        msg.includes("network");
+      logger.warn(
+        { err, hint: isNetworkErr ? "netwerk" : "onbekend" },
+        isNetworkErr
+          ? "GitHub latest ophalen mislukt – geen netwerktoegang tot api.github.com"
+          : "GitHub latest ophalen mislukt – onbekende fout"
+      );
       cache = {
         atMs: Date.now(),
         value: cache?.value ?? null,
-        error: err instanceof Error ? err.message : String(err)
+        error: msg
       };
       return cache.value;
     } finally {
@@ -331,22 +359,41 @@ export async function fetchAndroidApkFromGithub(): Promise<{
     return { ok: false, status: 404, error: "no_android_apk_on_latest_release" };
   }
 
-  const res = await fetch(apk.apiUrl, {
-    headers: {
-      ...headers(),
-      Accept: "application/octet-stream"
-    },
-    redirect: "follow"
-  });
-  if (!res.ok || !res.body) {
+  const apkHeaders = {
+    ...headers(),
+    Accept: "application/octet-stream"
+  };
+  let res = await fetch(apk.apiUrl, { headers: apkHeaders, redirect: "follow" });
+
+  // Expired / wrong token → retry anonymously (only works for public repos).
+  if ((res.status === 401 || res.status === 403) && githubToken()) {
     logger.warn(
       { status: res.status, assetId: apk.id, name: apk.name },
+      "GitHub APK-download: token geweigerd – opnieuw zonder token"
+    );
+    res = await fetch(apk.apiUrl, {
+      headers: { Accept: "application/octet-stream", "User-Agent": "archie-os-version-check" },
+      redirect: "follow"
+    });
+  }
+
+  if (!res.ok || !res.body) {
+    const hint =
+      res.status === 401 || res.status === 403
+        ? "Controleer GITHUB_TOKEN in docker/.env (token verlopen of onvoldoende rechten)"
+        : res.status === 404
+        ? "APK-asset niet gevonden op release 'android-latest'"
+        : undefined;
+    logger.warn(
+      { status: res.status, assetId: apk.id, name: apk.name, hint },
       "GitHub APK-download mislukt"
     );
     return {
       ok: false,
-      status: 502,
-      error: `github_apk_download_failed_${res.status}`
+      status: res.status === 404 ? 404 : 502,
+      error: hint
+        ? `github_apk_download_failed_${res.status}: ${hint}`
+        : `github_apk_download_failed_${res.status}`
     };
   }
 

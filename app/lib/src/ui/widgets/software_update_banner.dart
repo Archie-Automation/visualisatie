@@ -191,6 +191,17 @@ String _apkInstallErrorMessage(String? code) {
     case 'install_failed':
       return 'Android kon de installatie niet starten.';
     default:
+      if (code != null && code.startsWith('download_http_401')) {
+        return 'GitHub token verlopen of ongeldig. '
+            'Controleer GITHUB_TOKEN in docker/.env op de NUC.';
+      }
+      if (code != null && code.startsWith('download_http_403')) {
+        return 'GitHub toegang geweigerd (403). '
+            'Controleer GITHUB_TOKEN in docker/.env op de NUC.';
+      }
+      if (code != null && code.startsWith('download_http_404')) {
+        return 'APK niet gevonden op GitHub. Staat er een release "android-latest" met .apk?';
+      }
       if (code != null && code.startsWith('download_http_')) {
         return 'Download mislukt ($code). Staat er een .apk op de GitHub Release?';
       }
