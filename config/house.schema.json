@@ -168,6 +168,10 @@
       "properties": {
         "id": { "type": "string" },
         "name": { "type": "string" },
+        "visibleToUsers": {
+          "type": "boolean",
+          "description": "When true, household users can open this graph from Systemen."
+        },
         "entries": {
           "type": "array",
           "items": {
@@ -1161,6 +1165,10 @@
       "properties": {
         "enabled": { "type": "boolean" },
         "bindIp": { "type": "string" },
+        "host": {
+          "type": "string",
+          "description": "Advertised SIP registrar (NUC LAN IP or hostname). Same for all endpoints."
+        },
         "sipPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
         "wsPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
         "wssPort": { "type": "integer", "minimum": 1, "maximum": 65535 },

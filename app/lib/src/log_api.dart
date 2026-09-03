@@ -129,6 +129,7 @@ typedef LogQuery = ({String id, int fromMs, int toMs, int maxPoints});
 final logsListProvider = FutureProvider<List<LogInfo>>((ref) async {
   final auth = ref.watch(authProvider);
   if (!auth.isAuthed) throw StateError('not authenticated');
+  ref.watch(configProvider);
   final res = await http.get(
     Uri.parse('$apiBase/api/logs'),
     headers: {'authorization': 'Bearer ${auth.token}'},

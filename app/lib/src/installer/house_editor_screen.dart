@@ -137,12 +137,16 @@ String _deviceTypeLabel(String dt, DeviceBusCategory bus) {
   return _deviceTypeLabels[dt] ?? dt;
 }
 
-/// Twee stappen: eerst KNX / Lutron / Audio, daarna alleen passende types.
-Future<DeviceTypePick?> showPickDeviceTypeSheet(BuildContext context) {
+/// Twee stappen: eerst KNX of Lutron, daarna alleen passende types.
+/// [lockBus] slaat de buskeuze over (Audio is geen bus: alleen Sonos/Bluesound).
+Future<DeviceTypePick?> showPickDeviceTypeSheet(
+  BuildContext context, {
+  DeviceBusCategory? lockBus,
+}) {
   return showModalBottomSheet<DeviceTypePick>(
     context: context,
     isScrollControlled: true,
-    builder: (ctx) => const _DeviceTypePickerSheet(),
+    builder: (ctx) => _DeviceTypePickerSheet(lockBus: lockBus),
   );
 }
 
@@ -167,7 +171,9 @@ const _deviceTypeLabels = <String, String>{
 };
 
 class _DeviceTypePickerSheet extends StatefulWidget {
-  const _DeviceTypePickerSheet();
+  const _DeviceTypePickerSheet({this.lockBus});
+
+  final DeviceBusCategory? lockBus;
 
   @override
   State<_DeviceTypePickerSheet> createState() => _DeviceTypePickerSheetState();
@@ -177,9 +183,21 @@ class _DeviceTypePickerSheetState extends State<_DeviceTypePickerSheet> {
   DeviceBusCategory? _bus;
 
   @override
+  void initState() {
+    super.initState();
+    _bus = widget.lockBus;
+  }
+
+  static const _physicalBuses = [
+    DeviceBusCategory.knx,
+    DeviceBusCategory.lutron,
+  ];
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final bottom = MediaQuery.paddingOf(context).bottom;
+    final locked = widget.lockBus != null;
 
     if (_bus == null) {
       return SafeArea(
@@ -194,7 +212,7 @@ class _DeviceTypePickerSheetState extends State<_DeviceTypePickerSheet> {
                 style: theme.textTheme.titleMedium,
               ),
             ),
-            for (final bus in DeviceBusCategory.values)
+            for (final bus in _physicalBuses)
               ListTile(
                 contentPadding:
                     const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
@@ -221,8 +239,10 @@ class _DeviceTypePickerSheetState extends State<_DeviceTypePickerSheet> {
           ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 8),
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => setState(() => _bus = null),
+              icon: Icon(locked ? Icons.close : Icons.arrow_back),
+              onPressed: locked
+                  ? () => Navigator.pop(context)
+                  : () => setState(() => _bus = null),
             ),
             title: Text(
               _deviceBusCategoryLabels[_bus!]!,
@@ -1494,7 +1514,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               LuxeAddRow(
                 label: 'Audio toevoegen',
                 onTap: () async {
-                  final pick = await showPickDeviceTypeSheet(context);
+                  final pick = await showPickDeviceTypeSheet(
+                    context,
+                    lockBus: DeviceBusCategory.audio,
+                  );
                   if (pick != null && context.mounted) {
                     await _pickRoomAndAddDevice(context, pick);
                   }
@@ -2580,6 +2603,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       case _FocusKind.cameraDetail:
         return _DeviceForm(
           device: _cameras()[_sel.ci!],
+          house: _house!,
           onChanged: () => setState(() {}),
           onCopy: () => _copyDevice(_cameras()[_sel.ci!]),
           onPaste: () => _pasteDeviceIntoList(
@@ -2605,6 +2629,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       case _FocusKind.intercomDetail:
         return _DeviceForm(
           device: _intercoms()[_sel.ci!],
+          house: _house!,
           onChanged: () => setState(() {}),
           onCopy: () => _copyDevice(_intercoms()[_sel.ci!]),
           onPaste: () => _pasteDeviceIntoList(
@@ -2673,6 +2698,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       case _FocusKind.device:
         return _DeviceForm(
           device: _deviceList(_sel.fi, _sel.ri)[_sel.di],
+          house: _house!,
           onChanged: () => setState(() {}),
           onCopy: () => _copyDevice(_deviceList(_sel.fi, _sel.ri)[_sel.di]),
           onPaste: () => _pasteDeviceIntoList(
@@ -2694,6 +2720,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       case _FocusKind.globalDevice:
         return _DeviceForm(
           device: _globalDeviceList()[_sel.di],
+          house: _house!,
           onChanged: () => setState(() {}),
           onCopy: () => _copyDevice(_globalDeviceList()[_sel.di]),
           onPaste: () => _pasteDeviceIntoList(
@@ -3009,16 +3036,13 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
                   },
                 ),
                 const SizedBox(height: 8),
-                Builder(
-                  builder: (context) {
-                    final ep = sipEndpointForUser(widget.house, u)!;
-                    return SelectableText(
-                      'SIP-nummer: ${ep['ext'] ?? '(wordt bij opslaan gezet)'}\n'
-                      'Wachtwoord: ${ep['password'] ?? ''}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            fontFamily: 'monospace',
-                          ),
-                    );
+                VoipSipAccountFields(
+                  house: widget.house,
+                  ep: sipEndpointForUser(widget.house, u)!,
+                  includeHost: true,
+                  onChanged: () {
+                    widget.onChanged();
+                    setState(() {});
                   },
                 ),
               ],
@@ -4982,6 +5006,7 @@ class _DeviceBusControlSection extends StatelessWidget {
 class _DeviceForm extends StatelessWidget {
   const _DeviceForm({
     required this.device,
+    required this.house,
     required this.onChanged,
     required this.onDelete,
     this.onCopy,
@@ -4989,6 +5014,7 @@ class _DeviceForm extends StatelessWidget {
     this.getInstallerToken,
   });
   final Map<String, dynamic> device;
+  final Map<String, dynamic> house;
   final VoidCallback onChanged;
   final VoidCallback onDelete;
   final VoidCallback? onCopy;
@@ -5143,7 +5169,11 @@ class _DeviceForm extends StatelessWidget {
                 _CameraInstallerSection(
                     device: device, onChanged: onChanged),
               if (type == 'intercom') ...[
-                _IntercomKnxExtras(device: device, onChanged: onChanged),
+                _IntercomKnxExtras(
+                  device: device,
+                  house: house,
+                  onChanged: onChanged,
+                ),
                 _NestedStringFields(
                   label: 'Stream-URL\'s',
                   jsonKey: 'intercom',
@@ -5637,9 +5667,14 @@ class _SourcesCommaFieldState extends State<_SourcesCommaField> {
 }
 
 class _IntercomKnxExtras extends StatelessWidget {
-  const _IntercomKnxExtras({required this.device, required this.onChanged});
+  const _IntercomKnxExtras({
+    required this.device,
+    required this.house,
+    required this.onChanged,
+  });
 
   final Map<String, dynamic> device;
+  final Map<String, dynamic> house;
   final VoidCallback onChanged;
 
   @override
@@ -5698,9 +5733,15 @@ class _IntercomKnxExtras extends StatelessWidget {
         Text('SIP-inlog voor dit station',
             style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
+        VoipSipHostField(house: house, onChanged: onChanged),
+        const SizedBox(height: 8),
         SelectableText(
-          'Toestel: ${(o['sipExt'] as String?)?.isNotEmpty == true ? o['sipExt'] : '(wordt bij opslaan gezet)'}\n'
-          'Wachtwoord: ${(o['sipPassword'] as String?) ?? ''}',
+          sipClientLoginText(
+            host: voipSipHost(house),
+            port: voipSipPort(house),
+            ext: (o['sipExt'] as String?) ?? '',
+            password: (o['sipPassword'] as String?) ?? '',
+          ),
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 fontFamily: 'monospace',
               ),
@@ -5710,8 +5751,12 @@ class _IntercomKnxExtras extends StatelessWidget {
           child: TextButton.icon(
             onPressed: () {
               Clipboard.setData(ClipboardData(
-                text:
-                    'ext=${o['sipExt'] ?? ''}\nuser=${o['sipExt'] ?? ''}\npass=${o['sipPassword'] ?? ''}\nport=5060',
+                text: sipClientLoginText(
+                  host: voipSipHost(house),
+                  port: voipSipPort(house),
+                  ext: (o['sipExt'] as String?) ?? '',
+                  password: (o['sipPassword'] as String?) ?? '',
+                ),
               ));
             },
             icon: const Icon(Icons.copy, size: 16),
@@ -6141,9 +6186,9 @@ class _NestedStringFields extends StatelessWidget {
   }
 }
 
-/// Installer panel to define custom logs (graphs) of arbitrary group
-/// addresses. Thermostats are logged automatically; this is for everything
-/// else (e.g. power meters, humidity, CO?, water usage).
+/// Installer panel to define custom graphs of arbitrary group addresses.
+/// Thermostats are logged automatically; this is for everything else
+/// (e.g. power meters, humidity, CO₂, water usage).
 class _LogsInstallerPanel extends StatelessWidget {
   const _LogsInstallerPanel({
     required this.logs,
@@ -6158,7 +6203,8 @@ class _LogsInstallerPanel extends StatelessWidget {
   void _addLog() {
     logs.add({
       'id': 'log-${uuid.v4().substring(0, 8)}',
-      'name': 'Nieuwe log',
+      'name': 'Nieuwe grafiek',
+      'visibleToUsers': false,
       'entries': <Map<String, dynamic>>[],
     });
     onChanged();
@@ -6173,9 +6219,10 @@ class _LogsInstallerPanel extends StatelessWidget {
             style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
         Text(
-          'Maak grafieken aan van willekeurige groepsadressen. Waarden worden '
-          'op de server gelogd zodra ze veranderen (numerieke DPT\'s, ~90 dagen '
-          'bewaard).',
+          'Maak grafieken van groepsadressen. Waarden worden op de server '
+          'gelogd zodra ze veranderen (numerieke DPT\'s, ~90 dagen bewaard). '
+          'Zet een grafiek aan voor gebruikers om hem onder Systemen → Grafieken '
+          'te tonen.',
           style: Theme.of(context)
               .textTheme
               .bodyMedium
@@ -6288,14 +6335,17 @@ class _LogCard extends StatelessWidget {
               labelOverride: 'Naam',
               hintText: 'bijv. Verbruik woonkamer',
             ),
-            _BoundStrField(
-              'id',
-              log,
-              onChanged,
-              labelOverride: 'Log-ID (uniek)',
-              hintText: 'bijv. verbruik-wk',
+            LuxeSwitchRow(
+              title: 'Zichtbaar voor gebruikers',
+              subtitle:
+                  'Anders alleen in de technische configuratie en voor de installer.',
+              value: log['visibleToUsers'] == true,
+              onChanged: (v) {
+                log['visibleToUsers'] = v;
+                onChanged();
+              },
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 8),
             Text(
               'Groepsadressen',
               style: Theme.of(context).textTheme.titleSmall,
@@ -6305,7 +6355,7 @@ class _LogCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(
-                  'Voeg minstens ??n groepsadres toe.',
+                  'Voeg minstens één groepsadres toe.',
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall
@@ -6401,7 +6451,7 @@ class _LogEntryRow extends StatelessWidget {
             entry,
             onChanged,
             labelOverride: 'Eenheid (optioneel)',
-            hintText: '?C, %, W, kWh ...',
+            hintText: '°C, %, W, kWh …',
             emptyMeansRemove: true,
           ),
         ],
