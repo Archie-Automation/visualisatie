@@ -9,6 +9,7 @@ import '../api.dart';
 import '../device_activity.dart';
 import '../fireplace_virtual.dart';
 import '../idle_reset.dart';
+import '../log_api.dart';
 import '../media_api.dart';
 import '../models.dart';
 import '../room_control_category.dart';
@@ -119,6 +120,33 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
         _floorBrowsing = false;
       });
     }
+    final floorQ = _routeFloorId(context);
+    if (floorQ != null && floorQ.isNotEmpty) {
+      context.go('/');
+    }
+  }
+
+  String? _routeFloorId(BuildContext context) {
+    try {
+      return GoRouterState.of(context).uri.queryParameters['floor'];
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _openFloor(List<Floor> floors, int i) {
+    if (i < 0 || i >= floors.length) return;
+    setState(() {
+      _floorIndex = i;
+      _floorBrowsing = true;
+      if (_roomsScroll.hasClients) _roomsScroll.jumpTo(0);
+    });
+    context.replace('/?floor=${Uri.encodeComponent(floors[i].id)}');
+  }
+
+  void _closeFloorBrowse() {
+    setState(() => _floorBrowsing = false);
+    context.replace('/');
   }
 
   @override
@@ -163,23 +191,28 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
     );
     final safeIndex =
         floors.isEmpty ? 0 : _floorIndex.clamp(0, floors.length - 1);
-    final selectedFloor = floors.isEmpty ? null : floors[safeIndex];
+    final routeFloorId = _routeFloorId(context);
+    var selectedIndex = safeIndex;
+    if (routeFloorId != null && floors.isNotEmpty) {
+      final idx = floors.indexWhere((f) => f.id == routeFloorId);
+      if (idx >= 0) selectedIndex = idx;
+    }
+    final selectedFloor = floors.isEmpty ? null : floors[selectedIndex];
     final isPanel = !context.isPhone;
 
     // Wall tablet / desktop: floor drill-down — header als systemen (hoogte + honeycomb).
-    if (isPanel && _floorBrowsing && selectedFloor != null) {
+    if (isPanel &&
+        selectedFloor != null &&
+        (_floorBrowsing || routeFloorId == selectedFloor.id)) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _FloorBrowseHeader(
             floors: floors,
-            selectedIndex: safeIndex,
+            selectedIndex: selectedIndex,
             scrollController: _floorScroll,
-            onBack: () => setState(() => _floorBrowsing = false),
-            onSelect: (i) => setState(() {
-              _floorIndex = i;
-              if (_roomsScroll.hasClients) _roomsScroll.jumpTo(0);
-            }),
+            onBack: _closeFloorBrowse,
+            onSelect: (i) => _openFloor(floors, i),
           ),
           Expanded(
             child: ListView(
@@ -221,17 +254,14 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
             child: _FloorsHomeBand(
               floors: floors,
               scrollController: _floorScroll,
-              onSelect: (i) => setState(() {
-                _floorIndex = i;
-                _floorBrowsing = true;
-              }),
+              onSelect: (i) => _openFloor(floors, i),
             ),
           )
         else if (floors.isNotEmpty) ...[
           SliverToBoxAdapter(
             child: _FloorTabBar(
               floors: floors,
-              selectedIndex: safeIndex,
+              selectedIndex: selectedIndex,
               scrollController: _floorScroll,
               onSelect: (i) => setState(() => _floorIndex = i),
             ),
@@ -1139,6 +1169,19 @@ class _Systemen extends ConsumerWidget {
       ));
     }
 
+    final customLogs = ref.watch(logsListProvider).maybeWhen(
+          data: (logs) =>
+              logs.where((l) => l.kind == 'custom').toList(growable: false),
+          orElse: () => const <LogInfo>[],
+        );
+    if (customLogs.isNotEmpty) {
+      chips.add(_SystemChipData(
+        name: 'Grafieken',
+        icon: Icons.show_chart_outlined,
+        devices: const [],
+      ));
+    }
+
     if (chips.isEmpty) return const SizedBox.shrink();
 
     // Pas volgorde en zichtbaarheid toe.
@@ -1496,6 +1539,10 @@ class _SystemChipState extends ConsumerState<_SystemChip>
     final data = widget.data;
     if (data.name == 'Favorieten') {
       appOpen(context, '/system/$kFavorietenSlug');
+      return;
+    }
+    if (data.name == 'Grafieken') {
+      appOpen(context, '/system/$kGrafiekenSlug');
       return;
     }
     if (data.name == 'Alarm') {

@@ -93,6 +93,7 @@ const kHouseSystems = <HouseSystem>[
 ];
 
 const kFavorietenSlug = 'favorieten';
+const kGrafiekenSlug = 'grafieken';
 
 HouseSystem? houseSystemBySlug(String slug) {
   for (final s in kHouseSystems) {

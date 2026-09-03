@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api.dart';
 import '../device_activity.dart';
 import '../fireplace_virtual.dart';
+import '../log_api.dart';
 import '../media_api.dart';
 import '../models.dart';
 import '../room_control_category.dart';
@@ -41,6 +42,9 @@ class SystemScreen extends ConsumerWidget {
           data: (cfg) {
             if (slug == kFavorietenSlug) {
               return _FavorietenBody(cfg: cfg, onBack: () => appBack(context));
+            }
+            if (slug == kGrafiekenSlug) {
+              return _GrafiekenBody(onBack: () => appBack(context));
             }
             final system = houseSystemBySlug(slug);
             if (system == null) {
@@ -318,6 +322,126 @@ class _FavorietenBody extends ConsumerWidget {
                     ),
                   ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GrafiekenBody extends ConsumerWidget {
+  const _GrafiekenBody({required this.onBack});
+
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final logsAsync = ref.watch(logsListProvider);
+    final custom = logsAsync.maybeWhen(
+      data: (logs) =>
+          logs.where((l) => l.kind == 'custom').toList(growable: false),
+      orElse: () => const <LogInfo>[],
+    );
+
+    return SafeArea(
+      bottom: false,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          FunctionScreenHeader(
+            onBack: onBack,
+            title: 'Grafieken',
+            subtitle: custom.isEmpty
+                ? 'Geen grafieken'
+                : (custom.length == 1
+                    ? '1 grafiek'
+                    : '${custom.length} grafieken'),
+          ),
+          Expanded(
+            child: logsAsync.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (e, _) => Center(
+                child: Text(
+                  'Kan grafieken niet laden.',
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: LuxeColors.inkSoft,
+                      ),
+                ),
+              ),
+              data: (_) {
+                if (custom.isEmpty) {
+                  return Center(
+                    child: Text(
+                      'Nog geen grafieken voor dit account.',
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            color: LuxeColors.inkSoft,
+                          ),
+                    ),
+                  );
+                }
+                return ListView(
+                  padding: EdgeInsets.fromLTRB(
+                    context.isPhone ? 14 : 28,
+                    8,
+                    context.isPhone ? 14 : 28,
+                    48,
+                  ),
+                  children: [
+                    for (var i = 0; i < custom.length; i++) ...[
+                      if (i > 0) const SizedBox(height: 10),
+                      GlassCard(
+                        radius: 20,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 14,
+                        ),
+                        onTap: () => appOpen(
+                          context,
+                          '/log/${Uri.encodeComponent(custom[i].id)}'
+                          '?title=${Uri.encodeComponent(custom[i].name)}',
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.show_chart_outlined,
+                              color: LuxeColors.brass,
+                              size: 22,
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    custom[i].name,
+                                    style:
+                                        Theme.of(context).textTheme.titleMedium,
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    custom[i].series.length == 1
+                                        ? '1 reeks'
+                                        : '${custom[i].series.length} reeksen',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodySmall
+                                        ?.copyWith(color: LuxeColors.inkSoft),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right_rounded,
+                              color: LuxeColors.inkSoft,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
           ),
         ],

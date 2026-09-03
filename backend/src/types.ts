@@ -474,6 +474,8 @@ export interface VoipCallGroup {
 export interface VoipConfig {
   enabled?: boolean;
   bindIp?: string;
+  /** Advertised registrar: LAN-IP or hostname of the NUC. Phones and the app register here. */
+  host?: string;
   sipPort?: number;
   wsPort?: number;
   wssPort?: number;
@@ -1167,6 +1169,8 @@ export interface LogDef {
   id: string;
   name: string;
   entries: LogEntry[];
+  /** When true, regular users see this graph under Systemen → Grafieken. */
+  visibleToUsers?: boolean;
 }
 
 /* --------------------------------------------------------------------- */

@@ -29,18 +29,22 @@ void appBack(BuildContext context, {String fallback = '/'}) {
   }
 }
 
-/// Stamp the current path so Back can return there when there is no stack.
+/// Path + query of the current route, including a nested [from] so Back can
+/// restore filter/verdieping state — not only the path.
+String currentAppLocation(BuildContext context) {
+  try {
+    return _locationOf(GoRouterState.of(context).uri);
+  } catch (_) {
+    return '/';
+  }
+}
+
+/// Stamp the current location so Back returns there (path, query, nested from).
 String _withFrom(BuildContext context, String location) {
   final dest = Uri.parse(location);
   if (dest.queryParameters.containsKey('from')) return location;
-  var from = '/';
-  try {
-    final path = GoRouterState.of(context).uri.path;
-    if (path.isNotEmpty) from = path;
-  } catch (_) {
-    /* not under GoRouter */
-  }
-  if (!_isInternalPath(from)) from = '/';
+  var from = currentAppLocation(context);
+  if (!_isInternalLocation(from)) from = '/';
   return dest.replace(queryParameters: {
     ...dest.queryParameters,
     'from': from,
@@ -50,15 +54,25 @@ String _withFrom(BuildContext context, String location) {
 String? _readFrom(BuildContext context) {
   try {
     final raw = GoRouterState.of(context).uri.queryParameters['from'];
-    if (_isInternalPath(raw)) return raw;
+    if (_isInternalLocation(raw)) return raw;
   } catch (_) {
     /* not under GoRouter */
   }
   return null;
 }
 
-bool _isInternalPath(String? path) {
-  if (path == null || path.isEmpty) return false;
+String _locationOf(Uri uri) {
+  final path = uri.path.isEmpty ? '/' : uri.path;
+  if (!uri.hasQuery) return path;
+  return '$path?${uri.query}';
+}
+
+bool _isInternalLocation(String? loc) {
+  if (loc == null || loc.isEmpty) return false;
+  final uri = Uri.tryParse(loc);
+  if (uri == null) return false;
+  if (uri.hasScheme || uri.host.isNotEmpty) return false;
+  final path = uri.path.isEmpty ? '/' : uri.path;
   if (!path.startsWith('/')) return false;
   if (path.startsWith('//')) return false;
   return true;

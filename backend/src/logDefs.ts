@@ -10,7 +10,9 @@
 // logs and resolve a log id to its series).
 
 import { walkDevices } from "./config";
-import type { GA, HouseConfig } from "./types";
+import { isStaffRole } from "./roles";
+import type { GA, HouseConfig, User } from "./types";
+import { userMayUseDevice } from "./userAccess";
 
 export interface LogSeriesDef {
   ga: GA;
@@ -30,6 +32,7 @@ export interface LogDefResolved {
   name: string;
   kind: "thermostat" | "custom";
   series: LogSeriesDef[];
+  visibleToUsers?: boolean;
 }
 
 /** All logs available for the current config (thermostats + custom). */
@@ -80,6 +83,7 @@ export function listLogDefs(cfg: HouseConfig): LogDefResolved[] {
       id: `custom-${log.id}`,
       name: log.name?.trim() || log.id,
       kind: "custom",
+      visibleToUsers: log.visibleToUsers === true,
       series
     });
   }
@@ -93,6 +97,31 @@ export function findLogDef(
   id: string
 ): LogDefResolved | undefined {
   return listLogDefs(cfg).find((l) => l.id === id);
+}
+
+/** Logs this login may list and open. Staff sees all; users only opted-in
+ *  custom graphs plus thermostat logs of devices they may use. */
+export function viewerLogDefs(
+  cfg: HouseConfig,
+  user: User | undefined,
+  role: string | undefined
+): LogDefResolved[] {
+  const all = listLogDefs(cfg);
+  if (isStaffRole(role) || isStaffRole(user?.role)) return all;
+  return all.filter((d) => {
+    if (d.kind === "custom") return d.visibleToUsers === true;
+    if (!d.id.startsWith("thermostat-")) return false;
+    return userMayUseDevice(user, role, cfg, d.id.slice("thermostat-".length));
+  });
+}
+
+export function viewerCanSeeLog(
+  cfg: HouseConfig,
+  id: string,
+  user: User | undefined,
+  role: string | undefined
+): boolean {
+  return viewerLogDefs(cfg, user, role).some((l) => l.id === id);
 }
 
 /** Union of every group address covered by any log — the sampler's watch set. */

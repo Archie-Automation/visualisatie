@@ -35,7 +35,7 @@ import {
   walkDevices
 } from "./config";
 import { CommandSchema, dispatch } from "./commands";
-import { findLogDef, listLogDefs } from "./logDefs";
+import { findLogDef, viewerCanSeeLog, viewerLogDefs } from "./logDefs";
 import type { LogStore } from "./logStore";
 import type { LogSamplerHandle } from "./logSampler";
 import { hvacSwitchLock } from "./hvacSwitchLock";
@@ -95,6 +95,7 @@ import {
   validateLutronLoadOutputSemantics
 } from "./houseValidate";
 import { mergeVoipSecrets, normalizeVoip } from "./voip/normalize";
+import { parseVoipHost } from "./voip/host";
 import { randomSipPassword } from "./voip/secrets";
 import {
   resolveUserEndpoint,
@@ -1040,8 +1041,13 @@ export function buildRouter(
       .replace(/:\d+$/, "") || "127.0.0.1";
   };
 
+  const advertisedSipHost = (
+    req: import("express").Request,
+    cfg: HouseConfig
+  ): string => parseVoipHost(cfg.voip?.host) || lanHost(req);
+
   const voipWebSocketUrl = (req: import("express").Request, cfg: HouseConfig): string => {
-    const host = lanHost(req);
+    const host = advertisedSipHost(req, cfg);
     const cert = process.env.TLS_CERT_PATH?.trim() || "/data/certs/tls.crt";
     const useWss = !!(cert && fs.existsSync(cert));
     if (useWss) return `wss://${host}:${cfg.voip?.wssPort ?? 8089}/ws`;
@@ -1053,7 +1059,7 @@ export function buildRouter(
     if (!cfg.voip?.enabled) return res.json({ enabled: false });
     const ep = resolveUserEndpoint(cfg, req.user?.sub);
     if (!ep) return res.json({ enabled: true, sip: null });
-    const host = lanHost(req);
+    const host = advertisedSipHost(req, cfg);
     res.json({
       enabled: true,
       endpointId: ep.id,
@@ -1067,12 +1073,14 @@ export function buildRouter(
     });
   });
 
-  r.get("/voip/status", requireAuth, requireAdmin, (_req, res) => {
+  r.get("/voip/status", requireAuth, requireAdmin, (req, res) => {
     const cfg = getConfig();
     const regs = new Set(voipRegisteredExts());
     res.json({
       enabled: cfg.voip?.enabled === true,
       amiUp: voipAmiUp(),
+      host: parseVoipHost(cfg.voip?.host) ?? "",
+      suggestedHost: lanHost(req),
       sipPort: cfg.voip?.sipPort ?? 5060,
       endpoints: (cfg.voip?.endpoints ?? []).map((e) => ({
         id: e.id,
@@ -1525,14 +1533,18 @@ export function buildRouter(
 
   // ── Logs / grafieken ──────────────────────────────────────────────────
   // List available logs (one per thermostat + installer-defined custom logs).
-  r.get("/logs", requireAuth, (_req, res) => {
-    res.json({ logs: listLogDefs(getConfig()) });
+  r.get("/logs", requireAuth, (req: AuthedRequest, res) => {
+    const cfg = getConfig();
+    res.json({ logs: viewerLogDefs(cfg, currentUser(req), req.user?.role) });
   });
 
   // Historical, downsampled series for a single log within [from, to].
-  r.get("/logs/:id/history", requireAuth, (req, res) => {
-    const def = findLogDef(getConfig(), req.params.id);
-    if (!def) return res.status(404).json({ error: "unknown log" });
+  r.get("/logs/:id/history", requireAuth, (req: AuthedRequest, res) => {
+    const cfg = getConfig();
+    const def = findLogDef(cfg, req.params.id);
+    if (!def || !viewerCanSeeLog(cfg, def.id, currentUser(req), req.user?.role)) {
+      return res.status(404).json({ error: "unknown log" });
+    }
 
     const now = Date.now();
     const to = parseTs(req.query.to, now);
