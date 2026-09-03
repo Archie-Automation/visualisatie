@@ -16,6 +16,8 @@ export interface GithubAndroidApkInfo {
   sizeBytes: number;
   /** GitHub API asset URL — requires Accept: application/octet-stream + token. */
   apiUrl: string;
+  /** pubspec version baked into this APK (release title), if known. */
+  version?: string;
 }
 
 export interface GithubLatestInfo extends AppVersionInfo {
@@ -264,19 +266,15 @@ async function fetchLatestUncached(): Promise<GithubLatestInfo | null> {
     return best;
   }
 
-  // Only offer an APK that is at least as new as git HEAD (pubspec).
-  // Otherwise the tablet would download an older build and Android refuses it.
-  // CI sets release title to the same pubspec version as the server.
+  // Offer the newest APK even if CI lags a git push. Hiding it left tablets
+  // stuck on an old build (e.g. +186) while the NUC already ran a newer pubspec.
   const apkSource = pickNewer(
     rolling?.androidApk ? rolling : null,
     official?.androidApk ? official : null
   );
-  const branchVer = branch ?? newest;
-  const apkUsable =
-    apkSource?.androidApk &&
-    compareVersion(apkSource, branchVer) >= 0
-      ? apkSource.androidApk
-      : null;
+  const apkUsable = apkSource?.androidApk
+    ? { ...apkSource.androidApk, version: apkSource.version }
+    : null;
 
   return {
     ...newest,

@@ -76,12 +76,14 @@ class GithubAndroidApkInfo {
     required this.name,
     required this.sizeBytes,
     required this.downloadPath,
+    this.version,
   });
 
   final bool available;
   final String name;
   final int sizeBytes;
   final String downloadPath;
+  final String? version;
 
   factory GithubAndroidApkInfo.fromJson(Map<String, dynamic> j) {
     return GithubAndroidApkInfo(
@@ -90,7 +92,14 @@ class GithubAndroidApkInfo {
       sizeBytes: j['sizeBytes'] is num ? (j['sizeBytes'] as num).toInt() : 0,
       downloadPath:
           (j['downloadPath'] as String?)?.trim() ?? '/api/app/android.apk',
+      version: (j['version'] as String?)?.trim(),
     );
+  }
+
+  SoftwareVersionInfo? get asVersion {
+    final v = version?.trim();
+    if (v == null || v.isEmpty) return null;
+    return SoftwareVersionInfo.parse(v);
   }
 }
 
@@ -220,11 +229,13 @@ final softwareVersionStatusProvider =
         client.version != '0.0.0+0' &&
         client.compareTo(running) < 0;
     final apk = latest?.androidApk;
+    final apkVer = apk?.asVersion ?? latest?.asVersion;
     final androidApkUpdateAvailable = supportsAndroidApkUpdate &&
         latest != null &&
         apk != null &&
         apk.available &&
-        client.compareTo(latest.asVersion) < 0;
+        apkVer != null &&
+        client.compareTo(apkVer) < 0;
     return SoftwareVersionStatus(
       running: running,
       latest: latest,
