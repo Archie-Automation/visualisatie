@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import '../api.dart';
+import '../ui/widgets/confirm_dialog.dart';
 import '../ui/widgets/luxe_form.dart';
 
 Map<String, dynamic> ensureVoipMap(Map<String, dynamic> house) {
@@ -213,10 +214,7 @@ class _VoipSipAccountFieldsState extends State<VoipSipAccountFields> {
         _VoipLine(
           label: 'SIP-nummer',
           value: ext,
-          helper: extClash
-              ? 'Dit nummer is al in gebruik.'
-              : 'Uniek toestelnummer op de SIP-server. Programmeur mag dit wijzigen.',
-          helperMaxLines: 2,
+          helper: extClash ? 'Dit nummer is al in gebruik.' : null,
           onChanged: (s) {
             widget.ep['ext'] = s.trim();
             widget.onChanged();
@@ -225,8 +223,6 @@ class _VoipSipAccountFieldsState extends State<VoipSipAccountFields> {
         _VoipLine(
           label: 'SIP-wachtwoord',
           value: (widget.ep['password'] as String?) ?? '',
-          helper: 'Alleen voor dit toestel. Niet het inlogwachtwoord van de app.',
-          helperMaxLines: 2,
           onChanged: (s) {
             widget.ep['password'] = s;
             widget.onChanged();
@@ -236,23 +232,12 @@ class _VoipSipAccountFieldsState extends State<VoipSipAccountFields> {
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: SelectableText(
-              'SIP-adres: $uri',
+              uri,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     fontFamily: 'monospace',
                   ),
             ),
           ),
-        SelectableText(
-          sipClientLoginText(
-            host: host,
-            port: port,
-            ext: ext,
-            password: (widget.ep['password'] as String?) ?? '',
-          ),
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontFamily: 'monospace',
-              ),
-        ),
         TextButton.icon(
           onPressed: () {
             Clipboard.setData(ClipboardData(
@@ -265,7 +250,7 @@ class _VoipSipAccountFieldsState extends State<VoipSipAccountFields> {
             ));
           },
           icon: const Icon(Icons.copy, size: 16),
-          label: const Text('Kopieer SIP-inlog'),
+          label: const Text('Kopieer inlog'),
         ),
         TextButton(
           onPressed: () {
@@ -297,9 +282,8 @@ class VoipSipHostField extends StatelessWidget {
     return _VoipLine(
       label: 'SIP-serveradres (NUC)',
       value: voipSipHost(house),
-      helper: helper ??
-          'Zelfde adres voor alle toestellen. LAN-IP of hostname; de programmeur mag dit wijzigen.',
-      helperMaxLines: 3,
+      helper: helper,
+      helperMaxLines: 2,
       onChanged: (s) {
         setVoipSipHost(house, s);
         onChanged();
@@ -340,14 +324,12 @@ Map<String, dynamic>? sipEndpointForUser(
 
 void bindSipToUser(
   Map<String, dynamic> house,
-  Map<String, dynamic> user, {
-  String type = 'panel',
-}) {
+  Map<String, dynamic> user,
+) {
   final existing = sipEndpointForUser(house, user);
   if (existing != null) {
     user['sipEndpointId'] = existing['id'];
     existing['userId'] = user['id'];
-    if (type == 'panel' || type == 'phone') existing['type'] = type;
     return;
   }
   final uid = '${user['id']}';
@@ -360,7 +342,7 @@ void bindSipToUser(
     'id': id,
     'userId': uid,
     'name': userSipLabel(user),
-    'type': type == 'phone' ? 'phone' : 'panel',
+    'type': 'panel',
     'ext': nextSipExt(house),
     'password': randomVoipPassword(),
   };
@@ -484,7 +466,7 @@ class _VoipInstallerSectionState extends State<VoipInstallerSection> {
 
   List<Map<String, dynamic>> get _users => houseUserMaps(widget.house);
 
-  Future<void> _addSipForExistingUser(String type) async {
+  Future<void> _addSipForExistingUser() async {
     final taken = sipTakenUserIds(widget.house);
     final free = _users.where((u) => !taken.contains('${u['id']}')).toList();
     if (free.isEmpty) {
@@ -502,7 +484,7 @@ class _VoipInstallerSectionState extends State<VoipInstallerSection> {
       context: context,
       builder: (ctx) {
         return SimpleDialog(
-          title: Text(type == 'phone' ? 'Account voor telefoon' : 'Account voor paneel'),
+          title: const Text('Gebruiker'),
           children: [
             for (final u in free)
               SimpleDialogOption(
@@ -514,7 +496,7 @@ class _VoipInstallerSectionState extends State<VoipInstallerSection> {
       },
     );
     if (chosen == null) return;
-    bindSipToUser(widget.house, chosen, type: type);
+    bindSipToUser(widget.house, chosen);
     widget.onChanged();
   }
 
@@ -536,13 +518,24 @@ class _VoipInstallerSectionState extends State<VoipInstallerSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text('SIP-server',
+                  style: Theme.of(context).textTheme.titleLarge),
+            ),
+            const LuxeInfoIconButton(
+              title: 'SIP-server',
+              body:
+                  'Eigen Asterisk op de NUC. Elke gebruiker met SIP aan krijgt een eigen nummer en wachtwoord. '
+                  'Dat is de inlog voor dat toestel — paneel, telefoon of app maakt niet uit.\n\n'
+                  'Schakel uit als dit huis geen SIP gebruikt. Deurstations blijven dan beeld/deur via RTSP of KNX.',
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
         LuxeSwitchRow(
-          title: 'Eigen SIP-server (VoIP)',
-          subtitle: enabled
-              ? (ami
-                  ? 'PBX bereikbaar'
-                  : 'Aan — Asterisk start na Opslaan (Docker-service asterisk)')
-              : 'Uit. Deurstations blijven RTSP/webhook zoals nu.',
+          title: 'SIP-server ingeschakeld',
           value: enabled,
           onChanged: (v) {
             _voip['enabled'] = v;
@@ -550,6 +543,7 @@ class _VoipInstallerSectionState extends State<VoipInstallerSection> {
             if (v) _prefillHostFromStatus();
           },
         ),
+        const Divider(height: 24),
         if (_statusErr != null)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
@@ -564,7 +558,7 @@ class _VoipInstallerSectionState extends State<VoipInstallerSection> {
             child: TextButton.icon(
               onPressed: _refreshStatus,
               icon: const Icon(Icons.refresh, size: 18),
-              label: const Text('Status vernieuwen'),
+              label: Text(ami ? 'PBX bereikbaar' : 'Status vernieuwen'),
             ),
           ),
           const SizedBox(height: 8),
@@ -573,14 +567,20 @@ class _VoipInstallerSectionState extends State<VoipInstallerSection> {
             onChanged: widget.onChanged,
           ),
           const SizedBox(height: 12),
-          Text('Toestellen (één account per paneel of telefoon)',
-              style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 4),
-          Text(
-            'SIP hangt niet aan alle logins. Koppel een bestaande gebruiker; '
-            'elk account mag maar één keer. Dat paneel of die telefoon logt in met dat account. '
-            'Op hardware: server = SIP-serveradres, poort ${voipSipPort(widget.house)}, gebruiker = nummer.',
-            style: Theme.of(context).textTheme.bodySmall,
+          Row(
+            children: [
+              Expanded(
+                child: Text('Gebruikers',
+                    style: Theme.of(context).textTheme.titleSmall),
+              ),
+              LuxeInfoIconButton(
+                title: 'SIP-gebruikers',
+                body:
+                    'Zet SIP aan bij de gebruiker (Gebruikers in dit scherm), of voeg hier een bestaande gebruiker toe. '
+                    'Elk account heeft één SIP-nummer; elk toestel logt in met dat account.\n\n'
+                    'Op het toestel: server = SIP-serveradres, poort ${voipSipPort(widget.house)}, gebruiker = SIP-nummer.',
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           for (var i = 0; i < _endpoints.length; i++)
@@ -612,26 +612,24 @@ class _VoipInstallerSectionState extends State<VoipInstallerSection> {
                 widget.onChanged();
               },
             ),
-          Row(
-            children: [
-              TextButton.icon(
-                onPressed: () => _addSipForExistingUser('panel'),
-                icon: const Icon(Icons.tablet_mac_outlined, size: 18),
-                label: const Text('Paneel'),
-              ),
-              TextButton.icon(
-                onPressed: () => _addSipForExistingUser('phone'),
-                icon: const Icon(Icons.phone_outlined, size: 18),
-                label: const Text('Telefoon'),
-              ),
-            ],
+          TextButton.icon(
+            onPressed: _addSipForExistingUser,
+            icon: const Icon(Icons.person_add_outlined, size: 18),
+            label: const Text('Gebruiker toevoegen'),
           ),
           const SizedBox(height: 16),
-          Text('Oproepgroepen', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 4),
-          Text(
-            'Wie er overgaat als er wordt aangebeld. Bij opnemen stoppen de andere toestellen.',
-            style: Theme.of(context).textTheme.bodySmall,
+          Row(
+            children: [
+              Expanded(
+                child: Text('Oproepgroepen',
+                    style: Theme.of(context).textTheme.titleSmall),
+              ),
+              const LuxeInfoIconButton(
+                title: 'Oproepgroepen',
+                body:
+                    'Wie er overgaat als er wordt aangebeld. Bij opnemen stoppen de andere toestellen.',
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           for (var i = 0; i < _groups.length; i++)
@@ -652,8 +650,20 @@ class _VoipInstallerSectionState extends State<VoipInstallerSection> {
           ),
         ],
         const Divider(height: 32),
-        Text('Deurstations', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 4),
+        Row(
+          children: [
+            Expanded(
+              child: Text('Deurstations',
+                  style: Theme.of(context).textTheme.titleSmall),
+            ),
+            const LuxeInfoIconButton(
+              title: 'Deurstations',
+              body:
+                  'Intercom hoort bij het hele project, niet bij een kamer. '
+                  'SIP-inlog van het station stel je in bij het deurstation zelf.',
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -723,10 +733,7 @@ class _EndpointCard extends StatelessWidget {
             ),
             DropdownButtonFormField<String>(
               initialValue: currentOk ? currentId : null,
-              decoration: luxeFilledDecoration(
-                hint: 'Gebruiker',
-                helper: 'Dit account is het SIP-toestel. Niet delen.',
-              ),
+              decoration: luxeFilledDecoration(hint: 'Gebruiker'),
               items: [
                 for (final u in choices)
                   DropdownMenuItem(
@@ -754,21 +761,6 @@ class _EndpointCard extends StatelessWidget {
               value: ep['name'] as String? ?? '',
               onChanged: (s) {
                 ep['name'] = s;
-                onChanged();
-              },
-            ),
-            const SizedBox(height: 8),
-            DropdownButtonFormField<String>(
-              initialValue:
-                  (ep['type'] as String?) == 'phone' ? 'phone' : 'panel',
-              decoration: luxeFilledDecoration(hint: 'Type'),
-              items: const [
-                DropdownMenuItem(value: 'panel', child: Text('Paneel / app')),
-                DropdownMenuItem(value: 'phone', child: Text('SIP-telefoon')),
-              ],
-              onChanged: (v) {
-                if (v == null) return;
-                ep['type'] = v;
                 onChanged();
               },
             ),
