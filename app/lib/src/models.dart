@@ -269,6 +269,13 @@ class Device {
       confirm: DeviceConfirm.fromJson(j['confirm']),
     );
   }
+
+  /// Intercom flagged to appear on the Camera's page (view-only).
+  bool get listedInCamerasOverview {
+    if (type != DeviceType.intercom) return false;
+    final o = raw['intercom'];
+    return o is Map && o['showInCameras'] == true;
+  }
 }
 
 /* --------------------------------------------------------------------- */
@@ -724,6 +731,16 @@ class HouseConfig {
       }
     }
     yield* globalDevices;
+  }
+
+  /// Camera's-pagina: echte camera's plus deurbelcamera's met `showInCameras`.
+  List<Device> get camerasOverview {
+    final seen = <String>{};
+    final out = <Device>[];
+    for (final d in [...cameras, ...intercoms.where((d) => d.listedInCamerasOverview)]) {
+      if (seen.add(d.id)) out.add(d);
+    }
+    return out;
   }
 
   Device? deviceById(String id) {

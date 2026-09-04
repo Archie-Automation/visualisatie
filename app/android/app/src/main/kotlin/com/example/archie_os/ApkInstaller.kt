@@ -61,6 +61,14 @@ class ApkInstaller(private val activity: Activity) {
             )
             return
         }
+        if (!signingCompatible(file)) {
+            result.error(
+                "install_conflict",
+                "Andere handtekening dan de geïnstalleerde app",
+                null,
+            )
+            return
+        }
 
         pendingResult = result
         try {
@@ -205,6 +213,51 @@ class ApkInstaller(private val activity: Activity) {
         } catch (_: PackageManager.NameNotFoundException) {
             null
         }
+    }
+
+    private fun signingCompatible(file: File): Boolean {
+        val incoming = archiveSigners(file) ?: return true
+        val installed = installedSigners() ?: return true
+        if (incoming.isEmpty() || installed.isEmpty()) return true
+        return incoming.any { a -> installed.any { b -> a.contentEquals(b) } }
+    }
+
+    private fun archiveSigners(file: File): Array<ByteArray>? {
+        val flags = signingFlags()
+        val info = activity.packageManager.getPackageArchiveInfo(file.absolutePath, flags)
+            ?: return null
+        return signerBytes(info)
+    }
+
+    private fun installedSigners(): Array<ByteArray>? {
+        return try {
+            signerBytes(
+                activity.packageManager.getPackageInfo(activity.packageName, signingFlags()),
+            )
+        } catch (_: PackageManager.NameNotFoundException) {
+            null
+        }
+    }
+
+    private fun signingFlags(): Int {
+        return if (Build.VERSION.SDK_INT >= 28) {
+            PackageManager.GET_SIGNING_CERTIFICATES
+        } else {
+            @Suppress("DEPRECATION")
+            PackageManager.GET_SIGNATURES
+        }
+    }
+
+    private fun signerBytes(info: android.content.pm.PackageInfo): Array<ByteArray>? {
+        if (Build.VERSION.SDK_INT >= 28) {
+            val si = info.signingInfo ?: return null
+            val sigs =
+                if (si.hasMultipleSigners()) si.apkContentsSigners
+                else si.signingCertificateHistory
+            return sigs?.map { it.toByteArray() }?.toTypedArray()
+        }
+        @Suppress("DEPRECATION")
+        return info.signatures?.map { it.toByteArray() }?.toTypedArray()
     }
 
     private fun pendingFlags(): Int {

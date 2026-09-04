@@ -109,12 +109,12 @@ HouseSystem? houseSystemByName(String name) {
   return null;
 }
 
-/// Devices belonging to a house-wide system (includes cameras from [cfg.cameras]).
+/// Devices belonging to a house-wide system (includes cameras from [cfg.camerasOverview]).
 List<Device> devicesForHouseSystem(HouseConfig cfg, HouseSystem system) {
   final devices =
       cfg.allDevices.where((d) => system.types.contains(d.type)).toList();
   if (system.types.contains(DeviceType.camera)) {
-    devices.addAll(cfg.cameras);
+    devices.addAll(cfg.camerasOverview);
   }
   return devices;
 }

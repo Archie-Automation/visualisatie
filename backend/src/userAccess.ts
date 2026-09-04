@@ -162,9 +162,14 @@ export function filterConfigForUser(cfg: HouseConfig, user: User): HouseConfig {
   const cameras = houseFunctionAllowed(access, "cameras")
     ? (cfg.cameras ?? []).filter((d) => aclAllows(access.devices, d.id))
     : [];
+  const listedDoorCams = houseFunctionAllowed(access, "cameras")
+    ? (cfg.intercoms ?? []).filter(
+        (d) => d.intercom.showInCameras === true && aclAllows(access.devices, d.id)
+      )
+    : [];
   const intercoms = houseFunctionAllowed(access, "intercom")
     ? (cfg.intercoms ?? []).filter((d) => aclAllows(access.devices, d.id))
-    : [];
+    : listedDoorCams;
   const devices = filterDevices(cfg.devices ?? [], null);
 
   const scenes = (cfg.scenes ?? []).filter((s) =>

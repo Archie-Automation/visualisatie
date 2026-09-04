@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -46,6 +47,7 @@ Future<void> _startRegistration({
   required String token,
   required HouseConfig cfg,
 }) async {
+  if (kIsWeb) return;
   if (_starting) return;
     if (controller.isStarted) return;
     if (controller.phase != IntercomSipPhase.idle) return;

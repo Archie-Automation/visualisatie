@@ -6,8 +6,9 @@ import { logger } from "../logger";
 import type { HouseConfig, VoipEndpoint } from "../types";
 import type { WsHub } from "../ws";
 import { AmiClient, type AmiFields } from "./ami";
-import { writeAsteriskConfig } from "./asteriskConfig";
+import { doorContextName, groupDial, writeAsteriskConfig } from "./asteriskConfig";
 import { normalizeVoip } from "./normalize";
+import { astSafe } from "./secrets";
 
 let hub: WsHub | null = null;
 let bus: KnxBus | null = null;
@@ -33,6 +34,120 @@ export function voipRegisteredExts(): string[] {
 
 export function voipAmiUp(): boolean {
   return ami?.connected === true;
+}
+
+/**
+ * Installer test: overlay + SIP ring of a belgroep, same as pressing the
+ * door button. Uses the live (saved) house.json — unsaved wizard edits
+ * are invisible to Asterisk.
+ */
+export async function testRingGroup(opts: {
+  groupId: string;
+  intercomId: string;
+}): Promise<{ overlay: boolean; sip: boolean; error?: string }> {
+  const cfg = getConfig();
+  const ic = collectIntercoms(cfg).find((i) => i.id === opts.intercomId);
+  if (!ic) {
+    return {
+      overlay: false,
+      sip: false,
+      error:
+        "Intercom staat nog niet op de server. Sla de configuratie eerst op."
+    };
+  }
+  const group = (cfg.voip?.groups ?? []).find((g) => g.id === opts.groupId);
+  if (!group) {
+    return {
+      overlay: false,
+      sip: false,
+      error:
+        "Belgroep staat nog niet op de server. Sla de configuratie eerst op."
+    };
+  }
+
+  lastRingIntercomId = ic.id;
+  answeredBroadcastFor = null;
+  hub?.broadcastIntercomRing(ic.id);
+
+  if (!cfg.voip?.enabled) {
+    return {
+      overlay: true,
+      sip: false,
+      error:
+        "VoIP staat uit — alleen het paneel toont de oproep, geen SIP-rinkelen."
+    };
+  }
+
+  const dial = groupDial(cfg, group.id);
+  if (!dial) {
+    return {
+      overlay: true,
+      sip: false,
+      error:
+        "Geen toestellen in deze belgroep op de server. Sla eerst op en vink gebruikers aan."
+    };
+  }
+
+  const timeoutSec = Math.max(5, dial.timeout);
+  const ringGroupId = (ic.intercom.ringGroupId ?? "").trim();
+  const useDoorCtx = ringGroupId === group.id;
+  if (!useDoorCtx && !group.ext) {
+    return {
+      overlay: true,
+      sip: false,
+      error:
+        "Belgroep heeft nog geen intern nummer. Sla de configuratie eerst op."
+    };
+  }
+  const channel = useDoorCtx
+    ? `Local/s@${doorContextName(ic)}`
+    : `Local/${astSafe(group.ext)}@from-internal`;
+  const callerName = ic.name.replace(/[\r\n"]/g, " ").trim() || "Intercom";
+  const callerExt = (ic.intercom.sipExt ?? "test").replace(/[<>\r\n]/g, "");
+
+  try {
+    await ensureAmi();
+    if (!ami?.connected) {
+      return {
+        overlay: true,
+        sip: false,
+        error:
+          "Asterisk is niet bereikbaar — het paneel toont de oproep, tablets rinkelen niet via SIP."
+      };
+    }
+    const evs = await ami.send(
+      {
+        Action: "Originate",
+        Channel: channel,
+        Application: "Wait",
+        Data: String(timeoutSec),
+        CallerID: `"${callerName}" <${callerExt}>`,
+        Async: "true",
+        Timeout: String((timeoutSec + 8) * 1000),
+        Variable: `INTERCOM_ID=${ic.id}`
+      },
+      10_000
+    );
+    const ok = evs[0]?.Response === "Success";
+    if (!ok) {
+      return {
+        overlay: true,
+        sip: false,
+        error: evs[0]?.Message || "SIP-oproep starten mislukt."
+      };
+    }
+    return { overlay: true, sip: true };
+  } catch (err) {
+    logger.warn(
+      { err, groupId: group.id, intercomId: ic.id },
+      "test-ring originate mislukt"
+    );
+    return {
+      overlay: true,
+      sip: false,
+      error: "SIP-oproep starten mislukt. Het paneel toont de oproep wel."
+    };
+  }
 }
 
 export function resolveUserEndpoint(

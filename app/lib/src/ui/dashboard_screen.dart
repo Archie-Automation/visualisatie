@@ -1103,7 +1103,7 @@ class _Systemen extends ConsumerWidget {
 
     // Verzamel alle devices over alle verdiepingen/kamers.
     final allDevices = cfg.allDevices;
-    final allCameras = cfg.cameras;
+    final allCameras = cfg.camerasOverview;
 
     // Bouw lijst van zichtbare systemen (alleen als er devices zijn).
     final chips = <_SystemChipData>[];
@@ -1146,7 +1146,7 @@ class _Systemen extends ConsumerWidget {
       final devices = allDevices
           .where((d) => sys.types.contains(d.type))
           .toList();
-      // Camera's staan los in cfg.cameras.
+      // Camera's staan los; deurbelcamera's met showInCameras zitten in camerasOverview.
       if (sys.types.contains(DeviceType.camera)) {
         devices.addAll(allCameras);
       }
