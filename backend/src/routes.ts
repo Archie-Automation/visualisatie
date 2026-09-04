@@ -46,7 +46,14 @@ import type { KnxBus } from "./knxBus";
 import { logger } from "./logger";
 import { runScene } from "./scenes";
 import type { SchedulerHandle } from "./scheduler";
-import type { HouseConfig, Scene, Schedule, User } from "./types";
+import type {
+  CameraDevice,
+  HouseConfig,
+  IntercomDevice,
+  Scene,
+  Schedule,
+  User
+} from "./types";
 import { appVersionInfo } from "./version";
 import {
   fetchAndroidApkFromGithub,
@@ -58,8 +65,12 @@ import {
   cameraPath,
   collectCameras,
   collectIntercoms,
+  collectListedIntercoms,
+  findOverviewCamera,
+  intercomListedAsCamera,
   publicCamera,
   publicIntercom,
+  publicOverviewCamera,
   writeGo2rtcConfig
 } from "./cameras";
 import {
@@ -100,6 +111,7 @@ import { randomSipPassword } from "./voip/secrets";
 import {
   resolveUserEndpoint,
   syncVoipFromConfig,
+  testRingGroup,
   voipAmiUp,
   voipRegisteredExts
 } from "./voip/manager";
@@ -857,6 +869,35 @@ export function buildRouter(
     res.json(result);
   });
 
+  r.post(
+    "/installer/voip/test-ring",
+    requireAuth,
+    requireAdmin,
+    async (req: AuthedRequest, res) => {
+      const groupId = String(req.body?.groupId ?? "").trim();
+      const intercomId = String(req.body?.intercomId ?? "").trim();
+      if (!groupId || !intercomId) {
+        return res.status(400).json({
+          error: "groupId en intercomId zijn verplicht."
+        });
+      }
+      const result = await testRingGroup({ groupId, intercomId });
+      if (!result.overlay) {
+        return res.status(400).json({ error: result.error ?? "Oproep-test mislukt." });
+      }
+      logger.info(
+        {
+          by: req.user?.username,
+          groupId,
+          intercomId,
+          sip: result.sip
+        },
+        "installer test-ring"
+      );
+      res.json({ ok: true, ...result });
+    }
+  );
+
   /* ----------------------------- Media bases ------------------------- */
 
   const mediaBase = () =>
@@ -878,24 +919,29 @@ export function buildRouter(
   /* ------------------------------ Cameras ---------------------------- */
   // Cameras are view-only. No microphone, no backchannel. Period.
 
-  r.get("/cameras", requireAuth, (req, res) => {
-    const cams = collectCameras(getConfig());
+  r.get("/cameras", requireAuth, (req: AuthedRequest, res) => {
+    const cfg = getConfig();
     const base = clientApiBase(req);
-    res.json({ cameras: cams.map((c) => publicCamera(c, mediaBase(), base)) });
+    const media = mediaBase();
+    const cams = collectCameras(cfg).map((c) => publicCamera(c, media, base));
+    const extra = collectListedIntercoms(cfg)
+      .filter((ic) => mayUseOverviewCamera(req, ic))
+      .map((ic) => publicOverviewCamera(ic, media, base));
+    res.json({ cameras: [...cams, ...extra] });
   });
 
-  r.get("/cameras/:id", requireAuth, (req, res) => {
-    const cam = collectCameras(getConfig()).find((c) => c.id === req.params.id);
+  r.get("/cameras/:id", requireAuth, (req: AuthedRequest, res) => {
+    const cam = overviewCameraForReq(req);
     if (!cam) return res.status(404).json({ error: "unknown camera" });
-    res.json(publicCamera(cam, mediaBase(), clientApiBase(req)));
+    res.json(publicOverviewCamera(cam, mediaBase(), clientApiBase(req)));
   });
 
   r.get("/cameras/:id/snapshot", requireAuth, (req, res) =>
     proxySnapshot(req, res, "camera", mediaBase())
   );
 
-  r.post("/cameras/:id/warm", requireAuth, async (req, res) => {
-    const cam = collectCameras(getConfig()).find((c) => c.id === req.params.id);
+  r.post("/cameras/:id/warm", requireAuth, async (req: AuthedRequest, res) => {
+    const cam = overviewCameraForReq(req);
     if (!cam) return res.status(404).json({ error: "unknown camera" });
     const warmed = await warmGo2rtcProducer(mediaBase(), cameraPath(cam), {
       retries: 4,
@@ -904,10 +950,10 @@ export function buildRouter(
     return res.json({ warmed });
   });
 
-  r.get("/cameras/:id/hls.m3u8", requireAuth, async (req, res) => {
-    const cam = collectCameras(getConfig()).find((c) => c.id === req.params.id);
+  r.get("/cameras/:id/hls.m3u8", requireAuth, async (req: AuthedRequest, res) => {
+    const cam = overviewCameraForReq(req);
     if (!cam) return res.status(404).end();
-    if (cam.camera.directHls) {
+    if (cam.type === "camera" && cam.camera.directHls) {
       return res.redirect(cam.camera.directHls);
     }
     const p = cameraPath(cam);
@@ -935,8 +981,8 @@ export function buildRouter(
   // Must be a path-scoped route. `r.use(requireAuth, …)` without a prefix
   // also wraps every later route — including unauthenticated Spotify
   // `/tls-ok` and `/callback`, which then return `{ error: "missing token" }`.
-  r.get("/cameras/:id/hls-seg/*", requireAuth, async (req, res) => {
-    const cam = collectCameras(getConfig()).find((c) => c.id === req.params.id);
+  r.get("/cameras/:id/hls-seg/*", requireAuth, async (req: AuthedRequest, res) => {
+    const cam = overviewCameraForReq(req);
     if (!cam) return res.status(404).end();
     const rest = typeof req.params[0] === "string" ? req.params[0] : "";
     if (!rest) return res.status(404).end();
@@ -949,8 +995,8 @@ export function buildRouter(
     }
   });
 
-  r.post("/cameras/:id/webrtc", requireAuth, async (req, res) => {
-    const cam = collectCameras(getConfig()).find((c) => c.id === req.params.id);
+  r.post("/cameras/:id/webrtc", requireAuth, async (req: AuthedRequest, res) => {
+    const cam = overviewCameraForReq(req);
     if (!cam) return res.status(404).json({ error: "unknown camera" });
     // Strip any sendonly/sendrecv audio from the offer just in case a
     // modified client tries to push mic audio through the camera path.
@@ -1790,6 +1836,29 @@ p{color:#b3b3b3;margin:0}</style></head>
 
 /* ------------------------------- helpers ----------------------------- */
 
+function mayUseOverviewCamera(
+  req: AuthedRequest,
+  d: CameraDevice | IntercomDevice
+): boolean {
+  if (d.type === "camera") return true;
+  if (!intercomListedAsCamera(d)) return false;
+  const u = currentUser(req);
+  if (!u) return isStaffRole(req.user?.role);
+  if (isStaffRole(u.role)) return true;
+  if (!aclAllows(u.access?.devices, d.id)) return false;
+  return (
+    houseFunctionAllowed(u.access, "cameras") || canViewIntercom(req, d.id)
+  );
+}
+
+function overviewCameraForReq(
+  req: AuthedRequest
+): CameraDevice | IntercomDevice | undefined {
+  const cam = findOverviewCamera(getConfig(), req.params.id);
+  if (!cam || !mayUseOverviewCamera(req, cam)) return undefined;
+  return cam;
+}
+
 async function proxySnapshot(
   req: import("express").Request,
   res: import("express").Response,
@@ -1797,23 +1866,36 @@ async function proxySnapshot(
   mediaBase: string
 ) {
   const cfg = getConfig();
-  const target =
-    kind === "camera"
-      ? collectCameras(cfg).find((c) => c.id === req.params.id)
-      : collectIntercoms(cfg).find((i) => i.id === req.params.id);
+  let target: CameraDevice | IntercomDevice | undefined;
+  let resolvedKind: "camera" | "intercom" = kind;
+  if (kind === "camera") {
+    target = collectCameras(cfg).find((c) => c.id === req.params.id);
+    if (!target) {
+      target = collectListedIntercoms(cfg).find((i) => i.id === req.params.id);
+      resolvedKind = "intercom";
+    }
+    if (
+      target &&
+      !mayUseOverviewCamera(req as AuthedRequest, target)
+    ) {
+      return res.status(404).end();
+    }
+  } else {
+    target = collectIntercoms(cfg).find((i) => i.id === req.params.id);
+  }
   if (!target) return res.status(404).end();
 
-  const cacheKey = `${kind}:${target.id}`;
+  const cacheKey = `${resolvedKind}:${target.id}`;
   const cached = snapshotCache.get(cacheKey);
   const now = Date.now();
 
   // Stale-while-revalidate: return the last good frame immediately, refresh in background.
   if (serveSnapshotFromCache(res, cacheKey, cached, now)) {
-    triggerBackgroundSnapshotRefresh(kind, target, mediaBase, cached, now);
+    triggerBackgroundSnapshotRefresh(resolvedKind, target, mediaBase, cached, now);
     return;
   }
 
-  const buf = await refreshSnapshotCache(kind, target, mediaBase);
+  const buf = await refreshSnapshotCache(resolvedKind, target, mediaBase);
   if (buf) {
     res.setHeader("content-type", "image/jpeg");
     res.setHeader("cache-control", "public, max-age=2");

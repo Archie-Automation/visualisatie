@@ -342,3 +342,50 @@ Future<InstallerCameraProbeSummary> postInstallerCameraProbe(
     Map<String, dynamic>.from(jsonDecode(res.body) as Map),
   );
 }
+
+class InstallerVoipTestRingResult {
+  const InstallerVoipTestRingResult({
+    required this.overlay,
+    required this.sip,
+    this.error,
+  });
+
+  final bool overlay;
+  final bool sip;
+  final String? error;
+}
+
+Future<InstallerVoipTestRingResult> postInstallerVoipTestRing(
+  String token, {
+  required String groupId,
+  required String intercomId,
+}) async {
+  final res = await http.post(
+    Uri.parse('$apiBase/api/installer/voip/test-ring'),
+    headers: {
+      'content-type': 'application/json',
+      'authorization': 'Bearer $token',
+    },
+    body: jsonEncode({
+      'groupId': groupId,
+      'intercomId': intercomId,
+    }),
+  );
+  Map<String, dynamic> body = {};
+  if (res.body.isNotEmpty) {
+    try {
+      body = Map<String, dynamic>.from(jsonDecode(res.body) as Map);
+    } catch (_) {}
+  }
+  if (res.statusCode != 200) {
+    throw StateError(
+      body['error'] as String? ??
+          'Oproep-test mislukt (HTTP ${res.statusCode})',
+    );
+  }
+  return InstallerVoipTestRingResult(
+    overlay: body['overlay'] == true,
+    sip: body['sip'] == true,
+    error: body['error'] as String?,
+  );
+}

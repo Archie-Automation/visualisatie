@@ -539,6 +539,10 @@ export interface IntercomConfig {
   ringGroupId?: string;
   /** Enkele DTMF-toets tijdens het gesprek om het slot te openen. Standaard `#`. */
   dtmfDigit?: string;
+  /**
+   * Toon deze deurbelcamera ook op de Camera's-pagina (alleen beeld, geen microfoon).
+   */
+  showInCameras?: boolean;
   httpRelease?: IntercomHttpRelease;
   /**
    * Optionele passcode voor de HTTP ring-webhook (`POST /api/webhooks/ring/:id`).

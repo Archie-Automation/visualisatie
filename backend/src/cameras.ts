@@ -92,6 +92,47 @@ export function collectIntercoms(cfg: HouseConfig): IntercomDevice[] {
   return [...(cfg.intercoms ?? [])];
 }
 
+export function intercomListedAsCamera(d: IntercomDevice): boolean {
+  return d.intercom.showInCameras === true;
+}
+
+export function collectListedIntercoms(cfg: HouseConfig): IntercomDevice[] {
+  return collectIntercoms(cfg).filter(intercomListedAsCamera);
+}
+
+export function findOverviewCamera(
+  cfg: HouseConfig,
+  id: string
+): CameraDevice | IntercomDevice | undefined {
+  return (
+    collectCameras(cfg).find((c) => c.id === id) ??
+    collectListedIntercoms(cfg).find((i) => i.id === id)
+  );
+}
+
+/** View-only camera payload, including intercoms flagged `showInCameras`. */
+export function publicOverviewCamera(
+  d: CameraDevice | IntercomDevice,
+  mediaBase: string,
+  apiBase: string
+): CameraPublic {
+  if (d.type === "camera") return publicCamera(d, mediaBase, apiBase);
+  const p = cameraPath(d);
+  const hls = apiBase
+    ? `${apiBase}/api/cameras/${d.id}/hls.m3u8`
+    : `${mediaBase}/api/stream.m3u8?src=${encodeURIComponent(p)}`;
+  return {
+    id: d.id,
+    name: d.name,
+    kind: "camera",
+    aspect: d.intercom.aspect ?? "4:3",
+    hls,
+    webrtc: `${mediaBase}/api/webrtc?src=${encodeURIComponent(p)}`,
+    whep: `${mediaBase}/api/whep?src=${encodeURIComponent(p)}`,
+    snapshot: `${apiBase}/api/cameras/${d.id}/snapshot`
+  };
+}
+
 export function publicCamera(
   cam: CameraDevice,
   mediaBase: string,

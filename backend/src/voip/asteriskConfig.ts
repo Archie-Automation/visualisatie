@@ -70,7 +70,10 @@ qualify_frequency=30
 `;
 }
 
-function groupDial(cfg: HouseConfig, groupId: string): { dial: string; timeout: number } | null {
+export function groupDial(
+  cfg: HouseConfig,
+  groupId: string
+): { dial: string; timeout: number } | null {
   const g = (cfg.voip?.groups ?? []).find((x) => x.id === groupId);
   if (!g) return null;
   const eps = cfg.voip?.endpoints ?? [];
@@ -83,7 +86,7 @@ function groupDial(cfg: HouseConfig, groupId: string): { dial: string; timeout: 
   return { dial: targets.join("&"), timeout: g.timeoutSec ?? 30 };
 }
 
-function doorContextName(ic: IntercomDevice): string {
+export function doorContextName(ic: IntercomDevice): string {
   return `ring-${astSafe(ic.id).replace(/[^a-zA-Z0-9_-]/g, "")}`;
 }
 

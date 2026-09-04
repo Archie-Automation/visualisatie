@@ -109,7 +109,7 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
         ),
       ),
       data: (c) {
-        final cameras = List<Device>.from(c.cameras);
+        final cameras = List<Device>.from(c.camerasOverview);
         if (cameras.isEmpty) {
           return Scaffold(
             backgroundColor: Colors.transparent,

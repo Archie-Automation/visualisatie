@@ -37,6 +37,8 @@ class IntercomInstallerWizard extends StatelessWidget {
         BelgroepSetupCard(
           house: house,
           onChanged: onChanged,
+          getToken: getToken,
+          intercomId: '${device['id']}',
         ),
         IntercomActionMappingCard(
           device: device,
@@ -219,6 +221,18 @@ class IntercomDeviceSetupCard extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           _RtspTestButton(rtsp: rtsp, getToken: getToken),
+          const SizedBox(height: 8),
+          LuxeSwitchRow(
+            title: 'Toon bij Camera\'s',
+            subtitle:
+                'Live beeld van deze deurbel ook op de Camera\'s-pagina. '
+                'Alleen kijken, geen microfoon.',
+            value: o['showInCameras'] == true,
+            onChanged: (v) {
+              o['showInCameras'] = v;
+              onChanged();
+            },
+          ),
           const SizedBox(height: 16),
           _WizardTextField(
             label: 'Deuropen-code (DTMF)',
@@ -248,10 +262,14 @@ class BelgroepSetupCard extends StatelessWidget {
     super.key,
     required this.house,
     required this.onChanged,
+    this.getToken,
+    this.intercomId = '',
   });
 
   final Map<String, dynamic> house;
   final VoidCallback onChanged;
+  final Future<String?> Function()? getToken;
+  final String intercomId;
 
   @override
   Widget build(BuildContext context) {
@@ -299,6 +317,8 @@ class BelgroepSetupCard extends StatelessWidget {
               group: groups[i],
               canDelete: true,
               onChanged: onChanged,
+              getToken: getToken,
+              intercomId: intercomId,
               onDelete: () {
                 deleteBelgroep(house, '${groups[i]['id']}');
                 onChanged();
@@ -325,6 +345,8 @@ class _BelgroepEditor extends StatelessWidget {
     required this.canDelete,
     required this.onChanged,
     required this.onDelete,
+    this.getToken,
+    this.intercomId = '',
   });
 
   final Map<String, dynamic> house;
@@ -332,6 +354,8 @@ class _BelgroepEditor extends StatelessWidget {
   final bool canDelete;
   final VoidCallback onChanged;
   final VoidCallback onDelete;
+  final Future<String?> Function()? getToken;
+  final String intercomId;
 
   @override
   Widget build(BuildContext context) {
@@ -436,6 +460,13 @@ class _BelgroepEditor extends StatelessWidget {
                 onChanged();
               },
             ),
+          const SizedBox(height: 8),
+          _BelgroepTestRingButton(
+            groupId: '${group['id'] ?? ''}',
+            intercomId: intercomId,
+            getToken: getToken,
+            enabled: selectedCount > 0 && intercomId.trim().isNotEmpty,
+          ),
         ],
       ),
     );
@@ -570,6 +601,123 @@ class IntercomActionMappingCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _BelgroepTestRingButton extends StatefulWidget {
+  const _BelgroepTestRingButton({
+    required this.groupId,
+    required this.intercomId,
+    required this.enabled,
+    this.getToken,
+  });
+
+  final String groupId;
+  final String intercomId;
+  final bool enabled;
+  final Future<String?> Function()? getToken;
+
+  @override
+  State<_BelgroepTestRingButton> createState() =>
+      _BelgroepTestRingButtonState();
+}
+
+class _BelgroepTestRingButtonState extends State<_BelgroepTestRingButton> {
+  bool _busy = false;
+  String? _status;
+  Color? _statusColor;
+
+  Future<void> _run() async {
+    if (!widget.enabled) {
+      setState(() {
+        _status = widget.intercomId.trim().isEmpty
+            ? 'Geen intercom om te testen.'
+            : 'Vink eerst minstens één toestel aan en sla op.';
+        _statusColor = Colors.red.shade700;
+      });
+      return;
+    }
+    final token = await widget.getToken?.call();
+    if (!mounted) return;
+    if (token == null) {
+      setState(() {
+        _status = 'Niet ingelogd — kan de oproep niet starten.';
+        _statusColor = Colors.red.shade700;
+      });
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _status = null;
+      _statusColor = null;
+    });
+    try {
+      final r = await postInstallerVoipTestRing(
+        token,
+        groupId: widget.groupId,
+        intercomId: widget.intercomId,
+      );
+      if (!mounted) return;
+      if (r.sip) {
+        setState(() {
+          _status =
+              'Oproep gestart. Tablets, telefoons en het paneel moeten overgaan.';
+          _statusColor = null;
+        });
+      } else {
+        setState(() {
+          _status = r.error ??
+              'Paneel toont de oproep; SIP-rinkelen is niet gestart.';
+          _statusColor = Colors.orange.shade800;
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _status = '$e';
+        _statusColor = Colors.red.shade700;
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        OutlinedButton.icon(
+          onPressed: _busy ? null : _run,
+          icon: _busy
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.ring_volume_outlined, size: 18),
+          label: const Text('Oproep testen'),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 6),
+          child: Text(
+            'Vanaf de laptop: alle panelen en telefoons in deze groep gaan over. '
+            'Sla eerst op als je de groep net hebt gewijzigd.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+        if (_status != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              _status!,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: _statusColor,
+                  ),
+            ),
+          ),
+      ],
     );
   }
 }

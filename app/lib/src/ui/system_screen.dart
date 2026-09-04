@@ -240,7 +240,7 @@ class _FavorietenBody extends ConsumerWidget {
 
     final seenFavIds = <String>{};
     final favDevices = <Device>[];
-    for (final d in [...cfg.allDevices, ...cfg.cameras]) {
+    for (final d in [...cfg.allDevices, ...cfg.camerasOverview]) {
       if (effectiveDeviceFav(userDevFavsAsync, d)) {
         if (seenFavIds.add(d.id)) favDevices.add(d);
       }

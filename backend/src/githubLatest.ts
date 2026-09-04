@@ -136,7 +136,11 @@ function infoFromTag(
 function versionRawFromRelease(b: Record<string, unknown>): string | null {
   const name = typeof b.name === "string" ? b.name.trim() : "";
   const tag = typeof b.tag_name === "string" ? b.tag_name.trim() : "";
+  const notes = typeof b.body === "string" ? b.body.trim() : "";
   if (/^v?\d+\.\d+/i.test(name)) return stripV(name);
+  const embedded =
+    name.match(/(\d+\.\d+\.\d+\+\d+)/) ?? notes.match(/(\d+\.\d+\.\d+\+\d+)/);
+  if (embedded) return embedded[1];
   if (/^v?\d+\.\d+/i.test(tag)) return stripV(tag);
   return null;
 }
@@ -202,7 +206,45 @@ async function fetchReleaseByTag(
     `https://api.github.com/repos/${repo}/releases/tags/${encodeURIComponent(tag)}`
   );
   if (!rel.ok || !rel.body || typeof rel.body !== "object") return null;
-  return infoFromRelease(rel.body as Record<string, unknown>, "release");
+  const body = rel.body as Record<string, unknown>;
+  const apk = pickAndroidApk(body.assets);
+  const parsed = infoFromRelease(body, "release");
+  if (parsed) return { ...parsed, androidApk: apk };
+  if (!apk) return null;
+  const htmlUrl = typeof body.html_url === "string" ? body.html_url : null;
+  return {
+    ...parseVersion("0.0.0"),
+    tag,
+    htmlUrl,
+    source: "release",
+    checkedAt: new Date().toISOString(),
+    androidApk: apk
+  };
+}
+
+/** Rolling `android-latest` is the only APK channel. Official GitHub
+ *  "latest" often still has an old debug-signed build (downgrade +
+ *  signature mismatch → Android "App niet geïnstalleerd"). */
+function apkFromRolling(
+  rolling: GithubLatestInfo | null
+): GithubAndroidApkInfo | null {
+  const apk = rolling?.androidApk;
+  if (!apk) return null;
+  const labeled =
+    rolling && rolling.semver !== "0.0.0"
+      ? { ...apk, version: rolling.version }
+      : apk;
+  if (labeled.version) {
+    const ver = parseVersion(labeled.version);
+    if (compareVersion(ver, appVersionInfo) < 0) {
+      logger.warn(
+        { apk: labeled.version, running: appVersionInfo.version },
+        "APK op GitHub is ouder dan de server — niet aanbieden"
+      );
+      return null;
+    }
+  }
+  return labeled;
 }
 
 async function fetchLatestUncached(): Promise<GithubLatestInfo | null> {
@@ -268,13 +310,7 @@ async function fetchLatestUncached(): Promise<GithubLatestInfo | null> {
 
   // Offer the newest APK even if CI lags a git push. Hiding it left tablets
   // stuck on an old build (e.g. +186) while the NUC already ran a newer pubspec.
-  const apkSource = pickNewer(
-    rolling?.androidApk ? rolling : null,
-    official?.androidApk ? official : null
-  );
-  const apkUsable = apkSource?.androidApk
-    ? { ...apkSource.androidApk, version: apkSource.version }
-    : null;
+  const apkUsable = apkFromRolling(rolling);
 
   return {
     ...newest,
