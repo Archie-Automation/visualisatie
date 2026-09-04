@@ -80,7 +80,8 @@ class MainActivity : FlutterActivity(), SensorEventListener {
             when (call.method) {
                 "start" -> {
                     val volume = (call.argument<Number>("volume") ?: 0.8).toFloat()
-                    doorbellRinger?.start(volume)
+                    val tone = call.argument<String>("tone") ?: "chime"
+                    doorbellRinger?.start(volume, tone)
                     result.success(null)
                 }
                 "stop" -> {

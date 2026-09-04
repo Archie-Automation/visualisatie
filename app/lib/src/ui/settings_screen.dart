@@ -123,14 +123,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         setState(() => _topic = _SettingsTopic.appearance),
                   ),
                   Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
-                  _SettingsMenuTile(
-                    icon: Icons.notifications_off_outlined,
-                    title: 'Deurbel',
-                    subtitle: 'Stilzetten per account, volume per scherm',
-                    onTap: () =>
-                        setState(() => _topic = _SettingsTopic.doorbell),
-                  ),
-                  Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
+                  if (!wallTabletDeviceSettingsApply) ...[
+                    _SettingsMenuTile(
+                      icon: Icons.notifications_off_outlined,
+                      title: 'Deurbel',
+                      subtitle: 'Stilzetten voor dit account',
+                      onTap: () =>
+                          setState(() => _topic = _SettingsTopic.doorbell),
+                    ),
+                    Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
+                  ],
                   _SettingsMenuTile(
                     icon: Icons.schedule_outlined,
                     title: 'Tijdschema\'s',
@@ -228,6 +230,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _SettingsTopic.tablet =>
         'Deze instellingen gelden alleen voor dit apparaat. '
             'Op telefoon of in de browser hebben ze geen effect op het wandtablet.\n\n'
+            'Deurbel: volume, geluid en hoe lang dit paneel overgaat gelden alleen hier. '
+            'Stilzetten geldt voor dit account op elk scherm.\n\n'
             'Na inactiviteit gaat dit scherm terug naar home, daarna een screensaver met klok.\n\n'
             'Koppel de locatie waar dit tablet hangt. Optioneel toont '
             'de screensaver de temperatuur van een ruimte of buitentemperatuur '
@@ -278,8 +282,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     canEditSchedules: canEditSchedules,
                     showTitle: false,
                   ),
-                _SettingsTopic.tablet =>
-                  const _DisplayPanelSection(showTitle: false),
+                _SettingsTopic.tablet => Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const _DisplayPanelSection(showTitle: false),
+                      if (DoorbellRinger.supported) ...[
+                        const SizedBox(height: 16),
+                        const _DoorbellMuteSection(showTitle: true),
+                      ],
+                    ],
+                  ),
                 _SettingsTopic.spotify =>
                   const _SpotifySection(showTitle: false),
                 _SettingsTopic.users =>
@@ -1778,7 +1790,8 @@ class _DoorbellMuteSectionState extends ConsumerState<_DoorbellMuteSection> {
     if (_testing) return;
     setState(() => _testing = true);
     final volume = doorbellVolumeValue(ref.read(doorbellVolumeProvider));
-    await DoorbellRinger.start(volume: volume);
+    final tone = doorbellToneValue(ref.read(doorbellToneProvider));
+    await DoorbellRinger.start(volume: volume, toneId: tone);
     _testTimer?.cancel();
     _testTimer = Timer(const Duration(seconds: 4), () async {
       await DoorbellRinger.stop();
@@ -1787,7 +1800,20 @@ class _DoorbellMuteSectionState extends ConsumerState<_DoorbellMuteSection> {
   }
 
   Future<void> _previewVolume(double volume) async {
-    await DoorbellRinger.start(volume: volume);
+    final tone = doorbellToneValue(ref.read(doorbellToneProvider));
+    await DoorbellRinger.start(volume: volume, toneId: tone);
+    _testTimer?.cancel();
+    setState(() => _testing = true);
+    _testTimer = Timer(const Duration(seconds: 2), () async {
+      await DoorbellRinger.stop();
+      if (mounted) setState(() => _testing = false);
+    });
+  }
+
+  Future<void> _previewTone(String toneId) async {
+    await ref.read(doorbellToneProvider.notifier).set(toneId);
+    final volume = doorbellVolumeValue(ref.read(doorbellVolumeProvider));
+    await DoorbellRinger.start(volume: volume, toneId: toneId);
     _testTimer?.cancel();
     setState(() => _testing = true);
     _testTimer = Timer(const Duration(seconds: 2), () async {
@@ -1826,6 +1852,9 @@ class _DoorbellMuteSectionState extends ConsumerState<_DoorbellMuteSection> {
     final silent = me?.doorbellSilent == true;
     final until = me?.doorbellMutedUntil;
     final volume = doorbellVolumeValue(ref.watch(doorbellVolumeProvider));
+    final toneId = doorbellToneValue(ref.watch(doorbellToneProvider));
+    final ringSeconds =
+        doorbellRingSecondsValue(ref.watch(doorbellRingSecondsProvider));
     return _SettingsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1844,7 +1873,7 @@ class _DoorbellMuteSectionState extends ConsumerState<_DoorbellMuteSection> {
             title: 'Deurbel stil',
             subtitle: silent
                 ? _doorbellUntilLabel(until)
-                : 'Ding-dong bij een oproep',
+                : 'Stil op elk scherm van dit account',
             value: silent,
             onChanged: _busy
                 ? null
@@ -1892,13 +1921,56 @@ class _DoorbellMuteSectionState extends ConsumerState<_DoorbellMuteSection> {
                 onChangeEnd: _previewVolume,
               ),
             ),
+            const SizedBox(height: 8),
+            Text(
+              'Geluid',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final t in DoorbellRinger.tones)
+                  _MuteChip(
+                    label: t.label,
+                    selected: toneId == t.id,
+                    onTap: () => _previewTone(t.id),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Overgaan op dit paneel',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Daarna stopt de bel hier. Andere toestellen gaan door tot de belgroep stopt.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final s in DoorbellRinger.ringSecondsChoices)
+                  _MuteChip(
+                    label: '${s}s',
+                    selected: ringSeconds == s,
+                    onTap: () =>
+                        ref.read(doorbellRingSecondsProvider.notifier).set(s),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
             OutlinedButton.icon(
               onPressed: _testing ? null : _testSound,
               icon: Icon(
                 _testing ? Icons.volume_up : Icons.notifications_active_outlined,
                 size: 18,
               ),
-              label: Text(_testing ? 'Speelt…' : 'Test ding-dong'),
+              label: Text(_testing ? 'Speelt…' : 'Test geluid'),
             ),
           ],
           if (silent) ...[

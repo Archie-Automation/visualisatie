@@ -1111,7 +1111,7 @@ class _Systemen extends ConsumerWidget {
     // Favorieten chip â€” alleen als er favoriete devices of shortcuts zijn.
     final seenFavIds = <String>{};
     final favDevices = <Device>[];
-    for (final d in [...allDevices, ...allCameras]) {
+    for (final d in [...allDevices, ...allCameras, ...cfg.intercoms]) {
       if (effectiveDeviceFav(userDevFavsAsync, d)) {
         if (seenFavIds.add(d.id)) favDevices.add(d);
       }
@@ -1149,6 +1149,12 @@ class _Systemen extends ConsumerWidget {
       // Camera's staan los; deurbelcamera's met showInCameras zitten in camerasOverview.
       if (sys.types.contains(DeviceType.camera)) {
         devices.addAll(allCameras);
+      }
+      if (sys.types.contains(DeviceType.intercom)) {
+        final seen = {for (final d in devices) d.id};
+        for (final d in cfg.intercoms) {
+          if (seen.add(d.id)) devices.add(d);
+        }
       }
       if (devices.isEmpty) continue;
       chips.add(_SystemChipData(
