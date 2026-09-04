@@ -30,7 +30,7 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
         title: const Text('Server bijwerken?'),
         content: const Text(
           'De server haalt de nieuwste software op en installeert die opnieuw. '
-          'Dat duurt 10–20 minuten. Het huis blijft werken tot een korte herstart aan het eind. '
+          'Meestal 1–3 minuten. Het huis blijft werken tot een korte herstart aan het eind. '
           'Huisconfiguratie en wachtwoorden blijven bewaard.',
         ),
         actions: [
