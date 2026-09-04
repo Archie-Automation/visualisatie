@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -68,7 +69,9 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
       await waitForBackendOnline(timeout: const Duration(minutes: 3));
       ref.invalidate(softwareVersionStatusProvider);
       if (!mounted) return;
-      await fullAppRemountOrReload();
+      if (kIsWeb) {
+        await fullAppRemountOrReload();
+      }
     } catch (e) {
       if (mounted) {
         setState(() {

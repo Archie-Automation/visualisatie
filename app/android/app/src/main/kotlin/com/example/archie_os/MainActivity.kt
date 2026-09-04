@@ -1,37 +1,32 @@
 package com.example.archie_os
 
 import android.content.Context
-import android.content.Intent
 import android.graphics.PixelFormat
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
-import android.provider.Settings
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.view.WindowManager
-import androidx.core.content.FileProvider
 import androidx.core.view.WindowCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
-import java.io.File
 
 /**
  * Wandtablet wake:
  * - Proximity-sensor indien aanwezig
  * - Anders lichtsensor: snelle donkere dip = hand over sensor → wake
  * - [wakeScreen] ook aanroepbaar vanuit Flutter (alarm-inloop etc.)
- * - APK sideload install via FileProvider (GitHub OTA via NUC proxy)
+ * - APK-update via PackageInstaller-sessie (GitHub OTA via NUC)
  */
 class MainActivity : FlutterActivity(), SensorEventListener {
     private var sensorManager: SensorManager? = null
@@ -43,6 +38,7 @@ class MainActivity : FlutterActivity(), SensorEventListener {
     private var lastWakeAtMs = 0L
     private val mainHandler = Handler(Looper.getMainLooper())
     private var wakeLock: PowerManager.WakeLock? = null
+    private var apkInstaller: ApkInstaller? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -75,6 +71,7 @@ class MainActivity : FlutterActivity(), SensorEventListener {
             }
         }
 
+        apkInstaller = ApkInstaller(this)
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "archie_os/apk_install",
@@ -86,11 +83,7 @@ class MainActivity : FlutterActivity(), SensorEventListener {
                         result.error("bad_args", "path required", null)
                         return@setMethodCallHandler
                     }
-                    try {
-                        result.success(installApk(path))
-                    } catch (e: Exception) {
-                        result.error("install_failed", e.message, null)
-                    }
+                    apkInstaller?.install(path, result)
                 }
                 "appVersion" -> {
                     result.success(currentAppVersion())
@@ -98,38 +91,6 @@ class MainActivity : FlutterActivity(), SensorEventListener {
                 else -> result.notImplemented()
             }
         }
-    }
-
-    private fun installApk(path: String): Boolean {
-        val file = File(path)
-        if (!file.exists() || file.length() < 1024L) {
-            throw IllegalStateException("apk_missing")
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            if (!packageManager.canRequestPackageInstalls()) {
-                startActivity(
-                    Intent(
-                        Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                        Uri.parse("package:$packageName"),
-                    ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-                )
-                throw IllegalStateException("install_permission_denied")
-            }
-        }
-
-        val uri = FileProvider.getUriForFile(
-            this,
-            "$packageName.fileprovider",
-            file,
-        )
-        val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "application/vnd.android.package-archive")
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        startActivity(intent)
-        return true
     }
 
     private fun currentAppVersion(): Map<String, Any> {
@@ -284,6 +245,8 @@ class MainActivity : FlutterActivity(), SensorEventListener {
 
     override fun onDestroy() {
         stopSensors()
+        apkInstaller?.dispose()
+        apkInstaller = null
         try {
             wakeLock?.let { if (it.isHeld) it.release() }
         } catch (_: Exception) {
