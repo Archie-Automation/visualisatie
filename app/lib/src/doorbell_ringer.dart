@@ -13,10 +13,10 @@ class DoorbellRinger {
   static const defaultRingSeconds = 20;
 
   static const tones = <({String id, String label})>[
-    (id: 'chime', label: 'Ding-dong'),
-    (id: 'short', label: 'Kort'),
-    (id: 'soft', label: 'Zacht'),
-    (id: 'double', label: 'Dubbel'),
+    (id: 'chime', label: 'Klassiek'),
+    (id: 'modern', label: 'Modern'),
+    (id: 'brass', label: 'Mechanisch'),
+    (id: 'melody', label: 'Melodisch'),
   ];
 
   static const ringSecondsChoices = <int>[
@@ -37,13 +37,24 @@ class DoorbellRinger {
 
   static bool isKnownTone(String id) => tones.any((t) => t.id == id);
 
+  static String migrateToneId(String? raw) {
+    switch (raw) {
+      case 'short':
+      case 'double':
+        return 'modern';
+      case 'soft':
+        return 'melody';
+      default:
+        if (raw != null && isKnownTone(raw)) return raw;
+        return defaultToneId;
+    }
+  }
+
   static Future<void> start({double? volume, String? toneId}) async {
     if (!supported) return;
     final v = (volume ?? defaultVolume).clamp(0.0, 1.0);
     if (v <= 0) return;
-    final tone = (toneId != null && isKnownTone(toneId))
-        ? toneId
-        : defaultToneId;
+    final tone = DoorbellRinger.migrateToneId(toneId);
     try {
       await _channel.invokeMethod<void>('start', {
         'volume': v,
@@ -99,14 +110,11 @@ class DoorbellToneNotifier extends AsyncNotifier<String> {
   Future<String> build() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_tonePrefsKey);
-    if (raw != null && DoorbellRinger.isKnownTone(raw)) return raw;
-    return DoorbellRinger.defaultToneId;
+    return DoorbellRinger.migrateToneId(raw);
   }
 
   Future<void> set(String toneId) async {
-    final id = DoorbellRinger.isKnownTone(toneId)
-        ? toneId
-        : DoorbellRinger.defaultToneId;
+    final id = DoorbellRinger.migrateToneId(toneId);
     state = AsyncData(id);
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_tonePrefsKey, id);
@@ -119,7 +127,7 @@ final doorbellToneProvider =
 );
 
 String doorbellToneValue(AsyncValue<String> async) => async.maybeWhen(
-      data: (v) => DoorbellRinger.isKnownTone(v) ? v : DoorbellRinger.defaultToneId,
+      data: DoorbellRinger.migrateToneId,
       orElse: () => DoorbellRinger.defaultToneId,
     );
 
