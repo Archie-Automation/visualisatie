@@ -47,6 +47,8 @@ import '../ui/widgets/luxe_form.dart';
 import 'installer_api.dart';
 import 'installer_auth.dart';
 import 'installer_form_sections.dart';
+import 'intercom_installer_wizard.dart';
+import 'intercom_sip_config.dart';
 import 'knx_ga_catalog.dart';
 import 'voip_installer_section.dart';
 
@@ -1418,7 +1420,14 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   }
 
   void _addIntercom() {
+    final house = _house!;
+    enableIntercomCalling(house);
+    final groups = voipGroupMaps(house);
+    if (groups.isEmpty) createBelgroep(house);
     final map = _defaultDevice('intercom', 'dev-ic-${_uuid.v4()}');
+    final o = ensureIntercomMap(map);
+    final g = voipGroupMaps(house);
+    if (g.isNotEmpty) o['ringGroupId'] = g.first['id'];
     _intercoms().add(map);
     setState(() => _sel = _Focus.intercomDetail(_intercoms().length - 1));
   }
@@ -1536,8 +1545,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
+        LuxeListCard(
           child: VoipInstallerSection(
             house: _house!,
             onChanged: () => setState(() {}),
@@ -1553,11 +1561,20 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           padding: EdgeInsets.zero,
           child: Column(
             children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 14, 4),
+                child: LuxeSectionTitle(
+                  icon: Icons.sensor_door_outlined,
+                  title: 'Deurstations',
+                  subtitle:
+                      'Stap 1: toestel  ·  Stap 2: belgroep  ·  Stap 3: belknop',
+                ),
+              ),
               if (list.isEmpty)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
                   child: Text(
-                    'Nog geen intercom',
+                    'Nog geen deurstation. Voeg er één toe en vul de drie stappen in.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
@@ -1572,19 +1589,21 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   }(),
                   subtitle: () {
                     final o = list[i]['intercom'];
-                    if (o is! Map) return null;
-                    const labels = <String, String>{
-                      'doorbird': 'DoorBird',
-                      'twoN': '2N',
-                      'axis': 'Axis',
-                      'mobotix': 'Mobotix',
-                      'siedle': 'Siedle',
-                      'comelit': 'Comelit',
-                      'unifi': 'UniFi',
-                      'other': 'SIP',
-                      'sip': 'SIP',
-                    };
-                    return labels[o['kind'] as String?];
+                    if (o is! Map) return 'Tik om in te stellen';
+                    final rtsp = (o['rtsp'] as String?)?.trim() ?? '';
+                    final groupId = (o['ringGroupId'] as String?)?.trim() ?? '';
+                    String? groupName;
+                    for (final g in voipGroupMaps(_house!)) {
+                      if ('${g['id']}' == groupId) {
+                        groupName = (g['name'] as String?)?.trim();
+                        break;
+                      }
+                    }
+                    if (rtsp.isEmpty) return 'Camerastream ontbreekt';
+                    if (groupName != null && groupName.isNotEmpty) {
+                      return groupName;
+                    }
+                    return 'Nog geen belgroep gekoppeld';
                   }(),
                   selected:
                       _sel.kind == _FocusKind.intercomDetail && _sel.ci == i,
@@ -1748,11 +1767,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       case 'intercom':
         return {
           'id': id,
-          'name': 'Intercom',
+          'name': 'Voordeur',
           'type': 'intercom',
           'intercom': {
-            'kind': 'doorbird',
-            'rtsp': 'rtsp://192.168.1.102/live',
+            'kind': 'other',
+            'rtsp': '',
+            'dtmfDigit': '#',
             'releaseMode': 'knx',
           },
         };
@@ -2332,7 +2352,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               LuxeNavRow(
                 icon: Icons.doorbell_outlined,
                 title: 'Intercom',
-                subtitle: 'Deurbel, deur en SIP',
+                subtitle: 'Deurstation en belgroep',
                 selected: _sel.kind == _FocusKind.intercoms ||
                     _sel.kind == _FocusKind.intercomDetail,
                 trailing: _IntegrationBadge(
@@ -3003,10 +3023,10 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
                 children: [
                   Expanded(
                     child: LuxeSwitchRow(
-                      title: 'SIP',
+                      title: 'Ontvangt deurbel-oproepen',
                       subtitle: ensureVoipMap(widget.house)['enabled'] == true
-                          ? null
-                          : 'Zet de SIP-server aan bij Intercom.',
+                          ? 'Automatisch gekoppeld aan het toestel van deze gebruiker.'
+                          : 'Zet deurbel-oproepen aan bij Intercom.',
                       value: sipEndpointForUser(widget.house, u) != null,
                       onChanged: ensureVoipMap(widget.house)['enabled'] == true
                           ? (v) {
@@ -3023,25 +3043,14 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
                   ),
                   if (ensureVoipMap(widget.house)['enabled'] == true)
                     const LuxeInfoIconButton(
-                      title: 'SIP',
+                      title: 'Deurbel-oproepen',
                       body:
-                          'Elke gebruiker met SIP aan krijgt een eigen nummer en wachtwoord. '
-                          'Gebruik dat account op precies één toestel (paneel, telefoon of app).',
+                          'Dit account gaat over als het in een belgroep staat. '
+                          'Nummer en wachtwoord worden automatisch aangemaakt — '
+                          'niet nodig op het toestel in te vullen.',
                     ),
                 ],
               ),
-              if (sipEndpointForUser(widget.house, u) != null) ...[
-                const SizedBox(height: 8),
-                VoipSipAccountFields(
-                  house: widget.house,
-                  ep: sipEndpointForUser(widget.house, u)!,
-                  includeHost: true,
-                  onChanged: () {
-                    widget.onChanged();
-                    setState(() {});
-                  },
-                ),
-              ],
             ],
           ),
         ),
@@ -5077,8 +5086,9 @@ class _DeviceForm extends StatelessWidget {
                   ],
                 ),
               ),
-              _BoundStrField('name', device, onChanged,
-                  labelOverride: 'Naam'),
+              if (type != 'intercom')
+                _BoundStrField('name', device, onChanged,
+                    labelOverride: 'Naam'),
               if (type != 'camera' && type != 'intercom')
                 _BoundStrField('id', device, onChanged),
               LuxeSwitchRow(
@@ -5103,7 +5113,7 @@ class _DeviceForm extends StatelessWidget {
               lutronOnly: lutronOnly,
             ),
           ),
-        if (showTypeCard)
+        if (showTypeCard && type != 'intercom')
         LuxeListCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -5164,26 +5174,6 @@ class _DeviceForm extends StatelessWidget {
               if (type == 'camera')
                 _CameraInstallerSection(
                     device: device, onChanged: onChanged),
-              if (type == 'intercom') ...[
-                _IntercomKnxExtras(
-                  device: device,
-                  house: house,
-                  onChanged: onChanged,
-                ),
-                _NestedStringFields(
-                  label: 'Stream-URL\'s',
-                  jsonKey: 'intercom',
-                  device: device,
-                  fields: const ['rtsp', 'path', 'aspect'],
-                  onChanged: onChanged,
-                ),
-                _RtspDeviceExtra(
-                  device: device,
-                  nestedKey: 'intercom',
-                  includeRepublish: false,
-                  onChanged: onChanged,
-                ),
-              ],
               if (type == 'fireplace')
                 _FireplaceInstallerSection(
                   key: ValueKey('${device['id']}-fireplace'),
@@ -5237,6 +5227,46 @@ class _DeviceForm extends StatelessWidget {
             ],
           ),
         ),
+        if (type == 'intercom') ...[
+          IntercomInstallerWizard(
+            device: device,
+            house: house,
+            onChanged: onChanged,
+            getToken: getInstallerToken,
+          ),
+          LuxeListCard(
+            child: Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                childrenPadding: EdgeInsets.zero,
+                title: const Text('Geavanceerd'),
+                subtitle: const Text(
+                  'Merk, KNX-deur, DoorBird-API, webhook — alleen als DTMF niet volstaat',
+                ),
+                children: [
+                  _IntercomKnxExtras(
+                    device: device,
+                    onChanged: onChanged,
+                  ),
+                  _NestedStringFields(
+                    label: 'Extra stream-opties',
+                    jsonKey: 'intercom',
+                    device: device,
+                    fields: const ['path', 'aspect'],
+                    onChanged: onChanged,
+                  ),
+                  _RtspDeviceExtra(
+                    device: device,
+                    nestedKey: 'intercom',
+                    includeRepublish: false,
+                    onChanged: onChanged,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
         Padding(
           padding: const EdgeInsets.fromLTRB(22, 12, 22, 0),
           child: OutlinedButton.icon(
@@ -5665,12 +5695,10 @@ class _SourcesCommaFieldState extends State<_SourcesCommaField> {
 class _IntercomKnxExtras extends StatelessWidget {
   const _IntercomKnxExtras({
     required this.device,
-    required this.house,
     required this.onChanged,
   });
 
   final Map<String, dynamic> device;
-  final Map<String, dynamic> house;
   final VoidCallback onChanged;
 
   @override
@@ -5706,13 +5734,12 @@ class _IntercomKnxExtras extends StatelessWidget {
               child: Text('Merk', style: Theme.of(context).textTheme.titleSmall),
             ),
             LuxeInfoIconButton(
-              title: 'Deurstation',
+              title: 'Merk',
               body: kind == 'unifi'
                   ? 'UniFi Protect is meestal geen SIP-toestel. Gebruik RTSP + webhook, of UniFi Talk apart.'
                   : kind == 'siedle' || kind == 'comelit'
                       ? 'Alleen IP-modellen met SIP. Oudere bus-systemen (Vario/Simplebus) koppelen hier niet.'
-                      : 'Zet het deurstation als SIP-client op de eigen SIP-server. '
-                          'Beeld blijft optioneel via RTSP. Deur via KNX, HTTP of DoorBird-API.',
+                      : 'Alleen nodig als de deuropener via KNX, HTTP of DoorBird-API gaat in plaats van de DTMF-code.',
             ),
           ],
         ),
@@ -5729,55 +5756,6 @@ class _IntercomKnxExtras extends StatelessWidget {
             o['kind'] = v;
             onChanged();
           },
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: Text('SIP-inlog',
-                  style: Theme.of(context).textTheme.titleSmall),
-            ),
-            const LuxeInfoIconButton(
-              title: 'SIP-inlog',
-              body:
-                  'Nummer en wachtwoord voor dit deurstation als SIP-client op de NUC. '
-                  'Zelfde serveradres als bij de gebruikers.',
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        VoipSipHostField(house: house, onChanged: onChanged),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: () {
-              Clipboard.setData(ClipboardData(
-                text: sipClientLoginText(
-                  host: voipSipHost(house),
-                  port: voipSipPort(house),
-                  ext: (o['sipExt'] as String?) ?? '',
-                  password: (o['sipPassword'] as String?) ?? '',
-                ),
-              ));
-            },
-            icon: const Icon(Icons.copy, size: 16),
-            label: const Text('Kopieer inlog'),
-          ),
-        ),
-        _BoundStrField(
-          'ringGroupId',
-          o,
-          onChanged,
-          labelOverride: 'Oproepgroep-id',
-          key: ValueKey('ringgrp-${device['id']}'),
-        ),
-        _BoundStrField(
-          'dtmfDigit',
-          o,
-          onChanged,
-          labelOverride: 'DTMF deuropen (leeg = uit, standaard #)',
-          emptyMeansRemove: true,
-          key: ValueKey('dtmf-${device['id']}'),
         ),
         const SizedBox(height: 20),
         Text('Deur / poort open',

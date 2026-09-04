@@ -121,7 +121,7 @@ export function normalizeVoip(cfg: HouseConfig): void {
     doorExt = Math.max(doorExt, Number(icfg.sipExt) || 101);
     if (!icfg.sipPassword) icfg.sipPassword = randomSipPassword();
     if (!icfg.ringGroupId && v.groups[0]) icfg.ringGroupId = v.groups[0].id;
-    if (icfg.dtmfDigit == null) icfg.dtmfDigit = "#";
+    if (icfg.dtmfDigit == null || !icfg.dtmfDigit.trim()) icfg.dtmfDigit = "#";
   }
 }
 

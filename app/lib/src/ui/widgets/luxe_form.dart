@@ -56,16 +56,37 @@ InputDecoration luxeFilledDecoration({
     );
 
 class LuxeFieldLabel extends StatelessWidget {
-  const LuxeFieldLabel(this.label, {super.key});
+  const LuxeFieldLabel(this.label, {super.key, this.tooltip});
   final String label;
+  /// Hover (desktop) / long-press (touch) uitleg in gewone taal.
+  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
+    final tip = tooltip?.trim();
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.labelMedium,
+      child: Row(
+        children: [
+          Flexible(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelMedium,
+            ),
+          ),
+          if (tip != null && tip.isNotEmpty) ...[
+            const SizedBox(width: 6),
+            Tooltip(
+              message: tip,
+              waitDuration: const Duration(milliseconds: 250),
+              child: Icon(
+                Icons.help_outline,
+                size: 16,
+                color: LuxeColors.inkFaint,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

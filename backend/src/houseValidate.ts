@@ -222,10 +222,30 @@ export function validateRgbwWwSemantics(cfg: HouseConfig): string[] {
   return issues;
 }
 
-/** Intercom: KNX-deuropen vs DoorBird — verplichte velden per modus. */
+/** Intercom: RTSP/DTMF/belgroep + KNX-deuropen vs DoorBird. */
 export function validateIntercomSemantics(cfg: HouseConfig): string[] {
   const issues: string[] = [];
+  const groupIds = new Set((cfg.voip?.groups ?? []).map((g) => g.id));
   for (const d of cfg.intercoms ?? []) {
+    const name = d.name?.trim() || d.id;
+    const rtsp = d.intercom.rtsp?.trim() ?? "";
+    if (rtsp && !/^rtsps?:\/\/\S+$/i.test(rtsp)) {
+      issues.push(
+        `Intercom "${name}": camerastream moet met rtsp:// of rtsps:// beginnen.`
+      );
+    }
+    const dtmf = d.intercom.dtmfDigit;
+    if (dtmf != null && String(dtmf).trim() !== "") {
+      if (!/^[0-9A-D#*]$/i.test(String(dtmf).trim())) {
+        issues.push(
+          `Intercom "${name}": DTMF-code moet één teken zijn (0–9, #, * of A–D).`
+        );
+      }
+    }
+    const gid = d.intercom.ringGroupId?.trim();
+    if (gid && !groupIds.has(gid)) {
+      issues.push(`Intercom "${name}": belgroep bestaat niet.`);
+    }
     if (effectiveIntercomReleaseMode(d) === "http") {
       if (!d.intercom.httpRelease?.url?.trim()) {
         issues.push(`Intercom "${d.name}" (${d.id}): HTTP-deuropen URL ontbreekt.`);

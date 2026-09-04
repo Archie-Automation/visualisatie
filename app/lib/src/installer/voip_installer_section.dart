@@ -109,6 +109,7 @@ String sipClientLoginText({
 Set<String> usedSipExts(
   Map<String, dynamic> house, {
   String? exceptEndpointId,
+  String? exceptIntercomId,
 }) {
   final used = <String>{};
   for (final ep in voipEndpointMaps(house)) {
@@ -124,6 +125,9 @@ Set<String> usedSipExts(
   if (raw is List) {
     for (final ic in raw) {
       if (ic is! Map) continue;
+      if (exceptIntercomId != null && '${ic['id']}' == exceptIntercomId) {
+        continue;
+      }
       final o = ic['intercom'];
       if (o is! Map) continue;
       final e = (o['sipExt'] as String?)?.trim() ?? '';
@@ -387,6 +391,7 @@ void reassignSipEndpoint(
   newUser['sipEndpointId'] = ep['id'];
 }
 
+/// Indoor SIP stays automatic. This card only toggles calling on/off.
 class VoipInstallerSection extends StatefulWidget {
   const VoipInstallerSection({
     super.key,
@@ -408,22 +413,6 @@ class _VoipInstallerSectionState extends State<VoipInstallerSection> {
   String? _statusErr;
 
   Map<String, dynamic> get _voip => ensureVoipMap(widget.house);
-
-  List<Map<String, dynamic>> get _endpoints {
-    final raw = _voip['endpoints'];
-    if (raw is! List) {
-      _voip['endpoints'] = <Map<String, dynamic>>[];
-    }
-    return (_voip['endpoints'] as List).cast<Map<String, dynamic>>();
-  }
-
-  List<Map<String, dynamic>> get _groups {
-    final raw = _voip['groups'];
-    if (raw is! List) {
-      _voip['groups'] = <Map<String, dynamic>>[];
-    }
-    return (_voip['groups'] as List).cast<Map<String, dynamic>>();
-  }
 
   @override
   void initState() {
@@ -464,78 +453,33 @@ class _VoipInstallerSectionState extends State<VoipInstallerSection> {
     if (mounted) setState(() {});
   }
 
-  List<Map<String, dynamic>> get _users => houseUserMaps(widget.house);
-
-  Future<void> _addSipForExistingUser() async {
-    final taken = sipTakenUserIds(widget.house);
-    final free = _users.where((u) => !taken.contains('${u['id']}')).toList();
-    if (free.isEmpty) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Geen vrij account. Maak eerst een gebruiker, of haal SIP van een ander account af.',
-          ),
-        ),
-      );
-      return;
-    }
-    final chosen = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (ctx) {
-        return SimpleDialog(
-          title: const Text('Gebruiker'),
-          children: [
-            for (final u in free)
-              SimpleDialogOption(
-                onPressed: () => Navigator.pop(ctx, u),
-                child: Text(userSipLabel(u)),
-              ),
-          ],
-        );
-      },
-    );
-    if (chosen == null) return;
-    bindSipToUser(widget.house, chosen);
-    widget.onChanged();
-  }
-
-  void _addGroup() {
-    _groups.add({
-      'id': 'grp-${DateTime.now().microsecondsSinceEpoch}',
-      'name': 'Oproepgroep',
-      'ext': '',
-      'memberIds': _endpoints.map((e) => e['id']).toList(),
-      'timeoutSec': 30,
-    });
-    widget.onChanged();
-  }
-
   @override
   Widget build(BuildContext context) {
     final enabled = _voip['enabled'] == true;
     final ami = _status?['amiUp'] == true;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text('SIP-server',
-                  style: Theme.of(context).textTheme.titleLarge),
-            ),
-            const LuxeInfoIconButton(
-              title: 'SIP-server',
-              body:
-                  'Eigen Asterisk op de NUC. Elke gebruiker met SIP aan krijgt een eigen nummer en wachtwoord. '
-                  'Dat is de inlog voor dat toestel — paneel, telefoon of app maakt niet uit.\n\n'
-                  'Schakel uit als dit huis geen SIP gebruikt. Deurstations blijven dan beeld/deur via RTSP of KNX.',
-            ),
-          ],
+        const LuxeSectionTitle(
+          icon: Icons.doorbell_outlined,
+          title: 'Intercom',
+          subtitle:
+              'Koppel een IP-deurstation aan tablets en telefoons. '
+              'Indoor-accounts worden automatisch aangemaakt.',
+          trailing: LuxeInfoIconButton(
+            title: 'Deurbel-oproepen',
+            body:
+                'Zet dit aan om belknoppen naar tablets en telefoons te sturen. '
+                'Elke gebruiker in een belgroep krijgt automatisch een eigen account. '
+                'STUN, poorten en serveradres blijven op de achtergrond.\n\n'
+                'Zet uit als dit huis alleen beeld of KNX-deur gebruikt, zonder bellen.',
+          ),
         ),
-        const SizedBox(height: 16),
         LuxeSwitchRow(
-          title: 'SIP-server ingeschakeld',
+          title: 'Deurbel-oproepen naar tablets en telefoons',
+          subtitle: enabled
+              ? 'Toestellen in een belgroep gaan over bij aanbellen.'
+              : 'Uit: alleen live beeld en deuropener, geen gesprek.',
           value: enabled,
           onChanged: (v) {
             _voip['enabled'] = v;
@@ -543,308 +487,22 @@ class _VoipInstallerSectionState extends State<VoipInstallerSection> {
             if (v) _prefillHostFromStatus();
           },
         ),
-        const Divider(height: 24),
-        if (_statusErr != null)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              _statusErr!,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
         if (enabled) ...[
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
               onPressed: _refreshStatus,
               icon: const Icon(Icons.refresh, size: 18),
-              label: Text(ami ? 'PBX bereikbaar' : 'Status vernieuwen'),
+              label: Text(ami ? 'Server bereikbaar' : 'Verbinding controleren'),
             ),
           ),
-          const SizedBox(height: 8),
-          VoipSipHostField(
-            house: widget.house,
-            onChanged: widget.onChanged,
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Text('Gebruikers',
-                    style: Theme.of(context).textTheme.titleSmall),
-              ),
-              LuxeInfoIconButton(
-                title: 'SIP-gebruikers',
-                body:
-                    'Zet SIP aan bij de gebruiker (Gebruikers in dit scherm), of voeg hier een bestaande gebruiker toe. '
-                    'Elk account heeft één SIP-nummer; elk toestel logt in met dat account.\n\n'
-                    'Op het toestel: server = SIP-serveradres, poort ${voipSipPort(widget.house)}, gebruiker = SIP-nummer.',
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          for (var i = 0; i < _endpoints.length; i++)
-            _EndpointCard(
-              key: ValueKey(_endpoints[i]['id']),
-              house: widget.house,
-              ep: _endpoints[i],
-              registered: _isReg(_endpoints[i]['ext'] as String?),
-              onChanged: widget.onChanged,
-              onDelete: () {
-                final uid = '${_endpoints[i]['userId'] ?? ''}';
-                Map<String, dynamic>? user;
-                for (final u in _users) {
-                  if ('${u['id']}' == uid) {
-                    user = u;
-                    break;
-                  }
-                }
-                if (user != null) {
-                  unbindSipFromUser(widget.house, user);
-                } else {
-                  final id = _endpoints[i]['id'];
-                  _endpoints.removeAt(i);
-                  for (final g in _groups) {
-                    final m = g['memberIds'];
-                    if (m is List) m.remove(id);
-                  }
-                }
-                widget.onChanged();
-              },
+          if (_statusErr != null)
+            Text(
+              _statusErr!,
+              style: Theme.of(context).textTheme.bodySmall,
             ),
-          TextButton.icon(
-            onPressed: _addSipForExistingUser,
-            icon: const Icon(Icons.person_add_outlined, size: 18),
-            label: const Text('Gebruiker toevoegen'),
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: Text('Oproepgroepen',
-                    style: Theme.of(context).textTheme.titleSmall),
-              ),
-              const LuxeInfoIconButton(
-                title: 'Oproepgroepen',
-                body:
-                    'Wie er overgaat als er wordt aangebeld. Bij opnemen stoppen de andere toestellen.',
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          for (var i = 0; i < _groups.length; i++)
-            _GroupCard(
-              key: ValueKey(_groups[i]['id']),
-              group: _groups[i],
-              endpoints: _endpoints,
-              onChanged: widget.onChanged,
-              onDelete: () {
-                _groups.removeAt(i);
-                widget.onChanged();
-              },
-            ),
-          TextButton.icon(
-            onPressed: _addGroup,
-            icon: const Icon(Icons.group_add_outlined, size: 18),
-            label: const Text('Groep toevoegen'),
-          ),
         ],
-        const Divider(height: 32),
-        Row(
-          children: [
-            Expanded(
-              child: Text('Deurstations',
-                  style: Theme.of(context).textTheme.titleSmall),
-            ),
-            const LuxeInfoIconButton(
-              title: 'Deurstations',
-              body:
-                  'Intercom hoort bij het hele project, niet bij een kamer. '
-                  'SIP-inlog van het station stel je in bij het deurstation zelf.',
-            ),
-          ],
-        ),
       ],
-    );
-  }
-
-  bool _isReg(String? ext) {
-    final list = _status?['endpoints'];
-    if (list is! List || ext == null) return false;
-    for (final e in list) {
-      if (e is Map && e['ext'] == ext) return e['registered'] == true;
-    }
-    return false;
-  }
-}
-
-class _EndpointCard extends StatelessWidget {
-  const _EndpointCard({
-    super.key,
-    required this.house,
-    required this.ep,
-    required this.registered,
-    required this.onChanged,
-    required this.onDelete,
-  });
-
-  final Map<String, dynamic> house;
-  final Map<String, dynamic> ep;
-  final bool registered;
-  final VoidCallback onChanged;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final users = houseUserMaps(house);
-    final taken = sipTakenUserIds(house);
-    final currentId = (ep['userId'] as String?) ?? '';
-    final choices = [
-      for (final u in users)
-        if ('${u['id']}' == currentId || !taken.contains('${u['id']}')) u,
-    ];
-    final currentOk = choices.any((u) => '${u['id']}' == currentId);
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    '${ep['name'] ?? ''}  ·  ${ep['ext'] ?? '(auto)'}',
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                ),
-                if (registered)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 8),
-                    child: Icon(Icons.circle, size: 10, color: Colors.green),
-                  ),
-                IconButton(
-                  tooltip: 'Verwijderen',
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete_outline),
-                ),
-              ],
-            ),
-            DropdownButtonFormField<String>(
-              initialValue: currentOk ? currentId : null,
-              decoration: luxeFilledDecoration(hint: 'Gebruiker'),
-              items: [
-                for (final u in choices)
-                  DropdownMenuItem(
-                    value: '${u['id']}',
-                    child: Text(userSipLabel(u)),
-                  ),
-              ],
-              onChanged: (v) {
-                if (v == null) return;
-                Map<String, dynamic>? next;
-                for (final u in users) {
-                  if ('${u['id']}' == v) {
-                    next = u;
-                    break;
-                  }
-                }
-                if (next == null) return;
-                reassignSipEndpoint(house, ep, next);
-                onChanged();
-              },
-            ),
-            const SizedBox(height: 8),
-            _VoipLine(
-              label: 'Naam op het toestel',
-              value: ep['name'] as String? ?? '',
-              onChanged: (s) {
-                ep['name'] = s;
-                onChanged();
-              },
-            ),
-            const SizedBox(height: 8),
-            VoipSipAccountFields(
-              house: house,
-              ep: ep,
-              onChanged: onChanged,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _GroupCard extends StatelessWidget {
-  const _GroupCard({
-    super.key,
-    required this.group,
-    required this.endpoints,
-    required this.onChanged,
-    required this.onDelete,
-  });
-
-  final Map<String, dynamic> group;
-  final List<Map<String, dynamic>> endpoints;
-  final VoidCallback onChanged;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final members = (group['memberIds'] is List)
-        ? (group['memberIds'] as List).map((e) => '$e').toSet()
-        : <String>{};
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: _VoipLine(
-                    label: 'Naam groep',
-                    value: group['name'] as String? ?? '',
-                    onChanged: (s) {
-                      group['name'] = s;
-                      onChanged();
-                    },
-                  ),
-                ),
-                IconButton(
-                  onPressed: onDelete,
-                  icon: const Icon(Icons.delete_outline),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text('Leden', style: Theme.of(context).textTheme.labelLarge),
-            for (final ep in endpoints)
-              CheckboxListTile(
-                dense: true,
-                contentPadding: EdgeInsets.zero,
-                title: Text('${ep['name']} (${ep['ext'] ?? 'auto'})'),
-                value: members.contains('${ep['id']}'),
-                onChanged: (v) {
-                  final list = (group['memberIds'] is List)
-                      ? List<dynamic>.from(group['memberIds'] as List)
-                      : <dynamic>[];
-                  if (v == true) {
-                    if (!list.contains(ep['id'])) list.add(ep['id']);
-                  } else {
-                    list.remove(ep['id']);
-                  }
-                  group['memberIds'] = list;
-                  onChanged();
-                },
-              ),
-          ],
-        ),
-      ),
     );
   }
 }
