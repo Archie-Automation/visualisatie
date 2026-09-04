@@ -43,3 +43,31 @@ Future<List<Map<String, dynamic>>> saveHouseUsers({
       .map((u) => Map<String, dynamic>.from(u as Map))
       .toList();
 }
+
+Future<DateTime?> patchDoorbellMute({
+  required String token,
+  required DateTime? until,
+}) async {
+  final res = await http.patch(
+    Uri.parse('$apiBase/api/me/doorbell-mute'),
+    headers: {
+      'content-type': 'application/json',
+      'authorization': 'Bearer $token',
+    },
+    body: jsonEncode({
+      'until': until?.toUtc().toIso8601String(),
+    }),
+  );
+  if (res.statusCode != 200) {
+    String msg = 'deurbel-stil opslaan mislukt (${res.statusCode})';
+    try {
+      final body = jsonDecode(res.body);
+      if (body is Map && body['error'] != null) msg = body['error'].toString();
+    } catch (_) {}
+    throw Exception(msg);
+  }
+  final data = jsonDecode(res.body) as Map<String, dynamic>;
+  final raw = (data['doorbellMutedUntil'] as String?)?.trim();
+  if (raw == null || raw.isEmpty) return null;
+  return DateTime.tryParse(raw);
+}

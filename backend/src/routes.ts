@@ -579,12 +579,18 @@ export function buildRouter(
     const body = { users: parsed.data.users as unknown as User[] };
     await applyPlaintextPasswords(body);
 
-    const nextUsers = body.users.map((u) =>
-      canonicalizeStoredUser({
+    const prevById = new Map((previous.users ?? []).map((u) => [u.id, u]));
+    const nextUsers = body.users.map((u) => {
+      const c = canonicalizeStoredUser({
         ...u,
         passwordHash: u.passwordHash ?? ""
-      })
-    );
+      });
+      const prev = prevById.get(c.id);
+      if (prev?.doorbellMutedUntil && c.doorbellMutedUntil == null) {
+        c.doorbellMutedUntil = prev.doorbellMutedUntil;
+      }
+      return c;
+    });
     const draft = structuredClone(previous);
     draft.users = nextUsers;
     mergePasswordHashes(draft, previous);
@@ -609,6 +615,42 @@ export function buildRouter(
     );
     res.json({ ok: true, users });
   });
+
+  r.patch(
+    "/me/doorbell-mute",
+    requireAuth,
+    (req: AuthedRequest, res) => {
+      const parsed = z
+        .object({
+          until: z.union([z.string().min(10).max(48), z.null()])
+        })
+        .safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "ongeldige stil-tot tijd" });
+      }
+      const actor = currentUser(req);
+      if (!actor) return res.status(403).json({ error: "onbekende gebruiker" });
+      const until = parsed.data.until;
+      if (until != null && Number.isNaN(Date.parse(until))) {
+        return res.status(400).json({ error: "ongeldige stil-tot tijd" });
+      }
+      updateConfig((draft) => {
+        const u = (draft.users ?? []).find((x) => x.id === actor.id);
+        if (!u) return;
+        if (until == null || until.trim() === "") {
+          delete u.doorbellMutedUntil;
+        } else {
+          u.doorbellMutedUntil = until;
+        }
+      });
+      ws.broadcastConfigChanged(getConfigVersion());
+      const live = currentUser(req);
+      res.json({
+        ok: true,
+        doorbellMutedUntil: live?.doorbellMutedUntil ?? null
+      });
+    }
+  );
 
   r.get("/config", requireAuth, (req: AuthedRequest, res) => {
     const cfg = getConfig();

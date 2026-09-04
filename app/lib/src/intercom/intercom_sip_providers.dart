@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api.dart';
 import '../camera_api.dart';
 import '../models.dart';
-import '../ui/incoming_call_screen.dart';
 import 'intercom_controller.dart';
 import 'intercom_sip_types.dart';
 
@@ -86,29 +85,12 @@ Future<void> _startRegistration({
   }
 }
 
-/// Legt het SIP-incoming scherm over de hele app (onder MaterialApp.router).
-class SipIncomingCallLayer extends ConsumerWidget {
+/// SIP-incoming UI lives on [IntercomScreen], not as a second overlay.
+class SipIncomingCallLayer extends StatelessWidget {
   const SipIncomingCallLayer({super.key, required this.child});
 
   final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final sip = ref.watch(intercomSipControllerProvider);
-    return ListenableBuilder(
-      listenable: sip,
-      builder: (context, _) {
-        return Stack(
-          fit: StackFit.expand,
-          children: [
-            child,
-            if (sip.phase != IntercomSipPhase.idle)
-              Positioned.fill(
-                child: IncomingCallScreen(controller: sip),
-              ),
-          ],
-        );
-      },
-    );
-  }
+  Widget build(BuildContext context) => child;
 }
