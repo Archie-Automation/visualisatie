@@ -108,16 +108,15 @@ Future<AndroidApkInstallResult> downloadAndInstallAndroidApk({
     }
 
     onProgress?.call(1);
-    final launched = await _installChannel.invokeMethod<bool>(
-      'installApk',
-      {'path': file.path},
-    );
-    if (launched != true) {
-      return AndroidApkInstallResult.fail('install_intent_failed');
+    try {
+      await _installChannel.invokeMethod<dynamic>(
+        'installApk',
+        {'path': file.path},
+      );
+      return AndroidApkInstallResult.success();
+    } on PlatformException catch (e) {
+      return AndroidApkInstallResult.fail(e.code);
     }
-    return AndroidApkInstallResult.success();
-  } on PlatformException catch (e) {
-    return AndroidApkInstallResult.fail(e.code);
   } catch (e) {
     return AndroidApkInstallResult.fail(e.toString());
   } finally {

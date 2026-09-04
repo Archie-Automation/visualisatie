@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -26,6 +28,24 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
   double? _progress;
   String? _error;
   String? _serverProgress;
+  Timer? _poll;
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  void _setPoll(bool on) {
+    if (!on) {
+      _poll?.cancel();
+      _poll = null;
+      return;
+    }
+    _poll ??= Timer.periodic(const Duration(seconds: 8), (_) {
+      if (mounted) ref.invalidate(softwareVersionStatusProvider);
+    });
+  }
 
   Future<void> _installApk(GithubAndroidApkInfo? apk) async {
     if (_installing) return;
@@ -41,15 +61,32 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
       },
     );
     if (!mounted) return;
+    if (result.error == 'apk_not_newer') {
+      setState(() {
+        _installing = false;
+        _progress = null;
+        _error = null;
+      });
+      ref.invalidate(softwareVersionStatusProvider);
+      return;
+    }
     setState(() {
       _installing = false;
       _progress = result.ok ? 1 : null;
       _error = result.ok ? null : _apkInstallErrorMessage(result.error);
     });
+    if (result.ok) {
+      ref.invalidate(softwareVersionStatusProvider);
+    }
   }
 
-  Future<void> _updateServer() async {
-    if (_serverUpdating) return;
+  Future<SoftwareVersionStatus?> _refreshStatus() async {
+    ref.invalidate(softwareVersionStatusProvider);
+    return ref.read(softwareVersionStatusProvider.future);
+  }
+
+  Future<void> _updateServerThenApp() async {
+    if (_serverUpdating || _installing) return;
     final token = ref.read(authProvider).token;
     if (token == null) return;
     setState(() {
@@ -71,18 +108,39 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
         );
       }
       await waitForBackendOnline(timeout: const Duration(minutes: 3));
-      ref.invalidate(softwareVersionStatusProvider);
       if (!mounted) return;
-      await fullAppRemountOrReload();
+      setState(() => _serverProgress = 'Server klaar. App-update controleren…');
+      var status = await _refreshStatus();
+      if (supportsAndroidApkUpdate) {
+        for (var i = 0; i < 45 && mounted; i++) {
+          status = await _refreshStatus();
+          if (status?.androidApkUpdateAvailable == true) break;
+          if (status != null &&
+              !status.clientStale &&
+              !status.androidApkPending) {
+            break;
+          }
+          setState(() => _serverProgress = 'App-update wordt klaargezet…');
+          await Future<void>.delayed(const Duration(seconds: 8));
+        }
+      }
+      if (!mounted) return;
+      setState(() => _serverUpdating = false);
+      if (supportsAndroidApkUpdate &&
+          status?.androidApkUpdateAvailable == true) {
+        await _installApk(status!.latest?.androidApk);
+        return;
+      }
+      if (kIsWeb) {
+        await fullAppRemountOrReload();
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _serverUpdating = false;
         _error = e.toString().replaceFirst('Bad state: ', '');
       });
-      return;
     }
-    if (mounted) setState(() => _serverUpdating = false);
   }
 
   @override
@@ -90,6 +148,12 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
     final outdated = ref.watch(softwareUpdateAvailableProvider);
     final status = ref.watch(softwareVersionStatusProvider).asData?.value;
     final admin = ref.watch(authProvider).isInstaller;
+    _setPoll(
+      supportsAndroidApkUpdate &&
+          status?.androidApkPending == true &&
+          !_serverUpdating &&
+          !_installing,
+    );
 
     if (_serverUpdating) {
       return _Banner(
@@ -101,36 +165,31 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
     if (!outdated) return const SizedBox.shrink();
     if (status == null) return const SizedBox.shrink();
 
-    // Native tablet: tap anywhere on the strip to install. FilledButton/InkWell
-    // often eats the first touch on PoE wall panels.
-    final canInstallApk = supportsAndroidApkUpdate &&
-        status.latest?.androidApk?.available == true &&
-        (status.androidApkUpdateAvailable || status.clientStale);
-    if (canInstallApk) {
+    final apkReady = supportsAndroidApkUpdate &&
+        status.androidApkUpdateAvailable;
+    if (apkReady) {
       final latest = status.latest;
-      final ver = latest?.tag ??
+      final ver = latest?.androidApk?.version ??
           latest?.version ??
           status.running.version;
       final message = _error ??
           (_installing
-              ? 'App-update downloaden… Bevestig daarna de installatie.'
+              ? 'App-update downloaden… Bevestig daarna Installeren op het tablet.'
               : (ver.isEmpty
-                  ? 'Nieuwe app-versie beschikbaar. Tik om te installeren.'
-                  : 'Nieuwe app-versie ($ver) beschikbaar. Tik om te installeren.'));
+                  ? 'Nieuwe app klaar. Tik om te installeren.'
+                  : 'Nieuwe app ($ver) klaar. Tik om te installeren.'));
       return _Banner(
         message: message,
         actionLabel: _installing ? null : 'Installeren',
-        onAction:
-            _installing ? null : () => _installApk(latest?.androidApk),
+        onAction: _installing ? null : () => _installApk(latest?.androidApk),
         progress: _installing ? (_progress ?? 0) : null,
       );
     }
 
-    if (supportsAndroidApkUpdate && status.clientStale) {
+    if (supportsAndroidApkUpdate && status.androidApkPending) {
       return _Banner(
-        message: status.running.version.isEmpty
-            ? 'Nieuwe software op de server. Tablet-APK ontbreekt nog op GitHub (release android-latest).'
-            : 'Nieuwe software (${status.running.version}) op de server. Tablet-APK ontbreekt nog op GitHub (release android-latest).',
+        message: _error ??
+            'Server is nieuwer. De tablet-app volgt automatisch zodra het installatiebestand klaarstaat.',
       );
     }
 
@@ -145,16 +204,16 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
     }
 
     final latest = status.latest;
-    final ver = latest?.tag ?? latest?.version ?? '';
+    final ver = latest?.version ?? latest?.tag ?? '';
     final agentReady = status.serverUpdate?.agentReady == true;
     if (admin && agentReady) {
       return _Banner(
         message: _error ??
             (ver.isEmpty
-                ? 'Nieuwe serverversie op GitHub. Bijwerken duurt 10–20 minuten.'
-                : 'Nieuwe serverversie ($ver). Bijwerken duurt 10–20 minuten.'),
-        actionLabel: 'Server bijwerken',
-        onAction: _updateServer,
+                ? 'Nieuwe software. Eén tik werkt de server bij; de app volgt daarna.'
+                : 'Nieuwe software ($ver). Eén tik werkt de server bij; de app volgt daarna.'),
+        actionLabel: 'Bijwerken',
+        onAction: _updateServerThenApp,
       );
     }
     if (admin) {
@@ -170,8 +229,8 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
     }
     return _Banner(
       message: ver.isEmpty
-          ? 'Er is een nieuwere versie op GitHub. Vraag de beheerder de server bij te werken.'
-          : 'Nieuwe versie op GitHub ($ver). Vraag de beheerder de server bij te werken.',
+          ? 'Er is nieuwere software. Vraag de beheerder de server bij te werken.'
+          : 'Nieuwe software ($ver). Vraag de beheerder de server bij te werken.',
       actionLabel: latest?.htmlUrl != null ? 'Bekijken' : null,
       onAction: latest?.htmlUrl != null
           ? () => openReleasePage(latest!.htmlUrl)
@@ -187,9 +246,24 @@ String _apkInstallErrorMessage(String? code) {
     case 'apk_too_small':
     case 'apk_missing':
       return 'De gedownloade APK is ongeldig. Controleer of de GitHub Release een .apk heeft.';
+    case 'apk_invalid':
+      return 'Het gedownloade bestand is geen geldige app. Probeer het later opnieuw.';
+    case 'apk_not_newer':
+      return 'Deze app-versie staat er al op. Even geduld tot er een nieuwere klaarstaat.';
+    case 'install_aborted':
+      return 'Installatie afgebroken. Tik opnieuw op Installeren en bevestig op het tablet.';
+    case 'install_blocked':
+      return 'Android blokkeert de installatie. Controleer ouderlijk toezicht of zakelijke beperkingen.';
+    case 'install_conflict':
+      return 'Android weigert de update (andere handtekening). Verwijder Archie OS eenmalig en installeer opnieuw.';
+    case 'install_incompatible':
+      return 'Deze app-versie past niet op dit tablet.';
+    case 'install_storage':
+      return 'Te weinig opslagruimte om de app te installeren.';
     case 'install_intent_failed':
     case 'install_failed':
-      return 'Android kon de installatie niet starten.';
+    case 'busy':
+      return 'Installatie mislukt. Tik opnieuw op Installeren.';
     default:
       if (code != null && code.startsWith('download_http_401')) {
         return 'GitHub token verlopen of ongeldig. '

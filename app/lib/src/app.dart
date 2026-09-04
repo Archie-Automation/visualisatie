@@ -66,9 +66,10 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
   /// On iPhone/Safari the WS often drops while the screen is locked.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+      if (state == AppLifecycleState.resumed) {
       ref.read(busProvider.notifier).reconnectNow();
       applyAndroidKioskSystemUi();
+      ref.invalidate(softwareVersionStatusProvider);
     }
   }
 

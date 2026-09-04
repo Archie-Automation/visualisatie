@@ -172,6 +172,7 @@ class SoftwareVersionStatus {
     required this.updateAvailable,
     required this.clientStale,
     required this.androidApkUpdateAvailable,
+    required this.androidApkPending,
     this.serverUpdate,
     this.clientVersion,
   });
@@ -183,6 +184,8 @@ class SoftwareVersionStatus {
   final bool clientStale;
   /// Native Android: client older than GitHub latest AND an APK asset exists.
   final bool androidApkUpdateAvailable;
+  /// Tablet hinterloopt de server, maar de GitHub-APK is nog niet nieuwer.
+  final bool androidApkPending;
   final ServerUpdateSnapshot? serverUpdate;
   /// Installed app version used for APK comparison (package or dart-define).
   final SoftwareVersionInfo? clientVersion;
@@ -236,12 +239,16 @@ final softwareVersionStatusProvider =
         apk.available &&
         apkVer != null &&
         client.compareTo(apkVer) < 0;
+    final androidApkPending = supportsAndroidApkUpdate &&
+        clientStale &&
+        !androidApkUpdateAvailable;
     return SoftwareVersionStatus(
       running: running,
       latest: latest,
       updateAvailable: updateAvailable,
       clientStale: clientStale,
       androidApkUpdateAvailable: androidApkUpdateAvailable,
+      androidApkPending: androidApkPending,
       serverUpdate: serverUpdate,
       clientVersion: client,
     );
@@ -262,7 +269,10 @@ final softwareUpdateAvailableProvider = Provider.autoDispose<bool>((ref) {
   final async = ref.watch(softwareVersionStatusProvider);
   final s = async.asData?.value;
   if (s == null) return false;
-  return s.clientStale || s.androidApkUpdateAvailable || s.updateAvailable;
+  return s.clientStale ||
+      s.androidApkUpdateAvailable ||
+      s.androidApkPending ||
+      s.updateAvailable;
 });
 
 Future<void> openReleasePage(String? htmlUrl) async {
