@@ -466,7 +466,9 @@ export interface VoipCallGroup {
   id: string;
   name: string;
   ext: string;
+  /** Indoor `voip.endpoints[].id` — tablets/telefoons in deze belgroep. */
   memberIds: string[];
+  /** Afringduur in seconden (minimum 5, standaard 30). */
   timeoutSec?: number;
 }
 
@@ -512,6 +514,7 @@ export interface IntercomDoorbirdConfig {
 export interface IntercomConfig {
   /** Fabrikant / gesprekskanaal — geen KNX. */
   kind?: IntercomKind;
+  /** RTSP-camerastream van het deurstation (`rtsp://` of `rtsps://`). */
   rtsp: string;
   path?: string;
   aspect?: string;
@@ -526,12 +529,15 @@ export interface IntercomConfig {
   };
   doorbird?: IntercomDoorbirdConfig;
   sip?: IntercomSipConfig;
-  /** Extensie waarop dit deurstation inlogt op de eigen PBX. */
+  /**
+   * SIP-account zoals ingesteld op het fysieke deurstation (2N / DoorBird / Axis).
+   * Indoor tablets/telefoons krijgen een eigen account via `voip.endpoints` — niet hier.
+   */
   sipExt?: string;
   sipPassword?: string;
-  /** Oproepgroep die bij aanbellen gaat. */
+  /** Belgroep (`voip.groups[].id`) die overgaat bij belknop 1. */
   ringGroupId?: string;
-  /** DTMF-toets tijdens het gesprek (leeg = uit). Standaard "#". */
+  /** Enkele DTMF-toets tijdens het gesprek om het slot te openen. Standaard `#`. */
   dtmfDigit?: string;
   httpRelease?: IntercomHttpRelease;
   /**
