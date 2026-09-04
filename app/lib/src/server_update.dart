@@ -23,6 +23,7 @@ class ServerUpdateStatus {
   bool get isBusy => state == 'queued' || state == 'running';
   bool get isSuccess => state == 'success';
   bool get isError => state == 'error';
+  bool get isIdle => state == 'idle';
 
   factory ServerUpdateStatus.fromJson(Map<String, dynamic> j) {
     return ServerUpdateStatus(
@@ -74,6 +75,37 @@ Future<ServerUpdateStatus> postServerUpdate(String token) async {
   return ServerUpdateStatus.fromJson(body);
 }
 
+/// How the tablet should treat one poll while waiting for a NUC update.
+enum ServerUpdateWaitDecision { wait, success, error }
+
+/// The agent resets to idle ("Wacht op update-opdracht") immediately after
+/// success. Missing that brief success used to leave the tablet waiting 25 min.
+ServerUpdateWaitDecision decideServerUpdateWait({
+  required ServerUpdateStatus status,
+  required bool sawBusy,
+  required bool sawOutage,
+  required Duration elapsed,
+}) {
+  if (status.isError) return ServerUpdateWaitDecision.error;
+  if (status.isSuccess) return ServerUpdateWaitDecision.success;
+  if (status.isBusy) return ServerUpdateWaitDecision.wait;
+  if (sawBusy || sawOutage) return ServerUpdateWaitDecision.success;
+  if (elapsed >= const Duration(seconds: 15)) {
+    return ServerUpdateWaitDecision.success;
+  }
+  return ServerUpdateWaitDecision.wait;
+}
+
+String serverUpdateProgressMessage(ServerUpdateStatus status) {
+  final m = status.message.trim();
+  if (status.isIdle &&
+      (m.isEmpty || m.toLowerCase().contains('wacht op update'))) {
+    return 'Server is bijgewerkt.';
+  }
+  if (m.isEmpty) return 'Bezig met bijwerken…';
+  return m;
+}
+
 /// Poll until success/error. Survives the brief API outage at container swap.
 Future<ServerUpdateStatus> waitForServerUpdate({
   required String token,
@@ -81,19 +113,44 @@ Future<ServerUpdateStatus> waitForServerUpdate({
   Duration timeout = const Duration(minutes: 25),
 }) async {
   final deadline = DateTime.now().add(timeout);
+  final started = DateTime.now();
   var last = const ServerUpdateStatus(
     state: 'queued',
     message: 'Update aangevraagd…',
     agentReady: true,
   );
+  var sawBusy = false;
+  var sawOutage = false;
   while (DateTime.now().isBefore(deadline)) {
     try {
       last = await fetchServerUpdateStatus(token);
-      onMessage?.call(
-        last.message.isEmpty ? 'Bezig met bijwerken…' : last.message,
-      );
-      if (last.isSuccess || last.isError) return last;
+      if (last.isBusy) sawBusy = true;
+      onMessage?.call(serverUpdateProgressMessage(last));
+      switch (decideServerUpdateWait(
+        status: last,
+        sawBusy: sawBusy,
+        sawOutage: sawOutage,
+        elapsed: DateTime.now().difference(started),
+      )) {
+        case ServerUpdateWaitDecision.success:
+          return ServerUpdateStatus(
+            state: 'success',
+            message: last.isSuccess
+                ? (last.message.isEmpty
+                    ? 'Server is bijgewerkt.'
+                    : last.message)
+                : 'Server is bijgewerkt.',
+            agentReady: last.agentReady,
+            step: last.step,
+            error: last.error,
+          );
+        case ServerUpdateWaitDecision.error:
+          return last;
+        case ServerUpdateWaitDecision.wait:
+          break;
+      }
     } catch (_) {
+      sawOutage = true;
       onMessage?.call('Server herstart. Even geduld…');
     }
     await Future<void>.delayed(const Duration(seconds: 2));

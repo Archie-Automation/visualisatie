@@ -354,7 +354,7 @@ run_update() {
   restore_secrets
   log "code ok branch=$branch"
 
-  ST_STATE=running ST_STEP=build ST_MESSAGE="Software bouwen. Dit duurt 10–20 minuten. Het huis blijft werken tot de herstart aan het eind." write_status
+  ST_STATE=running ST_STEP=build ST_MESSAGE="Software bouwen. Meestal 1–3 minuten. Het huis blijft werken tot de herstart aan het eind." write_status
 
   if ! ( cd "$DOCKER_DIR" && $DOCKER compose --env-file .env up -d --build knx-stack >>"$LOG" 2>&1 ); then
     ST_STATE=error ST_STEP=build ST_MESSAGE="App bouwen/starten mislukt. Zie docker/data/update-agent.log op de NUC." ST_ERROR="compose_failed" ST_FINISHED=1 write_status
@@ -376,7 +376,37 @@ if [ -d "$LOCK" ]; then
   rmdir "$LOCK" 2>/dev/null || true
   log "cleared stale lock"
 fi
-ST_STATE=idle ST_STEP= ST_MESSAGE="Wacht op update-opdracht." ST_CLEAR_TIMES=1 ST_CLEAR_ERROR=1 write_status
+# Do not clobber a just-finished success: tablets poll this file and the
+# previous line used to reset to idle immediately after re-exec.
+python3 - "$STATUS" <<'PY' || true
+import json, os, sys
+from pathlib import Path
+from datetime import datetime
+p = Path(sys.argv[1])
+old = {}
+if p.exists():
+    try:
+        old = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        old = {}
+now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+state = (old.get("state") or "").strip()
+if state in ("success", "error"):
+    old["agentHeartbeatAt"] = now
+    p.write_text(json.dumps(old, indent=2) + "\n", encoding="utf-8")
+else:
+    os.environ["ST_STATE"] = "idle"
+    os.environ["ST_STEP"] = ""
+    os.environ["ST_MESSAGE"] = "Wacht op update-opdracht."
+    os.environ["ST_CLEAR_TIMES"] = "1"
+    os.environ["ST_CLEAR_ERROR"] = "1"
+    # write_status is a shell function; fall through via a marker file
+    Path(str(p) + ".want-idle").write_text("1", encoding="utf-8")
+PY
+if [ -f "$STATUS.want-idle" ]; then
+  rm -f "$STATUS.want-idle"
+  ST_STATE=idle ST_STEP= ST_MESSAGE="Wacht op update-opdracht." ST_CLEAR_TIMES=1 ST_CLEAR_ERROR=1 write_status
+fi
 
 while true; do
   if [ -f "$REQUEST" ]; then
