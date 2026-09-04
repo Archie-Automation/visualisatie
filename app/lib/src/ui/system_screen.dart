@@ -14,6 +14,7 @@ import '../user_favorite_shortcuts.dart';
 import 'app_nav.dart';
 import 'responsive.dart';
 import 'widgets/device_widgets.dart';
+import 'widgets/favorite_device_wrap.dart';
 import 'widgets/function_screen_header.dart';
 import 'widgets/glass_card.dart';
 import 'widgets/luxe_backdrop.dart';
@@ -205,7 +206,11 @@ class _SystemDevicesBody extends ConsumerWidget {
                           _SectionLabel(label: re.room.name.toUpperCase()),
                           for (var i = 0; i < re.devices.length; i++) ...[
                             if (i > 0) const SizedBox(height: 18),
-                            deviceWidget(re.devices[i]),
+                            FavoriteDeviceWrap(
+                              device: re.devices[i],
+                              cfg: cfg,
+                              child: deviceWidget(re.devices[i]),
+                            ),
                           ],
                           const SizedBox(height: 22),
                         ],
@@ -214,7 +219,11 @@ class _SystemDevicesBody extends ConsumerWidget {
                         const _SectionLabel(label: 'OVERIGE'),
                         for (var i = 0; i < unplaced.length; i++) ...[
                           if (i > 0) const SizedBox(height: 18),
-                          deviceWidget(unplaced[i]),
+                          FavoriteDeviceWrap(
+                            device: unplaced[i],
+                            cfg: cfg,
+                            child: deviceWidget(unplaced[i]),
+                          ),
                         ],
                       ],
                     ],
@@ -240,7 +249,7 @@ class _FavorietenBody extends ConsumerWidget {
 
     final seenFavIds = <String>{};
     final favDevices = <Device>[];
-    for (final d in [...cfg.allDevices, ...cfg.camerasOverview]) {
+    for (final d in [...cfg.allDevices, ...cfg.camerasOverview, ...cfg.intercoms]) {
       if (effectiveDeviceFav(userDevFavsAsync, d)) {
         if (seenFavIds.add(d.id)) favDevices.add(d);
       }

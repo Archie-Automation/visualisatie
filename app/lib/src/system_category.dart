@@ -114,7 +114,17 @@ List<Device> devicesForHouseSystem(HouseConfig cfg, HouseSystem system) {
   final devices =
       cfg.allDevices.where((d) => system.types.contains(d.type)).toList();
   if (system.types.contains(DeviceType.camera)) {
-    devices.addAll(cfg.camerasOverview);
+    _addUniqueDevices(devices, cfg.camerasOverview);
+  }
+  if (system.types.contains(DeviceType.intercom)) {
+    _addUniqueDevices(devices, cfg.intercoms);
   }
   return devices;
+}
+
+void _addUniqueDevices(List<Device> into, Iterable<Device> extra) {
+  final seen = {for (final d in into) d.id};
+  for (final d in extra) {
+    if (seen.add(d.id)) into.add(d);
+  }
 }

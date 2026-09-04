@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +13,7 @@ class CallService {
   CallService._(this._ref);
   final WidgetRef _ref;
   GoRouter? _router;
+  Timer? _panelRingTimer;
 
   static CallService? _instance;
   static CallService? get instance => _instance;
@@ -22,6 +25,7 @@ class CallService {
 
   Future<void> showIncoming(IntercomRing ring) async {
     ProximityWake.wakeScreen();
+    _panelRingTimer?.cancel();
     final silent =
         _ref.read(configProvider).value?.me?.doorbellSilent == true;
     if (silent) {
@@ -31,7 +35,8 @@ class CallService {
       if (volume <= 0) {
         debugPrint('[doorbell] skipped — panel volume 0');
       } else {
-        await DoorbellRinger.start(volume: volume);
+        final tone = doorbellToneValue(_ref.read(doorbellToneProvider));
+        await DoorbellRinger.start(volume: volume, toneId: tone);
       }
     }
     final target = '/intercom/${ring.intercomId}';
@@ -39,19 +44,44 @@ class CallService {
     if (loc != target) {
       _router?.push(target);
     }
+    final seconds =
+        doorbellRingSecondsValue(_ref.read(doorbellRingSecondsProvider));
+    _panelRingTimer = Timer(Duration(seconds: seconds), () {
+      unawaited(_onPanelRingTimedOut(ring));
+    });
+  }
+
+  Future<void> _onPanelRingTimedOut(IntercomRing ring) async {
+    final cur = _ref.read(intercomRingProvider);
+    if (cur == null ||
+        cur.intercomId != ring.intercomId ||
+        cur.answeredElsewhere) {
+      return;
+    }
+    await DoorbellRinger.stop();
+    final loc = _router?.state.uri.path;
+    if (loc == '/intercom/${ring.intercomId}') {
+      _router?.pop();
+    }
   }
 
   Future<void> end(String intercomId) async {
+    _panelRingTimer?.cancel();
+    _panelRingTimer = null;
     await DoorbellRinger.stop();
   }
 
   Future<void> endAll() async {
+    _panelRingTimer?.cancel();
+    _panelRingTimer = null;
     await DoorbellRinger.stop();
   }
 }
 
 final callServiceListenerProvider = Provider<void>((ref) {
   ref.watch(doorbellVolumeProvider);
+  ref.watch(doorbellToneProvider);
+  ref.watch(doorbellRingSecondsProvider);
   ref.listen<IntercomRing?>(intercomRingProvider, (prev, next) {
     final svc = CallService.instance;
     if (svc == null) return;

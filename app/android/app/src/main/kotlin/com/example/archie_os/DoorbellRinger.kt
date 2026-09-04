@@ -30,10 +30,13 @@ class DoorbellRinger(private val context: Context) {
     private var savedMode: Int? = null
     @Volatile private var gain = 0.8f
 
-    fun start(volume: Float) {
+    @Volatile private var toneId = "chime"
+
+    fun start(volume: Float, tone: String = "chime") {
         synchronized(lock) {
             stopLocked()
             gain = volume.coerceIn(0f, 1f)
+            toneId = tone
             if (gain <= 0.001f) {
                 Log.i(TAG, "doorbell volume 0 — not playing")
                 return
@@ -42,12 +45,12 @@ class DoorbellRinger(private val context: Context) {
             routeToSpeaker()
             requestFocus()
             running = true
-            if (startWav()) {
+            if (toneId == "chime" && startWav()) {
                 Log.i(TAG, "doorbell wav playing gain=$gain")
                 return
             }
             if (startPcm()) {
-                Log.i(TAG, "doorbell pcm playing gain=$gain")
+                Log.i(TAG, "doorbell pcm playing tone=$toneId gain=$gain")
                 return
             }
             startToneFallback()
@@ -126,7 +129,7 @@ class DoorbellRinger(private val context: Context) {
     }
 
     private fun startPcm(): Boolean {
-        val pcm = dingDongPcm()
+        val pcm = dingDongPcm(toneId)
         val tries = listOf(
             Triple(
                 AudioAttributes.USAGE_ALARM,
@@ -330,11 +333,10 @@ class DoorbellRinger(private val context: Context) {
         private const val TAG = "DoorbellRinger"
         private const val SAMPLE_RATE = 44100
 
-        private fun dingDongPcm(): ByteArray {
-            fun tone(freq: Double, ms: Int, volume: Double): ShortArray {
+        private fun dingDongPcm(kind: String): ByteArray {
+            fun tone(freq: Double, ms: Int, volume: Double, decay: Double = 4.2): ShortArray {
                 val n = SAMPLE_RATE * ms / 1000
                 val out = ShortArray(n)
-                val decay = 4.2
                 for (i in 0 until n) {
                     val t = i.toDouble() / SAMPLE_RATE
                     val env = exp(-t * decay)
@@ -348,11 +350,16 @@ class DoorbellRinger(private val context: Context) {
                 }
                 return out
             }
-            val ding = tone(783.99, 380, 0.92)
-            val gap = ShortArray(SAMPLE_RATE * 140 / 1000)
-            val dong = tone(659.25, 820, 0.95)
-            val rest = ShortArray(SAMPLE_RATE * 1500 / 1000)
-            val all = ding + gap + dong + rest
+            fun silence(ms: Int) = ShortArray(SAMPLE_RATE * ms / 1000)
+            val all = when (kind) {
+                "short" -> tone(783.99, 280, 0.9, 6.5) + silence(900)
+                "soft" -> tone(659.25, 520, 0.55, 3.2) + silence(400) +
+                    tone(523.25, 900, 0.5, 2.8) + silence(1200)
+                "double" -> tone(783.99, 220, 0.9, 7.0) + silence(90) +
+                    tone(783.99, 220, 0.85, 7.0) + silence(1100)
+                else -> tone(783.99, 380, 0.92) + silence(140) +
+                    tone(659.25, 820, 0.95) + silence(1500)
+            }
             val bytes = ByteArray(all.size * 2)
             var o = 0
             for (s in all) {
