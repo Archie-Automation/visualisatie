@@ -103,6 +103,20 @@ class GithubAndroidApkInfo {
   }
 }
 
+/// Install is offered only when the APK payload itself is newer than [client].
+bool androidApkNewerThanClient({
+  required bool apkSupported,
+  required GithubAndroidApkInfo? apk,
+  required SoftwareVersionInfo client,
+}) {
+  final apkVer = apk?.asVersion;
+  return apkSupported &&
+      apk != null &&
+      apk.available &&
+      apkVer != null &&
+      client.compareTo(apkVer) < 0;
+}
+
 class GithubLatestInfo {
   const GithubLatestInfo({
     required this.version,
@@ -232,13 +246,13 @@ final softwareVersionStatusProvider =
         client.version != '0.0.0+0' &&
         client.compareTo(running) < 0;
     final apk = latest?.androidApk;
-    final apkVer = apk?.asVersion ?? latest?.asVersion;
-    final androidApkUpdateAvailable = supportsAndroidApkUpdate &&
-        latest != null &&
-        apk != null &&
-        apk.available &&
-        apkVer != null &&
-        client.compareTo(apkVer) < 0;
+    // Only the APK's own version. Falling back to the GitHub/branch title
+    // offered Install while the binary was still an old app-release.apk.
+    final androidApkUpdateAvailable = androidApkNewerThanClient(
+      apkSupported: supportsAndroidApkUpdate,
+      apk: apk,
+      client: client,
+    );
     final androidApkPending = supportsAndroidApkUpdate &&
         clientStale &&
         !androidApkUpdateAvailable;

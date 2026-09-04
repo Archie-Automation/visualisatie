@@ -70,6 +70,17 @@ jobs:
           flutter build apk --release \
             --dart-define=API_BASE= \
             --dart-define=APP_VERSION="$VERSION"
+          CODE="${VERSION##*+}"
+          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          AAPT="$(ls -1 "$SDK"/build-tools/*/aapt 2>/dev/null | tail -1 || true)"
+          if [ -n "$AAPT" ]; then
+            BADGING="$("$AAPT" dump badging build/app/outputs/flutter-apk/app-release.apk)"
+            echo "$BADGING" | grep -q "versionCode='$CODE'" || {
+              echo "APK versionCode hoort $CODE te zijn (pubspec $VERSION)"
+              echo "$BADGING" | head -n 5
+              exit 1
+            }
+          fi
       - name: Publish android-latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -79,8 +90,27 @@ jobs:
           cp app/build/app/outputs/flutter-apk/app-release.apk archie-os.apk
           NOTES="Server + tablet ${VERSION}. NUC: Server bijwerken. Tablet: Installeren."
           if gh release view android-latest >/dev/null 2>&1; then
+            # Leftover app-release.apk (old debug builds) is picked first by
+            # naive asset matching and tablets then "install" a downgrade.
+            while IFS= read -r name; do
+              [ -z "$name" ] && continue
+              case "$name" in
+                archie-os.apk) ;;
+                *.apk)
+                  echo "Removing stale APK asset: $name"
+                  gh release delete-asset android-latest "$name" --yes
+                  ;;
+              esac
+            done < <(gh release view android-latest --json assets --jq '.assets[].name')
             gh release edit android-latest --title "$VERSION" --prerelease --notes "$NOTES"
             gh release upload android-latest archie-os.apk --clobber
           else
             gh release create android-latest archie-os.apk --prerelease --title "$VERSION" --notes "$NOTES"
           fi
+          leftover="$(gh release view android-latest --json assets --jq '.assets[].name' | grep -E '\.apk$' | grep -v '^archie-os\.apk$' || true)"
+          if [ -n "$leftover" ]; then
+            echo "android-latest mag alleen archie-os.apk hebben, nog aanwezig:"
+            echo "$leftover"
+            exit 1
+          fi
+          gh release view android-latest --json assets --jq '.assets[].name' | grep -qx 'archie-os.apk'

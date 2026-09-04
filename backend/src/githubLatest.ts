@@ -110,10 +110,15 @@ function pickAndroidApk(assets: unknown): GithubAndroidApkInfo | null {
     apks.push({ id, name, sizeBytes, apiUrl });
   }
   if (apks.length === 0) return null;
-  const preferred =
-    apks.find((a) => /archie|luxe|knx|app-release|release/i.test(a.name)) ??
-    apks[0];
-  return preferred;
+  // `android-latest` used to keep a leftover official `app-release.apk`
+  // (debug-signed, versionCode 186). The regex below matched that first
+  // and tablets downloaded a downgrade while the release title said 195.
+  return (
+    apks.find((a) => /^archie-os(\.apk|-)/i.test(a.name)) ??
+    apks.find((a) => /archie/i.test(a.name) && !/^app-release/i.test(a.name)) ??
+    apks.find((a) => !/^app-release\.apk$/i.test(a.name)) ??
+    null
+  );
 }
 
 function infoFromTag(
@@ -230,6 +235,13 @@ function apkFromRolling(
 ): GithubAndroidApkInfo | null {
   const apk = rolling?.androidApk;
   if (!apk) return null;
+  if (/^app-release\.apk$/i.test(apk.name)) {
+    logger.warn(
+      { name: apk.name, sizeBytes: apk.sizeBytes },
+      "app-release.apk op android-latest genegeerd (vaak oude debug-build)"
+    );
+    return null;
+  }
   const labeled =
     rolling && rolling.semver !== "0.0.0"
       ? { ...apk, version: rolling.version }
@@ -244,6 +256,10 @@ function apkFromRolling(
       return null;
     }
   }
+  logger.info(
+    { name: labeled.name, version: labeled.version, sizeBytes: labeled.sizeBytes },
+    "APK van android-latest"
+  );
   return labeled;
 }
 

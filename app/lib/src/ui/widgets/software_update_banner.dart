@@ -65,7 +65,7 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
       setState(() {
         _installing = false;
         _progress = null;
-        _error = null;
+        _error = _apkInstallErrorMessage(result.error);
       });
       ref.invalidate(softwareVersionStatusProvider);
       return;
@@ -249,7 +249,8 @@ String _apkInstallErrorMessage(String? code) {
     case 'apk_invalid':
       return 'Het gedownloade bestand is geen geldige app. Probeer het later opnieuw.';
     case 'apk_not_newer':
-      return 'Deze app-versie staat er al op. Even geduld tot er een nieuwere klaarstaat.';
+      return 'Het installatiebestand is niet nieuwer dan deze app. '
+          'Installeren heeft niets veranderd. Wacht tot er een nieuwere APK klaarstaat.';
     case 'install_aborted':
       return 'Installatie afgebroken. Tik opnieuw op Installeren en bevestig op het tablet.';
     case 'install_blocked':
