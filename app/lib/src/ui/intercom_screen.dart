@@ -130,8 +130,9 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
     return ListenableBuilder(
       listenable: sip,
       builder: (context, _) {
+        final waiting = !_inConversation;
         final ringing =
-            !_inConversation && _isRinging(ring: ring, sipPhase: sip.phase);
+            waiting && _isRinging(ring: ring, sipPhase: sip.phase);
         if (!_closing &&
             ring != null &&
             ring.answeredElsewhere &&
@@ -210,7 +211,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                             borderRadius: BorderRadius.circular(28),
                             boxShadow: LuxeShadows.darkLift,
                           ),
-                          child: ringing
+                          child: waiting
                               ? CameraSnapshot(
                                   cameraId: i.id,
                                   aspectRatio: i.aspectRatio,
@@ -265,24 +266,20 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
-                            _Shake(
-                              enabled: ringing,
-                              child: _ActionButton(
-                                icon: Icons.call_end,
-                                label: 'OPHANGEN',
-                                color: LuxeColors.danger,
-                                onTap: () => _cancel(sip),
-                              ),
+                            _ActionButton(
+                              icon: Icons.call_end,
+                              label: 'OPHANGEN',
+                              color: LuxeColors.danger,
+                              shake: ringing,
+                              onTap: () => _cancel(sip),
                             ),
-                            if (ringing)
-                              _Shake(
-                                enabled: true,
-                                child: _ActionButton(
-                                  icon: Icons.call,
-                                  label: 'OPNEMEN',
-                                  color: const Color(0xFF2E7D32),
-                                  onTap: () => _answer(sip),
-                                ),
+                            if (waiting)
+                              _ActionButton(
+                                icon: Icons.call,
+                                label: 'OPNEMEN',
+                                color: const Color(0xFF2E7D32),
+                                shake: ringing,
+                                onTap: () => _answer(sip),
                               )
                             else
                               const SizedBox(width: 72),
@@ -314,19 +311,20 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
   }
 }
 
-class _Shake extends StatefulWidget {
-  const _Shake({required this.enabled, required this.child});
+class _AlarmShake extends StatefulWidget {
+  const _AlarmShake({required this.enabled, required this.child});
   final bool enabled;
   final Widget child;
 
   @override
-  State<_Shake> createState() => _ShakeState();
+  State<_AlarmShake> createState() => _AlarmShakeState();
 }
 
-class _ShakeState extends State<_Shake> with SingleTickerProviderStateMixin {
+class _AlarmShakeState extends State<_AlarmShake>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 520),
+    duration: const Duration(milliseconds: 1100),
   );
 
   @override
@@ -336,7 +334,7 @@ class _ShakeState extends State<_Shake> with SingleTickerProviderStateMixin {
   }
 
   @override
-  void didUpdateWidget(covariant _Shake oldWidget) {
+  void didUpdateWidget(covariant _AlarmShake oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.enabled && !_c.isAnimating) {
       _c.repeat();
@@ -358,9 +356,14 @@ class _ShakeState extends State<_Shake> with SingleTickerProviderStateMixin {
     return AnimatedBuilder(
       animation: _c,
       builder: (context, child) {
-        final t = _c.value * math.pi * 2;
-        return Transform.translate(
-          offset: Offset(math.sin(t) * 3.2, math.sin(t * 2) * 1.1),
+        final t = _c.value;
+        // Burst like a mechanical alarm: ring-ring, then a beat of rest.
+        final ringing = t < 0.55;
+        final local = ringing ? t / 0.55 : 0.0;
+        final wiggle = ringing ? math.sin(local * math.pi * 10) : 0.0;
+        final decay = ringing ? (1.0 - local * 0.35) : 0.0;
+        return Transform.rotate(
+          angle: wiggle * 0.38 * decay,
           child: child,
         );
       },
@@ -376,47 +379,50 @@ class _ActionButton extends StatelessWidget {
     required this.color,
     required this.onTap,
     this.loading = false,
+    this.shake = false,
   });
   final IconData icon;
   final String label;
   final Color color;
   final VoidCallback onTap;
   final bool loading;
+  final bool shake;
 
   @override
   Widget build(BuildContext context) {
+    final circle = GestureDetector(
+      onTap: loading ? null : onTap,
+      child: Container(
+        width: 72,
+        height: 72,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color.withValues(alpha: 0.12),
+          border: Border.all(
+              color: color.withValues(alpha: 0.55), width: 1.4),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.35),
+              blurRadius: 24,
+              spreadRadius: -4,
+            ),
+          ],
+        ),
+        child: loading
+            ? Center(
+                child: SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: LuxeColors.ink),
+                ),
+              )
+            : Icon(icon, color: color, size: 28),
+      ),
+    );
     return Column(
       children: [
-        GestureDetector(
-          onTap: loading ? null : onTap,
-          child: Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: color.withValues(alpha: 0.12),
-              border: Border.all(
-                  color: color.withValues(alpha: 0.55), width: 1.4),
-              boxShadow: [
-                BoxShadow(
-                  color: color.withValues(alpha: 0.35),
-                  blurRadius: 24,
-                  spreadRadius: -4,
-                ),
-              ],
-            ),
-            child: loading
-                ? Center(
-                    child: SizedBox(
-                      width: 22,
-                      height: 22,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: LuxeColors.ink),
-                    ),
-                  )
-                : Icon(icon, color: color, size: 28),
-          ),
-        ),
+        _AlarmShake(enabled: shake && !loading, child: circle),
         const SizedBox(height: 12),
         Text(label,
             style: TextStyle(

@@ -45,8 +45,8 @@ class DoorbellRinger(private val context: Context) {
             routeToSpeaker()
             requestFocus()
             running = true
-            if (toneId == "chime" && startWav()) {
-                Log.i(TAG, "doorbell wav playing gain=$gain")
+            if (startWav()) {
+                Log.i(TAG, "doorbell wav playing tone=$toneId gain=$gain")
                 return
             }
             if (startPcm()) {
@@ -105,13 +105,26 @@ class DoorbellRinger(private val context: Context) {
         restore()
     }
 
-    /** Keep a compile-time reference so aapt cannot strip the wav. */
+    /** Keep a compile-time reference so aapt cannot strip the wavs. */
     @Suppress("unused")
-    private val keepWav = R.raw.doorbell
+    private val keepWav = intArrayOf(
+        R.raw.doorbell,
+        R.raw.doorbell_chime,
+        R.raw.doorbell_modern,
+        R.raw.doorbell_brass,
+        R.raw.doorbell_melody,
+    )
+
+    private fun wavResId(): Int = when (toneId) {
+        "modern" -> R.raw.doorbell_modern
+        "brass" -> R.raw.doorbell_brass
+        "melody" -> R.raw.doorbell_melody
+        else -> R.raw.doorbell_chime
+    }
 
     private fun startWav(): Boolean {
         return try {
-            val afd = context.resources.openRawResourceFd(R.raw.doorbell) ?: return false
+            val afd = context.resources.openRawResourceFd(wavResId()) ?: return false
             val p = MediaPlayer()
             p.setAudioAttributes(mediaAttrs(AudioAttributes.USAGE_MEDIA))
             p.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
@@ -123,7 +136,7 @@ class DoorbellRinger(private val context: Context) {
             player = p
             true
         } catch (e: Exception) {
-            Log.w(TAG, "wav player failed", e)
+            Log.w(TAG, "wav player failed tone=$toneId", e)
             false
         }
     }
