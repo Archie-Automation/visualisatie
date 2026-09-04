@@ -619,6 +619,7 @@ class CurrentUser {
   final String role;
   final bool canEditScenes;
   final bool enabled;
+  final DateTime? doorbellMutedUntil;
 
   const CurrentUser({
     required this.id,
@@ -627,6 +628,7 @@ class CurrentUser {
     required this.canEditScenes,
     this.displayName,
     this.enabled = true,
+    this.doorbellMutedUntil,
   });
 
   bool get isInstaller => isInstallerRole(role);
@@ -634,12 +636,19 @@ class CurrentUser {
   bool get isStaff => isStaffRole(role);
   bool get isAdmin => isInstaller;
 
+  bool get doorbellSilent {
+    final until = doorbellMutedUntil;
+    if (until == null) return false;
+    return until.isAfter(DateTime.now());
+  }
+
   factory CurrentUser.fromJson(Map<String, dynamic> j) {
     final access = (j['access'] as Map?) ?? const {};
     final role = j['role'] as String? ?? 'user';
     final editRaw = access['editScenes'];
     final canEdit =
         isStaffRole(role) || (editRaw == null ? true : editRaw == true);
+    final muteRaw = (j['doorbellMutedUntil'] as String?)?.trim();
     return CurrentUser(
       id: j['id'] as String,
       username: j['username'] as String,
@@ -647,6 +656,8 @@ class CurrentUser {
       displayName: j['displayName'] as String?,
       canEditScenes: canEdit,
       enabled: j['enabled'] != false,
+      doorbellMutedUntil:
+          muteRaw == null || muteRaw.isEmpty ? null : DateTime.tryParse(muteRaw),
     );
   }
 }

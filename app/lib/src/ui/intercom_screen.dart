@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -6,9 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api.dart';
 import '../camera_api.dart';
+import '../intercom/intercom_controller.dart';
 import '../intercom/intercom_sip_providers.dart';
+import '../intercom/intercom_sip_types.dart';
 import '../theme.dart';
 import 'app_nav.dart';
+import 'widgets/camera_snapshot.dart';
 import 'widgets/confirm_dialog.dart';
 import 'widgets/intercom_player.dart';
 import 'widgets/luxe_backdrop.dart';
@@ -22,23 +26,50 @@ class IntercomScreen extends ConsumerStatefulWidget {
 }
 
 class _IntercomScreenState extends ConsumerState<IntercomScreen> {
-  bool _talking = false;
   bool _releasing = false;
   String? _releaseFeedback;
   bool _sipUaStarted = false;
   bool _sipDiscoveryScheduled = false;
+  bool _closing = false;
+  bool _inConversation = false;
 
   @override
   void initState() {
     super.initState();
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
-    // Answering an active ring dismisses the incoming-call overlay.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final ring = ref.read(intercomRingProvider);
-      if (ring != null && ring.intercomId == widget.intercomId) {
-        ref.read(intercomRingProvider.notifier).clear();
-      }
-    });
+  }
+
+  bool _isRinging({
+    required IntercomRing? ring,
+    required IntercomSipPhase sipPhase,
+  }) {
+    if (ring != null &&
+        ring.intercomId == widget.intercomId &&
+        !ring.answeredElsewhere) {
+      return true;
+    }
+    return sipPhase == IntercomSipPhase.ringing;
+  }
+
+  Future<void> _answer(IntercomController sip) async {
+    if (_inConversation) return;
+    setState(() => _inConversation = true);
+    if (sip.phase == IntercomSipPhase.ringing) {
+      await sip.answerCall();
+    }
+    ref.read(intercomRingProvider.notifier).clear();
+  }
+
+  void _cancel(IntercomController sip) {
+    if (_closing) return;
+    _closing = true;
+    if (sip.phase == IntercomSipPhase.ringing) {
+      sip.declineCall();
+    } else if (sip.phase == IntercomSipPhase.inCall) {
+      sip.hangup();
+    }
+    ref.read(intercomRingProvider.notifier).clear();
+    if (mounted) appBack(context);
   }
 
   void _ensureSipUaFromConfig() {
@@ -93,8 +124,25 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
   @override
   Widget build(BuildContext context) {
     final info = ref.watch(intercomInfoProvider(widget.intercomId));
+    final ring = ref.watch(intercomRingProvider);
+    final sip = ref.watch(intercomSipControllerProvider);
 
-    return Scaffold(
+    return ListenableBuilder(
+      listenable: sip,
+      builder: (context, _) {
+        final ringing =
+            !_inConversation && _isRinging(ring: ring, sipPhase: sip.phase);
+        if (!_closing &&
+            ring != null &&
+            ring.answeredElsewhere &&
+            ring.intercomId == widget.intercomId) {
+          _closing = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) appBack(context);
+          });
+        }
+
+        return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
@@ -125,7 +173,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
         leading: IconButton(
           icon: const Icon(Icons.close),
           tooltip: 'Sluiten',
-          onPressed: () => appBack(context),
+          onPressed: () => _cancel(sip),
         ),
       ),
       body: LuxeBackdrop(
@@ -162,11 +210,18 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                             borderRadius: BorderRadius.circular(28),
                             boxShadow: LuxeShadows.darkLift,
                           ),
-                          child: IntercomPlayer(
-                            intercomId: i.id,
-                            aspectRatio: i.aspectRatio,
-                            talking: _talking,
-                          ),
+                          child: ringing
+                              ? CameraSnapshot(
+                                  cameraId: i.id,
+                                  aspectRatio: i.aspectRatio,
+                                  kind: SnapshotKind.intercom,
+                                  fit: BoxFit.cover,
+                                )
+                              : IntercomPlayer(
+                                  intercomId: i.id,
+                                  aspectRatio: i.aspectRatio,
+                                  talking: true,
+                                ),
                         ),
                       ),
                     ),
@@ -210,17 +265,27 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
-                            _ActionButton(
-                              icon: Icons.call_end,
-                              label: 'OPHANGEN',
-                              color: LuxeColors.danger,
-                              onTap: () => appBack(context),
+                            _Shake(
+                              enabled: ringing,
+                              child: _ActionButton(
+                                icon: Icons.call_end,
+                                label: 'OPHANGEN',
+                                color: LuxeColors.danger,
+                                onTap: () => _cancel(sip),
+                              ),
                             ),
-                            _TalkButton(
-                              active: _talking,
-                              onChanged: (v) =>
-                                  setState(() => _talking = v),
-                            ),
+                            if (ringing)
+                              _Shake(
+                                enabled: true,
+                                child: _ActionButton(
+                                  icon: Icons.call,
+                                  label: 'OPNEMEN',
+                                  color: const Color(0xFF2E7D32),
+                                  onTap: () => _answer(sip),
+                                ),
+                              )
+                            else
+                              const SizedBox(width: 72),
                             if (i.canRelease)
                               _ActionButton(
                                 icon: Icons.lock_open_outlined,
@@ -243,6 +308,63 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
           },
         ),
       ),
+    );
+      },
+    );
+  }
+}
+
+class _Shake extends StatefulWidget {
+  const _Shake({required this.enabled, required this.child});
+  final bool enabled;
+  final Widget child;
+
+  @override
+  State<_Shake> createState() => _ShakeState();
+}
+
+class _ShakeState extends State<_Shake> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 520),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.enabled) _c.repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant _Shake oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.enabled && !_c.isAnimating) {
+      _c.repeat();
+    } else if (!widget.enabled && _c.isAnimating) {
+      _c.stop();
+      _c.reset();
+    }
+  }
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) return widget.child;
+    return AnimatedBuilder(
+      animation: _c,
+      builder: (context, child) {
+        final t = _c.value * math.pi * 2;
+        return Transform.translate(
+          offset: Offset(math.sin(t) * 3.2, math.sin(t * 2) * 1.1),
+          child: child,
+        );
+      },
+      child: widget.child,
     );
   }
 }
@@ -303,72 +425,6 @@ class _ActionButton extends StatelessWidget {
               letterSpacing: 2.2,
               fontWeight: FontWeight.w600,
             )),
-      ],
-    );
-  }
-}
-
-class _TalkButton extends StatelessWidget {
-  const _TalkButton({required this.active, required this.onChanged});
-  final bool active;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        GestureDetector(
-          onLongPressStart: (_) => onChanged(true),
-          onLongPressEnd: (_) => onChanged(false),
-          onTap: () => onChanged(!active),
-          child: AnimatedContainer(
-            duration: Duration(milliseconds: 220),
-            curve: Curves.easeOutCubic,
-            width: 108,
-            height: 108,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: active
-                  ? LinearGradient(
-                      colors: [LuxeColors.brassGlow, LuxeColors.brass],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    )
-                  : null,
-              color: active ? null : LuxeColors.surfaceDim,
-              border: Border.all(
-                color: active
-                    ? LuxeColors.brass
-                    : LuxeColors.inkFaint,
-                width: 1.6,
-              ),
-              boxShadow: active
-                  ? [
-                      BoxShadow(
-                        color: LuxeColors.brass.withValues(alpha: 0.5),
-                        blurRadius: 40,
-                        spreadRadius: 4,
-                      )
-                    ]
-                  : null,
-            ),
-            child: Icon(
-              active ? Icons.mic : Icons.mic_none,
-              color: active ? Colors.white : LuxeColors.ink,
-              size: 40,
-            ),
-          ),
-        ),
-        SizedBox(height: 8),
-        Text(
-          active ? 'SPREKEN…' : 'HOUD INGEDRUKT',
-          style: TextStyle(
-            color: LuxeColors.inkSoft,
-            fontSize: 10,
-            letterSpacing: 2,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
       ],
     );
   }

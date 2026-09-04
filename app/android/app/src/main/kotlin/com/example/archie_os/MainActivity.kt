@@ -39,6 +39,7 @@ class MainActivity : FlutterActivity(), SensorEventListener {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var wakeLock: PowerManager.WakeLock? = null
     private var apkInstaller: ApkInstaller? = null
+    private var doorbellRinger: DoorbellRinger? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -65,6 +66,25 @@ class MainActivity : FlutterActivity(), SensorEventListener {
             when (call.method) {
                 "wakeScreen" -> {
                     wakeScreen()
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        doorbellRinger = DoorbellRinger(this)
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "archie_os/doorbell",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "start" -> {
+                    val volume = (call.argument<Number>("volume") ?: 0.8).toFloat()
+                    doorbellRinger?.start(volume)
+                    result.success(null)
+                }
+                "stop" -> {
+                    doorbellRinger?.stop()
                     result.success(null)
                 }
                 else -> result.notImplemented()
@@ -245,6 +265,8 @@ class MainActivity : FlutterActivity(), SensorEventListener {
 
     override fun onDestroy() {
         stopSensors()
+        doorbellRinger?.stop()
+        doorbellRinger = null
         apkInstaller?.dispose()
         apkInstaller = null
         try {

@@ -1083,6 +1083,11 @@ export interface User {
   enabled?: boolean;
   /** Indoor SIP-toestel voor deze login (voip.endpoints id). Uniek: elk account hoogstens één toestel. */
   sipEndpointId?: string;
+  /**
+   * ISO timestamp until which this login's tablet should not play the
+   * doorbell. Null/omit = sound on. A far-future date = until they unmute.
+   */
+  doorbellMutedUntil?: string;
   access?: {
     floors?: "*" | string[];
     rooms?: "*" | string[];

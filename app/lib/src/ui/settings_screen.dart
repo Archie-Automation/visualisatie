@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
 import '../display_panel_config.dart';
+import '../doorbell_ringer.dart';
 import '../media_api.dart';
 import '../models.dart';
 import '../roles.dart';
@@ -15,6 +17,7 @@ import '../software_version.dart';
 import '../theme.dart';
 import '../theme_mode.dart';
 import '../theme_auto_schedule.dart';
+import '../user_api.dart';
 import 'app_nav.dart';
 import 'responsive.dart';
 import 'schedule_editor_sheet.dart';
@@ -26,7 +29,7 @@ import 'widgets/luxe_backdrop.dart';
 import 'widgets/luxe_form.dart';
 import 'installer_nav.dart';
 
-enum _SettingsTopic { appearance, schedules, tablet, spotify, users }
+enum _SettingsTopic { appearance, doorbell, schedules, tablet, spotify, users }
 
 /// Customer-facing settings: menu first, then one function at a time.
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -121,6 +124,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
                   _SettingsMenuTile(
+                    icon: Icons.notifications_off_outlined,
+                    title: 'Deurbel',
+                    subtitle: 'Stilzetten per account, volume per scherm',
+                    onTap: () =>
+                        setState(() => _topic = _SettingsTopic.doorbell),
+                  ),
+                  Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
+                  _SettingsMenuTile(
                     icon: Icons.schedule_outlined,
                     title: 'Tijdschema\'s',
                     subtitle: 'Scenes en apparaten op tijd',
@@ -194,6 +205,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     final title = switch (topic) {
       _SettingsTopic.appearance => 'Weergave',
+      _SettingsTopic.doorbell => 'Deurbel',
       _SettingsTopic.schedules => 'Tijdschema\'s',
       _SettingsTopic.tablet => 'Wandtablet',
       _SettingsTopic.spotify => 'Spotify',
@@ -203,6 +215,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final infoBody = switch (topic) {
       _SettingsTopic.appearance =>
         'Kies licht, donker of automatisch.\n\n${showThemeSchedules ? 'Auto volgt het licht/donker-schema onder Tijdschema\'s.' : 'Licht of donker blijft vast tot je Auto kiest.'}',
+      _SettingsTopic.doorbell =>
+        'Stilzetten geldt voor dit account, op elk scherm waarop je bent ingelogd.\n\n'
+            'Volume geldt alleen voor dit paneel. Op een ander scherm zet je het daar apart.',
       _SettingsTopic.schedules => [
           'Laat scenes of apparaten automatisch lopen op een tijdstip, of bij zonsopkomst en zonsondergang.',
           if (showThemeSchedules)
@@ -253,6 +268,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               switch (topic) {
                 _SettingsTopic.appearance =>
                   const _AppearanceSection(showTitle: false),
+                _SettingsTopic.doorbell =>
+                  const _DoorbellMuteSection(showTitle: false),
                 _SettingsTopic.schedules => _schedulesSection(
                     context,
                     ref,
@@ -1730,6 +1747,266 @@ class _AppearanceSection extends ConsumerWidget {
             ),
           ],
         ),
+    );
+  }
+}
+
+class _DoorbellMuteSection extends ConsumerStatefulWidget {
+  const _DoorbellMuteSection({this.showTitle = true});
+  final bool showTitle;
+
+  @override
+  ConsumerState<_DoorbellMuteSection> createState() =>
+      _DoorbellMuteSectionState();
+}
+
+class _DoorbellMuteSectionState extends ConsumerState<_DoorbellMuteSection> {
+  bool _busy = false;
+  bool _testing = false;
+  Timer? _testTimer;
+
+  @override
+  void dispose() {
+    _testTimer?.cancel();
+    if (_testing) {
+      DoorbellRinger.stop();
+    }
+    super.dispose();
+  }
+
+  Future<void> _testSound() async {
+    if (_testing) return;
+    setState(() => _testing = true);
+    final volume = doorbellVolumeValue(ref.read(doorbellVolumeProvider));
+    await DoorbellRinger.start(volume: volume);
+    _testTimer?.cancel();
+    _testTimer = Timer(const Duration(seconds: 4), () async {
+      await DoorbellRinger.stop();
+      if (mounted) setState(() => _testing = false);
+    });
+  }
+
+  Future<void> _previewVolume(double volume) async {
+    await DoorbellRinger.start(volume: volume);
+    _testTimer?.cancel();
+    setState(() => _testing = true);
+    _testTimer = Timer(const Duration(seconds: 2), () async {
+      await DoorbellRinger.stop();
+      if (mounted) setState(() => _testing = false);
+    });
+  }
+
+  Future<void> _setUntil(DateTime? until) async {
+    final token = ref.read(authProvider).token;
+    if (token == null) return;
+    setState(() => _busy = true);
+    try {
+      await patchDoorbellMute(token: token, until: until);
+      ref.invalidate(configProvider);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), behavior: SnackBarBehavior.floating),
+      );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  DateTime _tonight() {
+    final now = DateTime.now();
+    var t = DateTime(now.year, now.month, now.day, 22);
+    if (!t.isAfter(now)) t = t.add(const Duration(days: 1));
+    return t;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final me = ref.watch(configProvider).value?.me;
+    final silent = me?.doorbellSilent == true;
+    final until = me?.doorbellMutedUntil;
+    final volume = doorbellVolumeValue(ref.watch(doorbellVolumeProvider));
+    return _SettingsCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (widget.showTitle) ...[
+            const _SettingsSectionTitle(
+              icon: Icons.notifications_off_outlined,
+              title: 'DEURBEL',
+              infoTitle: 'Deurbel',
+              infoBody:
+                  'Stilzetten geldt voor dit account, op elk scherm waarop je bent ingelogd.',
+            ),
+            const SizedBox(height: 10),
+          ],
+          LuxeSwitchRow(
+            title: 'Deurbel stil',
+            subtitle: silent
+                ? _doorbellUntilLabel(until)
+                : 'Ding-dong bij een oproep',
+            value: silent,
+            onChanged: _busy
+                ? null
+                : (v) => _setUntil(
+                      v ? DateTime.now().add(const Duration(hours: 1)) : null,
+                    ),
+          ),
+          if (DoorbellRinger.supported) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Volume op dit scherm',
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                ),
+                Text(
+                  '${(volume * 100).round()}%',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Alleen dit paneel. Andere schermen houden hun eigen stand.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            SliderTheme(
+              data: SliderTheme.of(context).copyWith(
+                activeTrackColor: LuxeColors.brass,
+                inactiveTrackColor: LuxeColors.lineSoft,
+                thumbColor: LuxeColors.brass,
+                overlayShape: SliderComponentShape.noOverlay,
+                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
+              ),
+              child: Slider(
+                value: volume,
+                min: 0,
+                max: 1,
+                divisions: 20,
+                label: '${(volume * 100).round()}%',
+                onChanged: (v) =>
+                    ref.read(doorbellVolumeProvider.notifier).set(v),
+                onChangeEnd: _previewVolume,
+              ),
+            ),
+            OutlinedButton.icon(
+              onPressed: _testing ? null : _testSound,
+              icon: Icon(
+                _testing ? Icons.volume_up : Icons.notifications_active_outlined,
+                size: 18,
+              ),
+              label: Text(_testing ? 'Speelt…' : 'Test ding-dong'),
+            ),
+          ],
+          if (silent) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _MuteChip(
+                  label: '15 min',
+                  selected: _isAbout(until, const Duration(minutes: 15)),
+                  onTap: _busy
+                      ? null
+                      : () => _setUntil(
+                            DateTime.now().add(const Duration(minutes: 15)),
+                          ),
+                ),
+                _MuteChip(
+                  label: '30 min',
+                  selected: _isAbout(until, const Duration(minutes: 30)),
+                  onTap: _busy
+                      ? null
+                      : () => _setUntil(
+                            DateTime.now().add(const Duration(minutes: 30)),
+                          ),
+                ),
+                _MuteChip(
+                  label: '1 uur',
+                  selected: _isAbout(until, const Duration(hours: 1)),
+                  onTap: _busy
+                      ? null
+                      : () => _setUntil(
+                            DateTime.now().add(const Duration(hours: 1)),
+                          ),
+                ),
+                _MuteChip(
+                  label: '2 uur',
+                  selected: _isAbout(until, const Duration(hours: 2)),
+                  onTap: _busy
+                      ? null
+                      : () => _setUntil(
+                            DateTime.now().add(const Duration(hours: 2)),
+                          ),
+                ),
+                _MuteChip(
+                  label: 'Tot vanavond',
+                  selected: _isTonight(until),
+                  onTap: _busy ? null : () => _setUntil(_tonight()),
+                ),
+                _MuteChip(
+                  label: 'Tot ik aanzet',
+                  selected: until != null && until.year >= 2090,
+                  onTap: _busy
+                      ? null
+                      : () => _setUntil(DateTime.utc(2099, 12, 31)),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  bool _isAbout(DateTime? until, Duration d) {
+    if (until == null || until.year >= 2090) return false;
+    final target = DateTime.now().add(d);
+    return until.difference(target).abs() < const Duration(minutes: 3);
+  }
+
+  bool _isTonight(DateTime? until) {
+    if (until == null || until.year >= 2090) return false;
+    final t = _tonight();
+    return until.difference(t).abs() < const Duration(minutes: 3);
+  }
+}
+
+String _doorbellUntilLabel(DateTime? until) {
+  if (until == null) return 'Stil';
+  if (until.year >= 2090) return 'Stil tot je hem weer aanzet';
+  final local = until.toLocal();
+  final now = DateTime.now();
+  final sameDay = local.year == now.year &&
+      local.month == now.month &&
+      local.day == now.day;
+  final time = DateFormat('HH:mm').format(local);
+  if (sameDay) return 'Stil tot $time';
+  return 'Stil tot ${DateFormat('d MMM HH:mm').format(local)}';
+}
+
+class _MuteChip extends StatelessWidget {
+  const _MuteChip({
+    required this.label,
+    required this.selected,
+    this.onTap,
+  });
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return FilterChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: onTap == null ? null : (_) => onTap!(),
+      showCheckmark: false,
+      visualDensity: VisualDensity.compact,
     );
   }
 }

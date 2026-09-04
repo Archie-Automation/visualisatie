@@ -1228,6 +1228,10 @@
           "type": "string",
           "description": "voip.endpoints id. Unique: at most one user per endpoint."
         },
+        "doorbellMutedUntil": {
+          "type": ["string", "null"],
+          "description": "ISO time until this user's doorbell is silent. Omit or null = sound on."
+        },
         "access": {
           "type": "object",
           "properties": {
