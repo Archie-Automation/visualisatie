@@ -309,49 +309,80 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                       child: SizedBox(
                         width: double.infinity,
                         child: LuxeRimBox(
-                        radius: 28,
-                        rimWidth: 1.25,
-                        fillColor: LuxeColors.surface,
-                        rimColor: Theme.of(context).brightness ==
-                                Brightness.dark
-                            ? LuxeColors.line
-                            : LuxeBorders.solid(
-                                LuxeColors.ink.withValues(alpha: 0.22),
+                          radius: 28,
+                          rimWidth: 1.25,
+                          fillColor: LuxeColors.surface.withValues(
+                            alpha: Theme.of(context).brightness ==
+                                    Brightness.dark
+                                ? 0.38
+                                : 0.46,
+                          ),
+                          rimColor: Theme.of(context).brightness ==
+                                  Brightness.dark
+                              ? LuxeColors.line
+                              : LuxeBorders.solid(
+                                  LuxeColors.ink.withValues(alpha: 0.22),
+                                ),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 20),
+                          child: Stack(
+                            children: [
+                              Positioned(
+                                top: 0,
+                                left: 0,
+                                right: 0,
+                                child: IgnorePointer(
+                                  child: Container(
+                                    height: 34,
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                        colors: [
+                                          LuxeColors.glassHighlight,
+                                          LuxeColors.glassHighlight
+                                              .withValues(alpha: 0),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 20),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _ActionButton(
-                              icon: Icons.call_end_rounded,
-                              label: 'OPHANGEN',
-                              color: _kCallHangup,
-                              shake: ringing,
-                              onTap: () => _cancel(sip),
-                            ),
-                            if (waiting)
-                              _ActionButton(
-                                icon: Icons.call_rounded,
-                                label: 'OPNEMEN',
-                                color: _kCallAnswer,
-                                shake: ringing,
-                                onTap: () => _answer(sip),
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceEvenly,
+                                children: [
+                                  _ActionButton(
+                                    icon: Icons.call_end_rounded,
+                                    label: 'OPHANGEN',
+                                    color: _kCallHangup,
+                                    shake: ringing,
+                                    onTap: () => _cancel(sip),
+                                  ),
+                                  if (waiting)
+                                    _ActionButton(
+                                      icon: Icons.call_rounded,
+                                      label: 'OPNEMEN',
+                                      color: _kCallAnswer,
+                                      shake: ringing,
+                                      onTap: () => _answer(sip),
+                                    ),
+                                  if (showRelease)
+                                    _ActionButton(
+                                      icon: Icons.lock_open_rounded,
+                                      label: 'DEUR OPEN',
+                                      color: _kCallDoor,
+                                      loading: _releasing,
+                                      onTap: () => _release(i),
+                                    ),
+                                ],
                               ),
-                            if (showRelease)
-                              _ActionButton(
-                                icon: Icons.lock_open_rounded,
-                                label: 'DEUR OPEN',
-                                color: _kCallDoor,
-                                loading: _releasing,
-                                onTap: () => _release(i),
-                              ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
                 ),
               ],
             ),
