@@ -103,9 +103,9 @@ class GithubAndroidApkInfo {
   }
 }
 
-/// Install is offered only when the APK payload itself is newer than [client],
-/// or the tablet already lags the server and the rolling `archie-os.apk` exists
-/// (CI title can lag the binary; hiding it left tablets waiting forever).
+/// Install is offered only when the APK payload itself is newer than [client].
+/// Offering a same-or-older rolling file while the tablet lagged the server
+/// made Installeren download a no-op; Android then reports apk_not_newer.
 bool androidApkNewerThanClient({
   required bool apkSupported,
   required GithubAndroidApkInfo? apk,
@@ -116,9 +116,8 @@ bool androidApkNewerThanClient({
   final name = apk.name.toLowerCase();
   if (name == 'app-release.apk') return false;
   final apkVer = apk.asVersion;
-  if (apkVer != null && client.compareTo(apkVer) < 0) return true;
-  if (clientStale && name.contains('archie')) return true;
-  return false;
+  if (apkVer == null) return false;
+  return client.compareTo(apkVer) < 0;
 }
 
 class GithubLatestInfo {
