@@ -172,10 +172,10 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
             children: [
               Text('INTERCOM',
                   style: TextStyle(
-                    color: LuxeColors.brass,
+                    color: LuxeColors.brassOnCanvas,
                     fontSize: 10,
-                    letterSpacing: 2.6,
-                    fontWeight: FontWeight.w600,
+                    letterSpacing: 2.0,
+                    fontWeight: FontWeight.w700,
                   )),
               Text(i.name,
                   style: TextStyle(
@@ -418,14 +418,17 @@ class _AlarmShakeState extends State<_AlarmShake>
         final t = _c.value;
         // One short ring, pause, one short ring, then a longer rest.
         double envelope = 0;
-        if (t < 0.14) {
-          envelope = math.sin((t / 0.14) * math.pi);
-        } else if (t >= 0.28 && t < 0.42) {
-          envelope = math.sin(((t - 0.28) / 0.14) * math.pi);
+        if (t < 0.16) {
+          envelope = math.sin((t / 0.16) * math.pi);
+        } else if (t >= 0.30 && t < 0.46) {
+          envelope = math.sin(((t - 0.30) / 0.16) * math.pi);
         }
-        return Transform.rotate(
-          angle: envelope * 0.09,
-          child: child,
+        return Transform.translate(
+          offset: Offset(envelope * 2.4, 0),
+          child: Transform.rotate(
+            angle: envelope * 0.16,
+            child: child,
+          ),
         );
       },
       child: widget.child,
