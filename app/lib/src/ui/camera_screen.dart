@@ -6,6 +6,7 @@ import '../theme.dart';
 import 'app_nav.dart';
 import 'widgets/camera_stream_body.dart';
 import 'widgets/function_screen_header.dart';
+import 'widgets/live_video_stage.dart';
 import 'widgets/luxe_backdrop.dart';
 
 /// Surveillance camera view. View-only, no microphone.
@@ -33,11 +34,12 @@ class CameraScreen extends ConsumerWidget {
               subtitle: "Camera's",
             ),
             Expanded(
-              child: Center(
-                child: info.when(
-                  loading: () =>
-                      CircularProgressIndicator(color: LuxeColors.brass),
-                  error: (e, _) => Padding(
+              child: info.when(
+                loading: () => Center(
+                  child: CircularProgressIndicator(color: LuxeColors.brass),
+                ),
+                error: (e, _) => Center(
+                  child: Padding(
                     padding: const EdgeInsets.all(40),
                     child: Text(
                       'Kan camera niet laden:\n$e',
@@ -45,14 +47,15 @@ class CameraScreen extends ConsumerWidget {
                       textAlign: TextAlign.center,
                     ),
                   ),
-                  data: (i) => Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-                    child: Hero(
-                      tag: 'cam-${i.id}',
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(24),
-                        child: CameraLivePlayer(info: i, fit: BoxFit.contain),
-                      ),
+                ),
+                data: (i) => Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+                  child: LiveVideoStage(
+                    heroTag: 'cam-${i.id}',
+                    child: CameraLivePlayer(
+                      info: i,
+                      fit: BoxFit.cover,
+                      expand: true,
                     ),
                   ),
                 ),

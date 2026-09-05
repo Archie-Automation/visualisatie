@@ -1088,6 +1088,18 @@ export function buildRouter(
     return proxySnapshot(req, res, "intercom", mediaBase());
   });
 
+  r.post("/intercoms/:id/warm", requireAuth, async (req: AuthedRequest, res) => {
+    if (!canViewIntercom(req, req.params.id))
+      return res.status(403).json({ error: "not allowed" });
+    const ic = collectIntercoms(getConfig()).find((i) => i.id === req.params.id);
+    if (!ic) return res.status(404).json({ error: "unknown intercom" });
+    const warmed = await warmGo2rtcProducer(mediaBase(), cameraPath(ic), {
+      retries: 4,
+      timeoutMs: 22_000
+    });
+    return res.json({ warmed });
+  });
+
   r.post("/intercoms/:id/webrtc", requireAuth, async (req: AuthedRequest, res) => {
     if (!canViewIntercom(req, req.params.id))
       return res.status(403).json({ error: "not allowed" });

@@ -19,7 +19,12 @@ class WebRTCCameraPlayer extends ConsumerStatefulWidget {
     this.showLiveBadge = true,
     this.muted = true,
     this.videoOnly = false,
+    this.expand = false,
+    this.opaqueBackground = true,
+    this.connectTimeout = const Duration(seconds: 25),
+    this.maxAttempts = 5,
     this.onFailed,
+    this.onConnected,
   });
 
   final String signallingPath;
@@ -28,7 +33,14 @@ class WebRTCCameraPlayer extends ConsumerStatefulWidget {
   final bool showLiveBadge;
   final bool muted;
   final bool videoOnly;
+  /// Fill the parent instead of locking to [aspectRatio].
+  final bool expand;
+  /// When false, no black fill/spinner — intended over a snapshot poster.
+  final bool opaqueBackground;
+  final Duration connectTimeout;
+  final int maxAttempts;
   final VoidCallback? onFailed;
+  final VoidCallback? onConnected;
 
   @override
   ConsumerState<WebRTCCameraPlayer> createState() =>
@@ -46,8 +58,6 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
   int _attempt = 0;
   bool _rendererReady = false;
 
-  static const _maxAttempts = 5;
-  static const _connectTimeoutDuration = Duration(seconds: 25);
   static const _retryDelay = Duration(seconds: 2);
 
   @override
@@ -79,7 +89,7 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
   }
 
   void _notifyFailed(String message) {
-    if (_attempt + 1 < _maxAttempts) {
+    if (_attempt + 1 < widget.maxAttempts) {
       _attempt++;
       Future<void>.delayed(_retryDelay, () {
         if (mounted) _restart();
@@ -97,7 +107,7 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
 
   void _armConnectTimeout() {
     _connectTimeout?.cancel();
-    _connectTimeout = Timer(_connectTimeoutDuration, () {
+    _connectTimeout = Timer(widget.connectTimeout, () {
       if (!mounted || _connected) return;
       _notifyFailed('live stream timeout');
     });
@@ -142,6 +152,7 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
           if (!mounted) return;
           _connectTimeout?.cancel();
           setState(() => _connected = true);
+          widget.onConnected?.call();
         }
       };
       pc.onConnectionState = (s) {
@@ -213,62 +224,64 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
 
   @override
   Widget build(BuildContext context) {
+    final stack = Stack(
+      fit: StackFit.expand,
+      children: [
+        if (widget.opaqueBackground) Container(color: Colors.black),
+        AnimatedOpacity(
+          opacity: _connected ? 1.0 : 0.0,
+          duration: Duration(milliseconds: 300),
+          child: RTCVideoView(
+            _renderer,
+            objectFit: widget.fit == BoxFit.cover
+                ? RTCVideoViewObjectFit.RTCVideoViewObjectFitCover
+                : RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+            mirror: false,
+          ),
+        ),
+        if (widget.opaqueBackground && !_connected && _error == null)
+          Center(
+            child: SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: LuxeColors.brass,
+              ),
+            ),
+          ),
+        if (widget.opaqueBackground && _error != null)
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.videocam_off_outlined,
+                      color: Colors.white54, size: 32),
+                  const SizedBox(height: 8),
+                  Text(_error!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          color: Colors.white54, fontSize: 12)),
+                ],
+              ),
+            ),
+          ),
+        if (widget.showLiveBadge && _connected)
+          const Positioned(
+            top: 10,
+            left: 10,
+            child: _LiveBadge(),
+          ),
+      ],
+    );
+    if (widget.expand) return stack;
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: AspectRatio(
         aspectRatio: widget.aspectRatio,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Container(color: Colors.black),
-            AnimatedOpacity(
-              opacity: _connected ? 1.0 : 0.0,
-              duration: Duration(milliseconds: 300),
-              child: RTCVideoView(
-                _renderer,
-                objectFit: widget.fit == BoxFit.cover
-                    ? RTCVideoViewObjectFit.RTCVideoViewObjectFitCover
-                    : RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
-                mirror: false,
-              ),
-            ),
-            if (!_connected && _error == null)
-              Center(
-                child: SizedBox(
-                  width: 28,
-                  height: 28,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: LuxeColors.brass,
-                  ),
-                ),
-              ),
-            if (_error != null)
-              Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.videocam_off_outlined,
-                          color: Colors.white54, size: 32),
-                      const SizedBox(height: 8),
-                      Text(_error!,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                              color: Colors.white54, fontSize: 12)),
-                    ],
-                  ),
-                ),
-              ),
-            if (widget.showLiveBadge && _connected)
-              const Positioned(
-                top: 10,
-                left: 10,
-                child: _LiveBadge(),
-              ),
-          ],
-        ),
+        child: stack,
       ),
     );
   }

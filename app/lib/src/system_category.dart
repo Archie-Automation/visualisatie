@@ -24,6 +24,15 @@ class HouseSystem {
   }
 }
 
+/// Path opened from a Systemen chip. A single intercom skips the tile list
+/// and goes straight to the same screen as an incoming doorbell.
+String houseSystemOpenPath(HouseSystem system, List<Device> devices) {
+  if (system.slug == 'intercom' && devices.length == 1) {
+    return '/intercom/${devices.first.id}';
+  }
+  return system.routePath ?? '/system/${system.slug}';
+}
+
 const kHouseSystems = <HouseSystem>[
   HouseSystem(
     slug: 'verlichting',

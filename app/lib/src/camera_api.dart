@@ -77,6 +77,19 @@ Future<bool> warmCameraStream({
   return j['warmed'] == true;
 }
 
+Future<bool> warmIntercomStream({
+  required String intercomId,
+  required String? token,
+}) async {
+  final res = await http.post(
+    Uri.parse('$apiBase/api/intercoms/$intercomId/warm'),
+    headers: {'authorization': 'Bearer $token'},
+  );
+  if (res.statusCode != 200) return false;
+  final j = jsonDecode(res.body) as Map<String, dynamic>;
+  return j['warmed'] == true;
+}
+
 /// ---------------------------- Intercoms -------------------------------
 /// WebRTC with talk, optional door release.
 

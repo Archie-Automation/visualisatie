@@ -25,6 +25,7 @@ class CameraSnapshot extends ConsumerStatefulWidget {
     this.fit = BoxFit.cover,
     this.kind = SnapshotKind.camera,
     this.showLiveBadge = true,
+    this.expand = false,
   });
 
   final String cameraId;
@@ -33,6 +34,8 @@ class CameraSnapshot extends ConsumerStatefulWidget {
   final BoxFit fit;
   final SnapshotKind kind;
   final bool showLiveBadge;
+  /// Fill the parent instead of locking to [aspectRatio].
+  final bool expand;
 
   @override
   ConsumerState<CameraSnapshot> createState() => _CameraSnapshotState();
@@ -43,6 +46,7 @@ class _CameraSnapshotState extends ConsumerState<CameraSnapshot> {
   Uint8List? _frame;       // last good JPEG bytes – null = never loaded yet
   bool _fetching = false;  // guard against overlapping requests
   int _failStreak = 0;     // consecutive failures (used to slow retries)
+  int _frameGen = 0;       // unique key so equal-sized JPEGs still swap
 
   @override
   void initState() {
@@ -85,13 +89,14 @@ class _CameraSnapshotState extends ConsumerState<CameraSnapshot> {
 
       final res = await http
           .get(url, headers: {'authorization': 'Bearer ${auth.token}'})
-          .timeout(const Duration(seconds: 12));
+          .timeout(const Duration(seconds: 8));
 
       if (!mounted) return;
 
       if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
         setState(() {
           _frame = res.bodyBytes;
+          _frameGen++;
           _failStreak = 0;
         });
       } else {
@@ -108,37 +113,39 @@ class _CameraSnapshotState extends ConsumerState<CameraSnapshot> {
 
   @override
   Widget build(BuildContext context) {
+    final stack = Stack(
+      fit: StackFit.expand,
+      children: [
+        Container(color: Colors.black),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 250),
+          child: _frame != null
+              ? Image.memory(
+                  _frame!,
+                  key: ValueKey('frame-$_frameGen'),
+                  fit: widget.fit,
+                  gaplessPlayback: true,
+                )
+              : const Center(
+                  key: ValueKey('offline'),
+                  child: Icon(Icons.videocam_off_outlined,
+                      color: Colors.white54, size: 28),
+                ),
+        ),
+        if (widget.showLiveBadge)
+          const Positioned(
+            top: 10,
+            left: 10,
+            child: _LiveDot(),
+          ),
+      ],
+    );
+    if (widget.expand) return stack;
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: AspectRatio(
         aspectRatio: widget.aspectRatio,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Container(color: Colors.black),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 250),
-              child: _frame != null
-                  ? Image.memory(
-                      _frame!,
-                      key: ValueKey('frame-${_frame!.length}'),
-                      fit: widget.fit,
-                      gaplessPlayback: true,
-                    )
-                  : const Center(
-                      key: ValueKey('offline'),
-                      child: Icon(Icons.videocam_off_outlined,
-                          color: Colors.white54, size: 28),
-                    ),
-            ),
-            if (widget.showLiveBadge)
-              const Positioned(
-                top: 10,
-                left: 10,
-                child: _LiveDot(),
-              ),
-          ],
-        ),
+        child: stack,
       ),
     );
   }

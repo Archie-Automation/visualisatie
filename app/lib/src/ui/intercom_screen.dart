@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
@@ -12,10 +13,13 @@ import '../intercom/intercom_sip_providers.dart';
 import '../intercom/intercom_sip_types.dart';
 import '../theme.dart';
 import 'app_nav.dart';
+import 'responsive.dart';
 import 'widgets/camera_snapshot.dart';
 import 'widgets/confirm_dialog.dart';
 import 'widgets/intercom_player.dart';
+import 'widgets/live_video_stage.dart';
 import 'widgets/luxe_backdrop.dart';
+import 'widgets/webrtc_camera_player.dart';
 
 class IntercomScreen extends ConsumerStatefulWidget {
   const IntercomScreen({super.key, required this.intercomId});
@@ -30,8 +34,11 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
   String? _releaseFeedback;
   bool _sipUaStarted = false;
   bool _sipDiscoveryScheduled = false;
+  bool _warmScheduled = false;
   bool _closing = false;
   bool _inConversation = false;
+  bool _previewFailed = false;
+  bool _previewLive = false;
 
   @override
   void initState() {
@@ -70,6 +77,16 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
     }
     ref.read(intercomRingProvider.notifier).clear();
     if (mounted) appBack(context);
+  }
+
+  void _ensureWarm() {
+    if (_warmScheduled) return;
+    _warmScheduled = true;
+    final token = ref.read(authProvider).token;
+    unawaited(
+      warmIntercomStream(intercomId: widget.intercomId, token: token)
+          .then((_) {}, onError: (_) {}),
+    );
   }
 
   void _ensureSipUaFromConfig() {
@@ -193,38 +210,69 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
           data: (i) {
             if (!_sipDiscoveryScheduled) {
               _sipDiscoveryScheduled = true;
-              WidgetsBinding.instance
-                  .addPostFrameCallback((_) => _ensureSipUaFromConfig());
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                _ensureSipUaFromConfig();
+                _ensureWarm();
+              });
             }
+            final phone = context.isPhone;
             return SafeArea(
               child: Column(
               children: [
                 Expanded(
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(24, 12, 24, 8),
-                    child: Hero(
-                      tag: 'intercom-${i.id}',
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(28),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(28),
-                            boxShadow: LuxeShadows.darkLift,
-                          ),
-                          child: waiting
-                              ? CameraSnapshot(
-                                  cameraId: i.id,
-                                  aspectRatio: i.aspectRatio,
-                                  kind: SnapshotKind.intercom,
-                                  fit: BoxFit.cover,
-                                )
-                              : IntercomPlayer(
-                                  intercomId: i.id,
-                                  aspectRatio: i.aspectRatio,
-                                  talking: true,
-                                ),
-                        ),
-                      ),
+                    padding: EdgeInsets.fromLTRB(
+                      phone ? 12 : 16,
+                      4,
+                      phone ? 12 : 16,
+                      8,
+                    ),
+                    child: LiveVideoStage(
+                      heroTag: 'intercom-${i.id}',
+                      child: waiting
+                          ? Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                if (!_previewLive)
+                                  CameraSnapshot(
+                                    cameraId: i.id,
+                                    aspectRatio: i.aspectRatio,
+                                    kind: SnapshotKind.intercom,
+                                    fit: BoxFit.cover,
+                                    expand: true,
+                                    showLiveBadge: false,
+                                  ),
+                                if (!_previewFailed)
+                                  WebRTCCameraPlayer(
+                                    signallingPath: 'intercoms/${i.id}',
+                                    aspectRatio: i.aspectRatio,
+                                    fit: BoxFit.cover,
+                                    expand: true,
+                                    videoOnly: true,
+                                    opaqueBackground: false,
+                                    connectTimeout:
+                                        const Duration(seconds: 8),
+                                    maxAttempts: 2,
+                                    onConnected: () {
+                                      if (mounted) {
+                                        setState(() => _previewLive = true);
+                                      }
+                                    },
+                                    onFailed: () {
+                                      if (mounted) {
+                                        setState(() => _previewFailed = true);
+                                      }
+                                    },
+                                  ),
+                              ],
+                            )
+                          : IntercomPlayer(
+                              intercomId: i.id,
+                              aspectRatio: i.aspectRatio,
+                              talking: true,
+                              fit: BoxFit.cover,
+                              expand: true,
+                            ),
                     ),
                   ),
                 ),

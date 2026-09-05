@@ -19,12 +19,15 @@ class IntercomPlayer extends ConsumerStatefulWidget {
     required this.aspectRatio,
     required this.talking,
     this.fit = BoxFit.contain,
+    this.expand = false,
   });
 
   final String intercomId;
   final double aspectRatio;
   final bool talking;
   final BoxFit fit;
+  /// Fill the parent instead of locking to [aspectRatio].
+  final bool expand;
 
   @override
   ConsumerState<IntercomPlayer> createState() => _IntercomPlayerState();
@@ -173,56 +176,58 @@ class _IntercomPlayerState extends ConsumerState<IntercomPlayer> {
 
   @override
   Widget build(BuildContext context) {
+    final stack = Stack(
+      fit: StackFit.expand,
+      children: [
+        Container(color: Colors.black),
+        if (_connected)
+          RTCVideoView(
+            _renderer,
+            objectFit: widget.fit == BoxFit.cover
+                ? RTCVideoViewObjectFit.RTCVideoViewObjectFitCover
+                : RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+            mirror: false,
+          )
+        else if (_error != null)
+          Center(
+            child: Padding(
+              padding: EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.videocam_off_outlined,
+                      color: Colors.white54, size: 32),
+                  const SizedBox(height: 8),
+                  Text(_error!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          color: Colors.white54, fontSize: 12)),
+                ],
+              ),
+            ),
+          )
+        else
+          Center(
+            child: SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: LuxeColors.brass),
+            ),
+          ),
+        Positioned(
+          top: 10,
+          left: 10,
+          child: _Badge(talking: widget.talking, connected: _connected),
+        ),
+      ],
+    );
+    if (widget.expand) return stack;
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: AspectRatio(
         aspectRatio: widget.aspectRatio,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Container(color: Colors.black),
-            if (_connected)
-              RTCVideoView(
-                _renderer,
-                objectFit: widget.fit == BoxFit.cover
-                    ? RTCVideoViewObjectFit.RTCVideoViewObjectFitCover
-                    : RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
-                mirror: false,
-              )
-            else if (_error != null)
-              Center(
-                child: Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.videocam_off_outlined,
-                          color: Colors.white54, size: 32),
-                      const SizedBox(height: 8),
-                      Text(_error!,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(
-                              color: Colors.white54, fontSize: 12)),
-                    ],
-                  ),
-                ),
-              )
-            else
-              Center(
-                child: SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: LuxeColors.brass),
-                ),
-              ),
-            Positioned(
-              top: 10,
-              left: 10,
-              child: _Badge(talking: widget.talking, connected: _connected),
-            ),
-          ],
-        ),
+        child: stack,
       ),
     );
   }
