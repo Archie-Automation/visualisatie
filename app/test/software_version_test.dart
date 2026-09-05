@@ -49,15 +49,15 @@ void main() {
     );
   });
 
-  test('rolling archie-os.apk is offered when the tablet lags the server', () {
+  test('same-or-older rolling APK is not offered even if the tablet lags', () {
     const apk = GithubAndroidApkInfo(
       available: true,
       name: 'archie-os.apk',
       sizeBytes: 1,
       downloadPath: '/api/app/android.apk',
-      version: '0.2.0+202',
+      version: '0.2.0+204',
     );
-    final client = SoftwareVersionInfo.parse('0.2.0+202');
+    final client = SoftwareVersionInfo.parse('0.2.0+204');
     expect(
       androidApkNewerThanClient(
         apkSupported: true,
@@ -65,7 +65,7 @@ void main() {
         client: client,
         clientStale: true,
       ),
-      isTrue,
+      isFalse,
     );
   });
 }
