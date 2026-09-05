@@ -1064,10 +1064,13 @@ export function buildRouter(
     );
     const base = clientApiBase(req);
     res.json({
-      intercoms: list.map((c) => ({
-        ...publicIntercom(c, mediaBase(), base),
-        canRelease: canReleaseIntercom(req, c.id)
-      }))
+      intercoms: list.map((c) => {
+        const pub = publicIntercom(c, mediaBase(), base);
+        return {
+          ...pub,
+          canRelease: pub.canRelease && canReleaseIntercom(req, c.id)
+        };
+      })
     });
   });
 
@@ -1076,9 +1079,10 @@ export function buildRouter(
       return res.status(403).json({ error: "not allowed" });
     const ic = collectIntercoms(getConfig()).find((i) => i.id === req.params.id);
     if (!ic) return res.status(404).json({ error: "unknown intercom" });
+    const pub = publicIntercom(ic, mediaBase(), clientApiBase(req));
     res.json({
-      ...publicIntercom(ic, mediaBase(), clientApiBase(req)),
-      canRelease: canReleaseIntercom(req, ic.id)
+      ...pub,
+      canRelease: pub.canRelease && canReleaseIntercom(req, ic.id)
     });
   });
 
