@@ -314,8 +314,8 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                           fillColor: LuxeColors.surface.withValues(
                             alpha: Theme.of(context).brightness ==
                                     Brightness.dark
-                                ? 0.38
-                                : 0.46,
+                                ? 0.28
+                                : 0.18,
                           ),
                           rimColor: Theme.of(context).brightness ==
                                   Brightness.dark
@@ -325,58 +325,32 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                                 ),
                           padding: const EdgeInsets.symmetric(
                               horizontal: 20, vertical: 20),
-                          child: Stack(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                             children: [
-                              Positioned(
-                                top: 0,
-                                left: 0,
-                                right: 0,
-                                child: IgnorePointer(
-                                  child: Container(
-                                    height: 34,
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        begin: Alignment.topCenter,
-                                        end: Alignment.bottomCenter,
-                                        colors: [
-                                          LuxeColors.glassHighlight,
-                                          LuxeColors.glassHighlight
-                                              .withValues(alpha: 0),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
+                              _ActionButton(
+                                icon: Icons.call_end_rounded,
+                                label: 'OPHANGEN',
+                                color: _kCallHangup,
+                                shake: ringing,
+                                onTap: () => _cancel(sip),
+                              ),
+                              if (waiting)
+                                _ActionButton(
+                                  icon: Icons.call_rounded,
+                                  label: 'OPNEMEN',
+                                  color: _kCallAnswer,
+                                  shake: ringing,
+                                  onTap: () => _answer(sip),
                                 ),
-                              ),
-                              Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment.spaceEvenly,
-                                children: [
-                                  _ActionButton(
-                                    icon: Icons.call_end_rounded,
-                                    label: 'OPHANGEN',
-                                    color: _kCallHangup,
-                                    shake: ringing,
-                                    onTap: () => _cancel(sip),
-                                  ),
-                                  if (waiting)
-                                    _ActionButton(
-                                      icon: Icons.call_rounded,
-                                      label: 'OPNEMEN',
-                                      color: _kCallAnswer,
-                                      shake: ringing,
-                                      onTap: () => _answer(sip),
-                                    ),
-                                  if (showRelease)
-                                    _ActionButton(
-                                      icon: Icons.lock_open_rounded,
-                                      label: 'DEUR OPEN',
-                                      color: _kCallDoor,
-                                      loading: _releasing,
-                                      onTap: () => _release(i),
-                                    ),
-                                ],
-                              ),
+                              if (showRelease)
+                                _ActionButton(
+                                  icon: Icons.lock_open_rounded,
+                                  label: 'DEUR OPEN',
+                                  color: _kCallDoor,
+                                  loading: _releasing,
+                                  onTap: () => _release(i),
+                                ),
                             ],
                           ),
                         ),
@@ -409,7 +383,7 @@ class _AlarmShakeState extends State<_AlarmShake>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1100),
+    duration: const Duration(milliseconds: 1600),
   );
 
   @override
@@ -442,13 +416,15 @@ class _AlarmShakeState extends State<_AlarmShake>
       animation: _c,
       builder: (context, child) {
         final t = _c.value;
-        // Burst like a mechanical alarm: ring-ring, then a beat of rest.
-        final ringing = t < 0.55;
-        final local = ringing ? t / 0.55 : 0.0;
-        final wiggle = ringing ? math.sin(local * math.pi * 10) : 0.0;
-        final decay = ringing ? (1.0 - local * 0.35) : 0.0;
+        // One short ring, pause, one short ring, then a longer rest.
+        double envelope = 0;
+        if (t < 0.14) {
+          envelope = math.sin((t / 0.14) * math.pi);
+        } else if (t >= 0.28 && t < 0.42) {
+          envelope = math.sin(((t - 0.28) / 0.14) * math.pi);
+        }
         return Transform.rotate(
-          angle: wiggle * 0.38 * decay,
+          angle: envelope * 0.09,
           child: child,
         );
       },

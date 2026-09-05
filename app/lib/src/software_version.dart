@@ -103,18 +103,22 @@ class GithubAndroidApkInfo {
   }
 }
 
-/// Install is offered only when the APK payload itself is newer than [client].
+/// Install is offered only when the APK payload itself is newer than [client],
+/// or the tablet already lags the server and the rolling `archie-os.apk` exists
+/// (CI title can lag the binary; hiding it left tablets waiting forever).
 bool androidApkNewerThanClient({
   required bool apkSupported,
   required GithubAndroidApkInfo? apk,
   required SoftwareVersionInfo client,
+  bool clientStale = false,
 }) {
-  final apkVer = apk?.asVersion;
-  return apkSupported &&
-      apk != null &&
-      apk.available &&
-      apkVer != null &&
-      client.compareTo(apkVer) < 0;
+  if (!apkSupported || apk == null || !apk.available) return false;
+  final name = apk.name.toLowerCase();
+  if (name == 'app-release.apk') return false;
+  final apkVer = apk.asVersion;
+  if (apkVer != null && client.compareTo(apkVer) < 0) return true;
+  if (clientStale && name.contains('archie')) return true;
+  return false;
 }
 
 class GithubLatestInfo {
@@ -252,6 +256,7 @@ final softwareVersionStatusProvider =
       apkSupported: supportsAndroidApkUpdate,
       apk: apk,
       client: client,
+      clientStale: clientStale,
     );
     final androidApkPending = supportsAndroidApkUpdate &&
         clientStale &&
