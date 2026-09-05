@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../api.dart';
 import '../device_activity.dart';
@@ -52,6 +53,9 @@ class SystemScreen extends ConsumerWidget {
               return _InvalidBody(onBack: () => appBack(context));
             }
             final devices = devicesForHouseSystem(cfg, system);
+            if (system.slug == 'intercom' && devices.length == 1) {
+              return _RedirectToIntercom(intercomId: devices.first.id);
+            }
             return _SystemDevicesBody(
               cfg: cfg,
               slug: slug,
@@ -87,6 +91,42 @@ class _InvalidBody extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// One intercom: skip the tile list (same screen as an incoming doorbell).
+class _RedirectToIntercom extends StatefulWidget {
+  const _RedirectToIntercom({required this.intercomId});
+  final String intercomId;
+
+  @override
+  State<_RedirectToIntercom> createState() => _RedirectToIntercomState();
+}
+
+class _RedirectToIntercomState extends State<_RedirectToIntercom> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      String from = '/';
+      try {
+        from = GoRouterState.of(context).uri.queryParameters['from'] ?? '/';
+      } catch (_) {}
+      context.replace(
+        Uri(
+          path: '/intercom/${widget.intercomId}',
+          queryParameters: {'from': from},
+        ).toString(),
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: CircularProgressIndicator(color: LuxeColors.brass),
     );
   }
 }

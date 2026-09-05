@@ -18,6 +18,7 @@ class CameraPlayer extends ConsumerStatefulWidget {
     this.fit = BoxFit.cover,
     this.interactive = false,
     this.showLiveBadge = true,
+    this.expand = false,
   });
 
   final String hlsUrl;
@@ -26,6 +27,8 @@ class CameraPlayer extends ConsumerStatefulWidget {
   final BoxFit fit;
   final bool interactive;
   final bool showLiveBadge;
+  /// Fill the parent instead of locking to [aspectRatio].
+  final bool expand;
 
   @override
   ConsumerState<CameraPlayer> createState() => _CameraPlayerState();
@@ -138,58 +141,60 @@ class _CameraPlayerState extends ConsumerState<CameraPlayer> {
 
   @override
   Widget build(BuildContext context) {
+    final stack = Stack(
+      fit: StackFit.expand,
+      children: [
+        Container(color: Colors.black),
+        if (_ready && _ctrl != null)
+          FittedBox(
+            fit: widget.fit,
+            clipBehavior: Clip.hardEdge,
+            child: SizedBox(
+              width: _ctrl!.value.size.width == 0
+                  ? 1920
+                  : _ctrl!.value.size.width,
+              height: _ctrl!.value.size.height == 0
+                  ? 1080
+                  : _ctrl!.value.size.height,
+              child: VideoPlayer(_ctrl!),
+            ),
+          )
+        else if (_err != null)
+          Center(
+            child: Icon(Icons.videocam_off_outlined,
+                color: Colors.white54, size: 32),
+          )
+        else
+          Center(
+            child: SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: LuxeColors.brass,
+              ),
+            ),
+          ),
+        if (widget.showLiveBadge && _ready)
+          const Positioned(
+            top: 10,
+            left: 10,
+            child: _LiveBadge(),
+          ),
+        if (widget.interactive)
+          Positioned(
+            bottom: 10,
+            right: 10,
+            child: _MuteButton(muted: _muted, onTap: _toggleMute),
+          ),
+      ],
+    );
+    if (widget.expand) return stack;
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: AspectRatio(
         aspectRatio: widget.aspectRatio,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            Container(color: Colors.black),
-            if (_ready && _ctrl != null)
-              FittedBox(
-                fit: widget.fit,
-                clipBehavior: Clip.hardEdge,
-                child: SizedBox(
-                  width: _ctrl!.value.size.width == 0
-                      ? 1920
-                      : _ctrl!.value.size.width,
-                  height: _ctrl!.value.size.height == 0
-                      ? 1080
-                      : _ctrl!.value.size.height,
-                  child: VideoPlayer(_ctrl!),
-                ),
-              )
-            else if (_err != null)
-              Center(
-                child: Icon(Icons.videocam_off_outlined,
-                    color: Colors.white54, size: 32),
-              )
-            else
-              Center(
-                child: SizedBox(
-                  width: 22,
-                  height: 22,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: LuxeColors.brass,
-                  ),
-                ),
-              ),
-            if (widget.showLiveBadge && _ready)
-              const Positioned(
-                top: 10,
-                left: 10,
-                child: _LiveBadge(),
-              ),
-            if (widget.interactive)
-              Positioned(
-                bottom: 10,
-                right: 10,
-                child: _MuteButton(muted: _muted, onTap: _toggleMute),
-              ),
-          ],
-        ),
+        child: stack,
       ),
     );
   }

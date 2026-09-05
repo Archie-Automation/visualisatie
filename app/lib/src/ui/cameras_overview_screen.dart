@@ -12,6 +12,7 @@ import 'widgets/back_pill.dart';
 import 'widgets/camera_snapshot.dart';
 import 'widgets/camera_stream_body.dart';
 import 'widgets/function_screen_header.dart';
+import 'widgets/live_video_stage.dart';
 import 'widgets/luxe_backdrop.dart';
 
 void _restoreSystemUi() {
@@ -176,7 +177,7 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
                     ),
                     Expanded(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
                         child: info.when(
                           loading: () => Center(
                             child: CircularProgressIndicator(
@@ -187,19 +188,11 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
                                 textAlign: TextAlign.center,
                                 style: TextStyle(color: LuxeColors.inkSoft)),
                           ),
-                          data: (i) => LayoutBuilder(
-                            builder: (context, constraints) => Center(
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(22),
-                                child: ConstrainedBox(
-                                  constraints: BoxConstraints(
-                                    maxHeight: constraints.maxHeight,
-                                    maxWidth: constraints.maxWidth,
-                                  ),
-                                  child: CameraLivePlayer(
-                                      info: i, fit: BoxFit.contain),
-                                ),
-                              ),
+                          data: (i) => LiveVideoStage(
+                            child: CameraLivePlayer(
+                              info: i,
+                              fit: BoxFit.cover,
+                              expand: true,
                             ),
                           ),
                         ),
@@ -278,7 +271,11 @@ class _FullscreenCameraView extends ConsumerWidget {
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.white54)),
             ),
-            data: (i) => CameraLivePlayer(info: i, fit: BoxFit.contain),
+            data: (i) => CameraLivePlayer(
+              info: i,
+              fit: BoxFit.cover,
+              expand: true,
+            ),
           ),
           // Terug — zelfde BackPill linksboven als de rest van de app
           Positioned(

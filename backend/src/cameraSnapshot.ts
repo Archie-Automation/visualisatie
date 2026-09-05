@@ -12,7 +12,7 @@ export type SnapshotCacheEntry = { buf: Buffer; ts: number };
 export const snapshotCache = new Map<string, SnapshotCacheEntry>();
 
 /** Serve cached JPEG without re-fetching from upstream. */
-export const SNAP_FRESH_MS = 3_000;
+export const SNAP_FRESH_MS = 1_500;
 /** Return stale frames while a slow refresh is in-flight. */
 export const SNAP_STALE_MS = 120_000;
 
@@ -56,15 +56,24 @@ export async function captureSnapshotFfmpeg(
       "-hide_banner",
       "-loglevel",
       "error",
+      "-fflags",
+      "+genpts+nobuffer+discardcorrupt",
+      "-flags",
+      "low_delay",
+      "-analyzeduration",
+      "500000",
+      "-probesize",
+      "500000",
       "-rtsp_transport",
       "tcp",
       "-i",
       rtspUrl,
+      "-an",
       "-frames:v",
       "1",
       ...(scaleWidth ? ["-vf", `scale=${width}:-1`] : []),
       "-q:v",
-      "8",
+      "5",
       "-f",
       "image2",
       "pipe:1"
@@ -131,20 +140,19 @@ export async function refreshSnapshotCache(
 
   try {
     const rtsp = rawRtspUrl(target);
-    let buf: Buffer | null = null;
+    const p = cameraPath(target);
+    const url = `${mediaBase}/api/frame.jpeg?src=${encodeURIComponent(p)}`;
+    const width =
+      target.type === "camera" ? snapshotScaleWidth(target.camera) : 720;
 
-    // Synology NVR streams are more reliable via direct ffmpeg than go2rtc's
-    // ffmpeg wrapper (Voordeur often fails there entirely).
-    if (kind === "camera" && rtsp) {
-      const width =
-        target.type === "camera" ? snapshotScaleWidth(target.camera) : 720;
-      buf = await captureSnapshotFfmpeg(rtsp, { width });
+    // go2rtc frame.jpeg is instant when the producer is warm. ffmpeg
+    // `-frames:v 1` waits for the next IDR — often 10s on Synology/NVR.
+    let buf = await fetchSnapshotFromGo2rtc(url, 2_500);
+    if (!buf && rtsp) {
+      buf = await captureSnapshotFfmpeg(rtsp, { width, timeoutMs: 8_000 });
     }
-
     if (!buf) {
-      const p = cameraPath(target);
-      const url = `${mediaBase}/api/frame.jpeg?src=${encodeURIComponent(p)}`;
-      buf = await fetchSnapshotFromGo2rtc(url, 10_000);
+      buf = await fetchSnapshotFromGo2rtc(url, 8_000);
     }
 
     if (buf) {
@@ -276,9 +284,14 @@ export function startGo2rtcStreamKeeper(
   const tick = async () => {
     if (stopped) return;
     const base = mediaBase();
-    for (const cam of collectCameras(getConfig())) {
+    const cfg = getConfig();
+    const devices: Array<CameraDevice | IntercomDevice> = [
+      ...collectCameras(cfg),
+      ...collectIntercoms(cfg)
+    ];
+    for (const d of devices) {
       if (stopped) break;
-      const p = cameraPath(cam);
+      const p = cameraPath(d);
       await warmGo2rtcProducer(base, p, { retries: 2, timeoutMs: 15_000 }).catch(
         () => false
       );

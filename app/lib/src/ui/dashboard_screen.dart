@@ -1556,8 +1556,8 @@ class _SystemChipState extends ConsumerState<_SystemChip>
       return;
     }
     final sys = houseSystemByName(data.name);
-    final route = sys?.routePath;
-    if (route != null) appOpen(context, route);
+    if (sys == null) return;
+    appOpen(context, houseSystemOpenPath(sys, data.devices));
   }
 
   /// Returns the count + worst urgency for active melding alerts.

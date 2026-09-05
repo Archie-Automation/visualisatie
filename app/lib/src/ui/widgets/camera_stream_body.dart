@@ -13,10 +13,13 @@ class CameraLivePlayer extends ConsumerStatefulWidget {
     super.key,
     required this.info,
     this.fit = BoxFit.contain,
+    this.expand = false,
   });
 
   final CameraInfo info;
   final BoxFit fit;
+  /// Fill the parent instead of locking to [CameraInfo.aspectRatio].
+  final bool expand;
 
   @override
   ConsumerState<CameraLivePlayer> createState() => _CameraLivePlayerState();
@@ -63,18 +66,20 @@ class _CameraLivePlayerState extends ConsumerState<CameraLivePlayer> {
   @override
   Widget build(BuildContext context) {
     if (!_streamReady) {
-      return AspectRatio(
-        aspectRatio: widget.info.aspectRatio,
-        child: Center(
-          child: SizedBox(
-            width: 28,
-            height: 28,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: LuxeColors.brass,
-            ),
+      final spinner = Center(
+        child: SizedBox(
+          width: 28,
+          height: 28,
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            color: LuxeColors.brass,
           ),
         ),
+      );
+      if (widget.expand) return spinner;
+      return AspectRatio(
+        aspectRatio: widget.info.aspectRatio,
+        child: spinner,
       );
     }
 
@@ -87,6 +92,7 @@ class _CameraLivePlayerState extends ConsumerState<CameraLivePlayer> {
         signallingPath: 'cameras/${widget.info.id}',
         aspectRatio: widget.info.aspectRatio,
         fit: widget.fit,
+        expand: widget.expand,
         videoOnly: true,
         onFailed: _onWebRtcFailed,
       );
@@ -99,6 +105,7 @@ class _CameraLivePlayerState extends ConsumerState<CameraLivePlayer> {
         aspectRatio: widget.info.aspectRatio,
         muted: false,
         fit: widget.fit,
+        expand: widget.expand,
         interactive: true,
       );
     }
