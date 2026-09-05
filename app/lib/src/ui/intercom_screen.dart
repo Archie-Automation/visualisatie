@@ -383,7 +383,7 @@ class _AlarmShakeState extends State<_AlarmShake>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 1600),
+    duration: const Duration(milliseconds: 1400),
   );
 
   @override
@@ -416,17 +416,16 @@ class _AlarmShakeState extends State<_AlarmShake>
       animation: _c,
       builder: (context, child) {
         final t = _c.value;
-        // One short ring, pause, one short ring, then a longer rest.
-        double envelope = 0;
-        if (t < 0.16) {
-          envelope = math.sin((t / 0.16) * math.pi);
-        } else if (t >= 0.30 && t < 0.46) {
-          envelope = math.sin(((t - 0.30) / 0.16) * math.pi);
+        // One left-right wobble, then rest until the cycle repeats.
+        var x = 0.0;
+        if (t < 0.32) {
+          final u = t / 0.32;
+          x = -math.sin(u * 2 * math.pi);
         }
         return Transform.translate(
-          offset: Offset(envelope * 2.4, 0),
+          offset: Offset(x * 7, 0),
           child: Transform.rotate(
-            angle: envelope * 0.16,
+            angle: x * 0.12,
             child: child,
           ),
         );
