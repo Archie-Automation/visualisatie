@@ -16,7 +16,6 @@ import 'app_nav.dart';
 import 'responsive.dart';
 import 'widgets/camera_snapshot.dart';
 import 'widgets/confirm_dialog.dart';
-import 'widgets/glass_card.dart';
 import 'widgets/intercom_player.dart';
 import 'widgets/live_video_stage.dart';
 import 'widgets/luxe_backdrop.dart';
@@ -220,21 +219,14 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
             final showRelease = i.canRelease &&
                 intercomHasReleaseTarget(
                     ref.watch(configProvider).value?.deviceById(i.id));
-            final answerColor =
-                Theme.of(context).brightness == Brightness.dark
-                    ? const Color(0xFF7CB394)
-                    : const Color(0xFF3E6B4F);
+            final hPad = phone ? 12.0 : 16.0;
+            final stagePad = EdgeInsets.fromLTRB(hPad, 4, hPad, 8);
             return SafeArea(
               child: Column(
               children: [
                 Expanded(
                   child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      phone ? 12 : 16,
-                      4,
-                      phone ? 12 : 16,
-                      8,
-                    ),
+                    padding: stagePad,
                     child: Center(
                       child: FractionallySizedBox(
                         widthFactor: 0.75,
@@ -310,40 +302,56 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                     ),
                   ),
                 Padding(
-                  padding: EdgeInsets.fromLTRB(28, 18, 28, 28),
-                  child: GlassCard(
-                    radius: 36,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 22),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _ActionButton(
-                          icon: Icons.call_end_rounded,
-                          label: 'OPHANGEN',
-                          color: LuxeColors.danger,
-                          shake: ringing,
-                          onTap: () => _cancel(sip),
+                  padding: EdgeInsets.fromLTRB(hPad, 12, hPad, 28),
+                  child: Center(
+                    child: FractionallySizedBox(
+                      widthFactor: 0.75,
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: LuxeRimBox(
+                        radius: 28,
+                        rimWidth: 1.25,
+                        fillColor: LuxeColors.surface,
+                        rimColor: Theme.of(context).brightness ==
+                                Brightness.dark
+                            ? LuxeColors.line
+                            : LuxeBorders.solid(
+                                LuxeColors.ink.withValues(alpha: 0.22),
+                              ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 20),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _ActionButton(
+                              icon: Icons.call_end_rounded,
+                              label: 'OPHANGEN',
+                              color: _kCallHangup,
+                              shake: ringing,
+                              onTap: () => _cancel(sip),
+                            ),
+                            if (waiting)
+                              _ActionButton(
+                                icon: Icons.call_rounded,
+                                label: 'OPNEMEN',
+                                color: _kCallAnswer,
+                                shake: ringing,
+                                onTap: () => _answer(sip),
+                              ),
+                            if (showRelease)
+                              _ActionButton(
+                                icon: Icons.lock_open_rounded,
+                                label: 'DEUR OPEN',
+                                color: _kCallDoor,
+                                loading: _releasing,
+                                onTap: () => _release(i),
+                              ),
+                          ],
                         ),
-                        if (waiting)
-                          _ActionButton(
-                            icon: Icons.call_rounded,
-                            label: 'OPNEMEN',
-                            color: answerColor,
-                            shake: ringing,
-                            onTap: () => _answer(sip),
-                          ),
-                        if (showRelease)
-                          _ActionButton(
-                            icon: Icons.lock_open_rounded,
-                            label: 'DEUR OPEN',
-                            color: LuxeColors.brass,
-                            loading: _releasing,
-                            onTap: () => _release(i),
-                          ),
-                      ],
+                      ),
                     ),
                   ),
+                ),
                 ),
               ],
             ),
@@ -418,6 +426,12 @@ class _AlarmShakeState extends State<_AlarmShake>
   }
 }
 
+/// Same fills in light and dark — palette danger/brass wash out in dark mode.
+const _kCallHangup = Color(0xFFB83A3A);
+const _kCallAnswer = Color(0xFF3E6B4F);
+const _kCallDoor = Color(0xFFA67C3D);
+const _kCallOnFill = Color(0xFFF7F4EC);
+
 class _ActionButton extends StatelessWidget {
   const _ActionButton({
     required this.icon,
@@ -436,9 +450,6 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final onColor = color.computeLuminance() > 0.42
-        ? LuxeColors.creamDeep
-        : const Color(0xFFF7F4EC);
     final circle = GestureDetector(
       onTap: loading ? null : onTap,
       child: Container(
@@ -456,17 +467,17 @@ class _ActionButton extends StatelessWidget {
           ],
         ),
         child: loading
-            ? Center(
+            ? const Center(
                 child: SizedBox(
                   width: 22,
                   height: 22,
                   child: CircularProgressIndicator(
                     strokeWidth: 2,
-                    color: onColor,
+                    color: _kCallOnFill,
                   ),
                 ),
               )
-            : Icon(icon, color: onColor, size: 30),
+            : Icon(icon, color: _kCallOnFill, size: 30),
       ),
     );
     return Column(
