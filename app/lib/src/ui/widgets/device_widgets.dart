@@ -2572,6 +2572,7 @@ class CameraTile extends ConsumerWidget {
                 data: (i) => CameraSnapshot(
                   cameraId: i.id,
                   aspectRatio: i.aspectRatio,
+                  fit: BoxFit.contain,
                 ),
               ),
             ),
