@@ -348,80 +348,76 @@ class _PartitionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final cfg = _stateConfig(partition.state, dark: dark);
-    final fill = dark ? LuxeColors.surfaceDarkElev : LuxeColors.surface;
-    final rim = LuxeBorders.solid(
-      LuxeColors.ink.withValues(alpha: dark ? 0.28 : 0.14),
-    );
+    final fill = LuxeColors.surface.withValues(alpha: dark ? 0.34 : 0.46);
+    final rim = dark
+        ? LuxeColors.glassRim
+        : LuxeBorders.solid(LuxeColors.ink.withValues(alpha: 0.16));
     final discFill = Color.alphaBlend(
       cfg.color.withValues(alpha: dark ? 0.28 : 0.14),
-      fill,
+      LuxeColors.surface.withValues(alpha: dark ? 0.55 : 0.72),
     );
     final discRim = LuxeBorders.solid(
       cfg.color.withValues(alpha: dark ? 0.75 : 0.50),
     );
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: rim),
-        boxShadow: LuxeShadows.chip(context),
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(22),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              ColoredBox(color: cfg.color, child: const SizedBox(width: 5)),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(18, 20, 22, 20),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 52,
-                        height: 52,
-                        decoration: BoxDecoration(
-                          color: discFill,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: discRim),
-                        ),
-                        child: Icon(cfg.icon, color: cfg.color, size: 26),
+    return LuxeRimBox(
+      radius: 22,
+      rimWidth: 1.25,
+      fillColor: fill,
+      rimColor: rim,
+      shadows: LuxeShadows.chip(context),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ColoredBox(color: cfg.color, child: const SizedBox(width: 5)),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 20, 22, 20),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: discFill,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: discRim),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              cfg.label,
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                                color: LuxeColors.ink,
-                                height: 1.2,
-                              ),
+                      child: Icon(cfg.icon, color: cfg.color, size: 26),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            cfg.label,
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              color: LuxeColors.ink,
+                              height: 1.2,
                             ),
-                            const SizedBox(height: 3),
-                            Text(
-                              partition.name.trim().isNotEmpty
-                                  ? partition.name
-                                  : 'Partitie ${partition.number}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: LuxeColors.inkSoft,
-                              ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            partition.name.trim().isNotEmpty
+                                ? partition.name
+                                : 'Partitie ${partition.number}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: LuxeColors.inkSoft,
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
