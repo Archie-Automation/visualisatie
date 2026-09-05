@@ -6,6 +6,29 @@ import '../../theme.dart';
 import '../responsive.dart';
 import 'back_pill.dart';
 
+/// Quiet brass “i” disc. Light mode keeps a fill so the glyph doesn’t vanish
+/// into the stone canvas; still translucent, not a solid button.
+BoxDecoration _brassInfoCircle(BuildContext context, {bool shadowed = true}) {
+  final light = Theme.of(context).brightness == Brightness.light;
+  return BoxDecoration(
+    shape: BoxShape.circle,
+    color: LuxeColors.brass.withValues(alpha: light ? 0.28 : 0.20),
+    border: Border.all(
+      color: (light ? LuxeColors.brassDeep : LuxeColors.brass)
+          .withValues(alpha: light ? 0.62 : 0.50),
+    ),
+    boxShadow: shadowed
+        ? const [
+            BoxShadow(
+              color: Color(0x14000000),
+              blurRadius: 8,
+              offset: Offset(0, 2),
+            ),
+          ]
+        : null,
+  );
+}
+
 /// Brass circular “i”. Same 48px hit target as [BackPill], circle not square.
 class LuxeInfoIconButton extends StatelessWidget {
   const LuxeInfoIconButton({
@@ -33,23 +56,12 @@ class LuxeInfoIconButton extends StatelessWidget {
           width: size,
           height: size,
           child: DecoratedBox(
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: LuxeColors.brass.withValues(alpha: 0.14),
-              border: Border.all(color: LuxeColors.brass.withValues(alpha: 0.4)),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x14000000),
-                  blurRadius: 8,
-                  offset: Offset(0, 2),
-                ),
-              ],
-            ),
+            decoration: _brassInfoCircle(context),
             child: Center(
               child: Icon(
                 Icons.info_outline_rounded,
                 size: iconSize,
-                color: LuxeColors.brassDeep,
+                color: LuxeColors.brassOnCanvas,
               ),
             ),
           ),
@@ -483,14 +495,8 @@ class _DialogHeader extends StatelessWidget {
           width: 40,
           height: 40,
           alignment: Alignment.center,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: LuxeColors.brass.withValues(alpha: 0.14),
-            border: Border.all(
-              color: LuxeColors.brass.withValues(alpha: 0.4),
-            ),
-          ),
-          child: Icon(icon, color: LuxeColors.brass, size: 20),
+          decoration: _brassInfoCircle(context, shadowed: false),
+          child: Icon(icon, color: LuxeColors.brassOnCanvas, size: 20),
         ),
         const SizedBox(width: 14),
         Expanded(

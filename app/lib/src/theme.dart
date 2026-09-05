@@ -271,6 +271,9 @@ class LuxeColors {
   static Color get brassGlow => _active.brassGlow;
   static Color get brassSoft => _active.brassSoft;
   static Color get brassDeep => _active.brassDeep;
+  /// Brass on the page canvas. Light [brass] sits too close to stone [cream].
+  static Color get brassOnCanvas =>
+      _active.ink.computeLuminance() < 0.45 ? brassDeep : brass;
   static Color get line => _active.line;
   static Color get lineSoft => _active.lineSoft;
   static Color get glassRim => _active.glassRim;
