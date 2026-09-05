@@ -246,16 +246,10 @@ function apkFromRolling(
     rolling && rolling.semver !== "0.0.0"
       ? { ...apk, version: rolling.version }
       : apk;
-  if (labeled.version) {
-    const ver = parseVersion(labeled.version);
-    if (compareVersion(ver, appVersionInfo) < 0) {
-      logger.warn(
-        { apk: labeled.version, running: appVersionInfo.version },
-        "APK op GitHub is ouder dan de server — niet aanbieden"
-      );
-      return null;
-    }
-  }
+  // Do not hide an APK that is merely behind the running server. That left
+  // tablets stuck on "wacht tot het installatiebestand klaarstaat" while CI
+  // lagged or the release title was stale. The client still refuses
+  // app-release.apk and no-op installs.
   logger.info(
     { name: labeled.name, version: labeled.version, sizeBytes: labeled.sizeBytes },
     "APK van android-latest"
