@@ -11,6 +11,7 @@ import type { IntercomDevice } from "./types";
 import type { MediaManager } from "./media/manager";
 import { hvacSwitchLock, type HvacLockEntry } from "./hvacSwitchLock";
 import { fireplaceVirtual, type FireplaceVirtualEntry } from "./fireplaceVirtual";
+import { captureOnIntercomRing } from "./intercomCaptures";
 
 const SECRET = process.env.JWT_SECRET ?? "dev-secret-change-me";
 
@@ -117,6 +118,7 @@ export function attachWebSocket(
         type: "intercom.ring",
         payload: { intercomId: intercom.id, name: intercom.name, ts: Date.now() }
       });
+      captureOnIntercomRing(intercom.id);
     }
   };
 
@@ -134,6 +136,7 @@ export function attachWebSocket(
         type: "intercom.ring",
         payload: { intercomId: found.id, name: found.name, ts: Date.now() }
       });
+      captureOnIntercomRing(found.id);
     },
     broadcastIntercomCleared(intercomId: string) {
       broadcastAll({

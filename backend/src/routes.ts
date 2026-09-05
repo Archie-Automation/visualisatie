@@ -74,6 +74,11 @@ import {
   writeGo2rtcConfig
 } from "./cameras";
 import {
+  captureIntercomStill,
+  listIntercomCaptures,
+  readIntercomCaptureJpeg
+} from "./intercomCaptures";
+import {
   refreshSnapshotCache,
   serveSnapshotFromCache,
   snapshotCache,
@@ -1090,6 +1095,37 @@ export function buildRouter(
     if (!canViewIntercom(req, req.params.id))
       return res.status(403).end();
     return proxySnapshot(req, res, "intercom", mediaBase());
+  });
+
+  r.get("/intercoms/:id/captures", requireAuth, (req: AuthedRequest, res) => {
+    if (!canViewIntercom(req, req.params.id))
+      return res.status(403).json({ error: "not allowed" });
+    res.json({ captures: listIntercomCaptures(req.params.id) });
+  });
+
+  r.get(
+    "/intercoms/:id/captures/:captureId",
+    requireAuth,
+    (req: AuthedRequest, res) => {
+      if (!canViewIntercom(req, req.params.id)) return res.status(403).end();
+      const buf = readIntercomCaptureJpeg(req.params.id, req.params.captureId);
+      if (!buf) return res.status(404).end();
+      res.setHeader("Cache-Control", "private, max-age=86400");
+      res.type("jpeg").send(buf);
+    }
+  );
+
+  r.post("/intercoms/:id/captures", requireAuth, async (req: AuthedRequest, res) => {
+    if (!canViewIntercom(req, req.params.id))
+      return res.status(403).json({ error: "not allowed" });
+    const ic = collectIntercoms(getConfig()).find((i) => i.id === req.params.id);
+    if (!ic) return res.status(404).json({ error: "unknown intercom" });
+    const meta = await captureIntercomStill({
+      intercomId: ic.id,
+      source: "manual"
+    });
+    if (!meta) return res.status(502).json({ error: "capture failed" });
+    res.json(meta);
   });
 
   r.post("/intercoms/:id/warm", requireAuth, async (req: AuthedRequest, res) => {
