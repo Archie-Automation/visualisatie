@@ -21,7 +21,6 @@ import 'widgets/back_pill.dart';
 import 'widgets/device_tile_shell.dart';
 import 'widgets/glass_card.dart';
 import 'widgets/heater_icon.dart';
-import 'widgets/honeycomb_pattern.dart';
 import 'widgets/light_status_icon.dart';
 import 'widgets/split_unit_icon.dart';
 import 'widgets/room_category_strip.dart';

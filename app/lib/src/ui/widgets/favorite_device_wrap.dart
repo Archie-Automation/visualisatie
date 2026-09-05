@@ -29,9 +29,18 @@ class FavoriteDeviceWrap extends ConsumerWidget {
         child,
         Align(
           alignment: Alignment.centerRight,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () async {
+          child: IconButton(
+            tooltip: isFav
+                ? 'Haal van het beginscherm'
+                : 'Zet op het beginscherm',
+            padding: const EdgeInsets.only(top: 4, right: 2),
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            icon: Icon(
+              isFav ? Icons.star_rounded : Icons.star_outline_rounded,
+              size: 22,
+              color: isFav ? LuxeColors.brass : LuxeColors.inkSoft,
+            ),
+            onPressed: () async {
               final wasFav = isFav;
               await toggleUserFavoriteDevice(ref, cfg, device.id, wasFav);
               if (!context.mounted) return;
@@ -46,64 +55,9 @@ class FavoriteDeviceWrap extends ConsumerWidget {
                 ),
               );
             },
-            child: Padding(
-              padding: const EdgeInsets.only(top: 10, right: 2),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isFav
-                      ? LuxeColors.brass.withValues(alpha: 0.12)
-                      : LuxeColors.ink.withValues(alpha: 0.04),
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(
-                    color: isFav
-                        ? LuxeColors.brass.withValues(alpha: 0.45)
-                        : LuxeColors.ink.withValues(alpha: 0.18),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isFav ? Icons.star_rounded : Icons.star_outline_rounded,
-                      size: 18,
-                      color: isFav ? LuxeColors.brass : LuxeColors.inkSoft,
-                    ),
-                    const SizedBox(width: 7),
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        ExcludeSemantics(
-                          child: Text(
-                            'Op beginscherm',
-                            style: _favPillLabelStyle(Colors.transparent),
-                          ),
-                        ),
-                        Text(
-                          isFav ? 'Op beginscherm' : 'Plaatsen',
-                          style: _favPillLabelStyle(
-                            isFav ? LuxeColors.brass : LuxeColors.inkSoft,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
           ),
         ),
       ],
     );
   }
 }
-
-TextStyle _favPillLabelStyle(Color color) => TextStyle(
-      fontSize: 13,
-      fontWeight: FontWeight.w600,
-      color: color,
-      letterSpacing: 0.3,
-      height: 1.2,
-    );
