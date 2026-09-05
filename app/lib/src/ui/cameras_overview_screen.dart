@@ -188,17 +188,12 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
                                 textAlign: TextAlign.center,
                                 style: TextStyle(color: LuxeColors.inkSoft)),
                           ),
-                          data: (i) => Center(
-                            child: FractionallySizedBox(
-                              widthFactor: kLiveVideoStageFactor,
-                              heightFactor: kLiveVideoStageFactor,
-                              child: LiveVideoStage(
-                                child: CameraLivePlayer(
-                                  info: i,
-                                  fit: BoxFit.cover,
-                                  expand: true,
-                                ),
-                              ),
+                          data: (i) => LiveVideoFittedStage(
+                            aspectRatio: i.aspectRatio,
+                            child: CameraLivePlayer(
+                              info: i,
+                              fit: BoxFit.contain,
+                              expand: true,
                             ),
                           ),
                         ),
@@ -286,7 +281,7 @@ class _FullscreenCameraView extends ConsumerWidget {
             ),
             data: (i) => CameraLivePlayer(
               info: i,
-              fit: BoxFit.cover,
+              fit: BoxFit.contain,
               expand: true,
             ),
           ),
@@ -426,7 +421,7 @@ class _ThumbStripItem extends StatelessWidget {
                   child: CameraSnapshot(
                     cameraId: device.id,
                     aspectRatio: 16 / 9,
-                    fit: BoxFit.cover,
+                    fit: BoxFit.contain,
                     showLiveBadge: false,
                     refresh: const Duration(seconds: 10),
                   ),

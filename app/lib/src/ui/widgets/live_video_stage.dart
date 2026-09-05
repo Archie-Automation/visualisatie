@@ -36,3 +36,44 @@ class LiveVideoStage extends StatelessWidget {
     return Hero(tag: tag, child: stage);
   }
 }
+
+/// Rounded live frame: at most [factor] of the parent, sized to [aspectRatio]
+/// so the picture is fully visible and not stretched or cropped.
+class LiveVideoFittedStage extends StatelessWidget {
+  const LiveVideoFittedStage({
+    super.key,
+    required this.aspectRatio,
+    required this.child,
+    this.heroTag,
+    this.factor = kLiveVideoStageFactor,
+  });
+
+  final double aspectRatio;
+  final Widget child;
+  final String? heroTag;
+  final double factor;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxW = constraints.maxWidth * factor;
+        final maxH = constraints.maxHeight * factor;
+        final ar = aspectRatio > 0.1 ? aspectRatio : 16 / 9;
+        var width = maxW;
+        var height = width / ar;
+        if (height > maxH) {
+          height = maxH;
+          width = height * ar;
+        }
+        return Center(
+          child: SizedBox(
+            width: width,
+            height: height,
+            child: LiveVideoStage(heroTag: heroTag, child: child),
+          ),
+        );
+      },
+    );
+  }
+}
