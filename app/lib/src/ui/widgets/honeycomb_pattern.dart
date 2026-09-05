@@ -47,8 +47,8 @@ class HoneycombPattern extends StatelessWidget {
   }
 }
 
-/// Sticky header fill die scroll-content afdekt maar het honingraat-profiel houdt.
-/// Canvas-kleur volgt [LuxeBackdrop] (cream), niet chip-surface — anders oogt de balk anders.
+/// Sticky header fill. Same canvas as the top of [LuxeBackdrop] so the bar
+/// does not read as a darker strip over Zonwering, kamers, etc.
 class StickyHeaderSurface extends StatelessWidget {
   const StickyHeaderSurface({
     super.key,
@@ -65,11 +65,10 @@ class StickyHeaderSurface extends StatelessWidget {
     final useDark = Theme.of(context).brightness == Brightness.dark;
     final p = Theme.of(context).extension<LuxePalette>() ??
         (useDark ? LuxePalette.dark : LuxePalette.light);
-    final phoneLight = !useDark && context.isPhone;
-    final base = phoneLight ? LuxePalette.phoneCream : p.cream;
-    // Dark: lichter over de canvas laten schemeren — opaque cream oogt te zwaar.
-    if (useDark) return base.withValues(alpha: 0.62);
-    return base;
+    // Same wash as the top of [LuxeBackdrop]. Mid [cream] was darker and
+    // read as a separate bar (Zonwering, kamers, …).
+    if (useDark) return p.cream;
+    return context.isPhone ? LuxePalette.phoneCreamLight : p.creamLight;
   }
 
   @override
@@ -81,21 +80,9 @@ class StickyHeaderSurface extends StatelessWidget {
         clipBehavior: Clip.hardEdge,
         decoration: BoxDecoration(
           color: _canvasColor(context),
-          border: Border(
-            bottom: BorderSide(
-              color: LuxeColors.line.withValues(alpha: 0.18),
-              width: 0.5,
-            ),
-          ),
           boxShadow: boxShadow,
         ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            HoneycombPattern.ambient(context),
-            child,
-          ],
-        ),
+        child: child,
       ),
     );
   }

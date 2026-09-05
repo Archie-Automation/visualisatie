@@ -12,7 +12,7 @@ export type SnapshotCacheEntry = { buf: Buffer; ts: number };
 export const snapshotCache = new Map<string, SnapshotCacheEntry>();
 
 /** Serve cached JPEG without re-fetching from upstream. */
-export const SNAP_FRESH_MS = 1_500;
+export const SNAP_FRESH_MS = 10_000;
 /** Return stale frames while a slow refresh is in-flight. */
 export const SNAP_STALE_MS = 120_000;
 
@@ -199,12 +199,12 @@ export function startCameraSnapshotWarmer(
       const { kind, d } = targets[i]!;
       await refreshSnapshotCache(kind, d, base).catch(() => null);
       if (i + 1 < targets.length) {
-        await new Promise<void>((r) => setTimeout(r, 1_500));
+        await new Promise<void>((r) => setTimeout(r, 2_500));
       }
     }
 
     if (!stopped) {
-      timer = setTimeout(() => void tick(), 8_000);
+      timer = setTimeout(() => void tick(), 20_000);
     }
   };
 
@@ -227,7 +227,7 @@ export function serveSnapshotFromCache(
   if (age >= SNAP_STALE_MS) return false;
 
   res.setHeader("content-type", "image/jpeg");
-  res.setHeader("cache-control", age < SNAP_FRESH_MS ? "public, max-age=2" : "no-store");
+  res.setHeader("cache-control", age < SNAP_FRESH_MS ? "public, max-age=8" : "no-store");
   if (age >= SNAP_FRESH_MS) res.setHeader("x-snapshot-stale", "1");
   res.end(cached.buf);
   return true;

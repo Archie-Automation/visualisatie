@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../theme.dart';
 
+/// Shared live-frame size on tablet/desktop. Camera and intercom stay in sync.
+const kLiveVideoStageFactor = 0.75;
+
 /// Full-bleed camera/intercom stage: fills the parent, clips to a rounded
 /// frame, shadow outside the clip so the picture can run edge-to-edge.
 class LiveVideoStage extends StatelessWidget {

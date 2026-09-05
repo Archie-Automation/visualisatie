@@ -93,7 +93,7 @@ class LuxeBackdrop extends StatelessWidget {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withValues(alpha: useDark ? 0.22 : 0.08),
+                    Colors.transparent,
                     Colors.transparent,
                     Colors.transparent,
                     Colors.black.withValues(alpha: useDark ? 0.28 : 0.10),

@@ -50,12 +50,18 @@ class CameraScreen extends ConsumerWidget {
                 ),
                 data: (i) => Padding(
                   padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-                  child: LiveVideoStage(
-                    heroTag: 'cam-${i.id}',
-                    child: CameraLivePlayer(
-                      info: i,
-                      fit: BoxFit.cover,
-                      expand: true,
+                  child: Center(
+                    child: FractionallySizedBox(
+                      widthFactor: kLiveVideoStageFactor,
+                      heightFactor: kLiveVideoStageFactor,
+                      child: LiveVideoStage(
+                        heroTag: 'cam-${i.id}',
+                        child: CameraLivePlayer(
+                          info: i,
+                          fit: BoxFit.cover,
+                          expand: true,
+                        ),
+                      ),
                     ),
                   ),
                 ),

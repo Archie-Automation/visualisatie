@@ -160,15 +160,6 @@ class _RoomStickyHeader extends SliverPersistentHeaderDelegate {
 
     return StickyHeaderSurface(
       height: headerHeight,
-      boxShadow: overlapsContent
-          ? [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 10,
-                offset: Offset(0, 2),
-              ),
-            ]
-          : null,
       child: SafeArea(
         bottom: false,
         child: Padding(
