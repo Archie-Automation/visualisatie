@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
@@ -142,6 +143,83 @@ final intercomInfoProvider =
   }
   return IntercomInfo.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
 });
+
+class IntercomCapture {
+  final String id;
+  final String intercomId;
+  final String name;
+  final int ts;
+  final String source;
+
+  const IntercomCapture({
+    required this.id,
+    required this.intercomId,
+    required this.name,
+    required this.ts,
+    required this.source,
+  });
+
+  DateTime get at => DateTime.fromMillisecondsSinceEpoch(ts);
+
+  String get imageUrl => '$apiBase/api/intercoms/$intercomId/captures/$id';
+
+  factory IntercomCapture.fromJson(Map<String, dynamic> j) => IntercomCapture(
+        id: j['id'] as String,
+        intercomId: j['intercomId'] as String,
+        name: (j['name'] as String?) ?? '',
+        ts: (j['ts'] as num).toInt(),
+        source: (j['source'] as String?) ?? 'manual',
+      );
+}
+
+final intercomCapturesProvider =
+    FutureProvider.family<List<IntercomCapture>, String>((ref, id) async {
+  final auth = ref.watch(authProvider);
+  if (!auth.isAuthed) throw StateError('not authenticated');
+  final res = await http.get(
+    Uri.parse('$apiBase/api/intercoms/$id/captures'),
+    headers: {'authorization': 'Bearer ${auth.token}'},
+  );
+  if (res.statusCode != 200) {
+    throw StateError('captures fetch failed: ${res.statusCode}');
+  }
+  final body = jsonDecode(res.body) as Map<String, dynamic>;
+  final list = (body['captures'] as List? ?? const [])
+      .cast<Map<String, dynamic>>()
+      .map(IntercomCapture.fromJson)
+      .toList();
+  return list;
+});
+
+Future<IntercomCapture> takeIntercomCapture({
+  required String intercomId,
+  required String? token,
+}) async {
+  final res = await http.post(
+    Uri.parse('$apiBase/api/intercoms/$intercomId/captures'),
+    headers: {'authorization': 'Bearer $token'},
+  );
+  if (res.statusCode != 200) {
+    throw StateError('capture failed: ${res.statusCode}');
+  }
+  return IntercomCapture.fromJson(
+    jsonDecode(res.body) as Map<String, dynamic>,
+  );
+}
+
+Future<Uint8List> fetchIntercomCaptureJpeg({
+  required String url,
+  required String? token,
+}) async {
+  final res = await http.get(
+    Uri.parse(url),
+    headers: {'authorization': 'Bearer $token'},
+  );
+  if (res.statusCode != 200) {
+    throw StateError('capture image failed: ${res.statusCode}');
+  }
+  return res.bodyBytes;
+}
 
 /// Fires a door release on the server (KNX pulse).
 Future<void> releaseIntercomDoor({

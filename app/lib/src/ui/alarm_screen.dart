@@ -14,7 +14,7 @@ import '../satel_api.dart';
 import '../theme.dart';
 import 'app_nav.dart';
 import 'responsive.dart';
-import 'widgets/back_pill.dart';
+import 'widgets/function_screen_header.dart';
 import 'widgets/luxe_backdrop.dart';
 
 class AlarmScreen extends ConsumerWidget {
@@ -25,9 +25,7 @@ class AlarmScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: LuxeBackdrop(
-        child: SafeArea(
-          child: _AlarmBody(),
-        ),
+        child: _AlarmBody(),
       ),
     );
   }
@@ -194,9 +192,14 @@ class _AlarmBodyState extends ConsumerState<_AlarmBody> {
 
     return Column(
       children: [
-        _AlarmHeader(onBack: () => appBack(context)),
+        FunctionScreenHeader(
+          onBack: () => appBack(context),
+          title: 'Alarm',
+        ),
         Expanded(
-          child: SingleChildScrollView(
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
             padding: EdgeInsets.symmetric(horizontal: hp),
             child: Column(
               children: [
@@ -248,48 +251,9 @@ class _AlarmBodyState extends ConsumerState<_AlarmBody> {
               ],
             ),
           ),
+          ),
         ),
       ],
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Header
-// ---------------------------------------------------------------------------
-
-class _AlarmHeader extends StatelessWidget {
-  const _AlarmHeader({required this.onBack});
-  final VoidCallback onBack;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      height: 64,
-      padding: EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(
-        color: LuxeColors.surface.withValues(alpha: 0.82),
-        border: Border(
-          bottom: BorderSide(color: LuxeColors.line, width: 0.5),
-        ),
-      ),
-      child: Row(
-        children: [
-          BackPill(onTap: onBack),
-          Expanded(
-            child: Text(
-              'Alarm',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: LuxeColors.ink,
-              ),
-            ),
-          ),
-          const SizedBox(width: 48),
-        ],
-      ),
     );
   }
 }
@@ -311,13 +275,27 @@ class _PartitionTabBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
         children: List.generate(partitions.length, (i) {
           final p        = partitions[i];
           final selected = i == selectedIdx;
-          final cfg      = _stateConfig(p.state);
+          final cfg      = _stateConfig(p.state, dark: dark);
+          final fill = selected
+              ? Color.alphaBlend(
+                  cfg.color.withValues(alpha: dark ? 0.22 : 0.12),
+                  LuxeColors.surface,
+                )
+              : LuxeColors.surface;
+          final rim = selected
+              ? LuxeBorders.solid(
+                  cfg.color.withValues(alpha: dark ? 0.75 : 0.55),
+                )
+              : LuxeBorders.solid(
+                  LuxeColors.ink.withValues(alpha: dark ? 0.22 : 0.14),
+                );
           return GestureDetector(
             onTap: () => onSelect(i),
             child: AnimatedContainer(
@@ -325,16 +303,9 @@ class _PartitionTabBar extends StatelessWidget {
               margin: const EdgeInsets.only(right: 10),
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
               decoration: BoxDecoration(
-                color: selected
-                    ? cfg.color.withValues(alpha: 0.12)
-                    : LuxeColors.surfaceDim,
+                color: fill,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: selected
-                      ? cfg.color.withValues(alpha: 0.40)
-                      : LuxeColors.line,
-                  width: selected ? 1.5 : 1,
-                ),
+                border: Border.all(color: rim, width: selected ? 1.5 : 1),
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -344,7 +315,7 @@ class _PartitionTabBar extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: selected ? cfg.color : LuxeColors.inkSoft,
+                      color: selected ? LuxeColors.ink : LuxeColors.inkSoft,
                     ),
                   ),
                   SizedBox(height: 2),
@@ -375,64 +346,83 @@ class _PartitionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cfg = _stateConfig(partition.state);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final cfg = _stateConfig(partition.state, dark: dark);
+    final fill = dark ? LuxeColors.surfaceDarkElev : LuxeColors.surface;
+    final rim = LuxeBorders.solid(
+      LuxeColors.ink.withValues(alpha: dark ? 0.28 : 0.14),
+    );
+    final discFill = Color.alphaBlend(
+      cfg.color.withValues(alpha: dark ? 0.28 : 0.14),
+      fill,
+    );
+    final discRim = LuxeBorders.solid(
+      cfg.color.withValues(alpha: dark ? 0.75 : 0.50),
+    );
 
-    return AnimatedContainer(
-      duration: Duration(milliseconds: 350),
-      curve: Curves.easeOutCubic,
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 20),
+    return DecoratedBox(
       decoration: BoxDecoration(
-        color: cfg.color.withValues(alpha: 0.10),
+        color: fill,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: cfg.color.withValues(alpha: 0.30)),
-        boxShadow: [
-          BoxShadow(
-            color: cfg.color.withValues(alpha: 0.12),
-            blurRadius: 28,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        border: Border.all(color: rim),
+        boxShadow: LuxeShadows.chip(context),
       ),
-      child: Row(
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: cfg.color.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: cfg.color.withValues(alpha: 0.35)),
-            ),
-            child: Icon(cfg.icon, color: cfg.color, size: 26),
-          ),
-          const SizedBox(width: 18),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  cfg.label,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: cfg.color,
-                    height: 1.2,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(22),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              ColoredBox(color: cfg.color, child: const SizedBox(width: 5)),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 20, 22, 20),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: discFill,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: discRim),
+                        ),
+                        child: Icon(cfg.icon, color: cfg.color, size: 26),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              cfg.label,
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                color: LuxeColors.ink,
+                                height: 1.2,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              partition.name.trim().isNotEmpty
+                                  ? partition.name
+                                  : 'Partitie ${partition.number}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: LuxeColors.inkSoft,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 3),
-                Text(
-                  partition.name.trim().isNotEmpty
-                      ? partition.name
-                      : 'Partitie ${partition.number}',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: LuxeColors.inkSoft,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -679,15 +669,28 @@ class _StateCfg {
   final Color color;
 }
 
-_StateCfg _stateConfig(SatelPartitionState s) => switch (s) {
-      SatelPartitionState.disarmed =>
-        const _StateCfg('Uitgeschakeld', Icons.lock_open_outlined, Color(0xFF4CAF50)),
-      SatelPartitionState.armed =>
-        const _StateCfg('Ingeschakeld', Icons.security_outlined, Color(0xFFD64545)),
-      SatelPartitionState.exitDelay =>
-        const _StateCfg('Uitlooptijd…', Icons.directions_run_rounded, Color(0xFFE07A3F)),
-      SatelPartitionState.entryDelay =>
-        const _StateCfg('Inlooptijd!', Icons.warning_amber_rounded, Color(0xFFD64545)),
+_StateCfg _stateConfig(SatelPartitionState s, {required bool dark}) =>
+    switch (s) {
+      SatelPartitionState.disarmed => _StateCfg(
+          'Uitgeschakeld',
+          Icons.lock_open_outlined,
+          dark ? const Color(0xFF8FCB9B) : const Color(0xFF2C5A40),
+        ),
+      SatelPartitionState.armed => _StateCfg(
+          'Ingeschakeld',
+          Icons.security_outlined,
+          dark ? const Color(0xFFFF8A8A) : const Color(0xFF9B2E2E),
+        ),
+      SatelPartitionState.exitDelay => _StateCfg(
+          'Uitlooptijd…',
+          Icons.directions_run_rounded,
+          dark ? const Color(0xFFFFB074) : const Color(0xFFB45A1F),
+        ),
+      SatelPartitionState.entryDelay => _StateCfg(
+          'Inlooptijd!',
+          Icons.warning_amber_rounded,
+          dark ? const Color(0xFFFF8A8A) : const Color(0xFF9B2E2E),
+        ),
     };
 
 // ---------------------------------------------------------------------------

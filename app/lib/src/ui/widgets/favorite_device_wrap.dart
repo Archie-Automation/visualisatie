@@ -29,18 +29,9 @@ class FavoriteDeviceWrap extends ConsumerWidget {
         child,
         Align(
           alignment: Alignment.centerRight,
-          child: IconButton(
-            tooltip: isFav
-                ? 'Haal van het beginscherm'
-                : 'Zet op het beginscherm',
-            padding: const EdgeInsets.only(top: 4, right: 2),
-            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-            icon: Icon(
-              isFav ? Icons.star_rounded : Icons.star_outline_rounded,
-              size: 22,
-              color: isFav ? LuxeColors.brass : LuxeColors.inkSoft,
-            ),
-            onPressed: () async {
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () async {
               final wasFav = isFav;
               await toggleUserFavoriteDevice(ref, cfg, device.id, wasFav);
               if (!context.mounted) return;
@@ -55,6 +46,38 @@ class FavoriteDeviceWrap extends ConsumerWidget {
                 ),
               );
             },
+            child: Padding(
+              padding: const EdgeInsets.only(top: 10, right: 2),
+              child: Semantics(
+                button: true,
+                label: isFav
+                    ? 'Haal van het beginscherm'
+                    : 'Zet op het beginscherm',
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isFav
+                        ? LuxeColors.brass.withValues(alpha: 0.12)
+                        : LuxeColors.ink.withValues(alpha: 0.04),
+                    border: Border.all(
+                      color: isFav
+                          ? LuxeColors.brass.withValues(alpha: 0.45)
+                          : LuxeColors.ink.withValues(alpha: 0.18),
+                    ),
+                  ),
+                  child: Center(
+                    child: Icon(
+                      isFav ? Icons.star_rounded : Icons.star_outline_rounded,
+                      size: 22,
+                      color: isFav ? LuxeColors.brass : LuxeColors.inkSoft,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ],

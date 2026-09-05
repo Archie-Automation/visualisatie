@@ -16,6 +16,7 @@ import 'responsive.dart';
 import 'widgets/camera_snapshot.dart';
 import 'widgets/confirm_dialog.dart';
 import 'widgets/function_screen_header.dart';
+import 'widgets/intercom_capture_overlay.dart';
 import 'widgets/intercom_player.dart';
 import 'widgets/live_video_stage.dart';
 import 'widgets/luxe_backdrop.dart';
@@ -201,57 +202,53 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                 Expanded(
                   child: Padding(
                     padding: stagePad,
-                    child: Center(
-                      child: FractionallySizedBox(
-                        widthFactor: kLiveVideoStageFactor,
-                        heightFactor: kLiveVideoStageFactor,
-                        child: LiveVideoStage(
+                    child: LiveVideoFittedStage(
+                      aspectRatio: i.aspectRatio,
                       heroTag: 'intercom-${i.id}',
-                      child: waiting
-                          ? Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                if (!_previewLive)
-                                  CameraSnapshot(
-                                    cameraId: i.id,
-                                    aspectRatio: i.aspectRatio,
-                                    kind: SnapshotKind.intercom,
-                                    fit: BoxFit.cover,
-                                    expand: true,
-                                    showLiveBadge: false,
-                                  ),
-                                if (!_previewFailed)
-                                  WebRTCCameraPlayer(
-                                    signallingPath: 'intercoms/${i.id}',
-                                    aspectRatio: i.aspectRatio,
-                                    fit: BoxFit.cover,
-                                    expand: true,
-                                    videoOnly: true,
-                                    opaqueBackground: false,
-                                    connectTimeout:
-                                        const Duration(seconds: 8),
-                                    maxAttempts: 2,
-                                    onConnected: () {
-                                      if (mounted) {
-                                        setState(() => _previewLive = true);
-                                      }
-                                    },
-                                    onFailed: () {
-                                      if (mounted) {
-                                        setState(() => _previewFailed = true);
-                                      }
-                                    },
-                                  ),
-                              ],
-                            )
-                          : IntercomPlayer(
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          if (waiting) ...[
+                            if (!_previewLive)
+                              CameraSnapshot(
+                                cameraId: i.id,
+                                aspectRatio: i.aspectRatio,
+                                kind: SnapshotKind.intercom,
+                                fit: BoxFit.contain,
+                                expand: true,
+                                showLiveBadge: false,
+                              ),
+                            if (!_previewFailed)
+                              WebRTCCameraPlayer(
+                                signallingPath: 'intercoms/${i.id}',
+                                aspectRatio: i.aspectRatio,
+                                fit: BoxFit.contain,
+                                expand: true,
+                                videoOnly: true,
+                                opaqueBackground: false,
+                                connectTimeout: const Duration(seconds: 8),
+                                maxAttempts: 2,
+                                onConnected: () {
+                                  if (mounted) {
+                                    setState(() => _previewLive = true);
+                                  }
+                                },
+                                onFailed: () {
+                                  if (mounted) {
+                                    setState(() => _previewFailed = true);
+                                  }
+                                },
+                              ),
+                          ] else
+                            IntercomPlayer(
                               intercomId: i.id,
                               aspectRatio: i.aspectRatio,
                               talking: true,
-                              fit: BoxFit.cover,
+                              fit: BoxFit.contain,
                               expand: true,
                             ),
-                    ),
+                          IntercomCaptureOverlay(intercomId: i.id),
+                        ],
                       ),
                     ),
                   ),
