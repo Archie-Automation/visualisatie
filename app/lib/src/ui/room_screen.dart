@@ -10,7 +10,6 @@ import 'responsive.dart';
 import 'widgets/back_pill.dart';
 import 'widgets/device_widgets.dart';
 import 'widgets/favorite_device_wrap.dart';
-import 'widgets/honeycomb_pattern.dart';
 import 'widgets/luxe_backdrop.dart';
 import 'widgets/satel_room_sensors.dart';
 import 'widgets/scene_strip.dart';

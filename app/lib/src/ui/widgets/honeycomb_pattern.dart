@@ -47,47 +47,6 @@ class HoneycombPattern extends StatelessWidget {
   }
 }
 
-/// Sticky header fill. Same canvas as the top of [LuxeBackdrop] so the bar
-/// does not read as a darker strip over Zonwering, kamers, etc.
-class StickyHeaderSurface extends StatelessWidget {
-  const StickyHeaderSurface({
-    super.key,
-    required this.child,
-    this.height,
-    this.boxShadow,
-  });
-
-  final Widget child;
-  final double? height;
-  final List<BoxShadow>? boxShadow;
-
-  Color _canvasColor(BuildContext context) {
-    final useDark = Theme.of(context).brightness == Brightness.dark;
-    final p = Theme.of(context).extension<LuxePalette>() ??
-        (useDark ? LuxePalette.dark : LuxePalette.light);
-    // Same wash as the top of [LuxeBackdrop]. Mid [cream] was darker and
-    // read as a separate bar (Zonwering, kamers, …).
-    if (useDark) return p.cream;
-    return context.isPhone ? LuxePalette.phoneCreamLight : p.creamLight;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        height: height,
-        clipBehavior: Clip.hardEdge,
-        decoration: BoxDecoration(
-          color: _canvasColor(context),
-          boxShadow: boxShadow,
-        ),
-        child: child,
-      ),
-    );
-  }
-}
-
 class _HoneycombPainter extends CustomPainter {
   _HoneycombPainter({required this.color, required this.hexSize});
 

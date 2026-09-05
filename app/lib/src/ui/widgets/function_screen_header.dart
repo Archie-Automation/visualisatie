@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../theme.dart';
 import '../responsive.dart';
 import 'back_pill.dart';
-import 'honeycomb_pattern.dart';
+import 'luxe_backdrop.dart';
 
 /// Pinned-style header for function/category screens — matches [RoomScreen] layout.
 class FunctionScreenHeader extends StatelessWidget {
