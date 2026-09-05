@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,11 +10,13 @@ import '../camera_api.dart';
 import '../intercom/intercom_controller.dart';
 import '../intercom/intercom_sip_providers.dart';
 import '../intercom/intercom_sip_types.dart';
+import '../models.dart';
 import '../theme.dart';
 import 'app_nav.dart';
 import 'responsive.dart';
 import 'widgets/camera_snapshot.dart';
 import 'widgets/confirm_dialog.dart';
+import 'widgets/glass_card.dart';
 import 'widgets/intercom_player.dart';
 import 'widgets/live_video_stage.dart';
 import 'widgets/luxe_backdrop.dart';
@@ -216,6 +217,13 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
               });
             }
             final phone = context.isPhone;
+            final showRelease = i.canRelease &&
+                intercomHasReleaseTarget(
+                    ref.watch(configProvider).value?.deviceById(i.id));
+            final answerColor =
+                Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFF7CB394)
+                    : const Color(0xFF3E6B4F);
             return SafeArea(
               child: Column(
               children: [
@@ -227,7 +235,11 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                       phone ? 12 : 16,
                       8,
                     ),
-                    child: LiveVideoStage(
+                    child: Center(
+                      child: FractionallySizedBox(
+                        widthFactor: 0.75,
+                        heightFactor: 0.75,
+                        child: LiveVideoStage(
                       heroTag: 'intercom-${i.id}',
                       child: waiting
                           ? Stack(
@@ -274,6 +286,8 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                               expand: true,
                             ),
                     ),
+                      ),
+                    ),
                   ),
                 ),
                 if (_releaseFeedback != null)
@@ -297,53 +311,37 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                   ),
                 Padding(
                   padding: EdgeInsets.fromLTRB(28, 18, 28, 28),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(36),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 24),
-                        decoration: BoxDecoration(
-                          color: LuxeColors.surface.withValues(alpha: 0.80),
-                          borderRadius: BorderRadius.circular(36),
-                          border: Border.all(
-                            color: LuxeColors.line,
+                  child: GlassCard(
+                    radius: 36,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 22),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _ActionButton(
+                          icon: Icons.call_end_rounded,
+                          label: 'OPHANGEN',
+                          color: LuxeColors.danger,
+                          shake: ringing,
+                          onTap: () => _cancel(sip),
+                        ),
+                        if (waiting)
+                          _ActionButton(
+                            icon: Icons.call_rounded,
+                            label: 'OPNEMEN',
+                            color: answerColor,
+                            shake: ringing,
+                            onTap: () => _answer(sip),
                           ),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _ActionButton(
-                              icon: Icons.call_end,
-                              label: 'OPHANGEN',
-                              color: LuxeColors.danger,
-                              shake: ringing,
-                              onTap: () => _cancel(sip),
-                            ),
-                            if (waiting)
-                              _ActionButton(
-                                icon: Icons.call,
-                                label: 'OPNEMEN',
-                                color: const Color(0xFF2E7D32),
-                                shake: ringing,
-                                onTap: () => _answer(sip),
-                              )
-                            else
-                              const SizedBox(width: 72),
-                            if (i.canRelease)
-                              _ActionButton(
-                                icon: Icons.lock_open_outlined,
-                                label: 'DEUR OPEN',
-                                color: LuxeColors.brass,
-                                loading: _releasing,
-                                onTap: () => _release(i),
-                              )
-                            else
-                              const SizedBox(width: 72),
-                          ],
-                        ),
-                      ),
+                        if (showRelease)
+                          _ActionButton(
+                            icon: Icons.lock_open_rounded,
+                            label: 'DEUR OPEN',
+                            color: LuxeColors.brass,
+                            loading: _releasing,
+                            onTap: () => _release(i),
+                          ),
+                      ],
                     ),
                   ),
                 ),
@@ -438,6 +436,9 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final onColor = color.computeLuminance() > 0.42
+        ? LuxeColors.creamDeep
+        : const Color(0xFFF7F4EC);
     final circle = GestureDetector(
       onTap: loading ? null : onTap,
       child: Container(
@@ -445,14 +446,12 @@ class _ActionButton extends StatelessWidget {
         height: 72,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: color.withValues(alpha: 0.12),
-          border: Border.all(
-              color: color.withValues(alpha: 0.55), width: 1.4),
+          color: color,
           boxShadow: [
             BoxShadow(
-              color: color.withValues(alpha: 0.35),
-              blurRadius: 24,
-              spreadRadius: -4,
+              color: color.withValues(alpha: 0.34),
+              blurRadius: 16,
+              offset: const Offset(0, 7),
             ),
           ],
         ),
@@ -462,10 +461,12 @@ class _ActionButton extends StatelessWidget {
                   width: 22,
                   height: 22,
                   child: CircularProgressIndicator(
-                      strokeWidth: 2, color: LuxeColors.ink),
+                    strokeWidth: 2,
+                    color: onColor,
+                  ),
                 ),
               )
-            : Icon(icon, color: color, size: 28),
+            : Icon(icon, color: onColor, size: 30),
       ),
     );
     return Column(
@@ -474,12 +475,35 @@ class _ActionButton extends StatelessWidget {
         const SizedBox(height: 12),
         Text(label,
             style: TextStyle(
-              color: color.withValues(alpha: 0.85),
+              color: color,
               fontSize: 10,
               letterSpacing: 2.2,
-              fontWeight: FontWeight.w600,
+              fontWeight: FontWeight.w700,
             )),
       ],
     );
   }
+}
+
+/// True when house.json has a real unlock target (KNX / HTTP / DoorBird).
+bool intercomHasReleaseTarget(Device? device) {
+  if (device == null) return false;
+  final ic = device.raw['intercom'];
+  if (ic is! Map) return false;
+  final mode = '${ic['releaseMode'] ?? ''}'.trim();
+  final ga = ic['release'] is Map
+      ? '${(ic['release'] as Map)['ga'] ?? ''}'.trim()
+      : '';
+  final url = ic['httpRelease'] is Map
+      ? '${(ic['httpRelease'] as Map)['url'] ?? ''}'.trim()
+      : '';
+  final db = ic['doorbird'] is Map ? ic['doorbird'] as Map : null;
+  final doorbirdOk = db != null &&
+      '${db['host'] ?? ''}'.trim().isNotEmpty &&
+      '${db['username'] ?? ''}'.trim().isNotEmpty &&
+      '${db['password'] ?? ''}'.isNotEmpty;
+  if (mode == 'http') return url.isNotEmpty;
+  if (mode == 'doorbird') return doorbirdOk;
+  if (mode == 'knx') return ga.isNotEmpty;
+  return url.isNotEmpty || ga.isNotEmpty || doorbirdOk;
 }
