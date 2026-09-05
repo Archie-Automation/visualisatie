@@ -21,7 +21,7 @@ class CameraSnapshot extends ConsumerStatefulWidget {
     super.key,
     required this.cameraId,
     required this.aspectRatio,
-    this.refresh = const Duration(milliseconds: 1500),
+    this.refresh = const Duration(seconds: 10),
     this.fit = BoxFit.cover,
     this.kind = SnapshotKind.camera,
     this.showLiveBadge = true,

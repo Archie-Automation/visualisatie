@@ -188,46 +188,59 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
                                 textAlign: TextAlign.center,
                                 style: TextStyle(color: LuxeColors.inkSoft)),
                           ),
-                          data: (i) => LiveVideoStage(
-                            child: CameraLivePlayer(
-                              info: i,
-                              fit: BoxFit.cover,
-                              expand: true,
+                          data: (i) => Center(
+                            child: FractionallySizedBox(
+                              widthFactor: kLiveVideoStageFactor,
+                              heightFactor: kLiveVideoStageFactor,
+                              child: LiveVideoStage(
+                                child: CameraLivePlayer(
+                                  info: i,
+                                  fit: BoxFit.cover,
+                                  expand: true,
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                    Container(
-                      padding: EdgeInsets.fromLTRB(8, 12, 8, 20),
-                      decoration: BoxDecoration(
-                        color: LuxeColors.cream.withValues(alpha: 0.85),
-                        border: Border(
-                            top: BorderSide(color: LuxeColors.line)),
-                      ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 28),
                       child: SafeArea(
                         top: false,
-                        child: SizedBox(
-                          height: 118,
-                          child: ListView.separated(
-                            scrollDirection: Axis.horizontal,
-                            padding:
-                                const EdgeInsets.symmetric(horizontal: 8),
-                            itemCount: cameras.length,
-                            separatorBuilder: (_, __) =>
-                                const SizedBox(width: 12),
-                            itemBuilder: (context, index) {
-                              final d = cameras[index];
-                              final active = d.id == selId;
-                              return _ThumbStripItem(
-                                device: d,
-                                selected: active,
-                                onTap: () {
-                                  if (_selectedId == d.id) return;
-                                  setState(() => _selectedId = d.id);
-                                },
-                              );
-                            },
+                        child: Center(
+                          child: FractionallySizedBox(
+                            widthFactor: kLiveVideoStageFactor,
+                            child: LuxeRimBox(
+                              radius: 28,
+                              rimWidth: 1.25,
+                              fillColor: LuxeColors.surface.withValues(
+                                alpha: Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? 0.28
+                                    : 0.18,
+                              ),
+                              rimColor: Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? LuxeColors.line
+                                  : LuxeBorders.solid(
+                                      LuxeColors.ink.withValues(alpha: 0.22),
+                                    ),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 14),
+                              child: SizedBox(
+                                height: 108,
+                                width: double.infinity,
+                                child: _CameraThumbBar(
+                                  cameras: cameras,
+                                  selectedId: selId,
+                                  onSelect: (id) {
+                                    if (_selectedId == id) return;
+                                    setState(() => _selectedId = id);
+                                  },
+                                ),
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -316,6 +329,60 @@ class _FullscreenCameraView extends ConsumerWidget {
   }
 }
 
+class _CameraThumbBar extends StatelessWidget {
+  const _CameraThumbBar({
+    required this.cameras,
+    required this.selectedId,
+    required this.onSelect,
+  });
+
+  final List<Device> cameras;
+  final String selectedId;
+  final ValueChanged<String> onSelect;
+
+  static const _itemW = 120.0;
+  static const _gap = 10.0;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final n = cameras.length;
+        final needed = n * _itemW + (n > 1 ? (n - 1) * _gap : 0);
+        final scroll = needed > constraints.maxWidth + 0.5;
+
+        Widget thumb(Device d) => _ThumbStripItem(
+              device: d,
+              selected: d.id == selectedId,
+              onTap: () => onSelect(d.id),
+            );
+
+        if (!scroll) {
+          return Row(
+            mainAxisAlignment: n <= 2
+                ? MainAxisAlignment.center
+                : MainAxisAlignment.spaceEvenly,
+            children: [
+              for (var i = 0; i < n; i++) ...[
+                if (i > 0 && n <= 2) const SizedBox(width: _gap),
+                thumb(cameras[i]),
+              ],
+            ],
+          );
+        }
+
+        return ListView.separated(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          itemCount: n,
+          separatorBuilder: (_, __) => const SizedBox(width: _gap),
+          itemBuilder: (context, i) => thumb(cameras[i]),
+        );
+      },
+    );
+  }
+}
+
 class _ThumbStripItem extends StatelessWidget {
   const _ThumbStripItem({
     required this.device,
@@ -332,7 +399,7 @@ class _ThumbStripItem extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: SizedBox(
-        width: 132,
+        width: _CameraThumbBar._itemW,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -360,7 +427,8 @@ class _ThumbStripItem extends StatelessWidget {
                     cameraId: device.id,
                     aspectRatio: 16 / 9,
                     fit: BoxFit.cover,
-                    refresh: Duration(milliseconds: 1500),
+                    showLiveBadge: false,
+                    refresh: const Duration(seconds: 10),
                   ),
                 ),
               ),

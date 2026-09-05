@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api.dart';
@@ -16,6 +15,7 @@ import 'app_nav.dart';
 import 'responsive.dart';
 import 'widgets/camera_snapshot.dart';
 import 'widgets/confirm_dialog.dart';
+import 'widgets/function_screen_header.dart';
 import 'widgets/intercom_player.dart';
 import 'widgets/live_video_stage.dart';
 import 'widgets/luxe_backdrop.dart';
@@ -39,12 +39,6 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
   bool _inConversation = false;
   bool _previewFailed = false;
   bool _previewLive = false;
-
-  @override
-  void initState() {
-    super.initState();
-    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.light);
-  }
 
   bool _isRinging({
     required IntercomRing? ring,
@@ -160,42 +154,23 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
           });
         }
 
+        final title = info.maybeWhen(
+          data: (i) => i.name,
+          orElse: () => 'Intercom',
+        );
         return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: info.maybeWhen(
-          data: (i) => Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('INTERCOM',
-                  style: TextStyle(
-                    color: LuxeColors.brassOnCanvas,
-                    fontSize: 10,
-                    letterSpacing: 2.0,
-                    fontWeight: FontWeight.w700,
-                  )),
-              Text(i.name,
-                  style: TextStyle(
-                    color: LuxeColors.ink,
-                    fontWeight: FontWeight.w400,
-                    letterSpacing: 0.5,
-                    fontSize: 18,
-                  )),
-            ],
-          ),
-          orElse: () => SizedBox.shrink(),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          tooltip: 'Sluiten',
-          onPressed: () => _cancel(sip),
-        ),
-      ),
-      body: LuxeBackdrop(
-        child: info.when(
+          backgroundColor: Colors.transparent,
+          body: LuxeBackdrop(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                FunctionScreenHeader(
+                  onBack: () => _cancel(sip),
+                  title: title,
+                  subtitle: 'Intercom',
+                ),
+                Expanded(
+                  child: info.when(
           loading: () => Center(
             child: CircularProgressIndicator(color: LuxeColors.brass),
           ),
@@ -221,16 +196,15 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                     ref.watch(configProvider).value?.deviceById(i.id));
             final hPad = phone ? 12.0 : 16.0;
             final stagePad = EdgeInsets.fromLTRB(hPad, 4, hPad, 8);
-            return SafeArea(
-              child: Column(
+            return Column(
               children: [
                 Expanded(
                   child: Padding(
                     padding: stagePad,
                     child: Center(
                       child: FractionallySizedBox(
-                        widthFactor: 0.75,
-                        heightFactor: 0.75,
+                        widthFactor: kLiveVideoStageFactor,
+                        heightFactor: kLiveVideoStageFactor,
                         child: LiveVideoStage(
                       heroTag: 'intercom-${i.id}',
                       child: waiting
@@ -305,7 +279,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                   padding: EdgeInsets.fromLTRB(hPad, 12, hPad, 28),
                   child: Center(
                     child: FractionallySizedBox(
-                      widthFactor: 0.75,
+                      widthFactor: kLiveVideoStageFactor,
                       child: SizedBox(
                         width: double.infinity,
                         child: LuxeRimBox(
@@ -359,12 +333,14 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                   ),
                 ),
               ],
-            ),
             );
           },
         ),
-      ),
-    );
+                ),
+              ],
+            ),
+          ),
+        );
       },
     );
   }
@@ -423,9 +399,9 @@ class _AlarmShakeState extends State<_AlarmShake>
           x = -math.sin(u * 2 * math.pi);
         }
         return Transform.translate(
-          offset: Offset(x * 7, 0),
+          offset: Offset(x * 4.5, 0),
           child: Transform.rotate(
-            angle: x * 0.12,
+            angle: x * 0.08,
             child: child,
           ),
         );
