@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { HouseConfig, IntercomDevice, VoipEndpoint } from "../types";
 import { astSafe } from "./secrets";
+import { intercomRingTargets } from "./ringTargets";
 
 export function asteriskConfDir(): string {
   return (
@@ -88,6 +89,60 @@ export function groupDial(
 
 export function doorContextName(ic: IntercomDevice): string {
   return `ring-${astSafe(ic.id).replace(/[^a-zA-Z0-9_-]/g, "")}`;
+}
+
+function doorDialBlock(
+  ic: IntercomDevice,
+  groupId: string,
+  dial: { dial: string; timeout: number },
+  exten: string
+): string {
+  const id = astSafe(ic.id);
+  const gid = astSafe(groupId);
+  return `exten => ${exten},1,NoOp(Ring ${id} ${gid})
+ same => n,Set(__INTERCOM_ID=${id})
+ same => n,Set(__RING_GROUP=${gid})
+ same => n,UserEvent(Archie,Kind: ring,IntercomId: ${id},GroupId: ${gid})
+ same => n,Dial(${dial.dial},${dial.timeout},tTU(archie-on-answer))
+ same => n,UserEvent(Archie,Kind: cleared,IntercomId: ${id})
+ same => n,Hangup()
+`;
+}
+
+/** Dialplan for one door station: knop 1 = default group; extra knoppen = group.ext. */
+export function buildDoorRingContext(
+  cfg: HouseConfig,
+  ic: IntercomDevice
+): string | null {
+  const targets = intercomRingTargets(ic);
+  const usable = targets
+    .map((t) => {
+      const dial = groupDial(cfg, t.ringGroupId);
+      const g = (cfg.voip?.groups ?? []).find((x) => x.id === t.ringGroupId);
+      return dial && g ? { t, dial, g } : null;
+    })
+    .filter((x): x is NonNullable<typeof x> => x != null);
+  if (usable.length === 0) return null;
+
+  const ctx = doorContextName(ic);
+  const lines: string[] = [`[${ctx}]`];
+  const primary = usable.find((x) => x.t.button === 1) ?? usable[0];
+  lines.push(doorDialBlock(ic, primary.t.ringGroupId, primary.dial, "s"));
+  const primaryExt = astSafe(primary.g.ext);
+  if (primaryExt) {
+    lines.push(`exten => ${primaryExt},1,Goto(s,1)`);
+  }
+
+  for (const row of usable) {
+    if (row === primary) continue;
+    const ext = astSafe(row.g.ext);
+    if (!ext || ext === primaryExt) continue;
+    lines.push(doorDialBlock(ic, row.t.ringGroupId, row.dial, ext));
+  }
+  // Unknown numbers (DoorBird knop 1 often not the group ext) → knop 1.
+  // Exact extra-button extensions above take priority over this pattern.
+  lines.push(`exten => _X.,1,Goto(s,1)`);
+  return `${lines.join("\n")}\n`;
 }
 
 export function buildAsteriskFiles(cfg: HouseConfig): Record<string, string> {
@@ -226,21 +281,8 @@ ${(cfg.intercoms ?? [])
   const groupExtens: string[] = [];
 
   for (const ic of cfg.intercoms ?? []) {
-    const groupId = ic.intercom.ringGroupId;
-    if (!groupId) continue;
-    const g = groupDial(cfg, groupId);
-    if (!g) continue;
-    const ctx = doorContextName(ic);
-    const id = astSafe(ic.id);
-    ringContexts.push(`[${ctx}]
-exten => _X.,1,Goto(s,1)
-exten => s,1,NoOp(Ring ${id})
- same => n,Set(__INTERCOM_ID=${id})
- same => n,UserEvent(Archie,Kind: ring,IntercomId: ${id})
- same => n,Dial(${g.dial},${g.timeout},tTU(archie-on-answer))
- same => n,UserEvent(Archie,Kind: cleared,IntercomId: ${id})
- same => n,Hangup()
-`);
+    const ctx = buildDoorRingContext(cfg, ic);
+    if (ctx) ringContexts.push(ctx);
   }
 
   for (const g of v.groups ?? []) {

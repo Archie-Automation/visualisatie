@@ -246,6 +246,36 @@ export function validateIntercomSemantics(cfg: HouseConfig): string[] {
     if (gid && !groupIds.has(gid)) {
       issues.push(`Intercom "${name}": belgroep bestaat niet.`);
     }
+    const extra = d.intercom.ringButtons ?? [];
+    const seenGroups = new Set<string>();
+    if (gid) seenGroups.add(gid);
+    extra.forEach((b, i) => {
+      const extraId = b.ringGroupId?.trim() ?? "";
+      const knop = i + 2;
+      if (!extraId) {
+        issues.push(`Intercom "${name}": belknop ${knop} heeft geen belgroep.`);
+        return;
+      }
+      if (!groupIds.has(extraId)) {
+        issues.push(
+          `Intercom "${name}": belknop ${knop} verwijst naar een onbekende belgroep.`
+        );
+        return;
+      }
+      if (seenGroups.has(extraId)) {
+        issues.push(
+          `Intercom "${name}": belknop ${knop} gebruikt dezelfde belgroep als een eerdere knop.`
+        );
+        return;
+      }
+      seenGroups.add(extraId);
+      const g = (cfg.voip?.groups ?? []).find((x) => x.id === extraId);
+      if (!g?.ext?.trim()) {
+        issues.push(
+          `Intercom "${name}": belknop ${knop} heeft een belgroep zonder intern nummer. Sla eerst op.`
+        );
+      }
+    });
     if (effectiveIntercomReleaseMode(d) === "http") {
       if (!d.intercom.httpRelease?.url?.trim()) {
         issues.push(`Intercom "${d.name}" (${d.id}): HTTP-deuropen URL ontbreekt.`);

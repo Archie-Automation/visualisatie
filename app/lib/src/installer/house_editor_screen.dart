@@ -16,16 +16,13 @@ import '../satel_api.dart'
     show
         SatelArmMode,
         SatelPartitionConfig,
-        SatelPartitionInfo,
         SatelPartitionState,
-        SatelStatus,
         SatelZoneMapping,
         satelDeviceTypes,
         satelDeviceTypeLabel,
         satelEnabledProvider,
         satelMainConfigProvider,
         satelServiceConfigProvider,
-        SatelServiceConfig,
         satelStatusProvider,
         saveSatelPartitions,
         saveSatelZones,
@@ -358,31 +355,13 @@ enum _FocusKind {
   user,
   logs,
   satel,
+  floors,
   floor,
   room,
   device,
+  globalDevices,
   /// A device that is NOT placed in any room.
   globalDevice,
-}
-
-/// Payload carried during a device drag in the installer tree.
-class _DeviceDragData {
-  const _DeviceDragData({
-    required this.device,
-    required this.fi,
-    required this.ri,
-    required this.di,
-  });
-  /// The device JSON map being dragged.
-  final Map<String, dynamic> device;
-  /// Source floor index; -1 means the global (room-less) list.
-  final int fi;
-  /// Source room index; -1 for global devices.
-  final int ri;
-  /// Source device index within the source list.
-  final int di;
-
-  bool get isGlobal => fi < 0;
 }
 
 class _Focus {
@@ -452,6 +431,18 @@ class _Focus {
         ri = -1,
         di = -1,
         ci = null;
+  const _Focus.floors()
+      : kind = _FocusKind.floors,
+        fi = -1,
+        ri = -1,
+        di = -1,
+        ci = null;
+  const _Focus.globalDevices()
+      : kind = _FocusKind.globalDevices,
+        fi = -1,
+        ri = -1,
+        di = -1,
+        ci = null;
   const _Focus.user(this.fi)
       : kind = _FocusKind.user,
         ri = -1,
@@ -499,8 +490,6 @@ class HouseEditorScreen extends ConsumerStatefulWidget {
 class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   static const _uuid = Uuid();
   Map<String, dynamic>? _house;
-  /// `${fi}-${ri}` when that room [ExpansionTile] is expanded (edit icon in title).
-  final Set<String> _expandedRoomKeys = {};
   _Focus _sel = const _Focus.project();
   Map<String, dynamic>? _copiedDevice;
   /// Whether the mobile detail panel is in view (vs. the menu list).
@@ -765,7 +754,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       'order': _floors().length,
       'rooms': <Map<String, dynamic>>[],
     });
-    setState(() {});
+    _selectFocus(_Focus.floor(_floors().length - 1));
   }
 
   void _addRoom(int fi) {
@@ -775,7 +764,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       'name': 'Nieuwe ruimte',
       'devices': <Map<String, dynamic>>[],
     });
-    setState(() {});
+    _selectFocus(_Focus.room(fi, rooms.length - 1));
   }
 
   String? _currentToken() {
@@ -1195,80 +1184,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     _selectFocus(_Focus.globalDevice(_globalDeviceList().length - 1));
   }
 
-  /// Moves a dragged device from its current location to a new target.
-  /// Pass [targetFi] = -1 / [targetRi] = -1 to move to the global list.
-  void _moveDevice(_DeviceDragData data,
-      {required int targetFi, required int targetRi}) {
-    // Prevent no-op drops on the same room.
-    if (!data.isGlobal &&
-        targetFi >= 0 &&
-        data.fi == targetFi &&
-        data.ri == targetRi) { return; }
-    if (data.isGlobal && targetFi < 0) { return; }
-
-    setState(() {
-      final deviceCopy = Map<String, dynamic>.from(data.device);
-      // Remove from source.
-      if (data.isGlobal) {
-        _globalDeviceList().removeAt(data.di);
-      } else {
-        _deviceList(data.fi, data.ri).removeAt(data.di);
-      }
-      // Insert in target and update selection.
-      if (targetFi < 0) {
-        _globalDeviceList().add(deviceCopy);
-        _sel = _Focus.globalDevice(_globalDeviceList().length - 1);
-        _mobileShowDetail = false;
-      } else {
-        _deviceList(targetFi, targetRi).add(deviceCopy);
-        _sel = _Focus.device(
-            targetFi, targetRi, _deviceList(targetFi, targetRi).length - 1);
-        _mobileShowDetail = false;
-      }
-    });
-  }
-
-  /// Compact floating card shown while dragging a device.
-  Widget _deviceDragFeedback(String name, String type) {
-    return Material(
-      elevation: 8,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.grey.shade300),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.open_with_outlined, size: 16,
-                color: Colors.grey),
-            const SizedBox(width: 8),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 160),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w600, fontSize: 13)),
-                  Text(type,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 11, color: Colors.grey.shade600)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   List<Map<String, dynamic>> _cameras() {
     final h = _house;
     if (h == null) return [];
@@ -1567,7 +1482,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   icon: Icons.sensor_door_outlined,
                   title: 'Deurstations',
                   subtitle:
-                      'Stap 1: toestel  ·  Stap 2: belgroep  ·  Stap 3: belknop',
+                      'Stap 1: toestel  ·  Stap 2: belgroep  ·  Stap 3: belknoppen',
                 ),
               ),
               if (list.isEmpty)
@@ -1897,9 +1812,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   void _addDevice(int fi, int ri, DeviceTypePick pick) {
     final id = 'dev-${_uuid.v4()}';
     _deviceList(fi, ri).add(_defaultDevice(pick.type, id, bus: pick.bus));
-    setState(() {
-      _sel = _Focus.device(fi, ri, _deviceList(fi, ri).length - 1);
-    });
+    _selectFocus(_Focus.device(fi, ri, _deviceList(fi, ri).length - 1));
   }
 
   Future<void> _copyDevice(Map<String, dynamic> device) async {
@@ -2002,6 +1915,11 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           _deviceList(_sel.fi, _sel.ri),
           onPasted: (i) => _selectFocus(_Focus.device(_sel.fi, _sel.ri, i)),
         );
+      case _FocusKind.globalDevices:
+        await _pasteDeviceIntoList(
+          _globalDeviceList(),
+          onPasted: (i) => _selectFocus(_Focus.globalDevice(i)),
+        );
       case _FocusKind.cameraDetail:
         await _pasteDeviceIntoList(
           _cameras(),
@@ -2045,9 +1963,11 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         _FocusKind.user => 'Gebruiker',
         _FocusKind.logs => 'Logs',
         _FocusKind.satel => 'Satel alarm',
+        _FocusKind.floors => 'Verdiepingen',
         _FocusKind.floor => 'Verdieping',
         _FocusKind.room => 'Kamer',
         _FocusKind.device => 'Apparaat',
+        _FocusKind.globalDevices => 'Apparaten',
         _FocusKind.globalDevice => 'Apparaat',
       };
 
@@ -2187,112 +2107,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     );
   }
 
-  /// Draggable list tile for a single device entry in the tree.
-  Widget _buildDraggableDeviceTile({
-    required BuildContext context,
-    required Map<String, dynamic> device,
-    required int fi,
-    required int ri,
-    required int di,
-    required bool selected,
-    required VoidCallback onTap,
-  }) {
-    final name = (device['name'] as String?) ?? (device['id'] as String? ?? '');
-    final type = (device['type'] as String?) ?? '';
-    final tile = ListTile(
-      dense: true,
-      visualDensity: VisualDensity.compact,
-      contentPadding: const EdgeInsets.only(left: 4, right: 0),
-      leading: Icon(Icons.drag_handle, size: 18,
-          color: selected
-              ? Theme.of(context).colorScheme.primary
-              : Colors.grey.shade400),
-      title: Text(name, overflow: TextOverflow.ellipsis),
-      subtitle: Text(type, style: const TextStyle(fontSize: 11)),
-      selected: selected,
-      onTap: onTap,
-      trailing: PopupMenuButton<String>(
-        icon: Icon(Icons.more_horiz, size: 18, color: Colors.grey.shade500),
-        padding: EdgeInsets.zero,
-        tooltip: 'Kopiëren / plakken',
-        onSelected: (action) {
-          if (action == 'copy') {
-            _copyDevice(device);
-          } else if (action == 'paste') {
-            if (fi < 0) {
-              _pasteDeviceIntoList(
-                _globalDeviceList(),
-                afterIndex: di,
-                onPasted: (i) => _selectFocus(_Focus.globalDevice(i)),
-              );
-            } else {
-              _pasteDeviceIntoList(
-                _deviceList(fi, ri),
-                afterIndex: di,
-                onPasted: (i) => _selectFocus(_Focus.device(fi, ri, i)),
-              );
-            }
-          }
-        },
-        itemBuilder: (ctx) => const [
-          PopupMenuItem(value: 'copy', child: Text('Kopiëren')),
-          PopupMenuItem(value: 'paste', child: Text('Plakken eronder')),
-        ],
-      ),
-    );
-    return LongPressDraggable<_DeviceDragData>(
-      data: _DeviceDragData(device: device, fi: fi, ri: ri, di: di),
-      delay: const Duration(milliseconds: 350),
-      feedback: _deviceDragFeedback(name, type),
-      childWhenDragging: Opacity(opacity: 0.3, child: tile),
-      child: tile,
-    );
-  }
-
-  /// Label widget used inside DragTarget for room/global section headers.
-  Widget _dropTargetLabel(
-    BuildContext context,
-    String label,
-    bool active, {
-    bool bold = false,
-  }) {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 150),
-      padding: const EdgeInsets.symmetric(vertical: 3, horizontal: 4),
-      decoration: active
-          ? BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
-              ),
-            )
-          : null,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Flexible(
-            child: Text(
-              label,
-              overflow: TextOverflow.ellipsis,
-              style: bold
-                  ? const TextStyle(fontWeight: FontWeight.w500)
-                  : null,
-            ),
-          ),
-          if (active) ...[
-            const SizedBox(width: 6),
-            Icon(Icons.arrow_downward_rounded,
-                size: 14,
-                color: Theme.of(context).colorScheme.primary),
-          ],
-        ],
-      ),
-    );
-  }
-
   Widget _buildTree(BuildContext context) {
-    final floors = _floors();
     Widget div() => Divider(height: 1, color: LuxeColors.lineSoft);
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
@@ -2304,15 +2119,31 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               LuxeNavRow(
                 icon: Icons.home_work_outlined,
                 title: 'Project',
-                subtitle: 'Naam, locatie, timezone',
                 selected: _sel.kind == _FocusKind.project,
                 onTap: () => _selectFocus(const _Focus.project()),
               ),
               div(),
               LuxeNavRow(
+                icon: Icons.layers_outlined,
+                title: 'Verdiepingen',
+                selected: _sel.kind == _FocusKind.floors ||
+                    _sel.kind == _FocusKind.floor ||
+                    _sel.kind == _FocusKind.room ||
+                    _sel.kind == _FocusKind.device,
+                onTap: () => _selectFocus(const _Focus.floors()),
+              ),
+              div(),
+              LuxeNavRow(
+                icon: Icons.devices_other_outlined,
+                title: 'Apparaten',
+                selected: _sel.kind == _FocusKind.globalDevices ||
+                    _sel.kind == _FocusKind.globalDevice,
+                onTap: () => _selectFocus(const _Focus.globalDevices()),
+              ),
+              div(),
+              LuxeNavRow(
                 icon: Icons.hub_outlined,
                 title: 'KNX-gateway',
-                subtitle: 'Bus en import',
                 selected: _sel.kind == _FocusKind.knx,
                 trailing: _IntegrationBadge(
                     enabled: (_house?['knx']?['enabled'] as bool?) != false &&
@@ -2323,7 +2154,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               LuxeNavRow(
                 icon: Icons.tune_outlined,
                 title: 'Lutron QSX/QS',
-                subtitle: 'Processor',
                 selected: _sel.kind == _FocusKind.lutron,
                 trailing: _IntegrationBadge(
                     enabled:
@@ -2335,7 +2165,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               LuxeNavRow(
                 icon: Icons.videocam_outlined,
                 title: 'Camera\'s',
-                subtitle: 'Hele huis',
                 selected: _sel.kind == _FocusKind.cameras ||
                     _sel.kind == _FocusKind.cameraDetail,
                 onTap: () => _selectFocus(const _Focus.cameras()),
@@ -2344,7 +2173,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               LuxeNavRow(
                 icon: Icons.speaker_group_outlined,
                 title: 'Audio',
-                subtitle: 'Sonos en Bluesound',
                 selected: _sel.kind == _FocusKind.audio,
                 onTap: () => _selectFocus(const _Focus.audio()),
               ),
@@ -2352,7 +2180,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               LuxeNavRow(
                 icon: Icons.doorbell_outlined,
                 title: 'Intercom',
-                subtitle: 'Deurstation en belgroep',
                 selected: _sel.kind == _FocusKind.intercoms ||
                     _sel.kind == _FocusKind.intercomDetail,
                 trailing: _IntegrationBadge(
@@ -2363,7 +2190,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               LuxeNavRow(
                 icon: Icons.people_outline,
                 title: 'Gebruikers',
-                subtitle: 'Accounts en toegang',
                 selected: _sel.kind == _FocusKind.users ||
                     _sel.kind == _FocusKind.user,
                 onTap: () => _selectFocus(const _Focus.users()),
@@ -2385,212 +2211,317 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  String _countLabel(int n, String one, String many) =>
+      n == 1 ? '1 $one' : '$n $many';
+
+  String _deviceRowSubtitle(Map<String, dynamic> d) {
+    final type = d['type'] as String? ?? '';
+    return _deviceTypeLabels[type] ?? type;
+  }
+
+  Widget _floorsInstallerPanel(BuildContext context) {
+    final floors = _floors();
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 36),
+      children: [
         LuxeListCard(
           padding: EdgeInsets.zero,
-          child: Theme(
-            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-            child: ExpansionTile(
-          key: const ValueKey('global-devices'),
-          leading: const Icon(Icons.devices_other_outlined),
-          title: DragTarget<_DeviceDragData>(
-            onWillAcceptWithDetails: (d) => !d.data.isGlobal,
-            onAcceptWithDetails: (d) =>
-                _moveDevice(d.data, targetFi: -1, targetRi: -1),
-            builder: (ctx, candidates, _) => _dropTargetLabel(
-              context,
-              'Apparaten (geen ruimte)',
-              candidates.isNotEmpty,
-            ),
-          ),
-          subtitle: Text(
-            '${_globalDeviceList().length} apparaten',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
-          initiallyExpanded: true,
-          children: [
-            Padding(
-              padding: const EdgeInsets.only(left: 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var di = 0; di < _globalDeviceList().length; di++)
-                    _buildDraggableDeviceTile(
-                      context: context,
-                      device: _globalDeviceList()[di],
-                      fi: -1, ri: -1, di: di,
-                      selected: _sel.kind == _FocusKind.globalDevice &&
-                          _sel.di == di,
-                      onTap: () => _selectFocus(_Focus.globalDevice(di)),
-                    ),
-                  LuxeAddRow(
-                    label: 'Apparaat toevoegen',
-                    onTap: () async {
-                      final pick = await showPickDeviceTypeSheet(context);
-                      if (pick == null) return;
-                      _addGlobalDevice(pick);
-                    },
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 8, 4),
+                child: LuxeSectionTitle(
+                  icon: Icons.layers_outlined,
+                  title: 'Verdiepingen',
+                  trailing: LuxeInfoIconButton(
+                    title: 'Verdiepingen',
+                    body:
+                        'Eerst een verdieping, daarna kamers, daarna apparaten in de kamer.',
                   ),
-                ],
+                ),
               ),
-            ),
-          ],
-        ),
-          ),
-        ),
-        LuxeListCard(
-          padding: EdgeInsets.zero,
-          child: Theme(
-            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-            child: Column(
-              children: [
-                LuxeAddRow(
-                  label: 'Verdieping toevoegen',
-                  onTap: _addFloor,
-                ),
-        for (var fi = 0; fi < floors.length; fi++)
-          ExpansionTile(
-            key: ValueKey('f-$fi'),
-            title: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
+              if (floors.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
                   child: Text(
-                    floors[fi]['name'] as String? ?? floors[fi]['id'] as String,
+                    'Nog geen verdieping',
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
-                IconButton(
-                  icon: Icon(
-                    Icons.edit_outlined,
-                    size: 22,
-                    color: _sel.kind == _FocusKind.floor && _sel.fi == fi
-                        ? Theme.of(context).colorScheme.primary
-                        : null,
-                  ),
-                  tooltip: 'Verdieping bewerken',
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                  onPressed: () => _selectFocus(_Focus.floor(fi)),
+              for (var i = 0; i < floors.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+                LuxeNavRow(
+                  icon: Icons.layers_outlined,
+                  title: (floors[i]['name'] as String?)?.trim().isNotEmpty == true
+                      ? (floors[i]['name'] as String).trim()
+                      : 'Verdieping',
+                  subtitle: _countLabel(_roomList(i).length, 'kamer', 'kamers'),
+                  selected: _sel.kind == _FocusKind.floor && _sel.fi == i,
+                  onTap: () => _selectFocus(_Focus.floor(i)),
                 ),
               ],
-            ),
-            initiallyExpanded: true,
-            children: [
-              Padding(
-                padding: const EdgeInsets.only(left: 20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (var ri = 0; ri < _roomList(fi).length; ri++)
-                      ExpansionTile(
-                        key: ValueKey('f${fi}r$ri'),
-                        tilePadding: const EdgeInsets.only(left: 4, right: 8),
-                        onExpansionChanged: (expanded) {
-                          final k = '$fi-$ri';
-                          setState(() {
-                            if (expanded) {
-                              _expandedRoomKeys.add(k);
-                            } else {
-                              _expandedRoomKeys.remove(k);
-                            }
-                          });
-                        },
-                        title: DragTarget<_DeviceDragData>(
-                          onWillAcceptWithDetails: (d) =>
-                              d.data.isGlobal ||
-                              d.data.fi != fi ||
-                              d.data.ri != ri,
-                          onAcceptWithDetails: (d) =>
-                              _moveDevice(d.data, targetFi: fi, targetRi: ri),
-                          builder: (ctx, candidates, _) => Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Expanded(
-                                child: _dropTargetLabel(
-                                  context,
-                                  _roomList(fi)[ri]['name'] as String? ??
-                                      _roomList(fi)[ri]['id'] as String,
-                                  candidates.isNotEmpty,
-                                  bold: true,
-                                ),
-                              ),
-                              if (_expandedRoomKeys.contains('$fi-$ri'))
-                                IconButton(
-                                  icon: Icon(
-                                    Icons.edit_outlined,
-                                    size: 20,
-                                    color: _sel.kind == _FocusKind.room &&
-                                            _sel.fi == fi &&
-                                            _sel.ri == ri
-                                        ? Theme.of(context)
-                                            .colorScheme
-                                            .primary
-                                        : null,
-                                  ),
-                                  tooltip: 'Kamer bewerken',
-                                  visualDensity: VisualDensity.compact,
-                                  padding: EdgeInsets.zero,
-                                  constraints: const BoxConstraints(
-                                    minWidth: 32,
-                                    minHeight: 32,
-                                  ),
-                                  onPressed: () => _selectFocus(_Focus.room(fi, ri)),
-                                ),
-                            ],
-                          ),
-                        ),
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(left: 12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                for (var di = 0;
-                                    di < _deviceList(fi, ri).length;
-                                    di++)
-                                  _buildDraggableDeviceTile(
-                                    context: context,
-                                    device: _deviceList(fi, ri)[di],
-                                    fi: fi, ri: ri, di: di,
-                                    selected: _sel.kind ==
-                                            _FocusKind.device &&
-                                        _sel.fi == fi &&
-                                        _sel.ri == ri &&
-                                        _sel.di == di,
-                                    onTap: () => _selectFocus(
-                                          _Focus.device(fi, ri, di),
-                                        ),
-                                  ),
-                                LuxeAddRow(
-                                  label: 'Apparaat toevoegen',
-                                  onTap: () async {
-                                    final pick =
-                                        await showPickDeviceTypeSheet(context);
-                                    if (!context.mounted) return;
-                                    if (pick != null) {
-                                      _addDevice(fi, ri, pick);
-                                    }
-                                  },
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    LuxeAddRow(
-                      label: 'Kamer toevoegen',
-                      onTap: () => _addRoom(fi),
-                    ),
-                  ],
-                ),
+              if (floors.isNotEmpty)
+                Divider(height: 1, color: LuxeColors.lineSoft),
+              LuxeAddRow(
+                label: 'Verdieping toevoegen',
+                onTap: _addFloor,
               ),
             ],
           ),
+        ),
+      ],
+    );
+  }
+
+  Widget _floorInstallerPanel(BuildContext context) {
+    final fi = _sel.fi;
+    final floor = _floors()[fi];
+    final rooms = _roomList(fi);
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 36),
+      children: [
+        LuxeListCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const LuxeSectionTitle(
+                icon: Icons.layers_outlined,
+                title: 'Verdieping',
+                trailing: LuxeInfoIconButton(
+                  title: 'Verdieping',
+                  body: 'Naam zoals in de app.',
+                ),
+              ),
+              _BoundStrField('name', floor, () => setState(() {}),
+                  labelOverride: 'Naam'),
+            ],
+          ),
+        ),
+        LuxeListCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 14, 4),
+                child: LuxeSectionTitle(
+                  icon: Icons.meeting_room_outlined,
+                  title: 'Kamers',
+                ),
+              ),
+              if (rooms.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+                  child: Text(
+                    'Nog geen kamer',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              for (var ri = 0; ri < rooms.length; ri++) ...[
+                if (ri > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+                LuxeNavRow(
+                  icon: Icons.meeting_room_outlined,
+                  title: (rooms[ri]['name'] as String?)?.trim().isNotEmpty == true
+                      ? (rooms[ri]['name'] as String).trim()
+                      : 'Kamer',
+                  subtitle: _countLabel(
+                      _deviceList(fi, ri).length, 'apparaat', 'apparaten'),
+                  selected:
+                      _sel.kind == _FocusKind.room && _sel.fi == fi && _sel.ri == ri,
+                  onTap: () => _selectFocus(_Focus.room(fi, ri)),
+                ),
               ],
+              if (rooms.isNotEmpty)
+                Divider(height: 1, color: LuxeColors.lineSoft),
+              LuxeAddRow(
+                label: 'Kamer toevoegen',
+                onTap: () => _addRoom(fi),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(22, 8, 22, 0),
+          child: OutlinedButton(
+            onPressed: () {
+              _floors().removeAt(fi);
+              setState(() => _sel = const _Focus.floors());
+            },
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red,
+              minimumSize: const Size.fromHeight(52),
+              shape: const StadiumBorder(),
             ),
+            child: const Text('Verdieping verwijderen'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _roomInstallerPanel(BuildContext context) {
+    final fi = _sel.fi;
+    final ri = _sel.ri;
+    final room = _roomList(fi)[ri];
+    final devices = _deviceList(fi, ri);
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 36),
+      children: [
+        LuxeListCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const LuxeSectionTitle(
+                icon: Icons.meeting_room_outlined,
+                title: 'Kamer',
+                trailing: LuxeInfoIconButton(
+                  title: 'Kamer',
+                  body:
+                      'Icoon en coverfoto zijn voor de kamerkaart in de app. '
+                      'Apparaten voeg je hieronder toe.',
+                ),
+              ),
+              _BoundStrField('name', room, () => setState(() {}),
+                  labelOverride: 'Naam'),
+              _BoundStrField('icon', room, () => setState(() {}),
+                  labelOverride: 'Icoon', emptyMeansRemove: true),
+              _BoundStrField('cover', room, () => setState(() {}),
+                  labelOverride: 'Cover', emptyMeansRemove: true),
+            ],
+          ),
+        ),
+        LuxeListCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
+                child: LuxeSectionTitle(
+                  icon: Icons.tune_outlined,
+                  title: 'Apparaten',
+                  trailing: IconButton(
+                    tooltip: 'Apparaat plakken',
+                    icon: const Icon(Icons.content_paste_outlined),
+                    onPressed: () => _pasteDeviceIntoList(
+                      devices,
+                      onPasted: (i) => _selectFocus(_Focus.device(fi, ri, i)),
+                    ),
+                  ),
+                ),
+              ),
+              if (devices.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+                  child: Text(
+                    'Nog geen apparaat',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              for (var di = 0; di < devices.length; di++) ...[
+                if (di > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+                LuxeNavRow(
+                  icon: Icons.tune_outlined,
+                  title: (devices[di]['name'] as String?)?.trim().isNotEmpty ==
+                          true
+                      ? (devices[di]['name'] as String).trim()
+                      : 'Apparaat',
+                  subtitle: _deviceRowSubtitle(devices[di]),
+                  selected: _sel.kind == _FocusKind.device &&
+                      _sel.fi == fi &&
+                      _sel.ri == ri &&
+                      _sel.di == di,
+                  onTap: () => _selectFocus(_Focus.device(fi, ri, di)),
+                ),
+              ],
+              if (devices.isNotEmpty)
+                Divider(height: 1, color: LuxeColors.lineSoft),
+              LuxeAddRow(
+                label: 'Apparaat toevoegen',
+                onTap: () async {
+                  final pick = await showPickDeviceTypeSheet(context);
+                  if (!context.mounted) return;
+                  if (pick != null) _addDevice(fi, ri, pick);
+                },
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(22, 8, 22, 0),
+          child: OutlinedButton(
+            onPressed: () {
+              _roomList(fi).removeAt(ri);
+              setState(() => _sel = _Focus.floor(fi));
+            },
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red,
+              minimumSize: const Size.fromHeight(52),
+              shape: const StadiumBorder(),
+            ),
+            child: const Text('Kamer verwijderen'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _globalDevicesInstallerPanel(BuildContext context) {
+    final list = _globalDeviceList();
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 36),
+      children: [
+        LuxeListCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 8, 4),
+                child: LuxeSectionTitle(
+                  icon: Icons.devices_other_outlined,
+                  title: 'Apparaten',
+                  trailing: LuxeInfoIconButton(
+                    title: 'Apparaten',
+                    body:
+                        'Apparaten die bij het hele huis horen, niet bij één kamer. '
+                        'Bijvoorbeeld WTW of een paneel in de meterkast.',
+                  ),
+                ),
+              ),
+              if (list.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+                  child: Text(
+                    'Nog geen apparaat',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              for (var i = 0; i < list.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+                LuxeNavRow(
+                  icon: Icons.devices_other_outlined,
+                  title: (list[i]['name'] as String?)?.trim().isNotEmpty == true
+                      ? (list[i]['name'] as String).trim()
+                      : 'Apparaat',
+                  subtitle: _deviceRowSubtitle(list[i]),
+                  selected:
+                      _sel.kind == _FocusKind.globalDevice && _sel.di == i,
+                  onTap: () => _selectFocus(_Focus.globalDevice(i)),
+                ),
+              ],
+              if (list.isNotEmpty)
+                Divider(height: 1, color: LuxeColors.lineSoft),
+              LuxeAddRow(
+                label: 'Apparaat toevoegen',
+                onTap: () async {
+                  final pick = await showPickDeviceTypeSheet(context);
+                  if (!context.mounted) return;
+                  if (pick != null) _addGlobalDevice(pick);
+                },
+              ),
+            ],
           ),
         ),
       ],
@@ -2691,41 +2622,14 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         );
       case _FocusKind.satel:
         return const _SatelInstallerPanel();
+      case _FocusKind.floors:
+        return _floorsInstallerPanel(context);
+      case _FocusKind.globalDevices:
+        return _globalDevicesInstallerPanel(context);
       case _FocusKind.floor:
-        return _MapStringForm(
-          title: 'Verdieping',
-          values: _floors()[_sel.fi],
-          keys: const ['id', 'name', 'order', 'icon'],
-          numericKeys: const {'order'},
-          onChanged: () => setState(() {}),
-          onDelete: () {
-            _floors().removeAt(_sel.fi);
-            setState(() => _sel = const _Focus.project());
-          },
-        );
+        return _floorInstallerPanel(context);
       case _FocusKind.room:
-        return _MapStringForm(
-          title: 'Kamer',
-          values: _roomList(_sel.fi)[_sel.ri],
-          keys: const ['id', 'name', 'icon', 'cover'],
-          headerActions: Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: () => _pasteDeviceIntoList(
-                _deviceList(_sel.fi, _sel.ri),
-                onPasted: (i) =>
-                    _selectFocus(_Focus.device(_sel.fi, _sel.ri, i)),
-              ),
-              icon: const Icon(Icons.content_paste_outlined),
-              label: const Text('Apparaat plakken'),
-            ),
-          ),
-          onChanged: () => setState(() {}),
-          onDelete: () {
-            _roomList(_sel.fi).removeAt(_sel.ri);
-            setState(() => _sel = _Focus.floor(_sel.fi));
-          },
-        );
+        return _roomInstallerPanel(context);
       case _FocusKind.device:
         return _DeviceForm(
           device: _deviceList(_sel.fi, _sel.ri)[_sel.di],
@@ -2761,10 +2665,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           ),
           onDelete: () {
             _globalDeviceList().removeAt(_sel.di);
-            setState(() {
-              _sel = const _Focus.project();
-              _mobileShowDetail = false;
-            });
+            setState(() => _sel = const _Focus.globalDevices());
           },
           getInstallerToken: () async {
             if (widget.useCustomerSession) {
@@ -3651,60 +3552,6 @@ class _KnxForm extends StatelessWidget {
               ],
             ),
           ),
-      ],
-    );
-  }
-}
-
-class _MapStringForm extends StatelessWidget {
-  const _MapStringForm({
-    required this.title,
-    required this.values,
-    required this.keys,
-    required this.onChanged,
-    this.numericKeys = const {},
-    this.onDelete,
-    this.headerActions,
-  });
-  final String title;
-  final Map<String, dynamic> values;
-  final List<String> keys;
-  final Set<String> numericKeys;
-  final VoidCallback onChanged;
-  final VoidCallback? onDelete;
-  final Widget? headerActions;
-
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.all(24),
-      children: [
-        if (headerActions != null) ...[
-          headerActions!,
-          const SizedBox(height: 8),
-        ],
-        Text(title, style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 16),
-        for (final k in keys)
-          if (values.containsKey(k) || k == 'icon' || k == 'cover' || k == 'order')
-            _BoundStrField(
-              k,
-              values,
-              onChanged,
-              number: numericKeys.contains(k),
-            ),
-        if (onDelete != null) ...[
-          const SizedBox(height: 24),
-          OutlinedButton(
-            onPressed: onDelete,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.red,
-              minimumSize: const Size.fromHeight(52),
-              shape: const StadiumBorder(),
-            ),
-            child: Text('$title verwijderen'),
-          ),
-        ],
       ],
     );
   }
@@ -6493,19 +6340,19 @@ class _SatelInstallerPanel extends ConsumerWidget {
           children: [
             const Icon(Icons.security_outlined, size: 22),
             const SizedBox(width: 10),
-            Text('Satel alarm',
-                style: Theme.of(context).textTheme.headlineMedium),
+            Expanded(
+              child: Text('Satel alarm',
+                  style: Theme.of(context).textTheme.headlineMedium),
+            ),
+            const LuxeInfoIconButton(
+              title: 'Satel',
+              body:
+                  'Koppeling met een Satel INTEGRA (ETHM-1). '
+                  'Zet aan, vul partities en zones in zoals in DLOADX, daarna de pincode.',
+            ),
           ],
         ),
-        const SizedBox(height: 6),
-        const Text(
-          'Schakel de Satel INTEGRA-koppeling in of uit. '
-          'Als uitgeschakeld worden er geen peilingen of TCP-verbindingen '
-          'naar het alarmpaneel gemaakt. '
-          'Partities, zones en kamerkoppeling stelt u hieronder in.',
-          style: TextStyle(fontSize: 13, height: 1.5),
-        ),
-        const SizedBox(height: 28),
+        const SizedBox(height: 20),
         if (loading)
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
@@ -6520,76 +6367,24 @@ class _SatelInstallerPanel extends ConsumerWidget {
           )
         else
           LuxeSwitchRow(
-            title: 'Integratie inschakelen',
-            subtitle:
-                'Zet aan om alarmpagina, ruimtesensoren en '
-                'inlooptijd-overlay te activeren.',
+            title: 'Integratie',
             value: enabled,
             onChanged: (v) =>
                 ref.read(satelEnabledProvider.notifier).setEnabled(v),
           ),
-        const SizedBox(height: 20),
-        if (enabled) _SatelLiveStatus(),
-        const SizedBox(height: 20),
-        if (enabled) _SatelPartitionsCard(),
-        const SizedBox(height: 20),
-        if (enabled) _SatelZonesCard(),
-        const SizedBox(height: 20),
-        if (enabled) _SatelPinCard(),
-        const SizedBox(height: 20),
-        if (enabled) _SatelEncryptionCard(),
-        const SizedBox(height: 28),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Icon(Icons.info_outline, size: 18),
-                    SizedBox(width: 8),
-                    Text('Configuratie',
-                        style: TextStyle(fontWeight: FontWeight.w600)),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                _cfgRow('Service-adres',
-                    'SATEL_BASE dart-define of http://localhost:8001'),
-                _cfgRow('Zone-indeling', 'satel/config.json op de server'),
-                _cfgRow('Sensortypes',
-                    'magneetcontact ? pir_beweging ? trilcontact ? glasbreuk ? rookmelder ? watermelder ? gasmelder ? paniekknop'),
-                _cfgRow('Polling', '1,5 seconde'),
-                _cfgRow('Arm / disarm',
-                    'POST /satel/arm  ?  POST /satel/disarm'),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _cfgRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 160,
-            child: Text(label,
-                style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: Color(0xFF5E5F66))),
-          ),
-          Expanded(
-            child:
-                Text(value, style: const TextStyle(fontSize: 12, height: 1.4)),
-          ),
+        if (enabled) ...[
+          const SizedBox(height: 20),
+          _SatelLiveStatus(),
+          const SizedBox(height: 20),
+          _SatelPartitionsCard(),
+          const SizedBox(height: 20),
+          _SatelZonesCard(),
+          const SizedBox(height: 20),
+          _SatelPinCard(),
+          const SizedBox(height: 20),
+          _SatelEncryptionCard(),
         ],
-      ),
+      ],
     );
   }
 }
@@ -6680,6 +6475,12 @@ class _SatelPartitionsCardState extends ConsumerState<_SatelPartitionsCard> {
                   child: Text('Partities',
                       style: TextStyle(fontWeight: FontWeight.w600)),
                 ),
+                const LuxeInfoIconButton(
+                  title: 'Partities',
+                  body:
+                      'Nummer zoals in DLOADX (1–32). '
+                      'Inschakelmodi: 0 = volledig, 1–3 = deelinschakeling uit DLOADX.',
+                ),
                 if (list != null)
                   TextButton.icon(
                     icon: const Icon(Icons.add, size: 16),
@@ -6687,12 +6488,6 @@ class _SatelPartitionsCardState extends ConsumerState<_SatelPartitionsCard> {
                     onPressed: list.length < 32 ? _add : null,
                   ),
               ],
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Voer voor elke partitie een nummer (1?32) en naam in. '
-              'Het nummer moet overeenkomen met de INTEGRA-configuratie.',
-              style: TextStyle(fontSize: 12, height: 1.4),
             ),
             const SizedBox(height: 14),
 
@@ -6702,7 +6497,7 @@ class _SatelPartitionsCardState extends ConsumerState<_SatelPartitionsCard> {
                 child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
               )
             else if (list.isEmpty)
-              const Text('Geen partities ? voeg er een toe.',
+              const Text('Geen partities.',
                   style: TextStyle(fontSize: 12, color: Color(0xFF98989F)))
             else
               ...List.generate(list.length, (i) {
@@ -6903,11 +6698,6 @@ class _ArmModesEditor extends StatelessWidget {
             ),
           );
         }),
-        const Text(
-          'Modus 0 = volledig inschakelen. Modi 1-3 zijn door de installateur '
-          'geprogrammeerde (deel)inschakelingen; geef ze een herkenbare naam.',
-          style: TextStyle(fontSize: 11, color: Color(0xFF98989F)),
-        ),
       ],
     );
   }
@@ -7002,8 +6792,14 @@ class _SatelZonesCardState extends ConsumerState<_SatelZonesCard> {
                 const Icon(Icons.sensors_outlined, size: 18),
                 const SizedBox(width: 8),
                 const Expanded(
-                  child: Text('Zones / sensoren',
+                  child: Text('Zones',
                       style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+                const LuxeInfoIconButton(
+                  title: 'Zones',
+                  body:
+                      'Zonenummer zoals in DLOADX (1–128). '
+                      'Type en kamer bepalen hoe de sensor in de app verschijnt.',
                 ),
                 if (list != null)
                   TextButton.icon(
@@ -7013,13 +6809,6 @@ class _SatelZonesCardState extends ConsumerState<_SatelZonesCard> {
                   ),
               ],
             ),
-            const SizedBox(height: 4),
-            const Text(
-              'Koppel elk zonenummer (1–128, zoals geprogrammeerd in de INTEGRA) '
-              'aan een sensortype en een kamer uit de app. De kamerkoppeling '
-              'blijft werken ook als de kamer later wordt hernoemd.',
-              style: TextStyle(fontSize: 12, height: 1.4),
-            ),
             const SizedBox(height: 14),
 
             if (list == null)
@@ -7028,7 +6817,7 @@ class _SatelZonesCardState extends ConsumerState<_SatelZonesCard> {
                 child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
               )
             else if (list.isEmpty)
-              const Text('Nog geen zones — voeg er een toe.',
+              const Text('Geen zones.',
                   style: TextStyle(fontSize: 12, color: Color(0xFF98989F)))
             else
               ...List.generate(list.length, (i) {
@@ -7231,7 +7020,7 @@ class _SatelPinCardState extends ConsumerState<_SatelPinCard> {
       return;
     }
     if (!RegExp(r'^\d{4,8}$').hasMatch(p1)) {
-      setState(() { _error = 'Pincode moet 4?8 cijfers zijn.'; _success = null; });
+      setState(() { _error = 'Pincode moet 4–8 cijfers zijn.'; _success = null; });
       return;
     }
     if (p1 != p2) {
@@ -7261,9 +7050,9 @@ class _SatelPinCardState extends ConsumerState<_SatelPinCard> {
   }
 
   @override
-  Widget build(BuildContext context, ) {
+  Widget build(BuildContext context) {
     final cfgAsync = ref.watch(satelServiceConfigProvider);
-    final hasPin   = cfgAsync.value?.hasPin ?? false;
+    final hasPin = cfgAsync.value?.hasPin ?? false;
 
     return Card(
       child: Padding(
@@ -7275,37 +7064,36 @@ class _SatelPinCardState extends ConsumerState<_SatelPinCard> {
               children: [
                 const Icon(Icons.pin_outlined, size: 18),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('In/uit-schakel pincode',
-                          style: TextStyle(fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 2),
-                      Text(
-                        hasPin
-                            ? 'Pincode is ingesteld (niet leesbaar via API).'
-                            : 'Nog geen pincode ingesteld.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: hasPin
-                              ? const Color(0xFF4CAF50)
-                              : const Color(0xFFD64545),
-                        ),
-                      ),
-                    ],
-                  ),
+                const Expanded(
+                  child: Text('Pincode',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+                const LuxeInfoIconButton(
+                  title: 'Pincode',
+                  body:
+                      '4–8 cijfers. Zelfde code als op het Satel-toestel, '
+                      'voor in- en uitschakelen vanuit de app.',
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 4),
+            Text(
+              hasPin ? 'Ingesteld' : 'Niet ingesteld',
+              style: TextStyle(
+                fontSize: 12,
+                color: hasPin
+                    ? const Color(0xFF4CAF50)
+                    : const Color(0xFFD64545),
+              ),
+            ),
+            const SizedBox(height: 14),
             TextFormField(
               controller: _pin1Ctrl,
               obscureText: true,
               keyboardType: TextInputType.number,
               maxLength: 8,
               decoration: const InputDecoration(
-                labelText: 'Nieuwe pincode (4?8 cijfers)',
+                labelText: 'Pincode',
                 border: OutlineInputBorder(),
                 counterText: '',
               ),
@@ -7317,7 +7105,7 @@ class _SatelPinCardState extends ConsumerState<_SatelPinCard> {
               keyboardType: TextInputType.number,
               maxLength: 8,
               decoration: const InputDecoration(
-                labelText: 'Herhaal pincode',
+                labelText: 'Herhaal',
                 border: OutlineInputBorder(),
                 counterText: '',
               ),
@@ -7414,35 +7202,27 @@ class _SatelEncryptionCardState extends ConsumerState<_SatelEncryptionCard> {
               children: [
                 const Icon(Icons.lock_outline, size: 18),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Encryptie (optioneel)',
-                          style: TextStyle(fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 2),
-                      Text(
-                        hasEnc
-                            ? 'Versleutelde integratie actief.'
-                            : 'Geen encryptie (plain-text verbinding).',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: hasEnc
-                              ? const Color(0xFF4CAF50)
-                              : const Color(0xFF98989F),
-                        ),
-                      ),
-                    ],
-                  ),
+                const Expanded(
+                  child: Text('Encryptie',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+                const LuxeInfoIconButton(
+                  title: 'Encryptie',
+                  body:
+                      'Alleen als in DLOADX versleutelde integratie aan staat. '
+                      'Zelfde sleutel als op het paneel.',
                 ),
               ],
             ),
-            const SizedBox(height: 6),
-            const Text(
-              'Alleen invullen als de installateur in DLOADX "Versleutelde '
-              'integratie" heeft aangezet. Vul dan exact dezelfde '
-              'integratiesleutel in. Laat leeg voor een onversleutelde verbinding.',
-              style: TextStyle(fontSize: 12, height: 1.4),
+            const SizedBox(height: 4),
+            Text(
+              hasEnc ? 'Aan' : 'Uit',
+              style: TextStyle(
+                fontSize: 12,
+                color: hasEnc
+                    ? const Color(0xFF4CAF50)
+                    : const Color(0xFF98989F),
+              ),
             ),
             const SizedBox(height: 14),
             TextFormField(
@@ -7481,8 +7261,7 @@ class _SatelEncryptionCardState extends ConsumerState<_SatelEncryptionCard> {
                           final k = _keyCtrl.text.trim();
                           if (k.isEmpty) {
                             setState(() {
-                              _error = 'Vul een sleutel in (of gebruik '
-                                  '"Encryptie uit").';
+                              _error = 'Vul een sleutel in.';
                               _success = null;
                             });
                             return;
@@ -7515,8 +7294,8 @@ class _SatelLiveStatus extends ConsumerWidget {
     final connected = status.connected;
     final stateLabel = switch (status.worstState) {
       SatelPartitionState.armed => 'Ingeschakeld',
-      SatelPartitionState.exitDelay => 'Uitlooptijd?',
-      SatelPartitionState.entryDelay => 'Inlooptijd!',
+      SatelPartitionState.exitDelay => 'Uitlooptijd',
+      SatelPartitionState.entryDelay => 'Inlooptijd',
       _ => 'Uitgeschakeld',
     };
     final violated = status.allZones.where((z) => z.violated).toList();
@@ -7558,8 +7337,10 @@ class _SatelLiveStatus extends ConsumerWidget {
                 runSpacing: 6,
                 children: violated.map((z) {
                   return Chip(
-                    label: Text('${z.room} ? ${z.name}',
-                        style: const TextStyle(fontSize: 11)),
+                    label: Text(
+                      z.room.trim().isEmpty ? z.name : '${z.room} · ${z.name}',
+                      style: const TextStyle(fontSize: 11),
+                    ),
                     backgroundColor:
                         const Color(0xFFD64545).withValues(alpha: 0.10),
                     side: BorderSide(

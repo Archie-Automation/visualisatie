@@ -6,12 +6,14 @@ import type { KnxBus } from "./knxBus";
 import type { GAState, MediaState } from "./types";
 import { getConfig, getConfigVersion } from "./config";
 import { buildDoorbellIndex } from "./intercoms";
+import type { TokenPayload } from "./auth";
 import { collectIntercoms } from "./cameras";
 import type { IntercomDevice } from "./types";
 import type { MediaManager } from "./media/manager";
 import { hvacSwitchLock, type HvacLockEntry } from "./hvacSwitchLock";
 import { fireplaceVirtual, type FireplaceVirtualEntry } from "./fireplaceVirtual";
 import { captureOnIntercomRing } from "./intercomCaptures";
+import { userIdsInVoipGroup } from "./voip/ringTargets";
 
 const SECRET = process.env.JWT_SECRET ?? "dev-secret-change-me";
 
@@ -35,7 +37,7 @@ type Outgoing =
   | { type: "config_changed"; payload: { version: number } };
 
 export interface WsHub {
-  broadcastIntercomRing(intercomId: string): void;
+  broadcastIntercomRing(intercomId: string, groupId?: string): void;
   broadcastIntercomCleared(intercomId: string): void;
   broadcastConfigChanged(version: number): void;
   close(): Promise<void>;
@@ -63,6 +65,8 @@ export function attachWebSocket(
     broadcastAll({ type: "fireplace.virtual", payload: entry });
   });
 
+  const wsUser = new WeakMap<WebSocket, string>();
+
   wss.on("connection", (ws, req) => {
     const url = new URL(req.url ?? "/ws", "http://localhost");
     const token = url.searchParams.get("token");
@@ -71,7 +75,8 @@ export function attachWebSocket(
       return;
     }
     try {
-      jwt.verify(token, SECRET);
+      const decoded = jwt.verify(token, SECRET) as TokenPayload;
+      if (decoded.sub) wsUser.set(ws, decoded.sub);
     } catch {
       ws.close(4401, "invalid token");
       return;
@@ -126,16 +131,28 @@ export function attachWebSocket(
   bus.on("stateChanged", onBusState);
 
   return {
-    broadcastIntercomRing(intercomId: string) {
+    broadcastIntercomRing(intercomId: string, groupId?: string) {
       const cfg = getConfig();
       // Use collectIntercoms (not buildDoorbellIndex) so intercoms without
       // a KNX doorbell.ga (e.g. DoorBird webhook / SIP) are also found.
       const found = collectIntercoms(cfg).find((i) => i.id === intercomId);
       if (!found) return;
-      broadcastAll({
+      const msg: Outgoing = {
         type: "intercom.ring",
         payload: { intercomId: found.id, name: found.name, ts: Date.now() }
-      });
+      };
+      const gid = groupId?.trim() ?? "";
+      if (!gid) {
+        broadcastAll(msg);
+      } else {
+        const allowed = userIdsInVoipGroup(cfg, gid);
+        const data = JSON.stringify(msg);
+        for (const client of wss.clients) {
+          if (client.readyState !== client.OPEN) continue;
+          const uid = wsUser.get(client);
+          if (uid && allowed.has(uid)) client.send(data);
+        }
+      }
       captureOnIntercomRing(found.id);
     },
     broadcastIntercomCleared(intercomId: string) {

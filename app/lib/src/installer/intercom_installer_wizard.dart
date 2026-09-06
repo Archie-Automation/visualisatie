@@ -410,6 +410,15 @@ class _BelgroepEditor extends StatelessWidget {
               onChanged();
             },
           ),
+          if (((group['ext'] as String?) ?? '').trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                'Intern nummer ${(group['ext'] as String).trim()} — '
+                'dit nummer zet je op de bijbehorende knop van het deurstation.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
           const LuxeFieldLabel(
             'Doeltoestellen',
             tooltip:
@@ -528,9 +537,9 @@ class IntercomActionMappingCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final o = ensureIntercomMap(device);
     final groups = voipGroupMaps(house);
-    final current = (o['ringGroupId'] as String?)?.trim() ?? '';
-    final valid = groups.any((g) => '${g['id']}' == current) ? current : null;
-    final err = validateRingGroupId(valid, groups);
+    final extra = extraRingButtonMaps(o);
+    final canAdd = groups.length > usedRingGroupIds(o).length &&
+        extra.length < maxExtraRingButtons;
 
     return LuxeListCard(
       child: Column(
@@ -539,45 +548,37 @@ class IntercomActionMappingCard extends StatelessWidget {
           const _StepTitle(
             step: 3,
             icon: Icons.alt_route_outlined,
-            title: 'Koppeling belknop',
-            subtitle: 'Wat er gebeurt als iemand op knop 1 van het deurstation drukt.',
+            title: 'Koppeling belknoppen',
+            subtitle:
+                'Elke knop op het deurstation belt een belgroep via SIP. '
+                'Deur open blijft hetzelfde.',
             trailing: LuxeInfoIconButton(
-              title: 'Belknop',
+              title: 'Belknoppen',
               body:
-                  'Knop 1 is de hoofdbel op het deurstation. '
-                  'Die start de gekozen belgroep: alle aangevinkte toestellen gaan over.',
+                  'Geen KNX-drukker. Op 2N, DoorBird of Axis programmeer je per knop '
+                  'het intern nummer van de belgroep.\n\n'
+                  'Knop 1 is de hoofdbel. Extra knoppen (praktijk, poort) krijgen '
+                  'een andere belgroep; camera en slot blijven van dit toestel.',
             ),
-          ),
-          const LuxeFieldLabel(
-            'Als belknop 1 wordt ingedrukt',
-            tooltip:
-                'De fysieke belknop op het deurstation. Geen KNX-knop — dit is de knop op 2N, DoorBird of Axis.',
           ),
           if (groups.isEmpty)
             Text(
               'Maak eerst een belgroep in stap 2.',
               style: Theme.of(context).textTheme.bodySmall,
             )
-          else
-            DropdownButtonFormField<String>(
-              key: ValueKey('ring-${device['id']}-$valid'),
-              initialValue: valid,
-              decoration: luxeFilledDecoration(
-                hint: 'Kies een belgroep',
-                helper: err,
-              ),
-              items: [
-                for (final g in groups)
-                  DropdownMenuItem(
-                    value: '${g['id']}',
-                    child: Text(
-                      ((g['name'] as String?)?.trim().isNotEmpty == true)
-                          ? (g['name'] as String).trim()
-                          : 'Belgroep',
-                    ),
-                  ),
-              ],
-              onChanged: (v) {
+          else ...[
+            _RingButtonRow(
+              button: 1,
+              house: house,
+              groups: groups,
+              deviceId: '${device['id']}',
+              selectedId: (o['ringGroupId'] as String?)?.trim(),
+              usedElsewhere: {
+                for (final b in extra)
+                  if ((b['ringGroupId'] as String?)?.trim().isNotEmpty == true)
+                    (b['ringGroupId'] as String).trim(),
+              },
+              onSelect: (v) {
                 if (v == null || v.isEmpty) {
                   o.remove('ringGroupId');
                 } else {
@@ -586,21 +587,132 @@ class IntercomActionMappingCard extends StatelessWidget {
                 onChanged();
               },
             ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Icon(Icons.touch_app_outlined, size: 18, color: LuxeColors.inkSoft),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Belknop 1  →  Start belgroep',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
+            for (var i = 0; i < extra.length; i++) ...[
+              const SizedBox(height: 16),
+              _RingButtonRow(
+                button: i + 2,
+                house: house,
+                groups: groups,
+                deviceId: '${device['id']}-x$i',
+                selectedId: (extra[i]['ringGroupId'] as String?)?.trim(),
+                usedElsewhere: usedRingGroupIds(o)
+                  ..remove((extra[i]['ringGroupId'] as String?)?.trim() ?? ''),
+                onSelect: (v) {
+                  if (v == null || v.isEmpty) {
+                    extra[i].remove('ringGroupId');
+                  } else {
+                    extra[i]['ringGroupId'] = v;
+                  }
+                  onChanged();
+                },
+                onRemove: () {
+                  removeExtraRingButton(o, i);
+                  onChanged();
+                },
               ),
             ],
-          ),
+            if (canAdd)
+              LuxeAddRow(
+                label: 'Belknop toevoegen',
+                onTap: () {
+                  if (addExtraRingButton(o, groups)) onChanged();
+                },
+              )
+            else if (groups.length <= 1)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Voor knop 2 maak je in stap 2 een tweede belgroep '
+                  '(bijvoorbeeld Praktijk).',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+class _RingButtonRow extends StatelessWidget {
+  const _RingButtonRow({
+    required this.button,
+    required this.house,
+    required this.groups,
+    required this.deviceId,
+    required this.selectedId,
+    required this.usedElsewhere,
+    required this.onSelect,
+    this.onRemove,
+  });
+
+  final int button;
+  final Map<String, dynamic> house;
+  final List<Map<String, dynamic>> groups;
+  final String deviceId;
+  final String? selectedId;
+  final Set<String> usedElsewhere;
+  final ValueChanged<String?> onSelect;
+  final VoidCallback? onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    final selectable = [
+      for (final g in groups)
+        if ('${g['id']}' == (selectedId ?? '') ||
+            !usedElsewhere.contains('${g['id']}'))
+          g,
+    ];
+    final valid = selectable.any((g) => '${g['id']}' == (selectedId ?? ''))
+        ? selectedId
+        : null;
+    final group = ringGroupMap(groups, valid);
+    final err = button == 1
+        ? validateRingGroupId(valid, groups)
+        : (valid == null || valid.isEmpty)
+            ? 'Kies een belgroep.'
+            : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: LuxeFieldLabel(
+                'Als belknop $button wordt ingedrukt',
+                tooltip: button == 1
+                    ? 'De fysieke belknop op het deurstation. '
+                        'Geen KNX-knop — dit is de knop op 2N, DoorBird of Axis.'
+                    : 'Programmeer deze knop op het deurstation met het nummer hieronder.',
+              ),
+            ),
+            if (onRemove != null)
+              IconButton(
+                tooltip: 'Belknop $button verwijderen',
+                onPressed: onRemove,
+                icon: const Icon(Icons.delete_outline),
+              ),
+          ],
+        ),
+        DropdownButtonFormField<String>(
+          key: ValueKey('ring-$deviceId-$button-$valid'),
+          initialValue: valid,
+          decoration: luxeFilledDecoration(
+            hint: 'Kies een belgroep',
+            helper: err ?? doorButtonDialHint(house, group),
+            helperMaxLines: 3,
+          ),
+          items: [
+            for (final g in selectable)
+              DropdownMenuItem(
+                value: '${g['id']}',
+                child: Text(groupDisplayName(g)),
+              ),
+          ],
+          onChanged: onSelect,
+        ),
+      ],
     );
   }
 }

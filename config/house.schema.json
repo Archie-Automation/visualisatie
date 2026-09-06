@@ -557,6 +557,17 @@
             "sipExt": { "type": "string" },
             "sipPassword": { "type": "string" },
             "ringGroupId": { "type": "string" },
+            "ringButtons": {
+              "type": "array",
+              "description": "Extra deurstation-knoppen (2+). Elke knop belt een andere belgroep via SIP; deuropen blijft hetzelfde.",
+              "items": {
+                "type": "object",
+                "required": ["ringGroupId"],
+                "properties": {
+                  "ringGroupId": { "type": "string" }
+                }
+              }
+            },
             "dtmfDigit": { "type": "string", "maxLength": 4 },
             "httpRelease": {
               "type": "object",

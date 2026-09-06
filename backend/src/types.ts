@@ -537,6 +537,11 @@ export interface IntercomConfig {
   sipPassword?: string;
   /** Belgroep (`voip.groups[].id`) die overgaat bij belknop 1. */
   ringGroupId?: string;
+  /**
+   * Extra fysieke knoppen op hetzelfde deurstation (knop 2, 3, …).
+   * Elke knop belt het intern nummer van die belgroep; deuropen blijft deze intercom.
+   */
+  ringButtons?: IntercomRingButton[];
   /** Enkele DTMF-toets tijdens het gesprek om het slot te openen. Standaard `#`. */
   dtmfDigit?: string;
   /**
@@ -550,6 +555,11 @@ export interface IntercomConfig {
    * Leeg laten = webhook accepteert elke aanroep (alleen op vertrouwd LAN).
    */
   webhookPasscode?: string;
+}
+
+/** Extra belknop op het deurstation → andere SIP-belgroep, zelfde slot/camera. */
+export interface IntercomRingButton {
+  ringGroupId: string;
 }
 
 export interface IntercomDevice extends DeviceBase {

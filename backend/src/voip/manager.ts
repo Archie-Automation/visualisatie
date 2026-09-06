@@ -8,6 +8,7 @@ import type { WsHub } from "../ws";
 import { AmiClient, type AmiFields } from "./ami";
 import { doorContextName, groupDial, writeAsteriskConfig } from "./asteriskConfig";
 import { normalizeVoip } from "./normalize";
+import { intercomRingTargets } from "./ringTargets";
 import { astSafe } from "./secrets";
 
 let hub: WsHub | null = null;
@@ -67,7 +68,7 @@ export async function testRingGroup(opts: {
 
   lastRingIntercomId = ic.id;
   answeredBroadcastFor = null;
-  hub?.broadcastIntercomRing(ic.id);
+  hub?.broadcastIntercomRing(ic.id, group.id);
 
   if (!cfg.voip?.enabled) {
     return {
@@ -89,9 +90,12 @@ export async function testRingGroup(opts: {
   }
 
   const timeoutSec = Math.max(5, dial.timeout);
-  const ringGroupId = (ic.intercom.ringGroupId ?? "").trim();
-  const useDoorCtx = ringGroupId === group.id;
-  if (!useDoorCtx && !group.ext) {
+  const doorTargets = intercomRingTargets(ic);
+  const onDoor = doorTargets.some((t) => t.ringGroupId === group.id);
+  const defaultGroupId = (ic.intercom.ringGroupId ?? "").trim();
+  const groupExt = astSafe(group.ext);
+  const useDefaultDoor = onDoor && group.id === defaultGroupId;
+  if (!useDefaultDoor && !groupExt) {
     return {
       overlay: true,
       sip: false,
@@ -99,9 +103,11 @@ export async function testRingGroup(opts: {
         "Belgroep heeft nog geen intern nummer. Sla de configuratie eerst op."
     };
   }
-  const channel = useDoorCtx
+  const channel = useDefaultDoor
     ? `Local/s@${doorContextName(ic)}`
-    : `Local/${astSafe(group.ext)}@from-internal`;
+    : onDoor
+      ? `Local/${groupExt}@${doorContextName(ic)}`
+      : `Local/${groupExt}@from-internal`;
   const callerName = ic.name.replace(/[\r\n"]/g, " ").trim() || "Intercom";
   const callerExt = (ic.intercom.sipExt ?? "test").replace(/[<>\r\n]/g, "");
 
@@ -214,7 +220,7 @@ function onAmiEvent(ev: AmiFields): void {
     if (kind === "ring") {
       lastRingIntercomId = id;
       answeredBroadcastFor = null;
-      hub?.broadcastIntercomRing(id);
+      hub?.broadcastIntercomRing(id, ev.GroupId);
     }
     if (kind === "answered") {
       if (answeredBroadcastFor !== id) {

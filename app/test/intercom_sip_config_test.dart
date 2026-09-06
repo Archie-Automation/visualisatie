@@ -48,13 +48,61 @@ void main() {
       expect(house['voip']['enabled'], isTrue);
     });
 
-    test('validateRingGroupId requires a known group', () {
+    test('addExtraRingButton maps knop 2 to an unused group', () {
       final groups = [
-        {'id': 'grp-1', 'name': 'Deurbel belgroep'},
+        {'id': 'grp-1', 'name': 'Woning', 'ext': '900', 'memberIds': <dynamic>[]},
+        {'id': 'grp-2', 'name': 'Praktijk', 'ext': '901', 'memberIds': <dynamic>[]},
       ];
-      expect(validateRingGroupId(null, groups), isNotNull);
-      expect(validateRingGroupId('grp-1', groups), isNull);
-      expect(validateRingGroupId('missing', groups), isNotNull);
+      final o = <String, dynamic>{'ringGroupId': 'grp-1'};
+      expect(addExtraRingButton(o, groups), isTrue);
+      expect(o['ringButtons'], [
+        {'ringGroupId': 'grp-2'},
+      ]);
+      expect(addExtraRingButton(o, groups), isFalse);
+    });
+
+    test('deleteBelgroep clears extra ring buttons', () {
+      final house = <String, dynamic>{
+        'voip': {
+          'enabled': true,
+          'groups': [
+            {'id': 'grp-1', 'name': 'Woning'},
+            {'id': 'grp-2', 'name': 'Praktijk'},
+          ],
+        },
+        'intercoms': [
+          {
+            'id': 'ic-1',
+            'intercom': {
+              'ringGroupId': 'grp-1',
+              'ringButtons': [
+                {'ringGroupId': 'grp-2'},
+              ],
+            },
+          },
+        ],
+      };
+      deleteBelgroep(house, 'grp-2');
+      final o = (house['intercoms'] as List).first['intercom'] as Map;
+      expect(o.containsKey('ringButtons'), isFalse);
+      expect(o['ringGroupId'], 'grp-1');
+    });
+
+    test('extraRingButtonIssues flags a duplicated group', () {
+      final groups = [
+        {'id': 'grp-1', 'name': 'Woning'},
+        {'id': 'grp-2', 'name': 'Praktijk'},
+      ];
+      final issues = extraRingButtonIssues(
+        {
+          'ringGroupId': 'grp-1',
+          'ringButtons': [
+            {'ringGroupId': 'grp-1'},
+          ],
+        },
+        groups,
+      );
+      expect(issues, isNotEmpty);
     });
   });
 
