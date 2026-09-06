@@ -37,6 +37,8 @@ const defaultDtmfDigit = '#';
 const defaultRingTimeoutSec = 30;
 const minRingTimeoutSec = 5;
 const maxRingTimeoutSec = 180;
+/// Knop 1 is `ringGroupId`; dit is het maximum extra knoppen (2…N).
+const maxExtraRingButtons = 5;
 
 final _rtspRe = RegExp(r'^rtsps?://\S+$', caseSensitive: false);
 final _dtmfRe = RegExp(r'^[0-9A-D#*]$', caseSensitive: false);
@@ -89,10 +91,111 @@ void deleteBelgroep(Map<String, dynamic> house, String groupId) {
   for (final ic in raw) {
     if (ic is! Map) continue;
     final o = ic['intercom'];
-    if (o is Map && '${o['ringGroupId']}' == groupId) {
+    if (o is! Map) continue;
+    if ('${o['ringGroupId']}' == groupId) {
       o.remove('ringGroupId');
     }
+    final extra = o['ringButtons'];
+    if (extra is List) {
+      extra.removeWhere(
+        (b) => b is Map && '${b['ringGroupId']}' == groupId,
+      );
+      if (extra.isEmpty) o.remove('ringButtons');
+    }
   }
+}
+
+List<Map<String, dynamic>> extraRingButtonMaps(
+  Map<String, dynamic> intercom, {
+  bool create = false,
+}) {
+  final raw = intercom['ringButtons'];
+  if (raw is List<Map<String, dynamic>>) return raw;
+  if (raw is List) {
+    final out = <Map<String, dynamic>>[
+      for (final b in raw)
+        if (b is Map<String, dynamic>)
+          b
+        else if (b is Map)
+          Map<String, dynamic>.from(b),
+    ];
+    intercom['ringButtons'] = out;
+    return out;
+  }
+  if (!create) return <Map<String, dynamic>>[];
+  final out = <Map<String, dynamic>>[];
+  intercom['ringButtons'] = out;
+  return out;
+}
+
+Set<String> usedRingGroupIds(Map<String, dynamic> intercom) {
+  final used = <String>{};
+  final primary = (intercom['ringGroupId'] as String?)?.trim() ?? '';
+  if (primary.isNotEmpty) used.add(primary);
+  for (final b in extraRingButtonMaps(intercom)) {
+    final id = (b['ringGroupId'] as String?)?.trim() ?? '';
+    if (id.isNotEmpty) used.add(id);
+  }
+  return used;
+}
+
+bool addExtraRingButton(Map<String, dynamic> intercom, List<Map<String, dynamic>> groups) {
+  final extra = extraRingButtonMaps(intercom, create: true);
+  if (extra.length >= maxExtraRingButtons) return false;
+  final used = usedRingGroupIds(intercom);
+  Map<String, dynamic>? next;
+  for (final g in groups) {
+    final id = '${g['id']}'.trim();
+    if (id.isNotEmpty && !used.contains(id)) {
+      next = g;
+      break;
+    }
+  }
+  if (next == null) return false;
+  extra.add({'ringGroupId': '${next['id']}'});
+  return true;
+}
+
+void removeExtraRingButton(Map<String, dynamic> intercom, int index) {
+  final extra = extraRingButtonMaps(intercom);
+  if (index < 0 || index >= extra.length) return;
+  extra.removeAt(index);
+  if (extra.isEmpty) intercom.remove('ringButtons');
+}
+
+String groupDisplayName(Map<String, dynamic> group) {
+  final n = (group['name'] as String?)?.trim() ?? '';
+  return n.isNotEmpty ? n : 'Belgroep';
+}
+
+Map<String, dynamic>? ringGroupMap(
+  List<Map<String, dynamic>> groups,
+  String? id,
+) {
+  final want = id?.trim() ?? '';
+  if (want.isEmpty) return null;
+  for (final g in groups) {
+    if ('${g['id']}' == want) return g;
+  }
+  return null;
+}
+
+/// Number to program on the door station for this belgroep.
+String sipNumberForGroup(Map<String, dynamic> house, Map<String, dynamic> group) {
+  final ext = (group['ext'] as String?)?.trim() ?? '';
+  if (ext.isEmpty) return '';
+  final host = voipSipHost(house);
+  if (host.isEmpty || isLoopbackSipHost(host)) return ext;
+  return '$ext@$host';
+}
+
+String doorButtonDialHint(Map<String, dynamic> house, Map<String, dynamic>? group) {
+  if (group == null) return 'Kies een belgroep.';
+  final num = sipNumberForGroup(house, group);
+  if (num.isEmpty) {
+    return 'Intern nummer volgt na opslaan. Programmeer daarna dit nummer op het deurstation.';
+  }
+  return 'Op het deurstation: bel $num';
 }
 
 int belgroepTimeoutSec(Map<String, dynamic> group) {
@@ -171,6 +274,34 @@ String? validateRingGroupId(
   return null;
 }
 
+List<String> extraRingButtonIssues(
+  Map<String, dynamic> intercom,
+  List<Map<String, dynamic>> groups,
+) {
+  final issues = <String>[];
+  final seen = <String>{};
+  final primary = (intercom['ringGroupId'] as String?)?.trim() ?? '';
+  if (primary.isNotEmpty) seen.add(primary);
+  extraRingButtonMaps(intercom).asMap().forEach((i, b) {
+    final knop = i + 2;
+    final id = (b['ringGroupId'] as String?)?.trim() ?? '';
+    if (id.isEmpty) {
+      issues.add('Belknop $knop: kies een belgroep.');
+      return;
+    }
+    if (!groups.any((g) => '${g['id']}' == id)) {
+      issues.add('Belknop $knop: deze belgroep bestaat niet meer.');
+      return;
+    }
+    if (seen.contains(id)) {
+      issues.add('Belknop $knop: kies een andere belgroep dan de eerdere knoppen.');
+      return;
+    }
+    seen.add(id);
+  });
+  return issues;
+}
+
 List<String> intercomWizardIssues({
   required Map<String, dynamic> device,
   required Map<String, dynamic> house,
@@ -184,5 +315,6 @@ List<String> intercomWizardIssues({
     validateRtspUrl((o['rtsp'] as String?) ?? ''),
     validateDtmfDigit((o['dtmfDigit'] as String?) ?? defaultDtmfDigit),
     validateRingGroupId(o['ringGroupId'] as String?, groups),
+    ...extraRingButtonIssues(o, groups),
   ].whereType<String>().toList();
 }
