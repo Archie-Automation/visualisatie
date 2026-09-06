@@ -504,36 +504,13 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     setState(() {
       _sel = focus;
       if (MediaQuery.sizeOf(context).width < 900) {
-        _mobileShowDetail = switch (focus.kind) {
-          _FocusKind.floors || _FocusKind.globalDevices => false,
-          _ => true,
-        };
+        _mobileShowDetail = true;
       }
     });
   }
 
-  void _showMainNav() {
-    setState(() {
-      _sel = const _Focus.project();
-      _mobileShowDetail = false;
-    });
-  }
-
-  bool get _inFloorsNav =>
-      _sel.kind == _FocusKind.floors ||
-      _sel.kind == _FocusKind.floor ||
-      _sel.kind == _FocusKind.room ||
-      _sel.kind == _FocusKind.device;
-
-  bool get _inGlobalDevicesNav =>
-      _sel.kind == _FocusKind.globalDevices ||
-      _sel.kind == _FocusKind.globalDevice;
-
-  bool get _hasInstallerBack {
-    if (_mobileShowDetail) return true;
-    return _sel.kind == _FocusKind.floors ||
-        _sel.kind == _FocusKind.globalDevices;
-  }
+  bool get _hasInstallerBack =>
+      MediaQuery.sizeOf(context).width < 900 && _mobileShowDetail;
 
   @override
   void initState() {
@@ -1971,8 +1948,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   String get _headerTitle {
     final wide = MediaQuery.sizeOf(context).width >= 900;
     if (!wide && _mobileShowDetail) return _focusTitle(_sel);
-    if (!wide && _inFloorsNav) return 'Verdiepingen';
-    if (!wide && _inGlobalDevicesNav) return 'Apparaten';
     return widget.useCustomerSession
         ? 'Technische configuratie'
         : 'Huisconfiguratie';
@@ -2000,31 +1975,24 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       };
 
   bool _stepBackInInstaller() {
-    if (_mobileShowDetail) {
-      switch (_sel.kind) {
-        case _FocusKind.device:
-          _selectFocus(_Focus.room(_sel.fi, _sel.ri));
-          return true;
-        case _FocusKind.room:
-          _selectFocus(_Focus.floor(_sel.fi));
-          return true;
-        case _FocusKind.floor:
-          _selectFocus(const _Focus.floors());
-          return true;
-        case _FocusKind.globalDevice:
-          _selectFocus(const _Focus.globalDevices());
-          return true;
-        default:
-          setState(() => _mobileShowDetail = false);
-          return true;
-      }
+    if (!_mobileShowDetail) return false;
+    switch (_sel.kind) {
+      case _FocusKind.device:
+        _selectFocus(_Focus.room(_sel.fi, _sel.ri));
+        return true;
+      case _FocusKind.room:
+        _selectFocus(_Focus.floor(_sel.fi));
+        return true;
+      case _FocusKind.floor:
+        _selectFocus(const _Focus.floors());
+        return true;
+      case _FocusKind.globalDevice:
+        _selectFocus(const _Focus.globalDevices());
+        return true;
+      default:
+        setState(() => _mobileShowDetail = false);
+        return true;
     }
-    if (_sel.kind == _FocusKind.floors ||
-        _sel.kind == _FocusKind.globalDevices) {
-      _showMainNav();
-      return true;
-    }
-    return false;
   }
 
   Future<void> _onHeaderBack({required bool wide}) async {
@@ -2160,11 +2128,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     );
   }
 
-  Widget _buildTree(BuildContext context) {
-    if (_inFloorsNav) return _floorsContextTree(context);
-    if (_inGlobalDevicesNav) return _globalDevicesContextTree(context);
-    return _mainNavTree(context);
-  }
+  Widget _buildTree(BuildContext context) => _mainNavTree(context);
 
   Widget _mainNavTree(BuildContext context) {
     Widget div() => Divider(height: 1, color: LuxeColors.lineSoft);
@@ -2287,147 +2251,121 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     return (n != null && n.isNotEmpty) ? n : fallback;
   }
 
-  Widget _menuBackRow() => LuxeNavRow(
-        icon: Icons.arrow_back,
-        title: 'Menu',
-        trailing: const SizedBox.shrink(),
-        onTap: _showMainNav,
-      );
-
-  Widget _floorsContextTree(BuildContext context) {
-    Widget div() => Divider(height: 1, color: LuxeColors.lineSoft);
-    final floors = _floors();
-    final showFloor = _sel.kind == _FocusKind.floor ||
-        _sel.kind == _FocusKind.room ||
-        _sel.kind == _FocusKind.device;
-    final showRoom =
-        _sel.kind == _FocusKind.room || _sel.kind == _FocusKind.device;
-    final fi = _sel.fi;
-    final ri = _sel.ri;
-
-    final path = <Widget>[
-      _menuBackRow(),
-      div(),
-      LuxeNavRow(
-        icon: Icons.layers_outlined,
-        title: 'Verdiepingen',
-        selected: _sel.kind == _FocusKind.floors,
-        onTap: () => _selectFocus(const _Focus.floors()),
+  Widget _floorsPathCard() {
+    final crumbs = <(String, VoidCallback, bool)>[
+      (
+        'Verdiepingen',
+        () => _selectFocus(const _Focus.floors()),
+        _sel.kind == _FocusKind.floors,
       ),
     ];
-    if (showFloor) {
-      path.addAll([
-        div(),
-        LuxeNavRow(
-          icon: Icons.layers_outlined,
-          title: _namedOr(floors[fi], 'Verdieping'),
-          selected: _sel.kind == _FocusKind.floor,
-          onTap: () => _selectFocus(_Focus.floor(fi)),
-        ),
-      ]);
+    if (_sel.fi >= 0 &&
+        (_sel.kind == _FocusKind.floor ||
+            _sel.kind == _FocusKind.room ||
+            _sel.kind == _FocusKind.device)) {
+      crumbs.add((
+        _namedOr(_floors()[_sel.fi], 'Verdieping'),
+        () => _selectFocus(_Focus.floor(_sel.fi)),
+        _sel.kind == _FocusKind.floor,
+      ));
     }
-    if (showRoom) {
-      path.addAll([
-        div(),
-        LuxeNavRow(
-          icon: Icons.meeting_room_outlined,
-          title: _namedOr(_roomList(fi)[ri], 'Kamer'),
-          selected: _sel.kind == _FocusKind.room,
-          onTap: () => _selectFocus(_Focus.room(fi, ri)),
-        ),
-      ]);
+    if (_sel.ri >= 0 &&
+        (_sel.kind == _FocusKind.room || _sel.kind == _FocusKind.device)) {
+      crumbs.add((
+        _namedOr(_roomList(_sel.fi)[_sel.ri], 'Kamer'),
+        () => _selectFocus(_Focus.room(_sel.fi, _sel.ri)),
+        _sel.kind == _FocusKind.room,
+      ));
     }
+    return LuxeListCard(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (var i = 0; i < crumbs.length; i++) ...[
+            if (i > 0)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Icon(
+                  Icons.chevron_right,
+                  size: 18,
+                  color: LuxeColors.inkSoft,
+                ),
+              ),
+            InkWell(
+              onTap: crumbs[i].$3 ? null : crumbs[i].$2,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+                child: Text(
+                  crumbs[i].$1,
+                  style: TextStyle(
+                    fontWeight:
+                        crumbs[i].$3 ? FontWeight.w600 : FontWeight.w400,
+                    color: crumbs[i].$3 ? LuxeColors.ink : LuxeColors.inkSoft,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
-    late final Widget listCard;
-    if (_sel.kind == _FocusKind.floors) {
-      listCard = _navListCard(
-        icon: Icons.layers_outlined,
-        title: 'Verdiepingen',
-        emptyLabel: 'Nog geen verdieping',
-        addLabel: 'Verdieping toevoegen',
-        onAdd: _addFloor,
-        info: const LuxeInfoIconButton(
-          title: 'Verdiepingen',
-          body: 'Tik een verdieping. Kamers en apparaten blijven daarna links zichtbaar.',
-        ),
-        children: [
-          for (var i = 0; i < floors.length; i++)
-            LuxeNavRow(
-              icon: Icons.layers_outlined,
-              title: _namedOr(floors[i], 'Verdieping'),
-              subtitle: _countLabel(_roomList(i).length, 'kamer', 'kamers'),
-              selected: false,
-              onTap: () => _selectFocus(_Focus.floor(i)),
-            ),
-        ],
-      );
-    } else if (_sel.kind == _FocusKind.floor) {
-      final rooms = _roomList(fi);
-      listCard = _navListCard(
-        icon: Icons.meeting_room_outlined,
-        title: 'Kamers',
-        emptyLabel: 'Nog geen kamer',
-        addLabel: 'Kamer toevoegen',
-        onAdd: () => _addRoom(fi),
-        children: [
-          for (var i = 0; i < rooms.length; i++)
-            LuxeNavRow(
-              icon: Icons.meeting_room_outlined,
-              title: _namedOr(rooms[i], 'Kamer'),
-              subtitle: _countLabel(
-                  _deviceList(fi, i).length, 'apparaat', 'apparaten'),
-              selected: false,
-              onTap: () => _selectFocus(_Focus.room(fi, i)),
-            ),
-        ],
-      );
-    } else {
-      final devices = _deviceList(fi, ri);
-      listCard = _navListCard(
-        icon: Icons.tune_outlined,
-        title: 'Apparaten',
-        emptyLabel: 'Nog geen apparaat',
-        addLabel: 'Apparaat toevoegen',
-        onAdd: () async {
-          final pick = await showPickDeviceTypeSheet(context);
-          if (!context.mounted) return;
-          if (pick != null) _addDevice(fi, ri, pick);
-        },
-        trailing: IconButton(
-          tooltip: 'Apparaat plakken',
-          icon: const Icon(Icons.content_paste_outlined),
-          onPressed: () => _pasteDeviceIntoList(
-            devices,
-            onPasted: (i) => _selectFocus(_Focus.device(fi, ri, i)),
-          ),
-        ),
-        children: [
-          for (var i = 0; i < devices.length; i++)
-            LuxeNavRow(
-              icon: Icons.tune_outlined,
-              title: _namedOr(devices[i], 'Apparaat'),
-              subtitle: _deviceRowSubtitle(devices[i]),
-              selected: _sel.kind == _FocusKind.device && _sel.di == i,
-              onTap: () => _selectFocus(_Focus.device(fi, ri, i)),
-            ),
-        ],
-      );
-    }
-
+  Widget _floorsInstallerPanel(BuildContext context) {
+    final floors = _floors();
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
       children: [
         LuxeListCard(
           padding: EdgeInsets.zero,
-          child: Column(children: path),
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 8, 4),
+                child: LuxeSectionTitle(
+                  icon: Icons.layers_outlined,
+                  title: 'Verdiepingen',
+                  trailing: LuxeInfoIconButton(
+                    title: 'Verdiepingen',
+                    body:
+                        'Eerst een verdieping, daarna kamers, daarna apparaten in de kamer.',
+                  ),
+                ),
+              ),
+              if (floors.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+                  child: Text(
+                    'Nog geen verdieping',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              for (var i = 0; i < floors.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+                LuxeNavRow(
+                  icon: Icons.layers_outlined,
+                  title: _namedOr(floors[i], 'Verdieping'),
+                  subtitle:
+                      _countLabel(_roomList(i).length, 'kamer', 'kamers'),
+                  selected: _sel.kind == _FocusKind.floor && _sel.fi == i,
+                  onTap: () => _selectFocus(_Focus.floor(i)),
+                ),
+              ],
+              if (floors.isNotEmpty)
+                Divider(height: 1, color: LuxeColors.lineSoft),
+              LuxeAddRow(
+                label: 'Verdieping toevoegen',
+                onTap: _addFloor,
+              ),
+            ],
+          ),
         ),
-        listCard,
       ],
     );
   }
 
-  Widget _globalDevicesContextTree(BuildContext context) {
-    Widget div() => Divider(height: 1, color: LuxeColors.lineSoft);
+  Widget _globalDevicesInstallerPanel(BuildContext context) {
     final list = _globalDeviceList();
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
@@ -2436,59 +2374,57 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           padding: EdgeInsets.zero,
           child: Column(
             children: [
-              _menuBackRow(),
-              div(),
-              LuxeNavRow(
-                icon: Icons.devices_other_outlined,
-                title: 'Apparaten',
-                selected: _sel.kind == _FocusKind.globalDevices,
-                onTap: () => _selectFocus(const _Focus.globalDevices()),
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 8, 4),
+                child: LuxeSectionTitle(
+                  icon: Icons.devices_other_outlined,
+                  title: 'Apparaten',
+                  trailing: LuxeInfoIconButton(
+                    title: 'Apparaten',
+                    body:
+                        'Apparaten die bij het hele huis horen, niet bij één kamer. '
+                        'Bijvoorbeeld WTW of een paneel in de meterkast.',
+                  ),
+                ),
+              ),
+              if (list.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+                  child: Text(
+                    'Nog geen apparaat',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              for (var i = 0; i < list.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+                LuxeNavRow(
+                  icon: Icons.devices_other_outlined,
+                  title: _namedOr(list[i], 'Apparaat'),
+                  subtitle: _deviceRowSubtitle(list[i]),
+                  selected:
+                      _sel.kind == _FocusKind.globalDevice && _sel.di == i,
+                  onTap: () => _selectFocus(_Focus.globalDevice(i)),
+                ),
+              ],
+              if (list.isNotEmpty)
+                Divider(height: 1, color: LuxeColors.lineSoft),
+              LuxeAddRow(
+                label: 'Apparaat toevoegen',
+                onTap: () async {
+                  final pick = await showPickDeviceTypeSheet(context);
+                  if (!context.mounted) return;
+                  if (pick != null) _addGlobalDevice(pick);
+                },
               ),
             ],
           ),
-        ),
-        _navListCard(
-          icon: Icons.devices_other_outlined,
-          title: 'Niet in een ruimte',
-          emptyLabel: 'Nog geen apparaat',
-          addLabel: 'Apparaat toevoegen',
-          onAdd: () async {
-            final pick = await showPickDeviceTypeSheet(context);
-            if (!context.mounted) return;
-            if (pick != null) _addGlobalDevice(pick);
-          },
-          info: const LuxeInfoIconButton(
-            title: 'Apparaten',
-            body:
-                'Apparaten die bij het hele huis horen, niet bij één kamer. '
-                'Bijvoorbeeld WTW of een paneel in de meterkast.',
-          ),
-          children: [
-            for (var i = 0; i < list.length; i++)
-              LuxeNavRow(
-                icon: Icons.devices_other_outlined,
-                title: _namedOr(list[i], 'Apparaat'),
-                subtitle: _deviceRowSubtitle(list[i]),
-                selected:
-                    _sel.kind == _FocusKind.globalDevice && _sel.di == i,
-                onTap: () => _selectFocus(_Focus.globalDevice(i)),
-              ),
-          ],
         ),
       ],
     );
   }
 
-  Widget _navListCard({
-    required IconData icon,
-    required String title,
-    required String emptyLabel,
-    required String addLabel,
-    required VoidCallback onAdd,
-    required List<Widget> children,
-    Widget? trailing,
-    Widget? info,
-  }) {
+  Widget _roomDevicesCard(int fi, int ri) {
+    final devices = _deviceList(fi, ri);
     return LuxeListCard(
       padding: EdgeInsets.zero,
       child: Column(
@@ -2496,55 +2432,51 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
             child: LuxeSectionTitle(
-              icon: icon,
-              title: title,
-              trailing: trailing ?? info,
+              icon: Icons.tune_outlined,
+              title: 'Apparaten',
+              trailing: IconButton(
+                tooltip: 'Apparaat plakken',
+                icon: const Icon(Icons.content_paste_outlined),
+                onPressed: () => _pasteDeviceIntoList(
+                  devices,
+                  onPasted: (i) => _selectFocus(_Focus.device(fi, ri, i)),
+                ),
+              ),
             ),
           ),
-          if (children.isEmpty)
+          if (devices.isEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(emptyLabel),
+              child: Text(
+                'Nog geen apparaat',
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
-          for (var i = 0; i < children.length; i++) ...[
-            if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
-            children[i],
+          for (var di = 0; di < devices.length; di++) ...[
+            if (di > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+            LuxeNavRow(
+              icon: Icons.tune_outlined,
+              title: _namedOr(devices[di], 'Apparaat'),
+              subtitle: _deviceRowSubtitle(devices[di]),
+              selected: _sel.kind == _FocusKind.device &&
+                  _sel.fi == fi &&
+                  _sel.ri == ri &&
+                  _sel.di == di,
+              onTap: () => _selectFocus(_Focus.device(fi, ri, di)),
+            ),
           ],
-          if (children.isNotEmpty)
+          if (devices.isNotEmpty)
             Divider(height: 1, color: LuxeColors.lineSoft),
-          LuxeAddRow(label: addLabel, onTap: onAdd),
+          LuxeAddRow(
+            label: 'Apparaat toevoegen',
+            onTap: () async {
+              final pick = await showPickDeviceTypeSheet(context);
+              if (!context.mounted) return;
+              if (pick != null) _addDevice(fi, ri, pick);
+            },
+          ),
         ],
       ),
-    );
-  }
-
-  Widget _sectionPickHint({
-    required IconData icon,
-    required String title,
-    required String body,
-    required String infoTitle,
-    required String infoBody,
-  }) {
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 36),
-      children: [
-        LuxeListCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              LuxeSectionTitle(
-                icon: icon,
-                title: title,
-                trailing: LuxeInfoIconButton(title: infoTitle, body: infoBody),
-              ),
-              Text(body),
-            ],
-          ),
-        ),
-      ],
     );
   }
 
@@ -2552,10 +2484,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     final fi = _sel.fi;
     final floor = _floors()[fi];
     final rooms = _roomList(fi);
-    final embedChildList = MediaQuery.sizeOf(context).width < 900;
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
       children: [
+        _floorsPathCard(),
         LuxeListCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2573,48 +2505,46 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             ],
           ),
         ),
-        if (embedChildList)
-          LuxeListCard(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 12, 14, 4),
-                  child: LuxeSectionTitle(
-                    icon: Icons.meeting_room_outlined,
-                    title: 'Kamers',
+        LuxeListCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 14, 4),
+                child: LuxeSectionTitle(
+                  icon: Icons.meeting_room_outlined,
+                  title: 'Kamers',
+                ),
+              ),
+              if (rooms.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+                  child: Text(
+                    'Nog geen kamer',
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
-                if (rooms.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
-                    child: Text(
-                      'Nog geen kamer',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                for (var ri = 0; ri < rooms.length; ri++) ...[
-                  if (ri > 0) Divider(height: 1, color: LuxeColors.lineSoft),
-                  LuxeNavRow(
-                    icon: Icons.meeting_room_outlined,
-                    title: _namedOr(rooms[ri], 'Kamer'),
-                    subtitle: _countLabel(
-                        _deviceList(fi, ri).length, 'apparaat', 'apparaten'),
-                    selected: _sel.kind == _FocusKind.room &&
-                        _sel.fi == fi &&
-                        _sel.ri == ri,
-                    onTap: () => _selectFocus(_Focus.room(fi, ri)),
-                  ),
-                ],
-                if (rooms.isNotEmpty)
-                  Divider(height: 1, color: LuxeColors.lineSoft),
-                LuxeAddRow(
-                  label: 'Kamer toevoegen',
-                  onTap: () => _addRoom(fi),
+              for (var ri = 0; ri < rooms.length; ri++) ...[
+                if (ri > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+                LuxeNavRow(
+                  icon: Icons.meeting_room_outlined,
+                  title: _namedOr(rooms[ri], 'Kamer'),
+                  subtitle: _countLabel(
+                      _deviceList(fi, ri).length, 'apparaat', 'apparaten'),
+                  selected:
+                      _sel.kind == _FocusKind.room && _sel.fi == fi && _sel.ri == ri,
+                  onTap: () => _selectFocus(_Focus.room(fi, ri)),
                 ),
               ],
-            ),
+              if (rooms.isNotEmpty)
+                Divider(height: 1, color: LuxeColors.lineSoft),
+              LuxeAddRow(
+                label: 'Kamer toevoegen',
+                onTap: () => _addRoom(fi),
+              ),
+            ],
           ),
+        ),
         Padding(
           padding: const EdgeInsets.fromLTRB(22, 8, 22, 0),
           child: OutlinedButton(
@@ -2633,16 +2563,14 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       ],
     );
   }
-
   Widget _roomInstallerPanel(BuildContext context) {
     final fi = _sel.fi;
     final ri = _sel.ri;
     final room = _roomList(fi)[ri];
-    final devices = _deviceList(fi, ri);
-    final embedChildList = MediaQuery.sizeOf(context).width < 900;
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
       children: [
+        _floorsPathCard(),
         LuxeListCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2664,60 +2592,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             ],
           ),
         ),
-        if (embedChildList)
-          LuxeListCard(
-            padding: EdgeInsets.zero,
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 8, 4),
-                  child: LuxeSectionTitle(
-                    icon: Icons.tune_outlined,
-                    title: 'Apparaten',
-                    trailing: IconButton(
-                      tooltip: 'Apparaat plakken',
-                      icon: const Icon(Icons.content_paste_outlined),
-                      onPressed: () => _pasteDeviceIntoList(
-                        devices,
-                        onPasted: (i) => _selectFocus(_Focus.device(fi, ri, i)),
-                      ),
-                    ),
-                  ),
-                ),
-                if (devices.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
-                    child: Text(
-                      'Nog geen apparaat',
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                  ),
-                for (var di = 0; di < devices.length; di++) ...[
-                  if (di > 0) Divider(height: 1, color: LuxeColors.lineSoft),
-                  LuxeNavRow(
-                    icon: Icons.tune_outlined,
-                    title: _namedOr(devices[di], 'Apparaat'),
-                    subtitle: _deviceRowSubtitle(devices[di]),
-                    selected: _sel.kind == _FocusKind.device &&
-                        _sel.fi == fi &&
-                        _sel.ri == ri &&
-                        _sel.di == di,
-                    onTap: () => _selectFocus(_Focus.device(fi, ri, di)),
-                  ),
-                ],
-                if (devices.isNotEmpty)
-                  Divider(height: 1, color: LuxeColors.lineSoft),
-                LuxeAddRow(
-                  label: 'Apparaat toevoegen',
-                  onTap: () async {
-                    final pick = await showPickDeviceTypeSheet(context);
-                    if (!context.mounted) return;
-                    if (pick != null) _addDevice(fi, ri, pick);
-                  },
-                ),
-              ],
-            ),
-          ),
+        _roomDevicesCard(fi, ri),
         Padding(
           padding: const EdgeInsets.fromLTRB(22, 8, 22, 0),
           child: OutlinedButton(
@@ -2736,6 +2611,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       ],
     );
   }
+
   Widget _buildDetail(BuildContext context) {
     switch (_sel.kind) {
       case _FocusKind.project:
@@ -2831,24 +2707,9 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       case _FocusKind.satel:
         return const _SatelInstallerPanel();
       case _FocusKind.floors:
-        return _sectionPickHint(
-          icon: Icons.layers_outlined,
-          title: 'Verdiepingen',
-          body: 'Kies links een verdieping.',
-          infoTitle: 'Verdiepingen',
-          infoBody:
-              'Tik een verdieping. Kamers en apparaten blijven daarna links zichtbaar.',
-        );
+        return _floorsInstallerPanel(context);
       case _FocusKind.globalDevices:
-        return _sectionPickHint(
-          icon: Icons.devices_other_outlined,
-          title: 'Apparaten',
-          body: 'Kies links een apparaat. Deze horen bij het huis, niet bij een kamer.',
-          infoTitle: 'Apparaten',
-          infoBody:
-              'Apparaten die bij het hele huis horen, niet bij één kamer. '
-              'Bijvoorbeeld WTW of een paneel in de meterkast.',
-        );
+        return _globalDevicesInstallerPanel(context);
       case _FocusKind.floor:
         return _floorInstallerPanel(context);
       case _FocusKind.room:
@@ -2874,6 +2735,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             }
             return ref.read(installerAuthProvider).token;
           },
+          leading: [
+            _floorsPathCard(),
+            _roomDevicesCard(_sel.fi, _sel.ri),
+          ],
         );
       case _FocusKind.globalDevice:
         return _DeviceForm(
@@ -5087,6 +4952,7 @@ class _DeviceForm extends StatelessWidget {
     this.onCopy,
     this.onPaste,
     this.getInstallerToken,
+    this.leading = const [],
   });
   final Map<String, dynamic> device;
   final Map<String, dynamic> house;
@@ -5095,6 +4961,7 @@ class _DeviceForm extends StatelessWidget {
   final VoidCallback? onCopy;
   final VoidCallback? onPaste;
   final Future<String?> Function()? getInstallerToken;
+  final List<Widget> leading;
 
   @override
   Widget build(BuildContext context) {
@@ -5131,6 +4998,7 @@ class _DeviceForm extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.only(top: 8, bottom: 36),
       children: [
+        ...leading,
         LuxeListCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
