@@ -3144,7 +3144,15 @@ class _MediaKnxInstallerSectionState extends State<MediaKnxInstallerSection> {
   void _pruneKnx() {
     final knx = _knxIfPresent();
     if (knx == null) return;
-    for (final key in ['playPause', 'volumeDim', 'next', 'previous']) {
+    for (final key in [
+      'playPause',
+      'volumeDim',
+      'mute',
+      'previous',
+      'next',
+      'previousPreset',
+      'nextPreset',
+    ]) {
       final v = knx[key];
       if (v is! List) continue;
       final nonempty =
@@ -3292,12 +3300,12 @@ class _MediaKnxInstallerSectionState extends State<MediaKnxInstallerSection> {
           dptHint: 'DPT3.007',
         ),
         _gaGroup(
-          title: 'Volgende',
+          title: 'Mute / unmute',
           body:
-              'DPT 1.001. Elke 1 doet hetzelfde als de knop rechts van play/pauze in de app '
-              '(volgend nummer, of volgende radiozender uit de favorieten). '
-              '0 wordt genegeerd.',
-          keyName: 'next',
+              'DPT 1.001. Drukken (1) wisselt mute. '
+              'Loslaten (0) wordt genegeerd, anders unmutet een drukknop meteen weer. '
+              'Meerdere adressen mogelijk.',
+          keyName: 'mute',
           dptHint: 'DPT1.001',
         ),
         _gaGroup(
@@ -3307,6 +3315,33 @@ class _MediaKnxInstallerSectionState extends State<MediaKnxInstallerSection> {
               '(vorig nummer, of vorige radiozender uit de favorieten). '
               '0 wordt genegeerd.',
           keyName: 'previous',
+          dptHint: 'DPT1.001',
+        ),
+        _gaGroup(
+          title: 'Volgende',
+          body:
+              'DPT 1.001. Elke 1 doet hetzelfde als de knop rechts van play/pauze in de app '
+              '(volgend nummer, of volgende radiozender uit de favorieten). '
+              '0 wordt genegeerd.',
+          keyName: 'next',
+          dptHint: 'DPT1.001',
+        ),
+        _gaGroup(
+          title: 'Vorige preset',
+          body:
+              'DPT 1.001. Elke 1 speelt de vorige Sonos-favoriet of BluOS-preset '
+              '(hele lijst, ook afspeellijsten; springt van de eerste naar de laatste). '
+              '0 wordt genegeerd.',
+          keyName: 'previousPreset',
+          dptHint: 'DPT1.001',
+        ),
+        _gaGroup(
+          title: 'Volgende preset',
+          body:
+              'DPT 1.001. Elke 1 speelt de volgende Sonos-favoriet of BluOS-preset '
+              '(hele lijst, ook afspeellijsten; springt van de laatste naar de eerste). '
+              '0 wordt genegeerd.',
+          keyName: 'nextPreset',
           dptHint: 'DPT1.001',
         ),
         Padding(

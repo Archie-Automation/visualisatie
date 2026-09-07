@@ -186,7 +186,15 @@ export function collectAllGAs(cfg: HouseConfig): GA[] {
     if (d.type === "media_sonos" || d.type === "media_bluesound") {
       const knx = d.knx;
       if (knx) {
-        for (const list of [knx.playPause, knx.volumeDim, knx.next, knx.previous]) {
+        for (const list of [
+          knx.playPause,
+          knx.volumeDim,
+          knx.mute,
+          knx.next,
+          knx.previous,
+          knx.nextPreset,
+          knx.previousPreset
+        ]) {
           for (const ga of list ?? []) add(String(ga).trim() || undefined);
         }
       }
@@ -350,8 +358,11 @@ export function buildGAIndex(cfg: HouseConfig): Map<GA, GARole[]> {
           }
         };
         pushList(knx.playPause, "switch");
+        pushList(knx.mute, "switch");
         pushList(knx.next, "switch");
         pushList(knx.previous, "switch");
+        pushList(knx.nextPreset, "switch");
+        pushList(knx.previousPreset, "switch");
         pushList(knx.volumeDim, "dim_control");
       }
     }

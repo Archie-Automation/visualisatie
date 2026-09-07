@@ -5,7 +5,8 @@ import {
   isRadioPlayback,
   matchPresetIndex,
   radioFavoriteRing,
-  resolveMediaSkip
+  resolveMediaSkip,
+  resolvePresetCycle
 } from "./skipLogic";
 
 const radios: MediaPreset[] = [
@@ -124,5 +125,40 @@ describe("resolveMediaSkip", () => {
     );
     assert.equal(r.kind, "preset");
     if (r.kind === "preset") assert.equal(r.preset.id, "3FM");
+  });
+});
+
+describe("resolvePresetCycle", () => {
+  it("walks the full list including playlists and wraps", () => {
+    const playing = state({
+      currentUri: radios[1]!.uri,
+      source: "Radio",
+      presets: mixed
+    });
+    assert.equal(resolvePresetCycle(playing, 1)?.id, "3FM");
+    assert.equal(resolvePresetCycle(playing, -1)?.id, "NPO 1");
+
+    const last = state({
+      currentUri: mixed[4]!.uri,
+      source: "Spotify",
+      presets: mixed
+    });
+    assert.equal(resolvePresetCycle(last, 1)?.id, "NPO 1");
+    assert.equal(resolvePresetCycle(last, -1)?.id, "Avond");
+  });
+
+  it("starts at first/last when the current item is not in the list", () => {
+    const unknown = state({
+      currentUri: "spotify:track:xyz",
+      source: "Spotify",
+      presets: mixed
+    });
+    assert.equal(resolvePresetCycle(unknown, 1)?.id, "NPO 1");
+    assert.equal(resolvePresetCycle(unknown, -1)?.id, "Hits");
+  });
+
+  it("returns null when there are no presets", () => {
+    assert.equal(resolvePresetCycle(state({ presets: [] }), 1), null);
+    assert.equal(resolvePresetCycle(undefined, 1), null);
   });
 });

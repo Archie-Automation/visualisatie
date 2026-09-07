@@ -491,6 +491,11 @@
               "description": "DPT 3.007. Eén adres voor dim op/neer; 0 = stop. Herhaalt ~5% tot stop.",
               "items": { "type": "string" }
             },
+            "mute": {
+              "type": "array",
+              "description": "DPT 1.001. Opkomende 1 wisselt mute/unmute. 0 (loslaten) wordt genegeerd.",
+              "items": { "type": "string" }
+            },
             "next": {
               "type": "array",
               "description": "DPT 1.001. Opkomende 1. Playlist: volgend nummer. Radio uit favorieten: volgende zender.",
@@ -499,6 +504,16 @@
             "previous": {
               "type": "array",
               "description": "DPT 1.001. Opkomende 1. Playlist: vorig nummer. Radio uit favorieten: vorige zender.",
+              "items": { "type": "string" }
+            },
+            "nextPreset": {
+              "type": "array",
+              "description": "DPT 1.001. Elke 1 speelt de volgende Sonos-favoriet of BluOS-preset (hele lijst, wraparound).",
+              "items": { "type": "string" }
+            },
+            "previousPreset": {
+              "type": "array",
+              "description": "DPT 1.001. Elke 1 speelt de vorige Sonos-favoriet of BluOS-preset (hele lijst, wraparound).",
               "items": { "type": "string" }
             },
             "volumeAffectsGroup": {

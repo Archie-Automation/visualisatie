@@ -27,8 +27,11 @@ type MediaKnxListKey = Exclude<keyof MediaKnxConfig, "volumeAffectsGroup">;
 const LIST_KEYS: Array<{ key: MediaKnxListKey; action: MediaKnxAction }> = [
   { key: "playPause", action: "playPause" },
   { key: "volumeDim", action: "volumeDim" },
+  { key: "mute", action: "mute" },
   { key: "next", action: "next" },
-  { key: "previous", action: "previous" }
+  { key: "previous", action: "previous" },
+  { key: "nextPreset", action: "nextPreset" },
+  { key: "previousPreset", action: "previousPreset" }
 ];
 
 export function mediaKnxOf(d: Device): MediaKnxConfig | undefined {
@@ -47,6 +50,10 @@ export function isRisingEdge(prev: unknown, now: unknown): boolean {
 /** Wall rockers send 1 on press and 0 on release. Toggle on the rising 1; ignore 0. */
 export function playPauseToggleAction(playing: boolean): "play" | "pause" {
   return playing ? "pause" : "play";
+}
+
+export function muteToggleValue(muted: boolean): boolean {
+  return !muted;
 }
 
 export function asGaList(raw: unknown): string[] {
@@ -220,6 +227,28 @@ export function attachMediaKnxBridge(bus: KnxBus, media: MediaManager): { close(
               "media KNX skip failed"
             );
           });
+          break;
+        }
+        case "mute": {
+          if (!isRisingEdge(prev, state.value)) break;
+          const cur = media.get(binding.deviceId);
+          const value = muteToggleValue(cur?.muted === true);
+          void media.command(binding.deviceId, { action: "mute", value }).catch((err) => {
+            logger.warn({ err, id: binding.deviceId, value }, "media KNX mute failed");
+          });
+          break;
+        }
+        case "nextPreset":
+        case "previousPreset": {
+          if (!isBitHigh(state.value)) break;
+          void media
+            .command(binding.deviceId, { action: binding.action })
+            .catch((err) => {
+              logger.warn(
+                { err, id: binding.deviceId, action: binding.action },
+                "media KNX preset cycle failed"
+              );
+            });
           break;
         }
         case "volumeDim": {

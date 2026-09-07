@@ -127,3 +127,22 @@ export function resolveMediaSkip(
   const next = (idx + direction + ring.length) % ring.length;
   return { kind: "preset", preset: ring[next]! };
 }
+
+/**
+ * Cycle the full favourite / preset list (radio and playlists).
+ * Unknown current item: next starts at the first, previous at the last.
+ */
+export function resolvePresetCycle(
+  state: MediaState | undefined,
+  direction: 1 | -1,
+  hintUri?: string
+): MediaPreset | null {
+  const presets = state?.presets ?? [];
+  if (presets.length === 0) return null;
+  const idx = state ? matchPresetIndex(state, presets, hintUri) : -1;
+  if (idx < 0) {
+    return direction === 1 ? presets[0]! : presets[presets.length - 1]!;
+  }
+  const next = (idx + direction + presets.length) % presets.length;
+  return presets[next]!;
+}
