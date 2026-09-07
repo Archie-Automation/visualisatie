@@ -131,6 +131,18 @@ function main() {
   media.start();
   attachMediaKnxBridge(bus, media);
 
+  void bus
+    .connect(collectAllGAs(cfg))
+    .then(() => {
+      logger.info({ host, port }, "KNX-gateway verbonden.");
+    })
+    .catch((err: unknown) => {
+      logger.error(
+        { err, host, port },
+        "KNX-gateway niet bereikbaar; bus blijft offline. API en overige diensten draaien wel."
+      );
+    });
+
   const lutron = new LutronIntegrationManager(bus);
   lutron.rebuild(cfg);
 
@@ -229,18 +241,6 @@ function main() {
     stopSnapshotWarmer();
     stopStreamKeeper();
   });
-
-  void bus
-    .connect(collectAllGAs(cfg))
-    .then(() => {
-      logger.info({ host, port }, "KNX-gateway verbonden.");
-    })
-    .catch((err: unknown) => {
-      logger.error(
-        { err, host, port },
-        "KNX-gateway niet bereikbaar; bus blijft offline. API en overige diensten draaien wel."
-      );
-    });
 
   const reportMs = Number(process.env.STARTUP_CONNECTIVITY_REPORT_MS ?? 5000);
   setTimeout(() => {

@@ -469,7 +469,17 @@ export class KnxBus extends EventEmitter {
     conn: unknown,
     groupAddresses: Iterable<GA>
   ) {
-    for (const ga of groupAddresses) {
+    const idx = this.gaRoles;
+    const ordered = [...groupAddresses].sort((a, b) => {
+      const score = (ga: GA) =>
+        (idx.get(ga) ?? []).some(
+          (r) => r.deviceType === "media_sonos" || r.deviceType === "media_bluesound"
+        )
+          ? 0
+          : 1;
+      return score(a) - score(b);
+    });
+    for (const ga of ordered) {
       const dpt = this.gaToDpt.get(ga) ?? "DPT1.001";
       try {
         const dp = new knx.Datapoint({ ga, dpt }, conn as never);

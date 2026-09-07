@@ -5,11 +5,22 @@ import {
   asGaList,
   buildMediaKnxIndex,
   decodeDimControl,
+  isBitHigh,
   isRisingEdge,
   nextVolume,
   playPauseToggleAction,
   resolveVolumeTarget
 } from "./knxBridge";
+
+describe("isBitHigh", () => {
+  it("treats 1/true as skip-activate, including after an earlier 1", () => {
+    assert.equal(isBitHigh(1), true);
+    assert.equal(isBitHigh(true), true);
+    assert.equal(isBitHigh("1"), true);
+    assert.equal(isBitHigh(0), false);
+    assert.equal(isBitHigh(false), false);
+  });
+});
 
 describe("isRisingEdge", () => {
   it("fires only on 0→1 / false→true", () => {
