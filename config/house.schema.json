@@ -493,12 +493,12 @@
             },
             "next": {
               "type": "array",
-              "description": "DPT 1.001. Alleen opkomende 1.",
+              "description": "DPT 1.001. Opkomende 1. Playlist: volgend nummer. Radio uit favorieten: volgende zender.",
               "items": { "type": "string" }
             },
             "previous": {
               "type": "array",
-              "description": "DPT 1.001. Alleen opkomende 1.",
+              "description": "DPT 1.001. Opkomende 1. Playlist: vorig nummer. Radio uit favorieten: vorige zender.",
               "items": { "type": "string" }
             },
             "volumeAffectsGroup": {

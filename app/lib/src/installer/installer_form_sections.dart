@@ -3294,14 +3294,18 @@ class _MediaKnxInstallerSectionState extends State<MediaKnxInstallerSection> {
         _gaGroup(
           title: 'Volgende',
           body:
-              'DPT 1.001. Alleen de opkomende 1 telt; 0 bij loslaten wordt genegeerd.',
+              'DPT 1.001. Alleen de opkomende 1 telt. '
+              'Bij een playlist: volgend nummer. '
+              'Bij een radiozender uit de favorieten: volgende zender in die lijst.',
           keyName: 'next',
           dptHint: 'DPT1.001',
         ),
         _gaGroup(
           title: 'Terug',
           body:
-              'DPT 1.001. Alleen de opkomende 1 telt; 0 bij loslaten wordt genegeerd.',
+              'DPT 1.001. Alleen de opkomende 1 telt. '
+              'Bij een playlist: vorig nummer. '
+              'Bij een radiozender uit de favorieten: vorige zender in die lijst.',
           keyName: 'previous',
           dptHint: 'DPT1.001',
         ),

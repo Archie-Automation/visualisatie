@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "lint": "eslint \"src/**/*.ts\"",
-    "test": "node --require ts-node/register --test src/media/knxBridge.test.ts"
+    "test": "node --require ts-node/register --test src/media/knxBridge.test.ts src/media/skipLogic.test.ts"
   },
   "dependencies": {
     "ajv": "^8.20.0",
