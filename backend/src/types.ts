@@ -313,9 +313,33 @@ export interface SonosConfig {
   spotifyDeviceName?: string;
 }
 
+/**
+ * Inbound KNX bindings for a media player. The NUC executes these; it never
+ * writes these GAs back (a wall rocker is command-only).
+ */
+export type MediaKnxAction = "playPause" | "volumeDim" | "next" | "previous";
+
+export interface MediaKnxConfig {
+  /** DPT 1.001 — 1 = play, 0 = pause. */
+  playPause?: GA[];
+  /** DPT 3.007 — one GA for dim up/down; 0 = stop. */
+  volumeDim?: GA[];
+  /** DPT 1.001 — rising 1 only. */
+  next?: GA[];
+  /** DPT 1.001 — rising 1 only. */
+  previous?: GA[];
+  /**
+   * When true, volume dim scales every zone in the current group
+   * (same proportional rule as the in-app group slider). Default false:
+   * only this zone moves; grouped neighbours keep their levels.
+   */
+  volumeAffectsGroup?: boolean;
+}
+
 export interface SonosDevice extends DeviceBase {
   type: "media_sonos";
   sonos: SonosConfig;
+  knx?: MediaKnxConfig;
 }
 
 export interface BluesoundConfig {
@@ -330,6 +354,7 @@ export interface BluesoundConfig {
 export interface BluesoundDevice extends DeviceBase {
   type: "media_bluesound";
   bluesound: BluesoundConfig;
+  knx?: MediaKnxConfig;
 }
 
 /** Transport state shared by every media player tile. */

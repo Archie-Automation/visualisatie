@@ -18,6 +18,7 @@ import { writeGo2rtcConfig } from "./cameras";
 import { startCameraSnapshotWarmer, startGo2rtcStreamKeeper } from "./cameraSnapshot";
 import { syncGo2rtcProcessAfterConfigWritten } from "./go2rtcSpawn";
 import { MediaManager } from "./media/manager";
+import { attachMediaKnxBridge } from "./media/knxBridge";
 import { LutronIntegrationManager } from "./lutron/manager";
 import {
   getConnectivitySnapshot,
@@ -128,6 +129,7 @@ function main() {
   const media = new MediaManager();
   media.rebuild(cfg);
   media.start();
+  attachMediaKnxBridge(bus, media);
 
   const lutron = new LutronIntegrationManager(bus);
   lutron.rebuild(cfg);

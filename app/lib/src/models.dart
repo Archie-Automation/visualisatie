@@ -78,7 +78,7 @@ enum ShadingSubtype {
         curtain => 'Gordijn',
         jalousie => 'Jaloezie',
         screen => 'Screen',
-        sheers => 'Sheers / vitrage',
+        sheers => 'Vitrage',
         awning => 'Markies',
       };
 
