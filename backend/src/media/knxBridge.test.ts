@@ -7,6 +7,7 @@ import {
   decodeDimControl,
   isBitHigh,
   isRisingEdge,
+  muteToggleValue,
   nextVolume,
   playPauseToggleAction,
   resolveVolumeTarget
@@ -39,6 +40,13 @@ describe("playPauseToggleAction", () => {
   it("toggles from current transport so a 1-then-0 rocker does not pause immediately", () => {
     assert.equal(playPauseToggleAction(false), "play");
     assert.equal(playPauseToggleAction(true), "pause");
+  });
+});
+
+describe("muteToggleValue", () => {
+  it("inverts mute so a 1-then-0 rocker does not unmute immediately", () => {
+    assert.equal(muteToggleValue(false), true);
+    assert.equal(muteToggleValue(true), false);
   });
 });
 
@@ -140,8 +148,11 @@ describe("buildMediaKnxIndex", () => {
                 sonos("a", {
                   playPause: ["1/1/1", ""],
                   volumeDim: ["1/1/2"],
+                  mute: ["1/1/5"],
                   next: ["1/1/3"],
-                  previous: ["1/1/4"]
+                  previous: ["1/1/4"],
+                  nextPreset: ["1/1/7"],
+                  previousPreset: ["1/1/6"]
                 }),
                 sonos("b", {
                   playPause: ["1/1/1"],
@@ -159,6 +170,9 @@ describe("buildMediaKnxIndex", () => {
     assert.equal(idx.get("1/1/1")?.[0].deviceId, "a");
     assert.equal(idx.get("1/1/1")?.[1].volumeAffectsGroup, true);
     assert.equal(idx.get("1/1/2")?.[0].action, "volumeDim");
+    assert.equal(idx.get("1/1/5")?.[0].action, "mute");
+    assert.equal(idx.get("1/1/6")?.[0].action, "previousPreset");
+    assert.equal(idx.get("1/1/7")?.[0].action, "nextPreset");
     assert.equal(idx.has(""), false);
   });
 

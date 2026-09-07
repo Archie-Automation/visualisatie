@@ -16,7 +16,7 @@ import type {
 } from "../types";
 import { BluesoundDriver } from "./bluesound";
 import { searchMediaDevice } from "./search";
-import { resolveMediaSkip } from "./skipLogic";
+import { resolveMediaSkip, resolvePresetCycle } from "./skipLogic";
 import { SonosDriver } from "./sonos";
 import * as spotify from "./spotify";
 import { SpotifyAuthError } from "./spotify";
@@ -425,6 +425,7 @@ export class MediaManager extends EventEmitter {
     id: string,
     cmd:
       | { action: "play" | "pause" | "stop" | "next" | "previous" }
+      | { action: "nextPreset" | "previousPreset" }
       | { action: "volume"; value: number }
       | { action: "mute"; value: boolean }
       | { action: "preset"; presetId: string; uri?: string }
@@ -468,6 +469,23 @@ export class MediaManager extends EventEmitter {
         } else {
           await drv.previous();
         }
+        break;
+      }
+      case "nextPreset":
+      case "previousPreset": {
+        await this.ensurePresets(id);
+        const dir = cmd.action === "nextPreset" ? 1 : -1;
+        const cur = this.states.get(id);
+        const preset = resolvePresetCycle(cur, dir, this.lastPresetArt.get(id)?.uri);
+        if (!preset) {
+          logger.debug({ id }, "media preset cycle skipped — empty list");
+          break;
+        }
+        this.lastPresetArt.set(id, {
+          uri: preset.uri ?? cur?.currentUri ?? "",
+          art: preset.image ?? this.lastPresetArt.get(id)?.art ?? ""
+        });
+        await drv.playPreset(preset.id, preset.uri);
         break;
       }
       case "volume":

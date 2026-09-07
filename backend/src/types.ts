@@ -317,17 +317,30 @@ export interface SonosConfig {
  * Inbound KNX bindings for a media player. The NUC executes these; it never
  * writes these GAs back (a wall rocker is command-only).
  */
-export type MediaKnxAction = "playPause" | "volumeDim" | "next" | "previous";
+export type MediaKnxAction =
+  | "playPause"
+  | "volumeDim"
+  | "mute"
+  | "next"
+  | "previous"
+  | "nextPreset"
+  | "previousPreset";
 
 export interface MediaKnxConfig {
   /** DPT 1.001 — rising 1 toggles play/pause; 0 (release) is ignored. */
   playPause?: GA[];
   /** DPT 3.007 — one GA for dim up/down; 0 = stop. */
   volumeDim?: GA[];
+  /** DPT 1.001 — rising 1 toggles mute; 0 (release) is ignored. */
+  mute?: GA[];
   /** DPT 1.001 — rising 1. Playlist: next/previous track. Radio favourite: next/previous station. */
   next?: GA[];
   /** DPT 1.001 — rising 1. Playlist: previous track. Radio favourite: previous station. */
   previous?: GA[];
+  /** DPT 1.001 — every bit 1 plays the next Sonos favourite / BluOS preset. */
+  nextPreset?: GA[];
+  /** DPT 1.001 — every bit 1 plays the previous favourite / preset. */
+  previousPreset?: GA[];
   /**
    * When true, volume dim scales every zone in the current group
    * (same proportional rule as the in-app group slider). Default false:
