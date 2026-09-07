@@ -342,6 +342,32 @@ Map<String, dynamic> _ensureChildMap(Map<String, dynamic> parent, String key) {
   return m;
 }
 
+class _CopyInstallerDeviceIntent extends Intent {
+  const _CopyInstallerDeviceIntent();
+}
+
+class _PasteInstallerDeviceIntent extends Intent {
+  const _PasteInstallerDeviceIntent();
+}
+
+/// Device copy/paste shortcuts must not win from a focused text field.
+class _UnlessEditingAction<T extends Intent> extends Action<T> {
+  _UnlessEditingAction(this._invoke);
+  final VoidCallback _invoke;
+
+  @override
+  bool isEnabled(T intent) {
+    final w = FocusManager.instance.primaryFocus?.context?.widget;
+    return w is! EditableText;
+  }
+
+  @override
+  Object? invoke(T intent) {
+    _invoke();
+    return null;
+  }
+}
+
 enum _FocusKind {
   project,
   knx,
@@ -2047,15 +2073,22 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     }
 
     final wide = _isInstallerWide();
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.keyC, control: true):
-            _tryCopyFocusedDevice,
-        const SingleActivator(LogicalKeyboardKey.keyV, control: true): () {
-          _tryPasteFocusedDevice();
-        },
+    return Shortcuts(
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.keyC, control: true):
+            _CopyInstallerDeviceIntent(),
+        SingleActivator(LogicalKeyboardKey.keyV, control: true):
+            _PasteInstallerDeviceIntent(),
       },
-      child: Focus(
+      child: Actions(
+        actions: {
+          _CopyInstallerDeviceIntent:
+              _UnlessEditingAction(_tryCopyFocusedDevice),
+          _PasteInstallerDeviceIntent: _UnlessEditingAction(() {
+            _tryPasteFocusedDevice();
+          }),
+        },
+        child: Focus(
         autofocus: true,
         child: PopScope(
       canPop: wide || !_hasInstallerBack,
@@ -2138,6 +2171,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         ),
       ),
         ),
+      ),
       ),
     );
   }
@@ -2833,15 +2867,11 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             title: 'Kamer',
             trailing: LuxeInfoIconButton(
               title: 'Kamer',
-              body: 'Icoon en coverfoto zijn voor de kamerkaart in de app.',
+              body: 'Naam zoals in de app.',
             ),
           ),
           _BoundStrField('name', room, () => setState(() {}),
               labelOverride: 'Naam'),
-          _BoundStrField('icon', room, () => setState(() {}),
-              labelOverride: 'Icoon', emptyMeansRemove: true),
-          _BoundStrField('cover', room, () => setState(() {}),
-              labelOverride: 'Cover', emptyMeansRemove: true),
         ],
       ),
     );
@@ -4018,8 +4048,12 @@ class _BoundStrFieldState extends State<_BoundStrField> {
   @override
   void didUpdateWidget(_BoundStrField old) {
     super.didUpdateWidget(old);
-    if (old.map[widget.keyName] != widget.map[widget.keyName]) {
-      _c.text = _initialText();
+    final next = _initialText();
+    if (_c.text != next) {
+      _c.value = TextEditingValue(
+        text: next,
+        selection: TextSelection.collapsed(offset: next.length),
+      );
     }
   }
 
@@ -4285,13 +4319,20 @@ class _ShadingSubtypeSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Type zonwering (icoon)',
-              style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 4),
-          Text(
-            'Bepaalt het icoon, de ondertitel en de bedieningsstijl '
-            '(open/dicht vs. omhoog/omlaag) in de klant-app.',
-            style: Theme.of(context).textTheme.bodySmall,
+          Row(
+            children: [
+              Expanded(
+                child: Text('Type zonwering',
+                    style: Theme.of(context).textTheme.titleSmall),
+              ),
+              const LuxeInfoIconButton(
+                title: 'Type zonwering',
+                body:
+                    'Bepaalt het icoon en de bediening in de app: '
+                    'open/dicht (gordijn, vitrage) of omhoog/omlaag '
+                    '(jaloezie, rolluik, screen).',
+              ),
+            ],
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -4428,12 +4469,19 @@ class _ShadingUiSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 6),
-          Text(
-            'Laat leeg voor standaard (alles wat de GA-set toelaat). '
-            'Lamellen-stap: ?5 % op slat-GA.',
-            style: Theme.of(context).textTheme.bodySmall,
+          Row(
+            children: [
+              Expanded(
+                child: Text(title, style: Theme.of(context).textTheme.titleSmall),
+              ),
+              const LuxeInfoIconButton(
+                title: 'Zichtbare bediening',
+                body:
+                    'Kies welke knoppen en sliders in de app staan. '
+                    'Zonder eigen keuze toont de app wat de groepadressen toelaten. '
+                    'Lamellen stap zet het lamellen-adres telkens 5 procent bij of af.',
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           if (hasPos)
@@ -4482,7 +4530,7 @@ class _ShadingUiSection extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: TextButton(
               onPressed: _clearUi,
-              child: const Text('Herstel standaard (wis shadingUi)'),
+              child: const Text('Herstel standaardweergave'),
             ),
           ),
         ],
@@ -5418,8 +5466,13 @@ class _DeviceForm extends StatelessWidget {
                 if (getInstallerToken != null)
                   _SonosProbeCard(
                       device: device, getToken: getInstallerToken!),
+                MediaKnxInstallerSection(
+                  key: ValueKey('${device['id']}-media-knx'),
+                  device: device,
+                  onChanged: onChanged,
+                ),
               ],
-              if (type == 'media_bluesound')
+              if (type == 'media_bluesound') ...[
                 _NestedStringFields(
                   label: 'Bluesound',
                   jsonKey: 'bluesound',
@@ -5428,6 +5481,12 @@ class _DeviceForm extends StatelessWidget {
                   intFields: const {'port'},
                   onChanged: onChanged,
                 ),
+                MediaKnxInstallerSection(
+                  key: ValueKey('${device['id']}-media-knx'),
+                  device: device,
+                  onChanged: onChanged,
+                ),
+              ],
               if (type == 'camera')
                 _CameraInstallerSection(
                     device: device, onChanged: onChanged),
@@ -5577,7 +5636,7 @@ String _deviceConfigSubtitle(String type) => switch (type) {
       'universal' || 'wtw' || 'melding' =>
         'Zelfde opbouw: label, groepadres, DPT/waarde — met zoeken in de catalogus.',
       'media_sonos' || 'media_bluesound' =>
-        'Host en poort van deze speler in het netwerk.',
+        'Host en poort, plus optioneel KNX-drukknoppen voor play, volume en skip.',
       'camera' =>
         'Alleen de stream-URL is nodig — dezelfde link als in VLC.',
       'intercom' =>
@@ -6319,8 +6378,6 @@ class _LightLikeGaSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final ga = _gaMap();
     final fields = device['type'] == 'light_dimmer' ? _dimmerFields : _switchFields;
-    final known = {for (final f in fields) f.$1};
-    final extra = ga.keys.where((k) => !known.contains(k)).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -6335,53 +6392,9 @@ class _LightLikeGaSection extends StatelessWidget {
             gaSearch: true,
             gaDptHint: _gaDptHint(fieldKey),
           ),
-        for (final k in extra)
-          _BoundStrField(
-            k,
-            ga,
-            onChanged,
-            key: ValueKey('ga-${device['id']}-$k'),
-            gaSearch: true,
-            gaDptHint: _gaDptHint(k),
-            emptyMeansRemove: true,
-          ),
-        LuxeAddRow(
-          label: 'Extra GA-regel',
-          onTap: () async {
-            final role = await _promptInstallerText(context, 'Rol (bv. switch)');
-            if (!context.mounted) return;
-            final addr = await _promptInstallerText(context, 'GA (x/y/z)');
-            if (!context.mounted) return;
-            if (role != null &&
-                role.isNotEmpty &&
-                addr != null &&
-                addr.isNotEmpty) {
-              ga[role] = addr;
-              onChanged();
-            }
-          },
-        ),
       ],
     );
   }
-}
-
-Future<String?> _promptInstallerText(BuildContext context, String label) async {
-  final c = TextEditingController();
-  return showDialog<String>(
-    context: context,
-    builder: (ctx) => AlertDialog(
-      title: Text(label),
-      content: TextField(controller: c, autofocus: true),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annuleer')),
-        FilledButton(
-          onPressed: () => Navigator.pop(ctx, c.text.trim()),
-          child: const Text('OK'),
-        ),
-      ],
-    ),
-  );
 }
 
 class _NestedStringFields extends StatelessWidget {

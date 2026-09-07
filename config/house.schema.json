@@ -477,6 +477,37 @@
             }
           }
         },
+        "knx": {
+          "type": "object",
+          "description": "Optionele KNX-drukknoppen voor media_sonos / media_bluesound. De NUC voert uit; deze adressen worden niet teruggeschreven.",
+          "properties": {
+            "playPause": {
+              "type": "array",
+              "description": "DPT 1.001. 1 = play, 0 = pauze.",
+              "items": { "type": "string" }
+            },
+            "volumeDim": {
+              "type": "array",
+              "description": "DPT 3.007. Eén adres voor dim op/neer; 0 = stop. Herhaalt ~5% tot stop.",
+              "items": { "type": "string" }
+            },
+            "next": {
+              "type": "array",
+              "description": "DPT 1.001. Alleen opkomende 1.",
+              "items": { "type": "string" }
+            },
+            "previous": {
+              "type": "array",
+              "description": "DPT 1.001. Alleen opkomende 1.",
+              "items": { "type": "string" }
+            },
+            "volumeAffectsGroup": {
+              "type": "boolean",
+              "default": false,
+              "description": "true: volume dim schaalt de hele groep (zoals de groeps-slider). false: alleen deze zone."
+            }
+          }
+        },
         "camera": {
           "type": "object",
           "required": ["rtsp"],

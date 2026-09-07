@@ -183,6 +183,14 @@ export function collectAllGAs(cfg: HouseConfig): GA[] {
         add(item.ga);
       }
     }
+    if (d.type === "media_sonos" || d.type === "media_bluesound") {
+      const knx = d.knx;
+      if (knx) {
+        for (const list of [knx.playPause, knx.volumeDim, knx.next, knx.previous]) {
+          for (const ga of list ?? []) add(String(ga).trim() || undefined);
+        }
+      }
+    }
   });
 
   for (const d of cfg.intercoms ?? []) {
@@ -329,6 +337,24 @@ export function buildGAIndex(cfg: HouseConfig): Map<GA, GARole[]> {
       for (const item of d.melding?.items ?? []) {
         const role = wtwDptToRoleConfig(item.dpt === "hex" ? "5.010" : item.dpt);
         pushGA(index, item.ga, role, d.id, d.type);
+      }
+    }
+
+    if (d.type === "media_sonos" || d.type === "media_bluesound") {
+      const knx = d.knx;
+      if (knx) {
+        for (const ga of knx.playPause ?? []) {
+          pushGA(index, String(ga).trim() || undefined, "switch", d.id, d.type);
+        }
+        for (const ga of knx.next ?? []) {
+          pushGA(index, String(ga).trim() || undefined, "switch", d.id, d.type);
+        }
+        for (const ga of knx.previous ?? []) {
+          pushGA(index, String(ga).trim() || undefined, "switch", d.id, d.type);
+        }
+        for (const ga of knx.volumeDim ?? []) {
+          pushGA(index, String(ga).trim() || undefined, "dim_control", d.id, d.type);
+        }
       }
     }
 

@@ -14,6 +14,8 @@ export const ROLE_DPT: Record<string, string> = {
   switch_status: "DPT1.001",
   dim_value: "DPT5.001",
   dim_status: "DPT5.001",
+  /** 4-bit dimming control (start up/down + stop). Media volume rocker. */
+  dim_control: "DPT3.007",
 
   up_down: "DPT1.008",
   stop_step: "DPT1.007",
@@ -305,6 +307,7 @@ export class KnxBus extends EventEmitter {
   }
 
   private pickDptForGa(roles: GARole[]): string {
+    if (roles.some((r) => r.role === "dim_control")) return "DPT3.007";
     const dpts = [
       ...new Set(roles.map((r) => ROLE_DPT[r.role]).filter(Boolean))
     ] as string[];
@@ -321,6 +324,8 @@ export class KnxBus extends EventEmitter {
     if (typeof raw === "number" || typeof raw === "boolean" || typeof raw === "string") {
       return raw;
     }
+    const nibble = dimObjectToNibble(raw);
+    if (nibble != null) return nibble;
     if (raw != null && typeof raw === "object" && "red" in raw && "green" in raw && "blue" in raw) {
       const o = raw as Record<string, unknown>;
       return {
@@ -355,6 +360,8 @@ export class KnxBus extends EventEmitter {
       if (numeric) return numeric;
     }
     if (buf.length <= 1) {
+      const dim = dpts.find((d) => d === "DPT3.007" || d.startsWith("DPT3"));
+      if (dim) return dim;
       const bit = dpts.find((d) => d.startsWith("DPT1"));
       if (bit) return bit;
     }
@@ -384,6 +391,12 @@ export class KnxBus extends EventEmitter {
       { dest, bufLen: buf.length, candidates },
       "KNX telegram decode failed for all DPT candidates"
     );
+    if (primary.startsWith("DPT3")) {
+      return {
+        decoded: buf.length > 0 ? buf[0] & 0x0f : 0,
+        dptId: primary
+      };
+    }
     return {
       decoded: buf.length > 0 ? Boolean(buf[0] & 0x01) : false,
       dptId: primary
@@ -400,7 +413,8 @@ export class KnxBus extends EventEmitter {
     } else if (typeof value === "number" || typeof value === "boolean") {
       decoded = value;
     } else {
-      decoded = String(value ?? "");
+      const nibble = dimObjectToNibble(value);
+      decoded = nibble ?? String(value ?? "");
     }
     this.updateCache(dest, decoded, dptId);
   }
@@ -417,6 +431,17 @@ export class KnxBus extends EventEmitter {
     let delay = 400;
     let scheduled = 0;
     for (const ga of gas) {
+      const roles = idx.get(ga) ?? [];
+      // Media KNX GAs are command-only. A GroupValue_Read at boot would
+      // replay last play/pause or start a dim hold.
+      if (
+        roles.length > 0 &&
+        roles.every(
+          (r) => r.deviceType === "media_sonos" || r.deviceType === "media_bluesound"
+        )
+      ) {
+        continue;
+      }
       const dp = this.datapoints.get(ga) as { read?: () => void } | undefined;
       if (!dp?.read) continue;
       scheduled++;
@@ -562,4 +587,20 @@ interface DptLib {
 function loadDptLib(): DptLib {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   return require("knx/src/dptlib") as DptLib;
+}
+
+/** knx.js DPT3.007 → 4-bit nibble (bit3 = increase, bits0–2 = step, 0 = stop). */
+function dimObjectToNibble(raw: unknown): number | null {
+  if (raw == null || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const stepRaw = o.data ?? o.step;
+  if (stepRaw == null && o.decr_incr == null && o.increase == null) return null;
+  const increase =
+    o.decr_incr != null
+      ? Number(o.decr_incr) !== 0
+      : o.increase != null
+        ? Boolean(o.increase)
+        : false;
+  const step = Number(stepRaw ?? 0) & 7;
+  return (increase ? 8 : 0) | step;
 }

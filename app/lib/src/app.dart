@@ -351,15 +351,16 @@ class _RouterRefresh extends ChangeNotifier {
   }
 }
 
-/// Custom scroll behaviour for Flutter web on mobile:
-/// - Enables touch + mouse + trackpad drag scrolling.
+/// Custom scroll behaviour:
+/// - Touch / stylus / trackpad drag scrolling (phone, tablet, twee-vinger).
+/// - No mouse drag: otherwise ListViews steal click-drag and you cannot
+///   select or overwrite text in fields on PC/laptop. Wheel still scrolls.
 /// - Removes the overscroll glow indicator (looks bad on glass UI).
 /// - Uses clamping physics so there is no rubber-band bounce jank.
 class _AppScrollBehavior extends MaterialScrollBehavior {
   @override
   Set<PointerDeviceKind> get dragDevices => {
         PointerDeviceKind.touch,
-        PointerDeviceKind.mouse,
         PointerDeviceKind.stylus,
         PointerDeviceKind.trackpad,
         PointerDeviceKind.unknown,

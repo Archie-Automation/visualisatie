@@ -2,9 +2,9 @@
 import 'package:uuid/uuid.dart';
 
 import '../ac_mode_config.dart';
-import '../hvac_switch_lock.dart';
 import '../room_control_category.dart';
 import '../theme.dart';
+import '../ui/widgets/confirm_dialog.dart';
 import '../ui/widgets/heater_icon.dart';
 import '../ui/widgets/luxe_form.dart';
 import 'knx_ga_catalog.dart';
@@ -868,6 +868,27 @@ class ClimateInstallerSection extends StatefulWidget {
       _ClimateInstallerSectionState();
 }
 
+class _InstallerInfoTitle extends StatelessWidget {
+  const _InstallerInfoTitle({required this.title, required this.body});
+  final String title;
+  final String body;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(title, style: Theme.of(context).textTheme.titleSmall),
+          ),
+          LuxeInfoIconButton(title: title, body: body),
+        ],
+      ),
+    );
+  }
+}
+
 class _ClimateInstallerSectionState extends State<ClimateInstallerSection> {
   void _notify() {
     widget.onChanged();
@@ -883,7 +904,6 @@ class _ClimateInstallerSectionState extends State<ClimateInstallerSection> {
     final canCool          = cfg['canCool'] as bool? ?? false;
     final userCanSwitch    = cfg['userCanSwitchMode'] as bool? ?? false;
     final lockDurationRaw  = cfg['hvacSwitchLockDuration'] as String? ?? '4:00';
-    final lockDuration     = HvacSwitchLockDuration.parse(lockDurationRaw);
     final showSwitchLock   = userCanSwitch && canHeat && canCool;
 
     String gaVal(String key) => ga[key] as String? ?? '';
@@ -895,99 +915,152 @@ class _ClimateInstallerSectionState extends State<ClimateInstallerSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Temperatuur', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 6),
+        const _InstallerInfoTitle(
+          title: 'Temperatuur',
+          body:
+              'Gemeten temperatuur en setpoint: DPT 9.001. '
+              'Setpoint-status is optioneel: als die er is, toont de app '
+              'wat de thermostaat terugmeldt.',
+        ),
         _InstallerStrField(
           key: ValueKey('cl-${widget.device['id']}-at'),
-          label: 'GA gemeten temperatuur (DPT 9.001) *',
+          label: 'Gemeten temperatuur',
           value: gaVal('actual_temp'),
           onChanged: (v) => setGa('actual_temp', v),
+          gaSearch: true,
+          gaDptHint: 'DPT9.001',
         ),
         _InstallerStrField(
           key: ValueKey('cl-${widget.device['id']}-sp'),
-          label: 'GA gewenste temperatuur / setpoint (DPT 9.001) *',
+          label: 'Setpoint',
           value: gaVal('setpoint'),
           onChanged: (v) => setGa('setpoint', v),
+          gaSearch: true,
+          gaDptHint: 'DPT9.001',
         ),
         _InstallerStrField(
           key: ValueKey('cl-${widget.device['id']}-ss'),
-          label: 'GA setpoint status (lezen, optioneel)',
+          label: 'Setpoint status (lezen)',
           value: gaVal('setpoint_status'),
           onChanged: (v) => setGa('setpoint_status', v),
+          gaSearch: true,
+          gaDptHint: 'DPT9.001',
         ),
         const SizedBox(height: 12),
-
-        // ── HVAC modus ──────────────────────────────────────────────
-        Text('Verwarm / Koel modus', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 4),
-        Text(
-          'DPT 1.100: 1 = verwarmen, 0 = koelen.',
-          style: Theme.of(context).textTheme.bodySmall,
+        const _InstallerInfoTitle(
+          title: 'Verwarm / koel',
+          body:
+              'DPT 1.100: 1 = verwarmen, 0 = koelen. '
+              'Schakelaar alleen nodig als de gebruiker zelf mag omschakelen. '
+              'Status is wat het systeem terugmeldt.',
         ),
-        const SizedBox(height: 6),
         _InstallerStrField(
           key: ValueKey('cl-${widget.device['id']}-hvac'),
-          label: 'GA verwarm/koel schakelaar (schrijven, als gebruiker omschakelt)',
+          label: 'Schakelaar (schrijven)',
           value: gaVal('hvac_mode'),
           onChanged: (v) => setGa('hvac_mode', v),
+          gaSearch: true,
+          gaDptHint: 'DPT1.100',
         ),
         _InstallerStrField(
           key: ValueKey('cl-${widget.device['id']}-hvacst'),
-          label: 'GA verwarm/koel status (lezen, systeem meldt modus)',
+          label: 'Status (lezen)',
           value: gaVal('hvac_mode_status'),
           onChanged: (v) => setGa('hvac_mode_status', v),
+          gaSearch: true,
+          gaDptHint: 'DPT1.100',
         ),
         const SizedBox(height: 12),
-
-        // ── Vraagmeldingen ───────────────────────────────────────────
-        Text('Vraagmeldingen', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 4),
-        Text(
-          'Geeft aan of er in de ruimte actief warmte- of koudevraag is (DPT 1.x).',
-          style: Theme.of(context).textTheme.bodySmall,
+        const _InstallerInfoTitle(
+          title: 'Vraagmeldingen',
+          body:
+              'Optioneel. Geeft in de app aan of er in de ruimte warmte- '
+              'of koudevraag is (DPT 1).',
         ),
-        const SizedBox(height: 6),
         _InstallerStrField(
           key: ValueKey('cl-${widget.device['id']}-hd'),
-          label: 'GA warmtevraag melding (lezen)',
+          label: 'Warmtevraag (lezen)',
           value: gaVal('heat_demand'),
           onChanged: (v) => setGa('heat_demand', v),
+          gaSearch: true,
+          gaDptHint: 'DPT1',
         ),
         _InstallerStrField(
           key: ValueKey('cl-${widget.device['id']}-cd'),
-          label: 'GA koudevraag melding (lezen)',
+          label: 'Koudevraag (lezen)',
           value: gaVal('cool_demand'),
           onChanged: (v) => setGa('cool_demand', v),
+          gaSearch: true,
+          gaDptHint: 'DPT1',
         ),
         const SizedBox(height: 12),
-
-        // ── Bedrijfsmodus (optioneel) ────────────────────────────────
-        Text('Bedrijfsmodus (DPT 20.102)', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 6),
+        const _InstallerInfoTitle(
+          title: 'Bedrijfsmodus',
+          body:
+              'DPT 20.102: comfort, standby, economy, gebouwbeveiliging. '
+              'Schrijven en status zijn optioneel. '
+              'Zet hieronder uit welke modi het systeem niet heeft; '
+              'die knoppen verdwijnen in de app.',
+        ),
         _InstallerStrField(
           key: ValueKey('cl-${widget.device['id']}-mode'),
-          label: 'GA bedrijfsmodus (comfort/standby/nacht, schrijven)',
+          label: 'Modus (schrijven)',
           value: gaVal('mode'),
           onChanged: (v) => setGa('mode', v),
+          gaSearch: true,
+          gaDptHint: 'DPT20.102',
         ),
         _InstallerStrField(
           key: ValueKey('cl-${widget.device['id']}-modest'),
-          label: 'GA bedrijfsmodus status (lezen)',
+          label: 'Modus status (lezen)',
           value: gaVal('mode_status'),
           onChanged: (v) => setGa('mode_status', v),
+          gaSearch: true,
+          gaDptHint: 'DPT20.102',
         ),
-        const SizedBox(height: 16),
-
-        // ── Setpoint bereik en stapgrootte ───────────────────────────
-        Text('Setpoint bereik & stapgrootte',
-            style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 6),
+        Builder(builder: (context) {
+          final modesMap = (cfg['modes'] as Map<String, dynamic>?) ??
+              <String, dynamic>{};
+          cfg['modes'] = modesMap;
+          bool modeEnabled(String key) => modesMap[key] != false;
+          void toggleMode(String key, bool v) {
+            modesMap[key] = v;
+            _notify();
+          }
+          return Column(
+            children: [
+              _SectionToggle(
+                  label: 'Comfort',
+                  value: modeEnabled('comfort'),
+                  onChanged: (v) => toggleMode('comfort', v)),
+              _SectionToggle(
+                  label: 'Standby',
+                  value: modeEnabled('standby'),
+                  onChanged: (v) => toggleMode('standby', v)),
+              _SectionToggle(
+                  label: 'Economy',
+                  value: modeEnabled('economy'),
+                  onChanged: (v) => toggleMode('economy', v)),
+              _SectionToggle(
+                  label: 'Gebouwbeveiliging',
+                  value: modeEnabled('buildingProtection'),
+                  onChanged: (v) => toggleMode('buildingProtection', v)),
+            ],
+          );
+        }),
+        const SizedBox(height: 12),
+        const _InstallerInfoTitle(
+          title: 'Setpoint in de app',
+          body:
+              'Grenzen van de plus/min-knoppen. Leeg = 5 tot 35 °C. '
+              'Stapgrootte is hoeveel de temperatuur per tik verandert.',
+        ),
         Row(
           children: [
             Expanded(
               child: _InstallerStrField(
                 key: ValueKey('cl-${widget.device['id']}-mint'),
-                label: 'Min °C (standaard 5)',
+                label: 'Min °C',
                 value: (cfg['minTemp'] as num?)?.toString() ?? '',
                 onChanged: (v) {
                   final n = double.tryParse(v);
@@ -1001,7 +1074,7 @@ class _ClimateInstallerSectionState extends State<ClimateInstallerSection> {
             Expanded(
               child: _InstallerStrField(
                 key: ValueKey('cl-${widget.device['id']}-maxt'),
-                label: 'Max °C (standaard 35)',
+                label: 'Max °C',
                 value: (cfg['maxTemp'] as num?)?.toString() ?? '',
                 onChanged: (v) {
                   final n = double.tryParse(v);
@@ -1031,65 +1104,26 @@ class _ClimateInstallerSectionState extends State<ClimateInstallerSection> {
           ),
         ),
         const SizedBox(height: 12),
-
-        // ── Bedrijfsmodi ─────────────────────────────────────────────
-        Text('Bedrijfsmodi (DPT 20.102)',
-            style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 4),
-        Text(
-          'Vink de modi uit die het systeem niet ondersteunt. '
-          'Alleen zichtbaar als GA bedrijfsmodus is ingevuld.',
-          style: Theme.of(context).textTheme.bodySmall,
+        const _InstallerInfoTitle(
+          title: 'Mogelijkheden',
+          body:
+              'Bepaalt wat de app toont. Mag de gebruiker niet omschakelen, '
+              'dan zie je alleen of er verwarmd of gekoeld wordt. '
+              'Vergrendeling na omschakelen: u:mm, bijvoorbeeld 4:00. '
+              '0:00 = geen vergrendeling, wel een waarschuwing.',
         ),
-        const SizedBox(height: 6),
-        Builder(builder: (context) {
-          final modesMap = (cfg['modes'] as Map<String, dynamic>?) ??
-              <String, dynamic>{};
-          cfg['modes'] = modesMap;
-          bool modeEnabled(String key) => modesMap[key] != false;
-          void toggleMode(String key, bool v) {
-            modesMap[key] = v;
-            _notify();
-          }
-          return Column(
-            children: [
-              _SectionToggle(
-                  label: 'Comfort (waarde 1)',
-                  value: modeEnabled('comfort'),
-                  onChanged: (v) => toggleMode('comfort', v)),
-              _SectionToggle(
-                  label: 'Standby (waarde 2)',
-                  value: modeEnabled('standby'),
-                  onChanged: (v) => toggleMode('standby', v)),
-              _SectionToggle(
-                  label: 'Economy (waarde 3)',
-                  value: modeEnabled('economy'),
-                  onChanged: (v) => toggleMode('economy', v)),
-              _SectionToggle(
-                  label: 'Gebouwbeveiliging (waarde 4)',
-                  value: modeEnabled('buildingProtection'),
-                  onChanged: (v) => toggleMode('buildingProtection', v)),
-            ],
-          );
-        }),
-        const SizedBox(height: 12),
-
-        // ── Capabilities ─────────────────────────────────────────────
-        Text('Mogelijkheden (bepaalt weergave in de app)',
-            style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 8),
         _SectionToggle(
-          label: 'Systeem kan verwarmen',
+          label: 'Kan verwarmen',
           value: canHeat,
           onChanged: (v) { cfg['canHeat'] = v; _notify(); },
         ),
         _SectionToggle(
-          label: 'Systeem kan koelen',
+          label: 'Kan koelen',
           value: canCool,
           onChanged: (v) { cfg['canCool'] = v; _notify(); },
         ),
         _SectionToggle(
-          label: 'Gebruiker kan zelf omschakelen (verwarm ↔ koel)',
+          label: 'Gebruiker mag omschakelen',
           value: userCanSwitch,
           onChanged: (v) {
             cfg['userCanSwitchMode'] = v;
@@ -1099,11 +1133,10 @@ class _ClimateInstallerSectionState extends State<ClimateInstallerSection> {
             _notify();
           },
         ),
-        if (showSwitchLock) ...[
-          const SizedBox(height: 4),
+        if (showSwitchLock)
           _InstallerStrField(
             key: ValueKey('cl-${widget.device['id']}-hvaclock'),
-            label: 'Vergrendeling na omschakelen (u:mm, bijv. 4:00)',
+            label: 'Vergrendeling (u:mm)',
             value: lockDurationRaw,
             onChanged: (v) {
               final trimmed = v.trim();
@@ -1114,51 +1147,6 @@ class _ClimateInstallerSectionState extends State<ClimateInstallerSection> {
               }
               _notify();
             },
-          ),
-          if (!lockDuration.hasLock)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.info_outline,
-                      size: 16,
-                      color: Theme.of(context).colorScheme.primary),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '0:00 = geen vergrendeling na omschakelen. '
-                      'De gebruiker krijgt wel een waarschuwing dat '
-                      'frequent omschakelen niet efficiënt is.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          ),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                'Na omschakelen is de knop ${lockDuration.formatForDialog()} '
-                'niet bruikbaar.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-              ),
-            ),
-        ],
-        if (!userCanSwitch && (canHeat || canCool))
-          Padding(
-            padding: const EdgeInsets.only(top: 4, bottom: 8),
-            child: Text(
-              'Het systeem bepaalt de modus. De app toont alleen de status-indicatie.',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-            ),
           ),
       ],
     );
@@ -3113,6 +3101,230 @@ class _MeldingItemEditor extends StatelessWidget {
             ),
           ],
         ),
+    );
+  }
+}
+
+// ── Media (Sonos / Bluesound) KNX rocker ─────────────────────────────────────
+
+class MediaKnxInstallerSection extends StatefulWidget {
+  const MediaKnxInstallerSection({
+    super.key,
+    required this.device,
+    required this.onChanged,
+  });
+
+  final Map<String, dynamic> device;
+  final VoidCallback onChanged;
+
+  @override
+  State<MediaKnxInstallerSection> createState() =>
+      _MediaKnxInstallerSectionState();
+}
+
+class _MediaKnxInstallerSectionState extends State<MediaKnxInstallerSection> {
+  void _notify() {
+    widget.onChanged();
+    setState(() {});
+  }
+
+  Map<String, dynamic>? _knxIfPresent() {
+    final v = widget.device['knx'];
+    if (v is Map<String, dynamic>) return v;
+    if (v is Map) {
+      final m = Map<String, dynamic>.from(v);
+      widget.device['knx'] = m;
+      return m;
+    }
+    return null;
+  }
+
+  Map<String, dynamic> _knx() => _ensureMap(widget.device, 'knx');
+
+  void _pruneKnx() {
+    final knx = _knxIfPresent();
+    if (knx == null) return;
+    for (final key in ['playPause', 'volumeDim', 'next', 'previous']) {
+      final v = knx[key];
+      if (v is! List) continue;
+      final nonempty =
+          v.where((e) => e.toString().trim().isNotEmpty).length;
+      if (nonempty == 0 && v.length <= 1) knx.remove(key);
+    }
+    if (knx['volumeAffectsGroup'] != true) knx.remove('volumeAffectsGroup');
+    if (knx.isEmpty) widget.device.remove('knx');
+  }
+
+  List<String> _stored(String key) {
+    final v = _knxIfPresent()?[key];
+    if (v is List) {
+      return [for (final e in v) e?.toString() ?? ''];
+    }
+    if (v is String && v.trim().isNotEmpty) return [v.trim()];
+    return [];
+  }
+
+  int _fieldCount(String key) {
+    final n = _stored(key).length;
+    return n == 0 ? 1 : n;
+  }
+
+  String _fieldValue(String key, int i) {
+    final list = _stored(key);
+    if (i < list.length) return list[i];
+    return '';
+  }
+
+  void _writeList(String key, List<String> list) {
+    final knx = _knx();
+    knx[key] = list;
+    _pruneKnx();
+    _notify();
+  }
+
+  void _setField(String key, int index, String raw) {
+    final list = [..._stored(key)];
+    while (list.length <= index) {
+      list.add('');
+    }
+    list[index] = raw.trim();
+    _writeList(key, list);
+  }
+
+  void _addField(String key) {
+    final list = [..._stored(key)];
+    if (list.isEmpty) list.add('');
+    list.add('');
+    _writeList(key, list);
+  }
+
+  void _removeField(String key, int index) {
+    final list = [..._stored(key)];
+    if (index < 0 || index >= list.length) return;
+    list.removeAt(index);
+    _writeList(key, list);
+  }
+
+  Widget _gaGroup({
+    required String title,
+    required String body,
+    required String keyName,
+    required String dptHint,
+  }) {
+    final stored = _stored(keyName);
+    final count = _fieldCount(keyName);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _InstallerInfoTitle(title: title, body: body),
+          for (var i = 0; i < count; i++)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: _InstallerStrField(
+                    key: ValueKey(
+                      '${widget.device['id']}-mknx-$keyName-$i-${stored.length}',
+                    ),
+                    label: count == 1 ? 'Groepsadres' : 'Groepsadres ${i + 1}',
+                    value: _fieldValue(keyName, i),
+                    onChanged: (v) => _setField(keyName, i, v),
+                    gaSearch: true,
+                    gaDptHint: dptHint,
+                  ),
+                ),
+                if (stored.length > 1)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 22),
+                    child: IconButton(
+                      tooltip: 'Adres verwijderen',
+                      onPressed: () => _removeField(keyName, i),
+                      icon: Icon(
+                        Icons.delete_outline,
+                        size: 18,
+                        color: Colors.red[400],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          LuxeAddRow(
+            label: 'Adres toevoegen',
+            onTap: () => _addField(keyName),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final groupOn = _knxIfPresent()?['volumeAffectsGroup'] == true;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 8),
+        Text('KNX-drukknoppen', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(
+          'Optioneel. De NUC luistert op de bus — de telefoon hoeft niet open.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        const SizedBox(height: 12),
+        _gaGroup(
+          title: 'Play / pauze',
+          body:
+              'DPT 1.001. 1 = play, 0 = pauze. Geen terugschrijven naar de bus. '
+              'Meerdere adressen mogelijk (bijvoorbeeld twee schakelaars).',
+          keyName: 'playPause',
+          dptHint: 'DPT1.001',
+        ),
+        _gaGroup(
+          title: 'Volume dim op/neer',
+          body:
+              'DPT 3.007, één groepadres voor omhoog én omlaag. '
+              'Vasthouden herhaalt stappen van 5% tot het stoptelegram (0). '
+              'Standaard alleen deze zone; zie de schakelaar hieronder voor de groep.',
+          keyName: 'volumeDim',
+          dptHint: 'DPT3.007',
+        ),
+        _gaGroup(
+          title: 'Volgende',
+          body:
+              'DPT 1.001. Alleen de opkomende 1 telt; 0 bij loslaten wordt genegeerd.',
+          keyName: 'next',
+          dptHint: 'DPT1.001',
+        ),
+        _gaGroup(
+          title: 'Terug',
+          body:
+              'DPT 1.001. Alleen de opkomende 1 telt; 0 bij loslaten wordt genegeerd.',
+          keyName: 'previous',
+          dptHint: 'DPT1.001',
+        ),
+        Padding(
+          padding: const EdgeInsets.only(top: 4, bottom: 8),
+          child: LuxeSwitchRow(
+            title: 'Andere zones in de groep meenemen',
+            subtitle:
+                'Uit: alleen het volume van deze zone. '
+                'Aan: dezelfde schaling als de groepsvolume-slider in de app. '
+                'Play, pauze en skip volgen de groep altijd via Sonos/Bluesound.',
+            value: groupOn,
+            onChanged: (v) {
+              if (v) {
+                _knx()['volumeAffectsGroup'] = true;
+              } else {
+                _knxIfPresent()?.remove('volumeAffectsGroup');
+              }
+              _pruneKnx();
+              _notify();
+            },
+          ),
+        ),
+      ],
     );
   }
 }
