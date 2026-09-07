@@ -324,9 +324,9 @@ export interface MediaKnxConfig {
   playPause?: GA[];
   /** DPT 3.007 — one GA for dim up/down; 0 = stop. */
   volumeDim?: GA[];
-  /** DPT 1.001 — rising 1 only. */
+  /** DPT 1.001 — rising 1. Playlist: next/previous track. Radio favourite: next/previous station. */
   next?: GA[];
-  /** DPT 1.001 — rising 1 only. */
+  /** DPT 1.001 — rising 1. Playlist: previous track. Radio favourite: previous station. */
   previous?: GA[];
   /**
    * When true, volume dim scales every zone in the current group

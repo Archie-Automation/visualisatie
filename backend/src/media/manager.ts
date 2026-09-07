@@ -16,6 +16,7 @@ import type {
 } from "../types";
 import { BluesoundDriver } from "./bluesound";
 import { searchMediaDevice } from "./search";
+import { resolveMediaSkip } from "./skipLogic";
 import { SonosDriver } from "./sonos";
 import * as spotify from "./spotify";
 import { SpotifyAuthError } from "./spotify";
@@ -442,11 +443,32 @@ export class MediaManager extends EventEmitter {
         await drv.stop();
         break;
       case "next":
-        await drv.next();
+      case "previous": {
+        const dir = cmd.action === "next" ? 1 : -1;
+        const cur = this.states.get(id);
+        const skip = resolveMediaSkip(cur, dir, this.lastPresetArt.get(id)?.uri);
+        if (skip.kind === "preset") {
+          this.lastPresetArt.set(id, {
+            uri: skip.preset.uri ?? cur?.currentUri ?? "",
+            art: skip.preset.image ?? this.lastPresetArt.get(id)?.art ?? ""
+          });
+          try {
+            await drv.playPreset(skip.preset.id, skip.preset.uri);
+          } catch (err) {
+            logger.warn(
+              { err, id, preset: skip.preset.id, action: cmd.action },
+              "media favorite skip failed — falling back to track skip"
+            );
+            if (cmd.action === "next") await drv.next();
+            else await drv.previous();
+          }
+        } else if (cmd.action === "next") {
+          await drv.next();
+        } else {
+          await drv.previous();
+        }
         break;
-      case "previous":
-        await drv.previous();
-        break;
+      }
       case "volume":
         await drv.setVolume(cmd.value);
         {
