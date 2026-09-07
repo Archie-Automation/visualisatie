@@ -371,8 +371,11 @@ export class KnxBus extends EventEmitter {
   private decodeBuffer(
     dest: GA,
     buf: Buffer
-  ): { decoded: number | boolean | string | Rgb232Triplet; dptId: string } {
+  ): { decoded: number | boolean | string | Rgb232Triplet; dptId: string; ignore?: boolean } {
     const primary = this.resolveDptForTelegram(dest, buf);
+    if (primary.startsWith("DPT3") && buf.length === 0) {
+      return { decoded: 0, dptId: primary, ignore: true };
+    }
     const fallback = this.gaToDpt.get(dest);
     const candidates = [
       primary,
@@ -394,7 +397,8 @@ export class KnxBus extends EventEmitter {
     if (primary.startsWith("DPT3")) {
       return {
         decoded: buf.length > 0 ? buf[0] & 0x0f : 0,
-        dptId: primary
+        dptId: primary,
+        ignore: buf.length === 0
       };
     }
     return {
@@ -408,6 +412,7 @@ export class KnxBus extends EventEmitter {
     let dptId = this.gaToDpt.get(dest) ?? "DPT1.001";
     if (Buffer.isBuffer(value)) {
       const result = this.decodeBuffer(dest, value);
+      if (result.ignore) return;
       decoded = result.decoded;
       dptId = result.dptId;
     } else if (typeof value === "number" || typeof value === "boolean") {

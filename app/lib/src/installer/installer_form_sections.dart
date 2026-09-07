@@ -3187,8 +3187,8 @@ class _MediaKnxInstallerSectionState extends State<MediaKnxInstallerSection> {
     while (list.length <= index) {
       list.add('');
     }
-    list[index] = raw.trim();
-    _writeList(key, list);
+    list[index] = raw;
+    _knx()[key] = list;
   }
 
   void _addField(String key) {
@@ -3226,7 +3226,7 @@ class _MediaKnxInstallerSectionState extends State<MediaKnxInstallerSection> {
                 Expanded(
                   child: _InstallerStrField(
                     key: ValueKey(
-                      '${widget.device['id']}-mknx-$keyName-$i-${stored.length}',
+                      '${widget.device['id']}-mknx-$keyName-$i',
                     ),
                     label: count == 1 ? 'Groepsadres' : 'Groepsadres ${i + 1}',
                     value: _fieldValue(keyName, i),
@@ -3276,8 +3276,9 @@ class _MediaKnxInstallerSectionState extends State<MediaKnxInstallerSection> {
         _gaGroup(
           title: 'Play / pauze',
           body:
-              'DPT 1.001. 1 = play, 0 = pauze. Geen terugschrijven naar de bus. '
-              'Meerdere adressen mogelijk (bijvoorbeeld twee schakelaars).',
+              'DPT 1.001. Drukken (1) wisselt play/pauze. '
+              'Loslaten (0) wordt genegeerd, anders pauzeert een drukknop meteen. '
+              'Meerdere adressen mogelijk.',
           keyName: 'playPause',
           dptHint: 'DPT1.001',
         ),

@@ -36,16 +36,31 @@ export function mediaKnxOf(d: Device): MediaKnxConfig | undefined {
   return d.knx;
 }
 
-export function isRisingEdge(prev: unknown, now: unknown): boolean {
-  const nowHigh = now === true || now === 1;
-  const wasHigh = prev === true || prev === 1;
-  return nowHigh && !wasHigh;
+export function isBitHigh(value: unknown): boolean {
+  return value === true || value === 1 || value === "1" || value === "true";
 }
 
-export function playPauseFromValue(value: unknown): "play" | "pause" | null {
-  if (value === true || value === 1) return "play";
-  if (value === false || value === 0) return "pause";
-  return null;
+export function isRisingEdge(prev: unknown, now: unknown): boolean {
+  return isBitHigh(now) && !isBitHigh(prev);
+}
+
+/** Wall rockers send 1 on press and 0 on release. Toggle on the rising 1; ignore 0. */
+export function playPauseToggleAction(playing: boolean): "play" | "pause" {
+  return playing ? "pause" : "play";
+}
+
+export function asGaList(raw: unknown): string[] {
+  if (typeof raw === "string") {
+    const s = raw.trim();
+    return s ? [s] : [];
+  }
+  if (!Array.isArray(raw)) return [];
+  const out: string[] = [];
+  for (const item of raw) {
+    const s = String(item ?? "").trim();
+    if (s) out.push(s);
+  }
+  return out;
 }
 
 export function decodeDimControl(value: unknown): DimCommand | null {
@@ -63,6 +78,7 @@ export function decodeDimControl(value: unknown): DimCommand | null {
     return { stop: false, increase, step };
   }
   if (typeof value === "string") {
+    if (value.trim() === "") return null;
     const n = Number(value);
     if (!Number.isFinite(n)) return null;
     return decodeDimControl(n);
@@ -104,11 +120,7 @@ export function buildMediaKnxIndex(cfg: HouseConfig): Map<GA, MediaKnxBinding[]>
     if (!knx) return;
     const volumeAffectsGroup = knx.volumeAffectsGroup === true;
     for (const { key, action } of LIST_KEYS) {
-      const list = knx[key];
-      if (!Array.isArray(list)) continue;
-      for (const raw of list) {
-        const ga = String(raw ?? "").trim();
-        if (!ga) continue;
+      for (const ga of asGaList(knx[key])) {
         const bindings = index.get(ga) ?? [];
         bindings.push({ deviceId: d.id, action, volumeAffectsGroup });
         index.set(ga, bindings);
@@ -188,8 +200,11 @@ export function attachMediaKnxBridge(bus: KnxBus, media: MediaManager): { close(
     for (const binding of bindings) {
       switch (binding.action) {
         case "playPause": {
-          const act = playPauseFromValue(state.value);
-          if (!act) break;
+          if (!isRisingEdge(prev, state.value)) break;
+          const cur = media.get(binding.deviceId);
+          const playing =
+            cur?.transport === "playing" || cur?.transport === "buffering";
+          const act = playPauseToggleAction(playing);
           void media.command(binding.deviceId, { action: act }).catch((err) => {
             logger.warn({ err, id: binding.deviceId, act }, "media KNX play/pause failed");
           });

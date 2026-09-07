@@ -343,18 +343,16 @@ export function buildGAIndex(cfg: HouseConfig): Map<GA, GARole[]> {
     if (d.type === "media_sonos" || d.type === "media_bluesound") {
       const knx = d.knx;
       if (knx) {
-        for (const ga of knx.playPause ?? []) {
-          pushGA(index, String(ga).trim() || undefined, "switch", d.id, d.type);
-        }
-        for (const ga of knx.next ?? []) {
-          pushGA(index, String(ga).trim() || undefined, "switch", d.id, d.type);
-        }
-        for (const ga of knx.previous ?? []) {
-          pushGA(index, String(ga).trim() || undefined, "switch", d.id, d.type);
-        }
-        for (const ga of knx.volumeDim ?? []) {
-          pushGA(index, String(ga).trim() || undefined, "dim_control", d.id, d.type);
-        }
+        const pushList = (raw: unknown, role: string) => {
+          const items = typeof raw === "string" ? [raw] : (raw as unknown[] | undefined);
+          for (const ga of items ?? []) {
+            pushGA(index, String(ga).trim() || undefined, role, d.id, d.type);
+          }
+        };
+        pushList(knx.playPause, "switch");
+        pushList(knx.next, "switch");
+        pushList(knx.previous, "switch");
+        pushList(knx.volumeDim, "dim_control");
       }
     }
 
