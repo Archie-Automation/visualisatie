@@ -142,6 +142,7 @@ export function attachMediaKnxBridge(bus: KnxBus, media: MediaManager): { close(
     index = buildMediaKnxIndex(getConfig());
     idxVersion = v;
   };
+  rebuild();
 
   const stopHold = (deviceId: string) => {
     const h = holds.get(deviceId);
@@ -212,7 +213,7 @@ export function attachMediaKnxBridge(bus: KnxBus, media: MediaManager): { close(
         }
         case "next":
         case "previous": {
-          if (!isRisingEdge(prev, state.value)) break;
+          if (!isBitHigh(state.value)) break;
           void media.command(binding.deviceId, { action: binding.action }).catch((err) => {
             logger.warn(
               { err, id: binding.deviceId, action: binding.action },

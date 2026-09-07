@@ -444,6 +444,7 @@ export class MediaManager extends EventEmitter {
         break;
       case "next":
       case "previous": {
+        await this.ensurePresets(id);
         const dir = cmd.action === "next" ? 1 : -1;
         const cur = this.states.get(id);
         const skip = resolveMediaSkip(cur, dir, this.lastPresetArt.get(id)?.uri);
@@ -592,6 +593,23 @@ export class MediaManager extends EventEmitter {
       }
     } catch (err) {
       logger.warn({ err, id: drv.deviceId }, "media poll crashed");
+    }
+  }
+
+  private async ensurePresets(id: string): Promise<void> {
+    const cur = this.states.get(id);
+    if ((cur?.presets?.length ?? 0) > 0) return;
+    const drv = this.drivers.get(id);
+    if (!drv) return;
+    try {
+      const presets = await drv.listPresets();
+      const live = this.states.get(id);
+      if (!live) return;
+      const next: MediaState = { ...live, presets };
+      this._applyGroupFields(id, next);
+      this.states.set(id, next);
+    } catch (err) {
+      logger.debug({ err, id }, "ensurePresets failed");
     }
   }
 
