@@ -174,7 +174,12 @@ class LuxeNavRow extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: Theme.of(context).textTheme.bodyLarge),
+                    Text(
+                      title,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
                       const SizedBox(height: 1),
                       Text(
