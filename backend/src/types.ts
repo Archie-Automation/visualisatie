@@ -320,7 +320,7 @@ export interface SonosConfig {
 export type MediaKnxAction = "playPause" | "volumeDim" | "next" | "previous";
 
 export interface MediaKnxConfig {
-  /** DPT 1.001 — 1 = play, 0 = pause. */
+  /** DPT 1.001 — rising 1 toggles play/pause; 0 (release) is ignored. */
   playPause?: GA[];
   /** DPT 3.007 — one GA for dim up/down; 0 = stop. */
   volumeDim?: GA[];

@@ -483,7 +483,7 @@
           "properties": {
             "playPause": {
               "type": "array",
-              "description": "DPT 1.001. 1 = play, 0 = pauze.",
+              "description": "DPT 1.001. Opkomende 1 = play/pauze wisselen. 0 (loslaten) wordt genegeerd.",
               "items": { "type": "string" }
             },
             "volumeDim": {

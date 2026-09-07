@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { HouseConfig, SonosDevice } from "../types";
 import {
+  asGaList,
   buildMediaKnxIndex,
   decodeDimControl,
   isRisingEdge,
   nextVolume,
-  playPauseFromValue,
+  playPauseToggleAction,
   resolveVolumeTarget
 } from "./knxBridge";
 
@@ -15,6 +16,7 @@ describe("isRisingEdge", () => {
     assert.equal(isRisingEdge(false, true), true);
     assert.equal(isRisingEdge(0, 1), true);
     assert.equal(isRisingEdge(undefined, 1), true);
+    assert.equal(isRisingEdge("0", "1"), true);
     assert.equal(isRisingEdge(true, true), false);
     assert.equal(isRisingEdge(1, 0), false);
     assert.equal(isRisingEdge(0, 0), false);
@@ -22,14 +24,10 @@ describe("isRisingEdge", () => {
   });
 });
 
-describe("playPauseFromValue", () => {
-  it("maps 1 to play and 0 to pause", () => {
-    assert.equal(playPauseFromValue(1), "play");
-    assert.equal(playPauseFromValue(true), "play");
-    assert.equal(playPauseFromValue(0), "pause");
-    assert.equal(playPauseFromValue(false), "pause");
-    assert.equal(playPauseFromValue(3), null);
-    assert.equal(playPauseFromValue("x"), null);
+describe("playPauseToggleAction", () => {
+  it("toggles from current transport so a 1-then-0 rocker does not pause immediately", () => {
+    assert.equal(playPauseToggleAction(false), "play");
+    assert.equal(playPauseToggleAction(true), "pause");
   });
 });
 
@@ -151,5 +149,10 @@ describe("buildMediaKnxIndex", () => {
     assert.equal(idx.get("1/1/1")?.[1].volumeAffectsGroup, true);
     assert.equal(idx.get("1/1/2")?.[0].action, "volumeDim");
     assert.equal(idx.has(""), false);
+  });
+
+  it("accepts a single GA string instead of an array", () => {
+    assert.deepEqual(asGaList("3/1/2"), ["3/1/2"]);
+    assert.deepEqual(asGaList([" 3/1/2 ", ""]), ["3/1/2"]);
   });
 });
