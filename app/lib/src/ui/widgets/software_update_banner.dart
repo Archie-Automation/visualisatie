@@ -29,6 +29,10 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
   String? _error;
   String? _serverProgress;
   Timer? _poll;
+  /// GitHub-APK die Android weigerde (`apk_not_newer`). Niet opnieuw aanbieden
+  /// tot naam/grootte/versie verandert — anders blijft Installeren dezelfde
+  /// oude binary downloaden terwijl de server al verder is.
+  String? _rejectedApkKey;
 
   @override
   void dispose() {
@@ -42,8 +46,18 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
       _poll = null;
       return;
     }
-    _poll ??= Timer.periodic(const Duration(seconds: 8), (_) {
-      if (mounted) ref.invalidate(softwareVersionStatusProvider);
+    _poll ??= Timer.periodic(const Duration(seconds: 8), (_) async {
+      if (!mounted) return;
+      final prev = _apkIdentity(
+        ref.read(softwareVersionStatusProvider).asData?.value?.latest?.androidApk,
+      );
+      ref.invalidate(softwareVersionStatusProvider);
+      final next = await ref.read(softwareVersionStatusProvider.future);
+      if (!mounted) return;
+      final now = _apkIdentity(next?.latest?.androidApk);
+      if (now != prev && now != _rejectedApkKey) {
+        setState(() => _error = null);
+      }
     });
   }
 
@@ -65,6 +79,7 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
       setState(() {
         _installing = false;
         _progress = null;
+        _rejectedApkKey = _apkIdentity(apk);
         _error = _apkInstallErrorMessage(result.error);
       });
       ref.invalidate(softwareVersionStatusProvider);
@@ -76,6 +91,8 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
       _error = result.ok ? null : _apkInstallErrorMessage(result.error);
     });
     if (result.ok) {
+      ref.invalidate(softwareVersionStatusProvider);
+    } else if (result.error == 'install_aborted' || result.error == 'busy') {
       ref.invalidate(softwareVersionStatusProvider);
     }
   }
@@ -148,11 +165,20 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
     final outdated = ref.watch(softwareUpdateAvailableProvider);
     final status = ref.watch(softwareVersionStatusProvider).asData?.value;
     final admin = ref.watch(authProvider).isInstaller;
+    final apkOffered = supportsAndroidApkUpdate &&
+        status?.androidApkUpdateAvailable == true &&
+        _apkIdentity(status?.latest?.androidApk) != _rejectedApkKey;
+    final apkWaiting = supportsAndroidApkUpdate &&
+        (status?.androidApkPending == true ||
+            (status?.androidApkUpdateAvailable == true && !apkOffered) ||
+            status?.clientStale == true);
+    // Ook polllen als er al een Installeren-banner hangt. Anders blijft een
+    // overgeslagen 230-prompt staan terwijl GitHub/server al 231+ zijn.
     _setPoll(
       supportsAndroidApkUpdate &&
-          status?.androidApkPending == true &&
           !_serverUpdating &&
-          !_installing,
+          !_installing &&
+          (apkOffered || apkWaiting),
     );
 
     if (_serverUpdating) {
@@ -162,11 +188,12 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
       );
     }
 
-    if (!outdated) return const SizedBox.shrink();
+    if (!outdated && !apkOffered && !apkWaiting) {
+      return const SizedBox.shrink();
+    }
     if (status == null) return const SizedBox.shrink();
 
-    final apkReady = supportsAndroidApkUpdate &&
-        status.androidApkUpdateAvailable;
+    final apkReady = apkOffered;
     if (apkReady) {
       final latest = status.latest;
       final ver = latest?.androidApk?.version ??
@@ -186,7 +213,7 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
       );
     }
 
-    if (supportsAndroidApkUpdate && status.androidApkPending) {
+    if (apkWaiting && !apkReady) {
       return _Banner(
         message: _error ??
             'Server is nieuwer. De tablet-app volgt automatisch zodra het installatiebestand klaarstaat.',
@@ -237,6 +264,11 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
           : null,
     );
   }
+}
+
+String _apkIdentity(GithubAndroidApkInfo? apk) {
+  if (apk == null) return '';
+  return '${apk.version ?? ''}|${apk.sizeBytes}|${apk.name}';
 }
 
 String _apkInstallErrorMessage(String? code) {
