@@ -852,6 +852,17 @@ export interface WtwButton {
   statusGa?: string;
   /** Welke waarde in statusGa de "actief"-toestand aangeeft (standaard true/1). */
   statusOnValue?: number | boolean;
+  /**
+   * `boost` = 1-bit inschakelen + optionele DPT 7.001-tijd in minuten.
+   * Ontbreekt of `stand` = gewone standknop.
+   */
+  kind?: "stand" | "boost";
+  /** Schrijf DPT 7.001; app in minuten, bus in seconden. */
+  timeGa?: string;
+  /** Lees resterende boost-tijd (DPT 7.001, seconden). */
+  timeStatusGa?: string;
+  /** Standaard boostduur in minuten (1–1092). */
+  minutes?: number;
 }
 
 export interface WtwStatusItem {
@@ -879,6 +890,11 @@ export interface WtwStatusItem {
    * Vervangt de tekst-badge als ingesteld.
    */
   icon1?: string;
+  /**
+   * Aflopende teller. KNX-waarde is resterende tijd in die eenheid.
+   * `off` dwingt een vast getal, ook als de eenheid “dagen” is.
+   */
+  countdown?: "off" | "seconds" | "minutes" | "days";
 }
 
 export interface WtwConfig {

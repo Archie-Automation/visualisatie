@@ -208,7 +208,17 @@ export const CommandSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("wtw.press"),
     deviceId: z.string(),
-    buttonId: z.string()
+    buttonId: z.string(),
+    /** Boost: schrijf DPT 7.001 minuten vóór het inschakelbit. */
+    minutes: z.number().int().min(1).max(65535).optional(),
+    /** Boost: true = in, false = uit. Ontbreekt = stuur de geconfigureerde waarde. */
+    on: z.boolean().optional()
+  }),
+  z.object({
+    kind: z.literal("wtw.setBoostMinutes"),
+    deviceId: z.string(),
+    buttonId: z.string(),
+    minutes: z.number().int().min(1).max(65535)
   }),
 
   /* --------------------------- Media ------------------------------ */
@@ -702,9 +712,26 @@ export async function dispatch(
       const btn = (device.wtw.buttons ?? []).find((b) => b.id === cmd.buttonId);
       if (!btn) throw new Error("unknown WTW button");
       const role = wtwDptToRole(btn.dpt);
+      if (btn.kind === "boost" && btn.timeGa && cmd.on !== false) {
+        const minutes = cmd.minutes ?? btn.minutes ?? 30;
+        const seconds = Math.min(65535, Math.max(1, minutes * 60));
+        await bus.write(btn.timeGa, "uint16", seconds);
+      }
       let val: number | boolean = btn.value;
+      if (cmd.on === false) val = false;
+      else if (cmd.on === true) val = true;
       if (role === "bit") val = typeof val === "boolean" ? val : val !== 0;
       await bus.write(btn.ga, role, val);
+      return;
+    }
+
+    case "wtw.setBoostMinutes": {
+      if (device.type !== "wtw") throw new Error("not a WTW device");
+      const btn = (device.wtw.buttons ?? []).find((b) => b.id === cmd.buttonId);
+      if (!btn || btn.kind !== "boost" || !btn.timeGa) {
+        throw new Error("WTW boost-tijd is niet geconfigureerd");
+      }
+      await bus.write(btn.timeGa, "uint16", Math.min(65535, Math.max(1, cmd.minutes * 60)));
       return;
     }
 

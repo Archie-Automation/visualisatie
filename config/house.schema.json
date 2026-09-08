@@ -1009,11 +1009,30 @@
         },
         "value": {
           "oneOf": [{ "type": "boolean" }, { "type": "number" }],
-          "description": "Te versturen waarde (0/1 voor bit, 0-255 voor byte, enz.)."
+          "description": "Te versturen waarde; moet bij het DPT passen (bit alleen 0/1)."
         },
         "statusGa": { "$ref": "#/definitions/gaPattern" },
         "statusOnValue": {
           "oneOf": [{ "type": "boolean" }, { "type": "number" }]
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["stand", "boost"],
+          "description": "boost = 1-bit inschakelen plus optionele tijd in minuten (DPT 7.001)."
+        },
+        "timeGa": {
+          "$ref": "#/definitions/gaPattern",
+          "description": "Boost-tijd schrijven, DPT 7.001, app in minuten, KNX in seconden."
+        },
+        "timeStatusGa": {
+          "$ref": "#/definitions/gaPattern",
+          "description": "Boost-tijd teruglezen, DPT 7.001, seconden op de bus."
+        },
+        "minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Standaard boostduur in minuten."
         }
       }
     },
@@ -1053,6 +1072,11 @@
         "icon1": {
           "type": "string",
           "description": "Icoon-sleutel die wordt getoond bij waarde 1/true. Vervangt de tekst-badge."
+        },
+        "countdown": {
+          "type": "string",
+          "enum": ["off", "seconds", "minutes", "days"],
+          "description": "Aflopende teller: KNX-waarde is resterende tijd in die eenheid; de app telt lokaal af."
         }
       }
     },
