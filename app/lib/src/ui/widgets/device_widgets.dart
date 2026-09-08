@@ -4058,7 +4058,10 @@ class _WtwTileState extends ConsumerState<WtwTile> {
     final bus = ref.watch(busProvider);
     final minutes = _setMinutes(z, bus);
     final remaining = _remaining(z, bus);
-    final boostOn = _bitOn(bus, z['boostStatusGa'] as String?);
+    final remainingLive =
+        remaining != null && remaining > Duration.zero;
+    final boostOn = _bitOn(bus, z['boostStatusGa'] as String?) &&
+        (remaining == null || remainingLive);
     final timeGa = (z['boostTimeGa'] as String?)?.trim() ?? '';
     final remainingGa = (z['boostRemainingGa'] as String?)?.trim() ?? '';
 
@@ -4105,7 +4108,9 @@ class _WtwTileState extends ConsumerState<WtwTile> {
             labelMode: deviceControlNumericLabel(s.label) != null
                 ? DeviceControlLabelMode.numeric
                 : DeviceControlLabelMode.iconOnly,
-            active: _bitOn(bus, z[statusKey(s.id)] as String?),
+            active: s.id == 'boost'
+                ? boostOn
+                : _bitOn(bus, z[statusKey(s.id)] as String?),
             onTap: () {
               if (s.id == 'boost') {
                 _press('boost', minutes: minutes, on: true);
@@ -4150,8 +4155,8 @@ class _WtwTileState extends ConsumerState<WtwTile> {
               ),
             if (remainingGa.isNotEmpty)
               _WtwRemainingRow(
-                remaining: remaining,
-                active: boostOn,
+                remaining: remainingLive ? remaining : null,
+                active: boostOn && remainingLive,
               ),
           ],
           ..._zehnderStatusRows(z, bus),
@@ -4267,8 +4272,9 @@ class _WtwRemainingRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final counting = active && remaining != null;
-    final text = remaining == null ? '—' : _wtwFormatClock(remaining!);
+    final left = remaining;
+    final counting = active && left != null && left.inSeconds > 0;
+    final text = !counting ? '—' : _wtwFormatClock(left!);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
