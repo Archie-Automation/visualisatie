@@ -17,6 +17,7 @@ import '../satel_api.dart'
         SatelArmMode,
         SatelPartitionConfig,
         SatelPartitionState,
+        SatelServiceConfig,
         SatelZoneMapping,
         satelDeviceTypes,
         satelDeviceTypeLabel,
@@ -26,6 +27,7 @@ import '../satel_api.dart'
         satelStatusProvider,
         saveSatelPartitions,
         saveSatelZones,
+        saveSatelConnection,
         saveSatelEncryptionKey,
         saveSatelPin;
 import '../shading_subtype_glyph.dart';
@@ -5427,6 +5429,22 @@ class _DeviceForm extends StatelessWidget {
                 icon: Icons.tune_outlined,
                 title: _deviceConfigTitle(type),
                 subtitle: _deviceConfigSubtitle(type),
+                trailing: switch (type) {
+                  'wtw' => const LuxeInfoIconButton(
+                    title: 'WTW',
+                    body:
+                        'Standen sturen een telegram. Statusregels lezen een GA. '
+                        'Uitleg per blok zit bij de i naast de titel.',
+                  ),
+                  'melding' => const LuxeInfoIconButton(
+                    title: 'Meldingen',
+                    body:
+                        'Eén regel per KNX-punt. Urgentie kleurt de app. '
+                        'Zoek groepadressen in de catalogus. Extra velden: '
+                        'drempel, teksten aan/uit, icoon.',
+                  ),
+                  _ => null,
+                },
               ),
               if (shadingGa)
                 _ShadingLikeGaSection(device: device, onChanged: onChanged)
@@ -6757,56 +6775,241 @@ class _SatelInstallerPanel extends ConsumerWidget {
     final loading = enabledAsync.isLoading;
 
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.only(top: 8, bottom: 36),
       children: [
+        LuxeListCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const LuxeSectionTitle(
+                icon: Icons.security_outlined,
+                title: 'Satel alarm',
+                trailing: LuxeInfoIconButton(
+                  title: 'Satel',
+                  body:
+                      'Koppeling met een Satel INTEGRA via ETHM-1 / INT-ETHER. '
+                      'Zet aan, vul IP-adres en poort in (standaard 7094), daarna partities, zones en pincode.',
+                ),
+              ),
+              if (loading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                )
+              else
+                LuxeSwitchRow(
+                  title: 'Integratie',
+                  value: enabled,
+                  onChanged: (v) =>
+                      ref.read(satelEnabledProvider.notifier).setEnabled(v),
+                ),
+              if (enabled) ...[
+                const SizedBox(height: 8),
+                _SatelConnectionCard(),
+              ],
+            ],
+          ),
+        ),
+        if (enabled) ...[
+          LuxeListCard(child: _SatelLiveStatus()),
+          LuxeListCard(child: _SatelPartitionsCard()),
+          LuxeListCard(child: _SatelZonesCard()),
+          LuxeListCard(child: _SatelPinCard()),
+          LuxeListCard(child: _SatelEncryptionCard()),
+        ],
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ETHM-1 / INT-ETHER connection
+// ---------------------------------------------------------------------------
+
+InputDecoration _satelCellDeco() => luxeFilledDecoration().copyWith(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    );
+
+class _SatelTableHeader extends StatelessWidget {
+  const _SatelTableHeader(this.cells);
+  final List<({String label, int flex, double? width})> cells;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.labelMedium;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          for (var i = 0; i < cells.length; i++) ...[
+            if (i > 0) const SizedBox(width: 10),
+            if (cells[i].width != null)
+              SizedBox(
+                width: cells[i].width,
+                child: Text(cells[i].label, style: style),
+              )
+            else
+              Expanded(
+                flex: cells[i].flex,
+                child: Text(cells[i].label, style: style),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _SatelConnectionCard extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_SatelConnectionCard> createState() =>
+      _SatelConnectionCardState();
+}
+
+class _SatelConnectionCardState extends ConsumerState<_SatelConnectionCard> {
+  final _hostCtrl = TextEditingController();
+  final _portCtrl = TextEditingController();
+  bool _loaded = false;
+  bool _saving = false;
+  String? _error;
+  String? _success;
+
+  @override
+  void dispose() {
+    _hostCtrl.dispose();
+    _portCtrl.dispose();
+    super.dispose();
+  }
+
+  void _fillFrom(SatelServiceConfig? cfg) {
+    if (_loaded) return;
+    _hostCtrl.text = cfg?.host ?? '';
+    _portCtrl.text = '${cfg?.port ?? 7094}';
+    _loaded = true;
+  }
+
+  Future<void> _save() async {
+    final host = _hostCtrl.text.trim();
+    if (host.isEmpty) {
+      setState(() {
+        _error = 'Vul het IP-adres van de ETHM-1 in.';
+        _success = null;
+      });
+      return;
+    }
+    final port = int.tryParse(_portCtrl.text.trim()) ?? 0;
+    if (port < 1 || port > 65535) {
+      setState(() {
+        _error = 'Poort moet tussen 1 en 65535 liggen (standaard 7094).';
+        _success = null;
+      });
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+      _success = null;
+    });
+    final result = await saveSatelConnection(host: host, port: port);
+    if (!mounted) return;
+    setState(() {
+      _saving = false;
+      if (result.ok) {
+        _success = 'Opgeslagen. De koppeling wordt opnieuw opgezet.';
+        ref.invalidate(satelServiceConfigProvider);
+        ref.invalidate(satelStatusProvider);
+      } else {
+        _error = result.error ?? 'Opslaan mislukt.';
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cfgAsync = ref.watch(satelServiceConfigProvider);
+    cfgAsync.whenData(_fillFrom);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const LuxeSectionTitle(
+          icon: Icons.lan_outlined,
+          title: 'ETHM-1 / INT-ETHER',
+          trailing: LuxeInfoIconButton(
+            title: 'ETHM-1',
+            body:
+                'IP-adres van de ETHM-1 of INT-ETHER in hetzelfde netwerk als de NUC. '
+                'Integratiepoort is meestal 7094 (DLOADX: Integratie).',
+          ),
+        ),
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.security_outlined, size: 22),
-            const SizedBox(width: 10),
             Expanded(
-              child: Text('Satel alarm',
-                  style: Theme.of(context).textTheme.headlineMedium),
+              flex: 3,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const LuxeFieldLabel('IP-adres'),
+                  TextField(
+                    controller: _hostCtrl,
+                    keyboardType: TextInputType.url,
+                    decoration: luxeFilledDecoration(),
+                  ),
+                ],
+              ),
             ),
-            const LuxeInfoIconButton(
-              title: 'Satel',
-              body:
-                  'Koppeling met een Satel INTEGRA (ETHM-1). '
-                  'Zet aan, vul partities en zones in zoals in DLOADX, daarna de pincode.',
+            const SizedBox(width: 12),
+            SizedBox(
+              width: 120,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const LuxeFieldLabel('Poort'),
+                  TextField(
+                    controller: _portCtrl,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
+                    decoration: luxeFilledDecoration(),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 20),
-        if (loading)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
-          )
-        else
-          LuxeSwitchRow(
-            title: 'Integratie',
-            value: enabled,
-            onChanged: (v) =>
-                ref.read(satelEnabledProvider.notifier).setEnabled(v),
-          ),
-        if (enabled) ...[
-          const SizedBox(height: 20),
-          _SatelLiveStatus(),
-          const SizedBox(height: 20),
-          _SatelPartitionsCard(),
-          const SizedBox(height: 20),
-          _SatelZonesCard(),
-          const SizedBox(height: 20),
-          _SatelPinCard(),
-          const SizedBox(height: 20),
-          _SatelEncryptionCard(),
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(_error!,
+              style: TextStyle(color: LuxeColors.danger, fontSize: 12)),
         ],
+        if (_success != null) ...[
+          const SizedBox(height: 8),
+          Text(_success!,
+              style: TextStyle(color: LuxeColors.inkSoft, fontSize: 12)),
+        ],
+        const SizedBox(height: 12),
+        Align(
+          alignment: Alignment.centerRight,
+          child: FilledButton(
+            onPressed: _saving ? null : _save,
+            child: _saving
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white))
+                : const Text('Opslaan'),
+          ),
+        ),
       ],
     );
   }
@@ -6884,140 +7087,125 @@ class _SatelPartitionsCardState extends ConsumerState<_SatelPartitionsCard> {
   Widget build(BuildContext context) {
     final list = _local;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.shield_outlined, size: 18),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text('Partities',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        LuxeSectionTitle(
+          icon: Icons.shield_outlined,
+          title: 'Partities',
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const LuxeInfoIconButton(
+                title: 'Partities',
+                body:
+                    'Nummer zoals in DLOADX (1–32). '
+                    'Inschakelmodi: 0 = volledig, 1–3 = deelinschakeling uit DLOADX.',
+              ),
+              if (list != null)
+                TextButton.icon(
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Toevoegen'),
+                  onPressed: list.length < 32 ? _add : null,
                 ),
-                const LuxeInfoIconButton(
-                  title: 'Partities',
-                  body:
-                      'Nummer zoals in DLOADX (1–32). '
-                      'Inschakelmodi: 0 = volledig, 1–3 = deelinschakeling uit DLOADX.',
-                ),
-                if (list != null)
-                  TextButton.icon(
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Toevoegen'),
-                    onPressed: list.length < 32 ? _add : null,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 14),
-
-            if (list == null)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-              )
-            else if (list.isEmpty)
-              const Text('Geen partities.',
-                  style: TextStyle(fontSize: 12, color: Color(0xFF98989F)))
-            else
-              ...List.generate(list.length, (i) {
-                final p = list[i];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF7F4EC),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0x14000000)),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 64,
-                            child: TextFormField(
-                              initialValue: '${p.number}',
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'Nr.',
-                                isDense: true,
-                                border: OutlineInputBorder(),
-                              ),
-                              onChanged: (v) {
-                                final n = int.tryParse(v);
-                                if (n != null && n >= 1 && n <= 32) {
-                                  setState(() =>
-                                      _local![i] = p.copyWith(number: n));
-                                }
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: TextFormField(
-                              initialValue: p.name,
-                              decoration: const InputDecoration(
-                                labelText: 'Naam',
-                                isDense: true,
-                                border: OutlineInputBorder(),
-                              ),
-                              onChanged: (v) => setState(
-                                  () => _local![i] = p.copyWith(name: v)),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 18),
-                            color: const Color(0xFF98989F),
-                            onPressed: () => _remove(i),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      _ArmModesEditor(
-                        modes: p.armModes,
-                        onChanged: (m) => setState(
-                            () => _local![i] = p.copyWith(armModes: m)),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-
-            if (_error != null) ...[
-              const SizedBox(height: 8),
-              Text(_error!,
-                  style: const TextStyle(
-                      color: Color(0xFFD64545), fontSize: 12)),
             ],
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Spacer(),
-                TextButton(
-                  onPressed: list == null ? null : _load,
-                  child: const Text('Herladen'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: (list == null || _saving) ? null : _save,
-                  child: _saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : const Text('Opslaan'),
-                ),
-              ],
+          ),
+        ),
+        if (list == null)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          )
+        else if (list.isEmpty)
+          Text('Geen partities.',
+              style: Theme.of(context).textTheme.bodySmall)
+        else ...[
+          const _SatelTableHeader([
+            (label: 'Nr.', flex: 0, width: 56.0),
+            (label: 'Naam', flex: 2, width: null),
+            (label: 'Inschakelmodi', flex: 4, width: null),
+            (label: '', flex: 0, width: 40.0),
+          ]),
+          ...List.generate(list.length, (i) {
+            final p = list[i];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 56,
+                    child: TextFormField(
+                      initialValue: '${p.number}',
+                      keyboardType: TextInputType.number,
+                      decoration: _satelCellDeco(),
+                      onChanged: (v) {
+                        final n = int.tryParse(v);
+                        if (n != null && n >= 1 && n <= 32) {
+                          setState(() =>
+                              _local![i] = p.copyWith(number: n));
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: TextFormField(
+                      initialValue: p.name,
+                      decoration: _satelCellDeco(),
+                      onChanged: (v) => setState(
+                          () => _local![i] = p.copyWith(name: v)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 4,
+                    child: _ArmModesEditor(
+                      modes: p.armModes,
+                      onChanged: (m) => setState(
+                          () => _local![i] = p.copyWith(armModes: m)),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 40,
+                    child: IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      color: LuxeColors.inkSoft,
+                      onPressed: () => _remove(i),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(_error!,
+              style: TextStyle(color: LuxeColors.danger, fontSize: 12)),
+        ],
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            const Spacer(),
+            TextButton(
+              onPressed: list == null ? null : _load,
+              child: const Text('Herladen'),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: (list == null || _saving) ? null : _save,
+              child: _saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Opslaan'),
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 }
@@ -7037,90 +7225,73 @@ class _ArmModesEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
       children: [
-        Row(
-          children: [
-            const Expanded(
-              child: Text('Inschakelmodi',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF98989F))),
-            ),
-            TextButton.icon(
-              icon: const Icon(Icons.add, size: 15),
-              label: const Text('Modus'),
-              onPressed: modes.length >= 4
-                  ? null
-                  : () {
-                      final used = modes.map((m) => m.mode).toSet();
-                      final next = [0, 1, 2, 3]
-                          .firstWhere((n) => !used.contains(n), orElse: () => 0);
-                      onChanged([
-                        ...modes,
-                        SatelArmMode(mode: next, name: _defaultName(next)),
-                      ]);
-                    },
-            ),
-          ],
-        ),
-        ...List.generate(modes.length, (j) {
-          final m = modes[j];
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
+        Expanded(
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
             child: Row(
               children: [
-                SizedBox(
-                  width: 104,
-                  child: DropdownButtonFormField<int>(
-                    initialValue: m.mode,
-                    isExpanded: true,
-                    decoration: const InputDecoration(
-                      labelText: 'Modus',
-                      isDense: true,
-                      border: OutlineInputBorder(),
+                for (var j = 0; j < modes.length; j++) ...[
+                  if (j > 0) const SizedBox(width: 8),
+                  SizedBox(
+                    width: 108,
+                    child: DropdownButtonFormField<int>(
+                      initialValue: modes[j].mode,
+                      isExpanded: true,
+                      decoration: _satelCellDeco(),
+                      items: [
+                        for (final n in [0, 1, 2, 3])
+                          DropdownMenuItem(value: n, child: Text('Modus $n')),
+                      ],
+                      onChanged: (v) {
+                        if (v == null) return;
+                        final copy = [...modes];
+                        copy[j] = SatelArmMode(mode: v, name: modes[j].name);
+                        onChanged(copy);
+                      },
                     ),
-                    items: [
-                      for (final n in [0, 1, 2, 3])
-                        DropdownMenuItem(value: n, child: Text('Modus $n')),
-                    ],
-                    onChanged: (v) {
-                      if (v == null) return;
-                      final copy = [...modes];
-                      copy[j] = SatelArmMode(mode: v, name: m.name);
-                      onChanged(copy);
-                    },
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: TextFormField(
-                    initialValue: m.name,
-                    decoration: const InputDecoration(
-                      labelText: 'Naam',
-                      isDense: true,
-                      border: OutlineInputBorder(),
+                  const SizedBox(width: 6),
+                  SizedBox(
+                    width: 120,
+                    child: TextFormField(
+                      initialValue: modes[j].name,
+                      decoration: _satelCellDeco(),
+                      onChanged: (v) {
+                        final copy = [...modes];
+                        copy[j] = SatelArmMode(mode: modes[j].mode, name: v);
+                        onChanged(copy);
+                      },
                     ),
-                    onChanged: (v) {
-                      final copy = [...modes];
-                      copy[j] = SatelArmMode(mode: m.mode, name: v);
-                      onChanged(copy);
-                    },
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, size: 16),
-                  color: const Color(0xFF98989F),
-                  onPressed: modes.length <= 1
-                      ? null
-                      : () => onChanged([...modes]..removeAt(j)),
-                ),
+                  if (modes.length > 1)
+                    IconButton(
+                      icon: const Icon(Icons.close, size: 16),
+                      color: LuxeColors.inkSoft,
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => onChanged([...modes]..removeAt(j)),
+                    ),
+                ],
               ],
             ),
-          );
-        }),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.add, size: 16),
+          tooltip: 'Modus',
+          onPressed: modes.length >= 4
+              ? null
+              : () {
+                  final used = modes.map((m) => m.mode).toSet();
+                  final next = [0, 1, 2, 3]
+                      .firstWhere((n) => !used.contains(n), orElse: () => 0);
+                  onChanged([
+                    ...modes,
+                    SatelArmMode(mode: next, name: _defaultName(next)),
+                  ]);
+                },
+        ),
       ],
     );
   }
@@ -7204,210 +7375,178 @@ class _SatelZonesCardState extends ConsumerState<_SatelZonesCard> {
     final rooms = _roomOptions(cfg);
     final knownRoomIds = rooms.map((r) => r.id).toSet();
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.sensors_outlined, size: 18),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text('Zones',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        LuxeSectionTitle(
+          icon: Icons.sensors_outlined,
+          title: 'Zones',
+          trailing: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const LuxeInfoIconButton(
+                title: 'Zones',
+                body:
+                    'Zonenummer zoals in DLOADX (1–128). '
+                    'Type en kamer bepalen hoe de sensor in de app verschijnt.',
+              ),
+              if (list != null)
+                TextButton.icon(
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('Toevoegen'),
+                  onPressed: list.length < 128 ? _add : null,
                 ),
-                const LuxeInfoIconButton(
-                  title: 'Zones',
-                  body:
-                      'Zonenummer zoals in DLOADX (1–128). '
-                      'Type en kamer bepalen hoe de sensor in de app verschijnt.',
-                ),
-                if (list != null)
-                  TextButton.icon(
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Toevoegen'),
-                    onPressed: list.length < 128 ? _add : null,
-                  ),
-              ],
-            ),
-            const SizedBox(height: 14),
-
-            if (list == null)
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-              )
-            else if (list.isEmpty)
-              const Text('Geen zones.',
-                  style: TextStyle(fontSize: 12, color: Color(0xFF98989F)))
-            else
-              ...List.generate(list.length, (i) {
-                final z = list[i];
-                // Only feed the dropdown a value it actually knows, else null.
-                final roomValue =
-                    (z.roomId != null && knownRoomIds.contains(z.roomId))
-                        ? z.roomId
-                        : null;
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF7F4EC),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0x14000000)),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 64,
-                            child: TextFormField(
-                              initialValue: '${z.zoneNumber}',
-                              keyboardType: TextInputType.number,
-                              decoration: const InputDecoration(
-                                labelText: 'Nr.',
-                                isDense: true,
-                                border: OutlineInputBorder(),
-                              ),
-                              onChanged: (v) {
-                                final n = int.tryParse(v);
-                                if (n != null && n >= 1 && n <= 128) {
-                                  setState(() => _local![i] =
-                                      z.copyWith(zoneNumber: n));
-                                }
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: TextFormField(
-                              initialValue: z.name,
-                              decoration: const InputDecoration(
-                                labelText: 'Naam',
-                                isDense: true,
-                                border: OutlineInputBorder(),
-                              ),
-                              onChanged: (v) => setState(
-                                  () => _local![i] = z.copyWith(name: v)),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline, size: 18),
-                            color: const Color(0xFF98989F),
-                            onPressed: () => _remove(i),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              initialValue: z.deviceType,
-                              isExpanded: true,
-                              decoration: const InputDecoration(
-                                labelText: 'Type',
-                                isDense: true,
-                                border: OutlineInputBorder(),
-                              ),
-                              items: [
-                                for (final t in satelDeviceTypes)
-                                  DropdownMenuItem(
-                                    value: t,
-                                    child: Text(satelDeviceTypeLabel(t),
-                                        overflow: TextOverflow.ellipsis),
-                                  ),
-                              ],
-                              onChanged: (v) {
-                                if (v != null) {
-                                  setState(() =>
-                                      _local![i] = z.copyWith(deviceType: v));
-                                }
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: DropdownButtonFormField<String?>(
-                              initialValue: roomValue,
-                              isExpanded: true,
-                              decoration: const InputDecoration(
-                                labelText: 'Kamer',
-                                isDense: true,
-                                border: OutlineInputBorder(),
-                              ),
-                              items: [
-                                const DropdownMenuItem<String?>(
-                                  value: null,
-                                  child: Text('Geen kamer',
-                                      overflow: TextOverflow.ellipsis),
-                                ),
-                                for (final r in rooms)
-                                  DropdownMenuItem<String?>(
-                                    value: r.id,
-                                    child: Text(r.label,
-                                        overflow: TextOverflow.ellipsis),
-                                  ),
-                              ],
-                              onChanged: (v) {
-                                setState(() {
-                                  if (v == null) {
-                                    _local![i] = z.copyWith(clearRoom: true);
-                                  } else {
-                                    final label = rooms
-                                        .firstWhere((r) => r.id == v)
-                                        .label;
-                                    // Store the room name (before the " · floor")
-                                    // for the alarm-page grouping label.
-                                    final name = label.split(' · ').first;
-                                    _local![i] = z.copyWith(
-                                        roomId: v, roomName: name);
-                                  }
-                                });
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                );
-              }),
-
-            if (_error != null) ...[
-              const SizedBox(height: 8),
-              Text(_error!,
-                  style: const TextStyle(
-                      color: Color(0xFFD64545), fontSize: 12)),
             ],
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Spacer(),
-                TextButton(
-                  onPressed: list == null ? null : _load,
-                  child: const Text('Herladen'),
-                ),
-                const SizedBox(width: 8),
-                FilledButton(
-                  onPressed: (list == null || _saving) ? null : _save,
-                  child: _saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : const Text('Opslaan'),
-                ),
-              ],
+          ),
+        ),
+        if (list == null)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+          )
+        else if (list.isEmpty)
+          Text('Geen zones.', style: Theme.of(context).textTheme.bodySmall)
+        else ...[
+          const _SatelTableHeader([
+            (label: 'Nr.', flex: 0, width: 56.0),
+            (label: 'Naam', flex: 2, width: null),
+            (label: 'Type', flex: 2, width: null),
+            (label: 'Kamer', flex: 2, width: null),
+            (label: '', flex: 0, width: 40.0),
+          ]),
+          ...List.generate(list.length, (i) {
+            final z = list[i];
+            final roomValue =
+                (z.roomId != null && knownRoomIds.contains(z.roomId))
+                    ? z.roomId
+                    : null;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 56,
+                    child: TextFormField(
+                      initialValue: '${z.zoneNumber}',
+                      keyboardType: TextInputType.number,
+                      decoration: _satelCellDeco(),
+                      onChanged: (v) {
+                        final n = int.tryParse(v);
+                        if (n != null && n >= 1 && n <= 128) {
+                          setState(() =>
+                              _local![i] = z.copyWith(zoneNumber: n));
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: TextFormField(
+                      initialValue: z.name,
+                      decoration: _satelCellDeco(),
+                      onChanged: (v) => setState(
+                          () => _local![i] = z.copyWith(name: v)),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: DropdownButtonFormField<String>(
+                      initialValue: z.deviceType,
+                      isExpanded: true,
+                      decoration: _satelCellDeco(),
+                      items: [
+                        for (final t in satelDeviceTypes)
+                          DropdownMenuItem(
+                            value: t,
+                            child: Text(satelDeviceTypeLabel(t),
+                                overflow: TextOverflow.ellipsis),
+                          ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) {
+                          setState(() =>
+                              _local![i] = z.copyWith(deviceType: v));
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: DropdownButtonFormField<String?>(
+                      initialValue: roomValue,
+                      isExpanded: true,
+                      decoration: _satelCellDeco(),
+                      items: [
+                        const DropdownMenuItem<String?>(
+                          value: null,
+                          child: Text('Geen kamer',
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                        for (final r in rooms)
+                          DropdownMenuItem<String?>(
+                            value: r.id,
+                            child: Text(r.label,
+                                overflow: TextOverflow.ellipsis),
+                          ),
+                      ],
+                      onChanged: (v) {
+                        setState(() {
+                          if (v == null) {
+                            _local![i] = z.copyWith(clearRoom: true);
+                          } else {
+                            final label =
+                                rooms.firstWhere((r) => r.id == v).label;
+                            final name = label.split(' · ').first;
+                            _local![i] =
+                                z.copyWith(roomId: v, roomName: name);
+                          }
+                        });
+                      },
+                    ),
+                  ),
+                  SizedBox(
+                    width: 40,
+                    child: IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 18),
+                      color: LuxeColors.inkSoft,
+                      onPressed: () => _remove(i),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(_error!,
+              style: TextStyle(color: LuxeColors.danger, fontSize: 12)),
+        ],
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            const Spacer(),
+            TextButton(
+              onPressed: list == null ? null : _load,
+              child: const Text('Herladen'),
+            ),
+            const SizedBox(width: 8),
+            FilledButton(
+              onPressed: (list == null || _saving) ? null : _save,
+              child: _saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Text('Opslaan'),
             ),
           ],
         ),
-      ),
+      ],
     );
   }
 }
@@ -7477,95 +7616,95 @@ class _SatelPinCardState extends ConsumerState<_SatelPinCard> {
     final cfgAsync = ref.watch(satelServiceConfigProvider);
     final hasPin = cfgAsync.value?.hasPin ?? false;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const LuxeSectionTitle(
+          icon: Icons.pin_outlined,
+          title: 'Pincode',
+          trailing: LuxeInfoIconButton(
+            title: 'Pincode',
+            body:
+                '4–8 cijfers. Zelfde code als op het Satel-toestel, '
+                'voor in- en uitschakelen vanuit de app.',
+          ),
+        ),
+        Text(
+          hasPin ? 'Ingesteld' : 'Niet ingesteld',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: hasPin ? const Color(0xFF4CAF50) : LuxeColors.danger,
+              ),
+        ),
+        const SizedBox(height: 12),
+        Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                const Icon(Icons.pin_outlined, size: 18),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text('Pincode',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                ),
-                const LuxeInfoIconButton(
-                  title: 'Pincode',
-                  body:
-                      '4–8 cijfers. Zelfde code als op het Satel-toestel, '
-                      'voor in- en uitschakelen vanuit de app.',
-                ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Text(
-              hasPin ? 'Ingesteld' : 'Niet ingesteld',
-              style: TextStyle(
-                fontSize: 12,
-                color: hasPin
-                    ? const Color(0xFF4CAF50)
-                    : const Color(0xFFD64545),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const LuxeFieldLabel('Pincode'),
+                  TextField(
+                    controller: _pin1Ctrl,
+                    obscureText: true,
+                    keyboardType: TextInputType.number,
+                    maxLength: 8,
+                    decoration: luxeFilledDecoration().copyWith(counterText: ''),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 14),
-            TextFormField(
-              controller: _pin1Ctrl,
-              obscureText: true,
-              keyboardType: TextInputType.number,
-              maxLength: 8,
-              decoration: const InputDecoration(
-                labelText: 'Pincode',
-                border: OutlineInputBorder(),
-                counterText: '',
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const LuxeFieldLabel('Herhaal'),
+                  TextField(
+                    controller: _pin2Ctrl,
+                    obscureText: true,
+                    keyboardType: TextInputType.number,
+                    maxLength: 8,
+                    decoration: luxeFilledDecoration().copyWith(counterText: ''),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 10),
-            TextFormField(
-              controller: _pin2Ctrl,
-              obscureText: true,
-              keyboardType: TextInputType.number,
-              maxLength: 8,
-              decoration: const InputDecoration(
-                labelText: 'Herhaal',
-                border: OutlineInputBorder(),
-                counterText: '',
-              ),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 8),
-              Text(_error!, style: const TextStyle(color: Color(0xFFD64545), fontSize: 13)),
-            ],
-            if (_success != null) ...[
-              const SizedBox(height: 8),
-              Text(_success!, style: const TextStyle(color: Color(0xFF4CAF50), fontSize: 13)),
-            ],
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                FilledButton.icon(
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.save_outlined, size: 16),
-                  label: const Text('Opslaan'),
-                  onPressed: _saving ? null : _save,
-                ),
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  icon: const Icon(Icons.refresh_rounded, size: 16),
-                  label: const Text('Wissen'),
-                  onPressed: _reset,
-                ),
-              ],
             ),
           ],
         ),
-      ),
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(_error!,
+              style: TextStyle(color: LuxeColors.danger, fontSize: 13)),
+        ],
+        if (_success != null) ...[
+          const SizedBox(height: 8),
+          Text(_success!,
+              style: TextStyle(color: LuxeColors.inkSoft, fontSize: 13)),
+        ],
+        const SizedBox(height: 14),
+        Row(
+          children: [
+            FilledButton.icon(
+              icon: _saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.save_outlined, size: 16),
+              label: const Text('Opslaan'),
+              onPressed: _saving ? null : _save,
+            ),
+            const SizedBox(width: 8),
+            TextButton.icon(
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: const Text('Wissen'),
+              onPressed: _reset,
+            ),
+          ],
+        ),
+      ],
     );
   }
 }
@@ -7615,95 +7754,78 @@ class _SatelEncryptionCardState extends ConsumerState<_SatelEncryptionCard> {
     final cfgAsync = ref.watch(satelServiceConfigProvider);
     final hasEnc = cfgAsync.value?.hasEncryption ?? false;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const LuxeSectionTitle(
+          icon: Icons.lock_outline,
+          title: 'Encryptie',
+          trailing: LuxeInfoIconButton(
+            title: 'Encryptie',
+            body:
+                'Alleen als in DLOADX versleutelde integratie aan staat. '
+                'Zelfde sleutel als op het paneel.',
+          ),
+        ),
+        Text(
+          hasEnc ? 'Aan' : 'Uit',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: hasEnc ? const Color(0xFF4CAF50) : LuxeColors.inkSoft,
+              ),
+        ),
+        const SizedBox(height: 12),
+        const LuxeFieldLabel('Integratiesleutel'),
+        TextField(
+          controller: _keyCtrl,
+          obscureText: true,
+          decoration: luxeFilledDecoration(),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(_error!,
+              style: TextStyle(color: LuxeColors.danger, fontSize: 13)),
+        ],
+        if (_success != null) ...[
+          const SizedBox(height: 8),
+          Text(_success!,
+              style: TextStyle(color: LuxeColors.inkSoft, fontSize: 13)),
+        ],
+        const SizedBox(height: 14),
+        Row(
           children: [
-            Row(
-              children: [
-                const Icon(Icons.lock_outline, size: 18),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text('Encryptie',
-                      style: TextStyle(fontWeight: FontWeight.w600)),
-                ),
-                const LuxeInfoIconButton(
-                  title: 'Encryptie',
-                  body:
-                      'Alleen als in DLOADX versleutelde integratie aan staat. '
-                      'Zelfde sleutel als op het paneel.',
-                ),
-              ],
+            FilledButton.icon(
+              icon: _saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.save_outlined, size: 16),
+              label: const Text('Opslaan'),
+              onPressed: _saving
+                  ? null
+                  : () {
+                      final k = _keyCtrl.text.trim();
+                      if (k.isEmpty) {
+                        setState(() {
+                          _error = 'Vul een sleutel in.';
+                          _success = null;
+                        });
+                        return;
+                      }
+                      _saveKey(k);
+                    },
             ),
-            const SizedBox(height: 4),
-            Text(
-              hasEnc ? 'Aan' : 'Uit',
-              style: TextStyle(
-                fontSize: 12,
-                color: hasEnc
-                    ? const Color(0xFF4CAF50)
-                    : const Color(0xFF98989F),
+            const SizedBox(width: 8),
+            if (hasEnc)
+              TextButton.icon(
+                icon: const Icon(Icons.lock_open_outlined, size: 16),
+                label: const Text('Encryptie uit'),
+                onPressed: _saving ? null : () => _saveKey(''),
               ),
-            ),
-            const SizedBox(height: 14),
-            TextFormField(
-              controller: _keyCtrl,
-              obscureText: true,
-              decoration: const InputDecoration(
-                labelText: 'Integratiesleutel',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 8),
-              Text(_error!,
-                  style: const TextStyle(color: Color(0xFFD64545), fontSize: 13)),
-            ],
-            if (_success != null) ...[
-              const SizedBox(height: 8),
-              Text(_success!,
-                  style: const TextStyle(color: Color(0xFF4CAF50), fontSize: 13)),
-            ],
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                FilledButton.icon(
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : const Icon(Icons.save_outlined, size: 16),
-                  label: const Text('Opslaan'),
-                  onPressed: _saving
-                      ? null
-                      : () {
-                          final k = _keyCtrl.text.trim();
-                          if (k.isEmpty) {
-                            setState(() {
-                              _error = 'Vul een sleutel in.';
-                              _success = null;
-                            });
-                            return;
-                          }
-                          _saveKey(k);
-                        },
-                ),
-                const SizedBox(width: 8),
-                if (hasEnc)
-                  TextButton.icon(
-                    icon: const Icon(Icons.lock_open_outlined, size: 16),
-                    label: const Text('Encryptie uit'),
-                    onPressed: _saving ? null : () => _saveKey(''),
-                  ),
-              ],
-            ),
           ],
         ),
-      ),
+      ],
     );
   }
 }
@@ -7723,60 +7845,53 @@ class _SatelLiveStatus extends ConsumerWidget {
     };
     final violated = status.allZones.where((z) => z.violated).toList();
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
           children: [
-            Row(
-              children: [
-                Container(
-                  width: 10,
-                  height: 10,
-                  margin: const EdgeInsets.only(right: 8),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: connected
-                        ? const Color(0xFF4CAF50)
-                        : const Color(0xFF98989F),
-                  ),
-                ),
-                Text(
-                  connected ? 'Verbonden' : 'Geen verbinding',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w600, fontSize: 13),
-                ),
-                const SizedBox(width: 20),
-                const Icon(Icons.shield_outlined, size: 15),
-                const SizedBox(width: 6),
-                Text(stateLabel, style: const TextStyle(fontSize: 13)),
-              ],
-            ),
-            if (violated.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: violated.map((z) {
-                  return Chip(
-                    label: Text(
-                      z.room.trim().isEmpty ? z.name : '${z.room} · ${z.name}',
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                    backgroundColor:
-                        const Color(0xFFD64545).withValues(alpha: 0.10),
-                    side: BorderSide(
-                        color: const Color(0xFFD64545)
-                            .withValues(alpha: 0.30)),
-                    padding: EdgeInsets.zero,
-                  );
-                }).toList(),
+            Container(
+              width: 10,
+              height: 10,
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: connected
+                    ? const Color(0xFF4CAF50)
+                    : LuxeColors.inkSoft,
               ),
-            ],
+            ),
+            Text(
+              connected ? 'Verbonden' : 'Geen verbinding',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+            const SizedBox(width: 20),
+            Icon(Icons.shield_outlined, size: 15, color: LuxeColors.ink),
+            const SizedBox(width: 6),
+            Text(stateLabel, style: Theme.of(context).textTheme.bodyMedium),
           ],
         ),
-      ),
+        if (violated.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: violated.map((z) {
+              return Chip(
+                label: Text(
+                  z.room.trim().isEmpty ? z.name : '${z.room} · ${z.name}',
+                  style: const TextStyle(fontSize: 11),
+                ),
+                backgroundColor:
+                    LuxeColors.danger.withValues(alpha: 0.10),
+                side: BorderSide(
+                    color: LuxeColors.danger.withValues(alpha: 0.30)),
+                padding: EdgeInsets.zero,
+              );
+            }).toList(),
+          ),
+        ],
+      ],
     );
   }
 }

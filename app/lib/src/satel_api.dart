@@ -603,6 +603,8 @@ final satelServiceConfigProvider =
         port: cfg.port,
         partitions: parts,
         hasPin: cfg.hasPin,
+        hasEncryption: cfg.hasEncryption,
+        zoneMappings: cfg.zoneMappings,
       );
     }
   } catch (_) {}
@@ -659,6 +661,30 @@ Future<({bool ok, String? error})> saveSatelPartitions(
   } catch (_) {}
 
   return (ok: true, error: null);
+}
+
+/// ETHM-1 / INT-ETHER address. Other config fields are left as-is.
+Future<({bool ok, String? error})> saveSatelConnection({
+  required String host,
+  required int port,
+}) async {
+  try {
+    final res = await http
+        .post(
+          Uri.parse('$satelBase/satel/config'),
+          headers: {'content-type': 'application/json'},
+          body: jsonEncode({'host': host.trim(), 'port': port}),
+        )
+        .timeout(const Duration(seconds: 6));
+    if (res.statusCode == 204) return (ok: true, error: null);
+    final body = res.body;
+    final msg = body.isNotEmpty
+        ? ((jsonDecode(body) as Map<String, dynamic>)['detail'] as String?)
+        : null;
+    return (ok: false, error: msg ?? 'HTTP ${res.statusCode}');
+  } catch (e) {
+    return (ok: false, error: e.toString());
+  }
 }
 
 /// Save the zone → sensor → room mapping to the Satel service.
