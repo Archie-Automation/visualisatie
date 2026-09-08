@@ -985,7 +985,7 @@
     "wtwZehnderComfoConnect": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Zehnder ComfoConnect: standen als 1-bit + eigen status-bit; boost-tijd en resterende tijd apart.",
+      "description": "Zehnder ComfoConnect: standen als 1-bit + eigen status-bit; boost-tijd set en status-set apart, aftellen in de app.",
       "properties": {
         "awayGa": { "$ref": "#/definitions/gaPattern" },
         "awayStatusGa": { "$ref": "#/definitions/gaPattern" },
@@ -1003,9 +1003,9 @@
           "$ref": "#/definitions/gaPattern",
           "description": "Ingestelde boostduur schrijven, DPT 7.001, seconden."
         },
-        "boostRemainingGa": {
+        "boostTimeStatusGa": {
           "$ref": "#/definitions/gaPattern",
-          "description": "Resterende boost-tijd lezen, DPT 7.001, seconden."
+          "description": "Teruglezing van de ingestelde boostduur, DPT 7.001, seconden."
         },
         "minutes": {
           "type": "integer",
