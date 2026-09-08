@@ -869,9 +869,14 @@ class ClimateInstallerSection extends StatefulWidget {
 }
 
 class _InstallerInfoTitle extends StatelessWidget {
-  const _InstallerInfoTitle({required this.title, required this.body});
+  const _InstallerInfoTitle({
+    required this.title,
+    required this.body,
+    this.trailing,
+  });
   final String title;
   final String body;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -883,6 +888,37 @@ class _InstallerInfoTitle extends StatelessWidget {
             child: Text(title, style: Theme.of(context).textTheme.titleSmall),
           ),
           LuxeInfoIconButton(title: title, body: body),
+          if (trailing != null) trailing!,
+        ],
+      ),
+    );
+  }
+}
+
+class _OverviewColHeader extends StatelessWidget {
+  const _OverviewColHeader(this.cells);
+  final List<({String label, int flex, double? width})> cells;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = Theme.of(context).textTheme.labelMedium;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8, top: 4),
+      child: Row(
+        children: [
+          for (var i = 0; i < cells.length; i++) ...[
+            if (i > 0) const SizedBox(width: 10),
+            if (cells[i].width != null)
+              SizedBox(
+                width: cells[i].width,
+                child: Text(cells[i].label, style: style),
+              )
+            else
+              Expanded(
+                flex: cells[i].flex,
+                child: Text(cells[i].label, style: style),
+              ),
+          ],
         ],
       ),
     );
@@ -1794,6 +1830,7 @@ class _InstallerStrField extends StatefulWidget {
     this.hint,
     this.gaSearch = false,
     this.gaDptHint,
+    this.compact = false,
   });
 
   final String label;
@@ -1803,6 +1840,8 @@ class _InstallerStrField extends StatefulWidget {
   final String? hint;
   final bool gaSearch;
   final String? gaDptHint;
+  /// No label above the field — for one-row tables.
+  final bool compact;
 
   @override
   State<_InstallerStrField> createState() => _InstallerStrFieldState();
@@ -1853,22 +1892,26 @@ class _InstallerStrFieldState extends State<_InstallerStrField> {
         ? KnxGaCatalog.instance.nameFor(_c.text)
         : null;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: EdgeInsets.only(bottom: widget.compact ? 0 : 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LuxeFieldLabel(widget.label),
+          if (!widget.compact) LuxeFieldLabel(widget.label),
           TextField(
             controller: _c,
             decoration: luxeFilledDecoration(
-              hint: widget.hint,
-              helper: resolvedName,
+              hint: widget.compact ? null : widget.hint,
+              helper: widget.compact ? null : resolvedName,
               suffixIcon: gaSearch
                   ? IconButton(
                       icon: const Icon(Icons.search),
                       tooltip: 'Groepsadres zoeken',
                       onPressed: _pickGa,
                     )
+                  : null,
+            ).copyWith(
+              contentPadding: widget.compact
+                  ? const EdgeInsets.symmetric(horizontal: 12, vertical: 10)
                   : null,
             ),
             keyboardType: widget.number
@@ -2267,72 +2310,86 @@ class _WtwInstallerSectionState extends State<WtwInstallerSection> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final buttons = _buttons;
     final statusItems = _status;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 8),
-
-        // ── Standen / knoppen ─────────────────────────────────────────────
-        Row(
-          children: [
-            Text('Standen / knoppen', style: theme.textTheme.titleSmall),
-            const Spacer(),
-            TextButton.icon(
-              onPressed: buttons.length < 8 ? _addButton : null,
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Toevoegen'),
-            ),
-          ],
-        ),
-        Text(
-          'Iedere knop stuurt één KNX-telegram. Kies het DPT en de waarde '
-          'die verstuurd moet worden. Optioneel terugkoppeling-GA voor actief-indicator.',
-          style: theme.textTheme.bodySmall?.copyWith(height: 1.4),
-        ),
-        const SizedBox(height: 8),
-        for (int i = 0; i < buttons.length; i++)
-          _WtwButtonEditor(
-            key: ValueKey(buttons[i]['id'] ?? i),
-            button: buttons[i],
-            index: i,
-            onChanged: () => setState(widget.onChanged),
-            onDelete: () => _removeButton(i),
+        _InstallerInfoTitle(
+          title: 'Standen / knoppen',
+          body:
+              'Iedere knop stuurt één KNX-telegram. Kies het DPT en de waarde '
+              'die verstuurd moet worden. Optioneel terugkoppeling-GA voor de '
+              'actief-indicator. Zoek groepadressen in de catalogus.',
+          trailing: TextButton.icon(
+            onPressed: buttons.length < 8 ? _addButton : null,
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('Toevoegen'),
           ),
-
-        const SizedBox(height: 20),
-        const Divider(),
-        const SizedBox(height: 8),
-
-        // ── Status / storingsmeldingen ────────────────────────────────────
-        Row(
-          children: [
-            Text('Status- en storingsmeldingen', style: theme.textTheme.titleSmall),
-            const Spacer(),
-            TextButton.icon(
-              onPressed: statusItems.length < 12 ? _addStatus : null,
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Toevoegen'),
+        ),
+        if (buttons.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Nog geen standen.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
-          ],
-        ),
-        Text(
-          'Elke melding leest een KNX-GA en toont de waarde opgemaakt '
-          'volgens het DPT: bit → ja/nee, byte → getal, hex → hex-code, enz.',
-          style: theme.textTheme.bodySmall?.copyWith(height: 1.4),
-        ),
-        const SizedBox(height: 8),
-        for (int i = 0; i < statusItems.length; i++)
-          _WtwStatusEditor(
-            key: ValueKey(statusItems[i]['id'] ?? i),
-            item: statusItems[i],
-            index: i,
-            onChanged: () => setState(widget.onChanged),
-            onDelete: () => _removeStatus(i),
+          )
+        else ...[
+          const _OverviewColHeader([
+            (label: 'Label', flex: 2, width: null),
+            (label: 'Groepsadres', flex: 2, width: null),
+            (label: 'DPT', flex: 2, width: null),
+            (label: 'Waarde', flex: 1, width: null),
+            (label: 'Status-GA', flex: 2, width: null),
+            (label: '', flex: 0, width: 40.0),
+          ]),
+          for (int i = 0; i < buttons.length; i++)
+            _WtwButtonEditor(
+              key: ValueKey(buttons[i]['id'] ?? i),
+              button: buttons[i],
+              onChanged: () => setState(widget.onChanged),
+              onDelete: () => _removeButton(i),
+            ),
+        ],
+        const SizedBox(height: 16),
+        _InstallerInfoTitle(
+          title: 'Status- en storingsmeldingen',
+          body:
+              'Elke regel leest een KNX-GA en toont de waarde volgens het DPT: '
+              'bit → ja/nee, byte → getal, hex → hex-code. '
+              'Icoon 0/1 alleen bij 1-bit.',
+          trailing: TextButton.icon(
+            onPressed: statusItems.length < 12 ? _addStatus : null,
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('Toevoegen'),
           ),
+        ),
+        if (statusItems.isEmpty)
+          Text(
+            'Nog geen statusmeldingen.',
+            style: Theme.of(context).textTheme.bodySmall,
+          )
+        else ...[
+          const _OverviewColHeader([
+            (label: 'Label', flex: 2, width: null),
+            (label: 'Groepsadres', flex: 2, width: null),
+            (label: 'DPT', flex: 2, width: null),
+            (label: 'Eenheid', flex: 1, width: null),
+            (label: 'Icoon', flex: 1, width: null),
+            (label: 'Icoon 0', flex: 1, width: null),
+            (label: 'Icoon 1', flex: 1, width: null),
+            (label: '', flex: 0, width: 40.0),
+          ]),
+          for (int i = 0; i < statusItems.length; i++)
+            _WtwStatusEditor(
+              key: ValueKey(statusItems[i]['id'] ?? i),
+              item: statusItems[i],
+              onChanged: () => setState(widget.onChanged),
+              onDelete: () => _removeStatus(i),
+            ),
+        ],
       ],
     );
   }
@@ -2342,66 +2399,83 @@ class _WtwButtonEditor extends StatelessWidget {
   const _WtwButtonEditor({
     super.key,
     required this.button,
-    required this.index,
     required this.onChanged,
     required this.onDelete,
   });
   final Map<String, dynamic> button;
-  final int index;
   final VoidCallback onChanged;
   final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return LuxeInsetCard(
-      child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text('Knop ${index + 1}',
-                    style: theme.textTheme.labelMedium),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: onDelete,
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            _StrField(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: _StrField(
               label: 'Label',
               value: button['label'] as String? ?? '',
-              onChanged: (v) { button['label'] = v; onChanged(); },
-            ),
-            _StrField(
-              label: 'Groepsadres (GA)',
-              value: button['ga'] as String? ?? '',
-              hint: '1/2/3',
-              onChanged: (v) { button['ga'] = v; onChanged(); },
-            ),
-            _DptDropdown(
-              label: 'DPT / telegram-type',
-              value: button['dpt'] as String? ?? '5.010',
-              options: _wtwDptButtonOptions,
-              onChanged: (v) { button['dpt'] = v; onChanged(); },
-            ),
-            _StrField(
-              label: 'Waarde om te versturen',
-              value: (button['value'] ?? '').toString(),
-              hint: 'bijv. 1  of  0  of  50',
+              compact: true,
               onChanged: (v) {
-                final n = num.tryParse(v);
-                button['value'] = n ?? (v == 'true' ? true : (v == 'false' ? false : 0));
+                button['label'] = v;
                 onChanged();
               },
             ),
-            _StrField(
-              label: 'Terugkoppeling GA (optioneel)',
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 2,
+            child: _StrField(
+              label: 'Groepsadres',
+              value: button['ga'] as String? ?? '',
+              compact: true,
+              gaSearch: true,
+              gaDptHint: 'DPT${button['dpt'] ?? '5.010'}',
+              onChanged: (v) {
+                button['ga'] = v;
+                onChanged();
+              },
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 2,
+            child: _DptDropdown(
+              label: 'DPT',
+              value: button['dpt'] as String? ?? '5.010',
+              options: _wtwDptButtonOptions,
+              compact: true,
+              onChanged: (v) {
+                button['dpt'] = v;
+                onChanged();
+              },
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 1,
+            child: _StrField(
+              label: 'Waarde',
+              value: (button['value'] ?? '').toString(),
+              compact: true,
+              onChanged: (v) {
+                final n = num.tryParse(v);
+                button['value'] =
+                    n ?? (v == 'true' ? true : (v == 'false' ? false : 0));
+                onChanged();
+              },
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 2,
+            child: _StrField(
+              label: 'Status-GA',
               value: button['statusGa'] as String? ?? '',
-              hint: '1/2/4',
+              compact: true,
+              gaSearch: true,
               onChanged: (v) {
                 if (v.isEmpty) {
                   button.remove('statusGa');
@@ -2411,8 +2485,17 @@ class _WtwButtonEditor extends StatelessWidget {
                 onChanged();
               },
             ),
-          ],
-        ),
+          ),
+          SizedBox(
+            width: 40,
+            child: IconButton(
+              icon: const Icon(Icons.delete_outline, size: 18),
+              color: LuxeColors.inkSoft,
+              onPressed: onDelete,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -2421,55 +2504,68 @@ class _WtwStatusEditor extends StatelessWidget {
   const _WtwStatusEditor({
     super.key,
     required this.item,
-    required this.index,
     required this.onChanged,
     required this.onDelete,
   });
   final Map<String, dynamic> item;
-  final int index;
   final VoidCallback onChanged;
   final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return LuxeInsetCard(
-      child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Text('Melding ${index + 1}',
-                    style: theme.textTheme.labelMedium),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: onDelete,
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            _StrField(
-              label: 'Label (bijv. "Filter vuil")',
+    final is1bit = (item['dpt'] as String? ?? '1.001').startsWith('1.');
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: _StrField(
+              label: 'Label',
               value: item['label'] as String? ?? '',
-              onChanged: (v) { item['label'] = v; onChanged(); },
+              compact: true,
+              onChanged: (v) {
+                item['label'] = v;
+                onChanged();
+              },
             ),
-            _StrField(
-              label: 'Groepsadres (GA)',
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 2,
+            child: _StrField(
+              label: 'Groepsadres',
               value: item['ga'] as String? ?? '',
-              hint: '1/2/5',
-              onChanged: (v) { item['ga'] = v; onChanged(); },
+              compact: true,
+              gaSearch: true,
+              gaDptHint: 'DPT${item['dpt'] ?? '1.001'}',
+              onChanged: (v) {
+                item['ga'] = v;
+                onChanged();
+              },
             ),
-            _DptDropdown(
-              label: 'DPT / weergave-opmaak',
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 2,
+            child: _DptDropdown(
+              label: 'DPT',
               value: item['dpt'] as String? ?? '1.001',
               options: _wtwDptStatusOptions,
-              onChanged: (v) { item['dpt'] = v; onChanged(); },
+              compact: true,
+              onChanged: (v) {
+                item['dpt'] = v;
+                onChanged();
+              },
             ),
-            _StrField(
-              label: 'Eenheid (optioneel, bijv. "dagen" of "°C")',
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 1,
+            child: _StrField(
+              label: 'Eenheid',
               value: item['unit'] as String? ?? '',
+              compact: true,
               onChanged: (v) {
                 if (v.isEmpty) {
                   item.remove('unit');
@@ -2479,35 +2575,72 @@ class _WtwStatusEditor extends StatelessWidget {
                 onChanged();
               },
             ),
-            _IconPickerField(
-              label: 'Icoon (optioneel, altijd zichtbaar)',
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 1,
+            child: _IconPickerField(
+              label: 'Icoon',
               value: item['icon'] as String?,
+              compact: true,
               onChanged: (v) {
-                if (v == null) item.remove('icon'); else item['icon'] = v;
+                if (v == null) {
+                  item.remove('icon');
+                } else {
+                  item['icon'] = v;
+                }
                 onChanged();
               },
             ),
-            // icon0/icon1 only relevant for 1-bit DPTs
-            if ((item['dpt'] as String? ?? '1.001').startsWith('1.')) ...[
-              _IconPickerField(
-                label: 'Icoon waarde 0 / OK',
-                value: item['icon0'] as String?,
-                onChanged: (v) {
-                  if (v == null) item.remove('icon0'); else item['icon0'] = v;
-                  onChanged();
-                },
-              ),
-              _IconPickerField(
-                label: 'Icoon waarde 1 / Actief / Alarm',
-                value: item['icon1'] as String?,
-                onChanged: (v) {
-                  if (v == null) item.remove('icon1'); else item['icon1'] = v;
-                  onChanged();
-                },
-              ),
-            ],
-          ],
-        ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 1,
+            child: is1bit
+                ? _IconPickerField(
+                    label: 'Icoon 0',
+                    value: item['icon0'] as String?,
+                    compact: true,
+                    onChanged: (v) {
+                      if (v == null) {
+                        item.remove('icon0');
+                      } else {
+                        item['icon0'] = v;
+                      }
+                      onChanged();
+                    },
+                  )
+                : const SizedBox.shrink(),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 1,
+            child: is1bit
+                ? _IconPickerField(
+                    label: 'Icoon 1',
+                    value: item['icon1'] as String?,
+                    compact: true,
+                    onChanged: (v) {
+                      if (v == null) {
+                        item.remove('icon1');
+                      } else {
+                        item['icon1'] = v;
+                      }
+                      onChanged();
+                    },
+                  )
+                : const SizedBox.shrink(),
+          ),
+          SizedBox(
+            width: 40,
+            child: IconButton(
+              icon: const Icon(Icons.delete_outline, size: 18),
+              color: LuxeColors.inkSoft,
+              onPressed: onDelete,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -2519,18 +2652,24 @@ class _StrField extends StatelessWidget {
     required this.label,
     required this.value,
     required this.onChanged,
-    this.hint,
+    this.compact = false,
+    this.gaSearch = false,
+    this.gaDptHint,
   });
   final String label;
   final String value;
   final ValueChanged<String> onChanged;
-  final String? hint;
+  final bool compact;
+  final bool gaSearch;
+  final String? gaDptHint;
 
   @override
   Widget build(BuildContext context) => _InstallerStrField(
         label: label,
         value: value,
-        hint: hint,
+        compact: compact,
+        gaSearch: gaSearch,
+        gaDptHint: gaDptHint,
         onChanged: onChanged,
       );
 }
@@ -2541,24 +2680,31 @@ class _DptDropdown extends StatelessWidget {
     required this.value,
     required this.options,
     required this.onChanged,
+    this.compact = false,
   });
   final String label;
   final String value;
   final List<String> options;
   final ValueChanged<String> onChanged;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final current = options.contains(value) ? value : options.first;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: EdgeInsets.only(bottom: compact ? 0 : 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LuxeFieldLabel(label),
+          if (!compact) LuxeFieldLabel(label),
           DropdownButtonFormField<String>(
             initialValue: current,
-            decoration: luxeFilledDecoration(),
+            isExpanded: true,
+            decoration: luxeFilledDecoration().copyWith(
+              contentPadding: compact
+                  ? const EdgeInsets.symmetric(horizontal: 12, vertical: 10)
+                  : null,
+            ),
             items: [
               for (final o in options)
                 DropdownMenuItem(
@@ -2586,10 +2732,12 @@ class _IconPickerField extends StatelessWidget {
     required this.label,
     required this.value,
     required this.onChanged,
+    this.compact = false,
   });
   final String label;
   final String? value;
   final ValueChanged<String?> onChanged;
+  final bool compact;
 
   static const _none = '(geen)';
 
@@ -2600,33 +2748,46 @@ class _IconPickerField extends StatelessWidget {
         ? value!
         : _none;
     return Padding(
-      padding: EdgeInsets.only(bottom: 10),
-      child: DropdownButtonFormField<String>(
-        value: current,
-        decoration: InputDecoration(labelText: label, isDense: true),
-        items: [
-          const DropdownMenuItem(
-            value: _none,
-            child: Text('(geen)', style: TextStyle(color: Colors.grey)),
-          ),
-          for (final key in sorted)
-            DropdownMenuItem(
-              value: key,
-              child: Row(
-                children: [
-                  iconWidgetForData(
-                        kUniversalIconMap[key],
-                        size: 18,
-                        color: LuxeColors.ink,
-                      ) ??
-                      Icon(kUniversalIconMap[key], size: 18),
-                  const SizedBox(width: 8),
-                  Text(key, overflow: TextOverflow.ellipsis),
-                ],
-              ),
+      padding: EdgeInsets.only(bottom: compact ? 0 : 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!compact && label.isNotEmpty) LuxeFieldLabel(label),
+          DropdownButtonFormField<String>(
+            initialValue: current,
+            isExpanded: true,
+            decoration: luxeFilledDecoration().copyWith(
+              contentPadding: compact
+                  ? const EdgeInsets.symmetric(horizontal: 12, vertical: 10)
+                  : null,
             ),
+            items: [
+              const DropdownMenuItem(
+                value: _none,
+                child: Text('(geen)'),
+              ),
+              for (final key in sorted)
+                DropdownMenuItem(
+                  value: key,
+                  child: Row(
+                    children: [
+                      iconWidgetForData(
+                            kUniversalIconMap[key],
+                            size: 18,
+                            color: LuxeColors.ink,
+                          ) ??
+                          Icon(kUniversalIconMap[key], size: 18),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(key, overflow: TextOverflow.ellipsis),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+            onChanged: (v) => onChanged(v == _none ? null : v),
+          ),
         ],
-        onChanged: (v) => onChanged(v == _none ? null : v),
       ),
     );
   }
@@ -2900,35 +3061,46 @@ class _MeldingInstallerSectionState extends State<MeldingInstallerSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton.icon(
+        _InstallerInfoTitle(
+          title: 'Meldingen',
+          body:
+              'Elke regel is één KNX-punt. Urgentie bepaalt de kleur in de app. '
+              'Bij 1-bit is actief = 1. Bij andere DPT’s kun je de drempelwaarde zetten. '
+              'Optionele teksten en icoon voor actief/inactief.',
+          trailing: TextButton.icon(
             onPressed: _items.length < 24 ? _addItem : null,
             icon: const Icon(Icons.add, size: 16),
             label: const Text('Toevoegen'),
           ),
         ),
         if (_items.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Center(
-              child: Text(
-                'Nog geen meldingen geconfigureerd.',
-                style: TextStyle(color: Colors.grey),
-              ),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Text(
+              'Nog geen meldingen.',
+              style: Theme.of(context).textTheme.bodySmall,
             ),
           )
-        else
+        else ...[
+          const _OverviewColHeader([
+            (label: 'Onderwerp', flex: 2, width: null),
+            (label: 'Groepsadres', flex: 2, width: null),
+            (label: 'DPT', flex: 2, width: null),
+            (label: 'Urgentie', flex: 2, width: null),
+            (label: 'Actief bij', flex: 1, width: null),
+            (label: 'Tekst aan', flex: 1, width: null),
+            (label: 'Tekst uit', flex: 1, width: null),
+            (label: 'Icoon', flex: 1, width: null),
+            (label: '', flex: 0, width: 40.0),
+          ]),
           for (int i = 0; i < _items.length; i++)
             _MeldingItemEditor(
               key: ValueKey(_items[i]['id']),
               item: _items[i],
-              index: i,
-              total: _items.length,
               onChanged: (updated) => _updateItem(i, updated),
               onDelete: () => _removeItem(i),
             ),
-        const SizedBox(height: 8),
+        ],
       ],
     );
   }
@@ -2938,14 +3110,10 @@ class _MeldingItemEditor extends StatelessWidget {
   const _MeldingItemEditor({
     super.key,
     required this.item,
-    required this.index,
-    required this.total,
     required this.onChanged,
     required this.onDelete,
   });
   final Map<String, dynamic> item;
-  final int index;
-  final int total;
   final ValueChanged<Map<String, dynamic>> onChanged;
   final VoidCallback onDelete;
 
@@ -2964,56 +3132,36 @@ class _MeldingItemEditor extends StatelessWidget {
     final urgency = item['urgency'] as String? ?? 'minder_belangrijk';
     final dpt = item['dpt'] as String? ?? '1.001';
     final is1bit = dpt.startsWith('1.');
-    final urgencyColor = switch (urgency) {
-      'urgent' => Colors.red.shade700,
-      'belangrijk' => Colors.orange.shade700,
-      _ => Colors.amber.shade700,
-    };
 
-    return LuxeInsetCard(
-      child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.drag_indicator, size: 18, color: Colors.grey[400]),
-                const SizedBox(width: 4),
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: urgencyColor,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '${index + 1}. ${item['label'] ?? 'Melding'}',
-                    style: const TextStyle(fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  color: Colors.red[400],
-                  tooltip: 'Verwijder melding',
-                  onPressed: onDelete,
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            _StrField(
-              label: 'Onderwerp (label)',
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: _StrField(
+              label: 'Onderwerp',
               value: item['label'] as String? ?? '',
+              compact: true,
               onChanged: (v) => _set('label', v.isEmpty ? 'Melding' : v),
             ),
-            _StrField(
-              label: 'KNX groepsadres (bijv. 1/2/3)',
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 2,
+            child: _StrField(
+              label: 'Groepsadres',
               value: item['ga'] as String? ?? '',
+              compact: true,
+              gaSearch: true,
+              gaDptHint: 'DPT$dpt',
               onChanged: (v) => _set('ga', v),
             ),
-            _DptDropdown(
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 2,
+            child: _DptDropdown(
               label: 'DPT',
               value: dpt,
               options: const [
@@ -3024,83 +3172,93 @@ class _MeldingItemEditor extends StatelessWidget {
                 '9.007', '9.008', '9.009', '9.020', '9.021',
                 '12.001', '13.001', '14.019', '14.068', 'hex',
               ],
+              compact: true,
               onChanged: (v) => _set('dpt', v),
             ),
-            Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  LuxeFieldLabel('Urgentiecategorie'),
-                  DropdownButtonFormField<String>(
-                value: urgency,
-                decoration: luxeFilledDecoration(),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'urgent',
-                    child: Row(
-                      children: [
-                        Icon(Icons.error_rounded, color: Colors.red, size: 18),
-                        SizedBox(width: 8),
-                        Text('Urgent / Storing'),
-                      ],
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'belangrijk',
-                    child: Row(
-                      children: [
-                        Icon(Icons.warning_rounded,
-                            color: Colors.orange, size: 18),
-                        SizedBox(width: 8),
-                        Text('Belangrijk'),
-                      ],
-                    ),
-                  ),
-                  DropdownMenuItem(
-                    value: 'minder_belangrijk',
-                    child: Row(
-                      children: [
-                        Icon(Icons.info_outline_rounded,
-                            color: Colors.amber, size: 18),
-                        SizedBox(width: 8),
-                        Text('Minder belangrijk / Info'),
-                      ],
-                    ),
-                  ),
-                ],
-                onChanged: (v) => _set('urgency', v ?? 'minder_belangrijk'),
-                  ),
-                ],
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 2,
+            child: DropdownButtonFormField<String>(
+              initialValue: urgency,
+              isExpanded: true,
+              decoration: luxeFilledDecoration().copyWith(
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'urgent',
+                  child: Text('Urgent'),
+                ),
+                DropdownMenuItem(
+                  value: 'belangrijk',
+                  child: Text('Belangrijk'),
+                ),
+                DropdownMenuItem(
+                  value: 'minder_belangrijk',
+                  child: Text('Info'),
+                ),
+              ],
+              onChanged: (v) => _set('urgency', v ?? 'minder_belangrijk'),
             ),
-            if (!is1bit) ...[
-              _StrField(
-                label: 'Actief wanneer waarde gelijk is aan (leeg = ≠ 0)',
-                value: item['activeValue']?.toString() ?? '',
-                onChanged: (v) {
-                  final num = double.tryParse(v);
-                  _set('activeValue', num);
-                },
-              ),
-            ],
-            _StrField(
-              label: 'Tekst als actief (optioneel)',
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 1,
+            child: is1bit
+                ? const SizedBox.shrink()
+                : _StrField(
+                    label: 'Actief bij',
+                    value: item['activeValue']?.toString() ?? '',
+                    compact: true,
+                    onChanged: (v) {
+                      final n = double.tryParse(v);
+                      _set('activeValue', n);
+                    },
+                  ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 1,
+            child: _StrField(
+              label: 'Tekst aan',
               value: item['activeLabel'] as String? ?? '',
+              compact: true,
               onChanged: (v) => _set('activeLabel', v.isEmpty ? null : v),
             ),
-            _StrField(
-              label: 'Tekst als inactief (optioneel)',
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 1,
+            child: _StrField(
+              label: 'Tekst uit',
               value: item['inactiveLabel'] as String? ?? '',
+              compact: true,
               onChanged: (v) => _set('inactiveLabel', v.isEmpty ? null : v),
             ),
-            _IconPickerField(
-              label: 'Icoon (optioneel)',
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            flex: 1,
+            child: _IconPickerField(
+              label: 'Icoon',
               value: item['icon'] as String?,
+              compact: true,
               onChanged: (v) => _set('icon', v),
             ),
-          ],
-        ),
+          ),
+          SizedBox(
+            width: 40,
+            child: IconButton(
+              icon: const Icon(Icons.delete_outline, size: 18),
+              color: LuxeColors.inkSoft,
+              tooltip: 'Verwijder melding',
+              onPressed: onDelete,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -3295,7 +3453,7 @@ class _MediaKnxInstallerSectionState extends State<MediaKnxInstallerSection> {
           body:
               'DPT 3.007, één groepadres voor omhoog én omlaag. '
               'Vasthouden herhaalt stappen van 5% tot het stoptelegram (0). '
-              'Zakt niet onder 10%, zodat er altijd geluid blijft; mute is apart. '
+              'Zakt niet onder 5%, zodat er altijd geluid blijft; mute is apart. '
               'Standaard alleen deze zone; zie de schakelaar hieronder voor de groep.',
           keyName: 'volumeDim',
           dptHint: 'DPT3.007',

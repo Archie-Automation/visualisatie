@@ -13,7 +13,7 @@ import type { MediaManager } from "./manager";
 
 const VOLUME_STEP = 5;
 /** Floor for DPT3.007 rocker dimming — mute remains the way to go silent. */
-export const VOLUME_MIN = 10;
+export const VOLUME_MIN = 5;
 const VOLUME_HOLD_MS = 250;
 
 export type DimCommand = { stop: true } | { stop: false; increase: boolean; step: number };
