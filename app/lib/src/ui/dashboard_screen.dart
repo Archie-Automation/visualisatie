@@ -1027,7 +1027,12 @@ Widget _scenes(
         padding: EdgeInsets.fromLTRB(hp, 0, hp, 14),
         child: Row(
           children: [
-            Text('SCENES', style: Theme.of(context).textTheme.labelLarge),
+            Text(
+              'SCENES',
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    fontSize: context.isPhone ? 14 : null,
+                  ),
+            ),
             if (cfg.scenes.length > 1) ...[
               const Spacer(),
               GestureDetector(
@@ -1210,8 +1215,12 @@ class _Systemen extends ConsumerWidget {
             padding: EdgeInsets.fromLTRB(context.hPad, 0, context.hPad, 16),
             child: Row(
               children: [
-                Text('SYSTEMEN',
-                    style: Theme.of(context).textTheme.labelLarge),
+                Text(
+                  'SYSTEMEN',
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        fontSize: context.isPhone ? 14 : null,
+                      ),
+                ),
                 const Spacer(),
                 GestureDetector(
                   onTap: () => _openManageSheet(context, ref, allOrderedChips, sysHidden),
@@ -2095,13 +2104,12 @@ class _RoomActivityBadges extends ConsumerWidget {
     if (!any) return const SizedBox.shrink();
 
     // Kale glyphs — geen glass/wells.
-    // Phone: brassOnCanvas (brassDeep in light — 18px brass verdween in cream).
-    // Tablet: ink (zwart light / wit dark), gelijk aan header.
+    // Zelfde ink als kamernamen (brass zat nergens anders op dit scherm).
     final phone = context.isPhone;
     final glyph = phone ? 24.0 : 22.0;
     final slot = phone ? 44.0 : 40.0;
     final badge = phone ? 28.0 : 26.0;
-    final color = phone ? LuxeColors.brassOnCanvas : LuxeColors.ink;
+    final color = LuxeColors.ink;
 
     Widget tap(Widget child, String categorySlug) => GestureDetector(
           behavior: HitTestBehavior.opaque,
