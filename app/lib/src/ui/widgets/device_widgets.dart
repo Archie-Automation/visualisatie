@@ -3968,12 +3968,117 @@ class _StepBar extends StatelessWidget {
 // WTW / HRV ventilatie tile
 // ─────────────────────────────────────────────────────────────────────────────
 
-class WtwTile extends ConsumerWidget {
+class WtwTile extends ConsumerStatefulWidget {
   const WtwTile({super.key, required this.device});
   final Device device;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<WtwTile> createState() => _WtwTileState();
+}
+
+class _WtwTileState extends ConsumerState<WtwTile> {
+  int? _minutesOverride;
+  DateTime? _boostEndsAt;
+  Timer? _tick;
+  bool _lastBoostActive = false;
+
+  Device get device => widget.device;
+
+  static bool _isBoost(Map<String, dynamic> b) => b['kind'] == 'boost';
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  static bool _wtwButtonActive(Map<String, dynamic> b, BusState bus) {
+    final statusGa = b['statusGa'] as String?;
+    if (statusGa == null) return false;
+    final current = bus.values[statusGa];
+    if (current == null) return false;
+    final onValue = b['statusOnValue'] ?? b['value'];
+    final n = num.tryParse(current.toString());
+    final onN = num.tryParse(onValue.toString());
+    return n != null && onN != null
+        ? n == onN
+        : current.toString() == onValue.toString();
+  }
+
+  /// Bus holds seconds (DPT 7.001); the app shows minutes.
+  static int _minutesFromKnx(num v) {
+    if (v >= 60) return (v / 60).round().clamp(1, 1092);
+    return v.round().clamp(1, 180);
+  }
+
+  int _boostMinutes(Map<String, dynamic> boost, BusState bus) {
+    if (_minutesOverride != null) return _minutesOverride!.clamp(1, 180);
+    final writeGa = (boost['timeGa'] as String?)?.trim();
+    if (writeGa != null && writeGa.isNotEmpty) {
+      final v = num.tryParse(bus.values[writeGa]?.toString() ?? '');
+      if (v != null) return _minutesFromKnx(v).clamp(1, 180);
+    }
+    return (boost['minutes'] as num?)?.round().clamp(1, 180) ?? 30;
+  }
+
+  void _press(Map<String, dynamic> b, BusState bus) {
+    final payload = <String, dynamic>{
+      'kind': 'wtw.press',
+      'deviceId': device.id,
+      'buttonId': b['id'],
+    };
+    if (_isBoost(b)) {
+      final active = _wtwButtonActive(b, bus);
+      payload['on'] = !active;
+      final minutes = _boostMinutes(b, bus);
+      if (!active) {
+        payload['minutes'] = minutes;
+        _boostEndsAt = DateTime.now().add(Duration(minutes: minutes));
+      } else {
+        _boostEndsAt = null;
+      }
+    }
+    ref.read(busProvider.notifier).send(payload);
+    setState(() {});
+  }
+
+  void _setMinutes(Map<String, dynamic> boost, int minutes) {
+    final clamped = minutes.clamp(1, 180);
+    setState(() => _minutesOverride = clamped);
+    ref.read(busProvider.notifier).send({
+      'kind': 'wtw.setBoostMinutes',
+      'deviceId': device.id,
+      'buttonId': boost['id'],
+      'minutes': clamped,
+    });
+  }
+
+  void _syncBoostTimer(bool active, int minutes, bool hasTimeStatus) {
+    final rising = active && !_lastBoostActive;
+    final falling = !active && _lastBoostActive;
+    _lastBoostActive = active;
+    if (!rising && !falling) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        if (rising && !hasTimeStatus) {
+          _boostEndsAt ??= DateTime.now().add(Duration(minutes: minutes));
+        }
+        if (!active) _boostEndsAt = null;
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final cfg = device.raw['wtw'] as Map<String, dynamic>?;
     if (cfg == null) {
       return _Placeholder(name: device.name, hint: 'WTW config ontbreekt');
@@ -3983,6 +4088,43 @@ class WtwTile extends ConsumerWidget {
     final statusItems =
         (cfg['status'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final bus = ref.watch(busProvider);
+
+    Map<String, dynamic>? boostBtn;
+    for (final b in buttons) {
+      if (_isBoost(b)) {
+        boostBtn = b;
+        break;
+      }
+    }
+    final timeGa = (boostBtn?['timeGa'] as String?)?.trim() ?? '';
+    final timeStatusGa = (boostBtn?['timeStatusGa'] as String?)?.trim() ?? '';
+    final showBoostTime = boostBtn != null;
+    final minutes =
+        boostBtn == null ? 30 : _boostMinutes(boostBtn, bus);
+    final boostActive =
+        boostBtn != null && _wtwButtonActive(boostBtn, bus);
+    _syncBoostTimer(boostActive, minutes, timeStatusGa.isNotEmpty);
+
+    Duration? remaining;
+    if (_boostEndsAt != null) {
+      final left = _boostEndsAt!.difference(DateTime.now());
+      remaining = left.isNegative ? Duration.zero : left;
+    } else if (boostActive && timeStatusGa.isNotEmpty) {
+      final v = num.tryParse(bus.values[timeStatusGa]?.toString() ?? '');
+      if (v != null && v < minutes * 60) {
+        remaining = Duration(seconds: v.round());
+      }
+    }
+
+    final skipGas = <String>{
+      if (timeGa.isNotEmpty) timeGa,
+      if (timeStatusGa.isNotEmpty) timeStatusGa,
+    };
+
+    final extraStatus = [
+      for (final s in statusItems)
+        if (!skipGas.contains((s['ga'] as String?)?.trim() ?? '')) s,
+    ];
 
     final buttonItems = [
       for (final b in buttons)
@@ -3996,16 +4138,17 @@ class WtwTile extends ConsumerWidget {
                 ? DeviceControlLabelMode.numeric
                 : DeviceControlLabelMode.iconOnly,
             active: _wtwButtonActive(b, bus),
-            onTap: () {
-              ref.read(busProvider.notifier).send({
-                'kind': 'wtw.press',
-                'deviceId': device.id,
-                'buttonId': b['id'],
-              });
-            },
+            onTap: () => _press(b, bus),
           );
         }(),
     ];
+
+    final boostLabel = (boostBtn?['label'] as String?)?.trim();
+    final timeLabel = (boostLabel == null || boostLabel.isEmpty)
+        ? 'Boost-tijd'
+        : (boostLabel.toLowerCase().contains('tijd')
+            ? boostLabel
+            : '$boostLabel-tijd');
 
     return DeviceTileShell(
       child: Column(
@@ -4026,38 +4169,238 @@ class WtwTile extends ConsumerWidget {
             ),
           ],
 
-          if (statusItems.isNotEmpty) ...[
+          if (showBoostTime || extraStatus.isNotEmpty) ...[
             SizedBox(height: DeviceControlBar.sectionSpacing(context)),
             const Divider(height: 1),
             const SizedBox(height: 12),
-            ...statusItems.map((s) => _WtwStatusRow(item: s, bus: bus)),
+            if (showBoostTime)
+              _WtwBoostTimeRow(
+                label: timeLabel,
+                minutes: minutes,
+                remaining: remaining,
+                active: boostActive,
+                onDecrease: (boostActive || timeGa.isEmpty)
+                    ? null
+                    : () => _setMinutes(boostBtn!, minutes - 5),
+                onIncrease: (boostActive || timeGa.isEmpty)
+                    ? null
+                    : () => _setMinutes(boostBtn!, minutes + 5),
+              ),
+            ...extraStatus.map((s) => _WtwStatusRow(item: s, bus: bus)),
           ],
         ],
       ),
     );
   }
+}
 
-  static bool _wtwButtonActive(Map<String, dynamic> b, BusState bus) {
-    final statusGa = b['statusGa'] as String?;
-    if (statusGa == null) return false;
-    final current = bus.values[statusGa];
-    if (current == null) return false;
-    final onValue = b['statusOnValue'] ?? b['value'];
-    final n = num.tryParse(current.toString());
-    final onN = num.tryParse(onValue.toString());
-    return n != null && onN != null
-        ? n == onN
-        : current.toString() == onValue.toString();
+class _WtwBoostTimeRow extends StatelessWidget {
+  const _WtwBoostTimeRow({
+    required this.label,
+    required this.minutes,
+    required this.remaining,
+    required this.active,
+    this.onDecrease,
+    this.onIncrease,
+  });
+
+  final String label;
+  final int minutes;
+  final Duration? remaining;
+  final bool active;
+  final VoidCallback? onDecrease;
+  final VoidCallback? onIncrease;
+
+  @override
+  Widget build(BuildContext context) {
+    final counting = remaining != null;
+    final pulse = active || counting;
+    final text = counting ? _wtwFormatClock(remaining!) : '$minutes min';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(Icons.timer_outlined,
+              size: 16,
+              color: pulse ? LuxeColors.brass : LuxeColors.inkSoft),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: pulse ? LuxeColors.ink : LuxeColors.inkSoft,
+                    fontWeight: pulse ? FontWeight.w600 : FontWeight.w400,
+                  ),
+            ),
+          ),
+          if (!pulse && (onDecrease != null || onIncrease != null)) ...[
+            _WtwMiniStep(icon: Icons.remove, onTap: onDecrease),
+            const SizedBox(width: 6),
+          ],
+          _WtwPulseBadge(text: text, pulse: pulse),
+          if (!pulse && (onDecrease != null || onIncrease != null)) ...[
+            const SizedBox(width: 6),
+            _WtwMiniStep(icon: Icons.add, onTap: onIncrease),
+          ],
+        ],
+      ),
+    );
   }
 }
 
-class _WtwStatusRow extends StatelessWidget {
+class _WtwMiniStep extends StatelessWidget {
+  const _WtwMiniStep({required this.icon, this.onTap});
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 28,
+      height: 28,
+      child: Material(
+        color: LuxeColors.surfaceDim.withValues(alpha: 0.7),
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: Icon(icon, size: 14, color: LuxeColors.inkSoft),
+        ),
+      ),
+    );
+  }
+}
+
+class _WtwPulseBadge extends StatefulWidget {
+  const _WtwPulseBadge({required this.text, required this.pulse});
+  final String text;
+  final bool pulse;
+
+  @override
+  State<_WtwPulseBadge> createState() => _WtwPulseBadgeState();
+}
+
+class _WtwPulseBadgeState extends State<_WtwPulseBadge>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulse = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    if (widget.pulse) _pulse.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _WtwPulseBadge old) {
+    super.didUpdateWidget(old);
+    if (widget.pulse && !_pulse.isAnimating) {
+      _pulse.repeat(reverse: true);
+    } else if (!widget.pulse && _pulse.isAnimating) {
+      _pulse
+        ..stop()
+        ..value = 1;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final badge = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(
+        color: widget.pulse
+            ? LuxeColors.brass.withValues(alpha: 0.12)
+            : LuxeColors.surfaceDim.withValues(alpha: 0.60),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: widget.pulse
+              ? LuxeColors.brass.withValues(alpha: 0.35)
+              : LuxeColors.line,
+        ),
+      ),
+      child: Text(
+        widget.text,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: widget.pulse ? LuxeColors.brass : LuxeColors.inkSoft,
+          letterSpacing: 0.4,
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
+      ),
+    );
+    if (!widget.pulse) return badge;
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.38, end: 1).animate(
+        CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
+      ),
+      child: badge,
+    );
+  }
+}
+
+String _wtwFormatClock(Duration d) {
+  if (d.isNegative) d = Duration.zero;
+  final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+  if (d.inHours > 0) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    return '${d.inHours}:$m:$s';
+  }
+  return '${d.inMinutes}:$s';
+}
+
+String? _wtwCountdownUnit(Map<String, dynamic> item) {
+  final c = item['countdown'] as String?;
+  if (c == 'off') return null;
+  if (c == 'seconds' || c == 'minutes' || c == 'days') return c;
+  final dpt = item['dpt'] as String? ?? '';
+  if (dpt != '7.001' && dpt != '5.010') return null;
+  final u = (item['unit'] as String? ?? '').toLowerCase();
+  if (u.contains('dag') || u.contains('day')) return 'days';
+  if (u.contains('min')) return 'minutes';
+  if (u.contains('sec') || u == 's') return 'seconds';
+  return null;
+}
+
+Duration? _wtwCountdownFromRaw(num raw, String unit) {
+  switch (unit) {
+    case 'seconds':
+      return Duration(seconds: raw.round());
+    case 'minutes':
+      return Duration(minutes: raw.round());
+    case 'days':
+      return Duration(days: raw.round());
+    default:
+      return null;
+  }
+}
+
+class _WtwStatusRow extends StatefulWidget {
   const _WtwStatusRow({required this.item, required this.bus});
   final Map<String, dynamic> item;
   final BusState bus;
 
   @override
+  State<_WtwStatusRow> createState() => _WtwStatusRowState();
+}
+
+class _WtwStatusRowState extends State<_WtwStatusRow> {
+  num? _anchorRaw;
+  DateTime? _anchoredAt;
+
+  @override
   Widget build(BuildContext context) {
+    final item = widget.item;
+    final bus = widget.bus;
     final label = item['label'] as String? ?? '';
     final ga = item['ga'] as String? ?? '';
     final dpt = item['dpt'] as String? ?? '1.001';
@@ -4066,8 +4409,32 @@ class _WtwStatusRow extends StatelessWidget {
     final icon0Key = item['icon0'] as String?;
     final icon1Key = item['icon1'] as String?;
     final rawValue = bus.values[ga];
+    final countdownUnit = _wtwCountdownUnit(item);
 
-    final (display, isAlert) = _formatWtwStatus(dpt, rawValue, unit);
+    Duration? remaining;
+    if (countdownUnit != null && countdownUnit != 'days') {
+      final n = num.tryParse(rawValue?.toString() ?? '');
+      if (n != null) {
+        if (_anchorRaw != n) {
+          _anchorRaw = n;
+          _anchoredAt = DateTime.now();
+        }
+        final base = _wtwCountdownFromRaw(n, countdownUnit);
+        if (base != null && _anchoredAt != null) {
+          final left = base - DateTime.now().difference(_anchoredAt!);
+          remaining = left.isNegative ? Duration.zero : left;
+        }
+      }
+    }
+
+    final (display, isAlert) = remaining != null
+        ? (
+            countdownUnit == 'minutes'
+                ? '${remaining.inMinutes} min'
+                : _wtwFormatClock(remaining),
+            false,
+          )
+        : _WtwStatusRowState._formatWtwStatus(dpt, rawValue, unit);
 
     // Resolve value icon for bit types when icon0/icon1 are configured.
     final isBit = dpt.startsWith('1.');
@@ -4118,6 +4485,11 @@ class _WtwStatusRow extends StatelessWidget {
             _WtwIconBadge(
               iconKey: valueIconKey!,
               isAlert: isAlert,
+            )
+          else if (remaining != null)
+            _WtwPulseBadge(
+              text: display,
+              pulse: false,
             )
           else
             Container(

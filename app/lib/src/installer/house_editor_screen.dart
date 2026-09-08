@@ -5439,8 +5439,10 @@ class _DeviceForm extends StatelessWidget {
                   'wtw' => const LuxeInfoIconButton(
                     title: 'WTW',
                     body:
-                        'Standen sturen een telegram. Statusregels lezen een GA. '
-                        'Uitleg per blok zit bij de i naast de titel.',
+                        'Standknop: knoptekst, DPT en een waarde die bij dat DPT past '
+                        '(bit alleen 0 of 1). Boost: 1-bit aan/uit, status-bit, '
+                        'en 2-byte tijd (app: minuten, bus: seconden). '
+                        'In de statuslijst: ingestelde minuten, bij boost knipperen en aftellen.',
                   ),
                   'melding' => const LuxeInfoIconButton(
                     title: 'Meldingen',
