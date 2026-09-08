@@ -67,8 +67,7 @@ extension ResponsiveX on BuildContext {
   double get displayMediumFontSize => isPhone ? 30.0 : 42.0;
 
   /// Icon well inside scene / system / room-category chips.
-  /// Phone keeps the original size; tablet uses a larger glyph.
-  double get chipIconBox => isPhone ? 34.0 : 44.0;
-  double get chipIconSize => isPhone ? 18.0 : 24.0;
-  double get chipIconRadius => isPhone ? 9.0 : 12.0;
+  double get chipIconBox => isPhone ? 40.0 : 44.0;
+  double get chipIconSize => isPhone ? 22.0 : 24.0;
+  double get chipIconRadius => isPhone ? 11.0 : 12.0;
 }

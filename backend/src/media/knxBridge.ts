@@ -12,6 +12,8 @@ import type {
 import type { MediaManager } from "./manager";
 
 const VOLUME_STEP = 5;
+/** Floor for DPT3.007 rocker dimming — mute remains the way to go silent. */
+export const VOLUME_MIN = 10;
 const VOLUME_HOLD_MS = 250;
 
 export type DimCommand = { stop: true } | { stop: false; increase: boolean; step: number };
@@ -100,7 +102,10 @@ export function decodeDimControl(value: unknown): DimCommand | null {
 
 export function nextVolume(current: number | undefined, increase: boolean, step = VOLUME_STEP): number {
   const base = typeof current === "number" && Number.isFinite(current) ? current : 0;
-  return Math.max(0, Math.min(100, Math.round(base + (increase ? step : -step))));
+  return Math.max(
+    VOLUME_MIN,
+    Math.min(100, Math.round(base + (increase ? step : -step)))
+  );
 }
 
 export function resolveVolumeTarget(opts: {
@@ -168,6 +173,9 @@ export function attachMediaKnxBridge(bus: KnxBus, media: MediaManager): { close(
       volumeAffectsGroup: binding.volumeAffectsGroup,
       grouped
     });
+    const current =
+      target.kind === "group" ? (state?.groupVolume ?? state?.volume) : state?.volume;
+    if (current === target.next) return;
     try {
       if (target.kind === "group") {
         await media.setGroupVolume(binding.deviceId, target.next);

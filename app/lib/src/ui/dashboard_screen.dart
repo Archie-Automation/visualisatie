@@ -810,38 +810,38 @@ class _RoomDashboardRow extends ConsumerWidget {
                 ),
               ),
               // Name + chevron together form the tap target for room navigation.
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: onOpenRoom,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        room.name.toUpperCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        // Same family as scenes/systems; slightly larger for
-                        // list-row context (chips read bigger inside their tile).
-                        style: TextStyle(
-                          color: LuxeColors.ink,
-                          fontSize: 12,
-                          height: 1.35,
-                          letterSpacing: 1.4,
-                          fontWeight: FontWeight.w600,
+              Expanded(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: onOpenRoom,
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          room.name.toUpperCase(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          // Same family as scenes/systems; slightly larger for
+                          // list-row context (chips read bigger inside their tile).
+                          style: TextStyle(
+                            color: LuxeColors.ink,
+                            fontSize: context.isPhone ? 14 : 12,
+                            height: 1.35,
+                            letterSpacing: context.isPhone ? 1.2 : 1.4,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
-                    ),
-                    SizedBox(width: 2),
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 18,
-                      color: LuxeColors.inkSoft.withValues(alpha: 0.55),
-                    ),
-                  ],
+                      SizedBox(width: 2),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        size: context.isPhone ? 20 : 18,
+                        color: LuxeColors.inkSoft.withValues(alpha: 0.55),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              Spacer(),
               _RoomActivityBadges(floor: floor, room: room),
             ],
           ),
@@ -1997,10 +1997,9 @@ class _RoomActivityBadges extends ConsumerWidget {
   final Floor floor;
   final Room room;
 
-  /// Baseline for equalizer scale math.
+  /// Baseline for equalizer scale math (phone badges pass a larger size).
   static const _badgeSize = 22.0;
   static const _glyphSize = 18.0;
-  static const _slotHeight = 36.0;
 
   void _openCategory(BuildContext context, String categorySlug) {
     appOpen(
@@ -2096,12 +2095,13 @@ class _RoomActivityBadges extends ConsumerWidget {
     if (!any) return const SizedBox.shrink();
 
     // Kale glyphs — geen glass/wells.
-    // Phone: brass. Tablet: ink (zwart light / wit dark), gelijk aan header.
+    // Phone: brassOnCanvas (brassDeep in light — 18px brass verdween in cream).
+    // Tablet: ink (zwart light / wit dark), gelijk aan header.
     final phone = context.isPhone;
-    final glyph = phone ? _glyphSize : 22.0;
-    final slot = phone ? _slotHeight : 40.0;
-    final badge = phone ? _badgeSize : 26.0;
-    final color = phone ? LuxeColors.brass : LuxeColors.ink;
+    final glyph = phone ? 24.0 : 22.0;
+    final slot = phone ? 44.0 : 40.0;
+    final badge = phone ? 28.0 : 26.0;
+    final color = phone ? LuxeColors.brassOnCanvas : LuxeColors.ink;
 
     Widget tap(Widget child, String categorySlug) => GestureDetector(
           behavior: HitTestBehavior.opaque,

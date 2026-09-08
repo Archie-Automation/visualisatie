@@ -124,7 +124,7 @@ class _SegmentChipState extends State<_SegmentChip> {
                       softWrap: false,
                       style: TextStyle(
                         color: LuxeColors.ink,
-                        fontSize: 11,
+                        fontSize: context.isPhone ? 12 : 11,
                         height: 1.35,
                         letterSpacing: 0.7,
                         fontWeight: FontWeight.w600,
