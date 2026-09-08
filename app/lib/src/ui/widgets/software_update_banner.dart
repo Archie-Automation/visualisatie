@@ -220,6 +220,42 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
       );
     }
 
+    if (status.updateAvailable) {
+      final latest = status.latest;
+      final ver = latest?.version ?? latest?.tag ?? '';
+      final agentReady = status.serverUpdate?.agentReady == true;
+      if (admin && agentReady) {
+        return _Banner(
+          message: _error ??
+              (ver.isEmpty
+                  ? 'Nieuwe software. Eén tik werkt de server bij; de app volgt daarna.'
+                  : 'Nieuwe software ($ver). Eén tik werkt de server bij; de app volgt daarna.'),
+          actionLabel: 'Bijwerken',
+          onAction: _updateServerThenApp,
+        );
+      }
+      if (admin) {
+        return _Banner(
+          message: ver.isEmpty
+              ? 'Nieuwe versie op GitHub. Eenmalig op de NUC: sudo bash docker/install.sh. Daarna vanaf de tablet.'
+              : 'Nieuwe versie ($ver). Eenmalig op de NUC: sudo bash docker/install.sh. Daarna vanaf de tablet.',
+          actionLabel: latest?.htmlUrl != null ? 'Bekijken' : null,
+          onAction: latest?.htmlUrl != null
+              ? () => openReleasePage(latest!.htmlUrl)
+              : null,
+        );
+      }
+      return _Banner(
+        message: ver.isEmpty
+            ? 'Er is nieuwere software. Vraag de beheerder de server bij te werken.'
+            : 'Nieuwe software ($ver). Vraag de beheerder de server bij te werken.',
+        actionLabel: latest?.htmlUrl != null ? 'Bekijken' : null,
+        onAction: latest?.htmlUrl != null
+            ? () => openReleasePage(latest!.htmlUrl)
+            : null,
+      );
+    }
+
     if (status.clientStale) {
       return _Banner(
         message: status.running.version.isEmpty
@@ -230,39 +266,7 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
       );
     }
 
-    final latest = status.latest;
-    final ver = latest?.version ?? latest?.tag ?? '';
-    final agentReady = status.serverUpdate?.agentReady == true;
-    if (admin && agentReady) {
-      return _Banner(
-        message: _error ??
-            (ver.isEmpty
-                ? 'Nieuwe software. Eén tik werkt de server bij; de app volgt daarna.'
-                : 'Nieuwe software ($ver). Eén tik werkt de server bij; de app volgt daarna.'),
-        actionLabel: 'Bijwerken',
-        onAction: _updateServerThenApp,
-      );
-    }
-    if (admin) {
-      return _Banner(
-        message: ver.isEmpty
-            ? 'Nieuwe versie op GitHub. Eenmalig op de NUC: sudo bash docker/install.sh. Daarna vanaf de tablet.'
-            : 'Nieuwe versie ($ver). Eenmalig op de NUC: sudo bash docker/install.sh. Daarna vanaf de tablet.',
-        actionLabel: latest?.htmlUrl != null ? 'Bekijken' : null,
-        onAction: latest?.htmlUrl != null
-            ? () => openReleasePage(latest!.htmlUrl)
-            : null,
-      );
-    }
-    return _Banner(
-      message: ver.isEmpty
-          ? 'Er is nieuwere software. Vraag de beheerder de server bij te werken.'
-          : 'Nieuwe software ($ver). Vraag de beheerder de server bij te werken.',
-      actionLabel: latest?.htmlUrl != null ? 'Bekijken' : null,
-      onAction: latest?.htmlUrl != null
-          ? () => openReleasePage(latest!.htmlUrl)
-          : null,
-    );
+    return const SizedBox.shrink();
   }
 }
 

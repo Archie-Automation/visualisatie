@@ -35,6 +35,8 @@ type Cache = {
 };
 
 const CACHE_MS = 2 * 60 * 1000; // 2 min — a git push must show up on the tablet quickly
+/** Force-refresh mag GitHub niet vaker dan dit raken (tablets + web-F5). */
+const FORCE_MIN_MS = 15_000;
 const ANDROID_LATEST_TAG = "android-latest";
 let cache: Cache | null = null;
 let inflight: Promise<GithubLatestInfo | null> | null = null;
@@ -350,13 +352,27 @@ export async function getGithubLatest(
   if (!force && cache && now - cache.atMs < CACHE_MS) {
     return cache.value;
   }
-  if (!force && inflight) return inflight;
+  if (force && cache && now - cache.atMs < FORCE_MIN_MS) {
+    return cache.value;
+  }
+  if (inflight) return inflight;
 
   inflight = (async () => {
     try {
       const value = await fetchLatestUncached();
-      cache = { atMs: Date.now(), value };
-      return value;
+      if (value) {
+        cache = { atMs: Date.now(), value };
+        return value;
+      }
+      // Lege fetch niet over een goede stand heen zetten — anders verdwijnt
+      // de web-banner “nieuwe versie op GitHub” na een mislukte Android-poll.
+      if (cache?.value) {
+        logger.warn("GitHub latest leeg, vorige stand gehouden");
+        cache = { atMs: Date.now(), value: cache.value };
+        return cache.value;
+      }
+      cache = { atMs: Date.now(), value: null };
+      return null;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const isNetworkErr =
