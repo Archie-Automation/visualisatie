@@ -28,6 +28,11 @@ Write commands:
   0x84       Disarm partitions            payload: usercode(8) + partitions(4)
   0x86       Bypass zones                 payload: usercode(8) + zones(16)
   0x87       Unbypass zones               payload: usercode(8) + zones(16)
+
+Name dump (on demand, not polled):
+  0xEE  Read device name   payload: type (1) + number (1)
+        type 0 = partition, type 1 = zone. Reply: type, number, function
+        (zone reaction / partition type), 16-byte Windows-1250 name.
 """
 
 from __future__ import annotations
@@ -35,6 +40,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import struct
+from dataclasses import dataclass
 
 from .encryption import EncryptedCommunicationHandler
 
@@ -120,7 +126,12 @@ CMD_PART_ARMED_MODE3      = 0x0C
 CMD_PART_ENTRY_TIME       = 0x0E
 CMD_PART_EXIT_OVER_10     = 0x0F
 CMD_PART_EXIT_UNDER_10    = 0x10
+CMD_READ_NAME             = 0xEE   # read device name (partition / zone)
 CMD_NEW_DATA              = 0xEF   # RESULT / command response
+
+# 0xEE device types (ETHM-1 integration protocol).
+NAME_TYPE_PARTITION = 0
+NAME_TYPE_ZONE      = 1
 
 # Arm-mode write command per mode index (0-3).
 CMD_ARM_MODE = {0: 0x80, 1: 0x81, 2: 0x82, 3: 0x83}
@@ -198,9 +209,81 @@ def _le_bitmask(numbers: list[int], nbytes: int) -> bytes:
 # Async client
 # ---------------------------------------------------------------------------
 
-_POLL_INTERVAL  = 3.0   # seconds between full query cycles
-_CONNECT_RETRY  = 5.0   # seconds before reconnect after failure
-_READ_TIMEOUT   = 10.0  # seconds before assuming connection is dead
+_POLL_INTERVAL    = 3.0   # seconds between full query cycles
+_POLL_READ_WINDOW = 0.8   # seconds to collect status replies while holding the IO lock
+_CONNECT_RETRY    = 5.0   # seconds before reconnect after failure
+_READ_TIMEOUT     = 10.0  # seconds before assuming connection is dead
+_NAME_READ_TIMEOUT = 1.5  # seconds to wait for one 0xEE reply
+_MAX_PARTITIONS   = 32
+_MAX_ZONES        = 128
+
+
+def _decode_satel_name(raw: bytes) -> str:
+    """Decode a 16-byte DLOADX name (Windows-1250, space/NUL padded)."""
+    text = raw.split(b"\x00", 1)[0]
+    for enc in ("cp1250", "cp1252", "latin-1"):
+        try:
+            return text.decode(enc).strip()
+        except UnicodeDecodeError:
+            continue
+    return text.decode("latin-1", errors="replace").strip()
+
+
+def reaction_to_device_type(reaction: int) -> str:
+    """Map an Integra zone reaction to our DeviceType string.
+
+    Reaction codes differ slightly by firmware; only obvious 24h types are
+    mapped. PIR vs. magnet is not in the reaction — default is magneetcontact.
+    """
+    if reaction in (3, 13):
+        return "rookmelder"
+    if reaction in (4, 5, 6):
+        return "paniekknop"
+    return "magneetcontact"
+
+
+@dataclass(frozen=True)
+class DeviceName:
+    device_type: int
+    number: int
+    function: int
+    name: str
+
+
+@dataclass(frozen=True)
+class PanelPartition:
+    number: int
+    name: str
+
+
+@dataclass(frozen=True)
+class PanelZone:
+    zone_number: int
+    name: str
+    reaction: int
+    device_type: str
+
+
+@dataclass(frozen=True)
+class PanelLayout:
+    partitions: list[PanelPartition]
+    zones: list[PanelZone]
+
+
+def parse_device_name(body: bytes) -> DeviceName | None:
+    """Parse an 0xEE response body (cmd byte included)."""
+    if not body or body[0] != CMD_READ_NAME:
+        return None
+    data = body[1:]
+    if len(data) < 19:
+        return None
+    number = 256 if data[1] == 0 else data[1]
+    return DeviceName(
+        device_type=data[0],
+        number=number,
+        function=data[2],
+        name=_decode_satel_name(bytes(data[3:19])),
+    )
 
 
 def _encode_user_code(pin: str) -> bytes:
@@ -273,6 +356,76 @@ class SatelClient:
         cmd = CMD_ZONES_BYPASS if on else CMD_ZONES_UNBYP
         payload = _encode_user_code(pin) + _le_bitmask(zones, 16)
         return await self._send_action(cmd, payload)
+
+    async def read_device_name(self, device_type: int, number: int) -> DeviceName | None:
+        """Query one DLOADX name.
+
+        Returns a ``DeviceName`` (``name=""`` means unused).
+        ``None`` means timeout or not connected.
+        """
+        if not self._connected:
+            return None
+        num_byte = 0 if number == 256 else number
+        frames = await self._request(
+            CMD_READ_NAME, bytes([device_type, num_byte]),
+        )
+        if not frames:
+            return None
+        for frame in frames:
+            if not frame:
+                continue
+            if frame[0] == CMD_NEW_DATA:
+                return DeviceName(
+                    device_type=device_type,
+                    number=number,
+                    function=0,
+                    name="",
+                )
+            parsed = parse_device_name(frame)
+            if parsed is not None:
+                return parsed
+        return None
+
+    async def read_panel_layout(self) -> PanelLayout:
+        """Dump named partitions (1–32) and zones (1–128). Skips empty slots."""
+        if not self._connected:
+            raise ConnectionError("Satel not connected")
+
+        partitions: list[PanelPartition] = []
+        timeouts = 0
+        for n in range(1, _MAX_PARTITIONS + 1):
+            dn = await self.read_device_name(NAME_TYPE_PARTITION, n)
+            if dn is None:
+                timeouts += 1
+                if timeouts >= 8:
+                    raise TimeoutError(
+                        "Het paneel reageert niet op naam-uitlezing. "
+                        "Controleer de ETHM-1 integratie (commando 0xEE)."
+                    )
+                continue
+            timeouts = 0
+            if dn.name:
+                partitions.append(PanelPartition(number=dn.number, name=dn.name))
+
+        zones: list[PanelZone] = []
+        timeouts = 0
+        for n in range(1, _MAX_ZONES + 1):
+            dn = await self.read_device_name(NAME_TYPE_ZONE, n)
+            if dn is None:
+                timeouts += 1
+                if timeouts >= 8:
+                    break
+                continue
+            timeouts = 0
+            if dn.name:
+                zones.append(PanelZone(
+                    zone_number=dn.number,
+                    name=dn.name,
+                    reaction=dn.function,
+                    device_type=reaction_to_device_type(dn.function),
+                ))
+
+        return PanelLayout(partitions=partitions, zones=zones)
 
     async def _send_action(self, cmd: int, payload: bytes) -> bool:
         if self._writer is None or not self._connected:
@@ -351,29 +504,37 @@ class SatelClient:
 
     async def _poll_plain(self) -> None:
         assert self._reader and self._writer
-        reader, writer = self._reader, self._writer
-        loop = asyncio.get_event_loop()
+        writer = self._writer
         while True:
+            # Hold the IO lock for the whole send+read so 0xEE dumps never
+            # race the poller on the same StreamReader.
             async with self._io_lock:
                 for cmd in _QUERY_CMDS:
                     writer.write(_build_frame(cmd))
                 await writer.drain()
+                await self._collect_plain(_POLL_READ_WINDOW)
+            await asyncio.sleep(_POLL_INTERVAL)
 
-            deadline = loop.time() + _POLL_INTERVAL
-            while loop.time() < deadline:
-                try:
-                    chunk = await asyncio.wait_for(
-                        reader.read(512),
-                        timeout=max(0.1, deadline - loop.time()),
-                    )
-                except asyncio.TimeoutError:
-                    break
-                if not chunk:
-                    raise ConnectionResetError("EOF from Satel module")
-                self._buf.extend(chunk)
-                frames, self._buf = _parse_frames(self._buf)
-                for frame in frames:
-                    self._handle_frame(frame)
+    async def _collect_plain(self, window: float) -> None:
+        """Read plaintext frames for ``window`` seconds. Caller holds ``_io_lock``."""
+        assert self._reader
+        reader = self._reader
+        loop = asyncio.get_event_loop()
+        deadline = loop.time() + window
+        while loop.time() < deadline:
+            try:
+                chunk = await asyncio.wait_for(
+                    reader.read(512),
+                    timeout=max(0.05, deadline - loop.time()),
+                )
+            except asyncio.TimeoutError:
+                break
+            if not chunk:
+                raise ConnectionResetError("EOF from Satel module")
+            self._buf.extend(chunk)
+            frames, self._buf = _parse_frames(self._buf)
+            for frame in frames:
+                self._handle_frame(frame)
 
     # --- Encrypted polling --------------------------------------------------
 
@@ -384,7 +545,44 @@ class SatelClient:
                     await self._exchange_encrypted(cmd)
             await asyncio.sleep(_POLL_INTERVAL)
 
-    async def _exchange_encrypted(self, cmd: int, payload: bytes = b'') -> None:
+    async def _request(self, cmd: int, payload: bytes = b'') -> list[bytes]:
+        """Send one command and return response frames. Serialised on ``_io_lock``."""
+        if self._writer is None or not self._connected:
+            return []
+        async with self._io_lock:
+            if self._crypto is not None:
+                return await self._exchange_encrypted(cmd, payload)
+            return await self._exchange_plain(cmd, payload)
+
+    async def _exchange_plain(self, cmd: int, payload: bytes = b'',
+                             timeout: float = _NAME_READ_TIMEOUT) -> list[bytes]:
+        """Send one plaintext command and wait for its reply. Caller holds ``_io_lock``."""
+        assert self._reader and self._writer
+        self._writer.write(_build_frame(cmd, payload))
+        await self._writer.drain()
+        loop = asyncio.get_event_loop()
+        deadline = loop.time() + timeout
+        collected: list[bytes] = []
+        while loop.time() < deadline:
+            try:
+                chunk = await asyncio.wait_for(
+                    self._reader.read(512),
+                    timeout=max(0.05, deadline - loop.time()),
+                )
+            except asyncio.TimeoutError:
+                break
+            if not chunk:
+                raise ConnectionResetError("EOF from Satel module")
+            self._buf.extend(chunk)
+            frames, self._buf = _parse_frames(self._buf)
+            for frame in frames:
+                self._handle_frame(frame)
+                collected.append(frame)
+                if frame and frame[0] in (cmd, CMD_NEW_DATA):
+                    return collected
+        return collected
+
+    async def _exchange_encrypted(self, cmd: int, payload: bytes = b'') -> list[bytes]:
         """Send one encrypted frame and read its single response PDU.
 
         Must be called while holding ``self._io_lock`` (mutates crypto state).
@@ -403,6 +601,7 @@ class SatelClient:
         frames, _ = _parse_frames(bytearray(decrypted))
         for frame in frames:
             self._handle_frame(frame)
+        return frames
 
     # --- Frame handling -----------------------------------------------------
 
@@ -423,8 +622,8 @@ class SatelClient:
             self.state.partitions_entry = _bits_to_set(payload)
         elif cmd in (CMD_PART_EXIT_OVER_10, CMD_PART_EXIT_UNDER_10):
             self._update_exit(cmd, _bits_to_set(payload))
-        elif cmd == CMD_NEW_DATA:
-            pass  # command result / ack
+        elif cmd in (CMD_NEW_DATA, CMD_READ_NAME):
+            pass  # command result / name dump (handled by the requester)
         else:
             log.debug("Unhandled Satel cmd 0x%02X", cmd)
 

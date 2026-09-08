@@ -6,6 +6,7 @@ GET  /satel/config       — Return current configuration (password + PIN exclud
 POST /satel/config       — Store a new config and hot-reload.
 POST /satel/pin          — Set or overwrite the stored arm/disarm PIN (write-only).
 GET  /satel/status       — Partition states, room sensors, zone list.
+GET  /satel/discover     — Dump partition + zone names from the panel (DLOADX).
 POST /satel/arm          — Arm one partition   (body: {partition}).
 POST /satel/disarm       — Disarm one partition (body: {partition}).
 
@@ -26,7 +27,7 @@ from typing import Annotated
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
 
-from .config_schema import ArmModeConfig, PartitionConfig, SatelConfig, ZoneMapping
+from .config_schema import ArmModeConfig, DeviceType, PartitionConfig, SatelConfig, ZoneMapping
 from .protocol import SatelClient
 
 logging.basicConfig(
@@ -40,6 +41,7 @@ CONFIG_FILE = _HERE / "config.json"
 
 _client: SatelClient | None = None
 _config: SatelConfig | None = None
+_discover_lock = asyncio.Lock()
 
 # ---------------------------------------------------------------------------
 # Config helpers
@@ -328,6 +330,86 @@ async def get_status() -> StatusResponse:
         rooms=rooms,
         all_zones=all_zones,
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /satel/discover  — one-shot DLOADX name dump (does not write config)
+# ---------------------------------------------------------------------------
+
+
+class DiscoverOut(BaseModel):
+    partitions:   list[PartitionOut]
+    zone_mapping: list[ZoneMapping]
+
+
+@app.get("/satel/discover", response_model=DiscoverOut,
+         summary="Read partition and zone names from the panel (does not save).")
+async def get_discover() -> DiscoverOut:
+    if _config is None or _client is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                            detail="Satel not configured yet.")
+    if not _client.connected:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Geen verbinding met het paneel. Controleer IP-adres en poort.",
+        )
+    if _discover_lock.locked():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Er loopt al een uitlezing.",
+        )
+    async with _discover_lock:
+        try:
+            layout = await _client.read_panel_layout()
+        except HTTPException:
+            raise
+        except ConnectionError:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Geen verbinding met het paneel. Controleer IP-adres en poort.",
+            )
+        except TimeoutError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=str(exc) or "Het paneel reageert niet op naam-uitlezing.",
+            )
+        except Exception as exc:
+            log.warning("Satel discover failed: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail="Uitlezen van het paneel is mislukt.",
+            )
+    if not layout.partitions and not layout.zones:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Het paneel gaf geen namen terug. Controleer de ETHM-1 integratie.",
+        )
+    partitions = [
+        PartitionOut(
+            number=p.number,
+            name=p.name,
+            arm_modes=[ArmModeConfig(mode=0, name="Volledig")],
+        )
+        for p in layout.partitions
+    ]
+    zones: list[ZoneMapping] = []
+    for z in layout.zones:
+        try:
+            dtype = DeviceType(z.device_type)
+        except ValueError:
+            dtype = DeviceType.magneetcontact
+        zones.append(ZoneMapping(
+            zone_number=z.zone_number,
+            name=z.name,
+            room="",
+            room_id=None,
+            device_type=dtype,
+        ))
+    log.info(
+        "Satel discover: %s partitions, %s zones",
+        len(partitions), len(zones),
+    )
+    return DiscoverOut(partitions=partitions, zone_mapping=zones)
 
 
 # ---------------------------------------------------------------------------

@@ -2104,12 +2104,13 @@ class _RoomActivityBadges extends ConsumerWidget {
     if (!any) return const SizedBox.shrink();
 
     // Kale glyphs — geen glass/wells.
-    // Zelfde ink als kamernamen (brass zat nergens anders op dit scherm).
+    // Phone: inkSoft (antraciet, zelfde gewicht als kamernamen).
+    // Tablet: ink, gelijk aan de header.
     final phone = context.isPhone;
     final glyph = phone ? 24.0 : 22.0;
     final slot = phone ? 44.0 : 40.0;
     final badge = phone ? 28.0 : 26.0;
-    final color = LuxeColors.ink;
+    final color = phone ? LuxeColors.inkSoft : LuxeColors.ink;
 
     Widget tap(Widget child, String categorySlug) => GestureDetector(
           behavior: HitTestBehavior.opaque,

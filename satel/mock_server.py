@@ -196,6 +196,31 @@ async def get_config():
     }
 
 
+@app.get("/satel/discover")
+async def get_discover():
+    """Pretend DLOADX dump. Independent of the saved installer mapping."""
+    return {
+        "partitions": [
+            {
+                "number": p["number"],
+                "name": p["name"],
+                "arm_modes": [{"mode": 0, "name": "Volledig"}],
+            }
+            for p in _DEFAULT_PARTITIONS
+        ],
+        "zone_mapping": [
+            {
+                "zone_number": z["zone_number"],
+                "name": z["name"],
+                "room": "",
+                "room_id": None,
+                "device_type": z["device_type"],
+            }
+            for z in _MOCK_ZONES
+        ],
+    }
+
+
 class _ActionBody(BaseModel):
     partition: int = 1
     mode: int = 0           # arm mode 0-3
