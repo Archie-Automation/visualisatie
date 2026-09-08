@@ -66,7 +66,7 @@ Future<AndroidApkInstallResult> downloadAndInstallAndroidApk({
     return AndroidApkInstallResult.fail('install_permission_denied');
   }
 
-  final uri = Uri.parse('$apiBase/api/app/android.apk');
+  final uri = Uri.parse('$apiBase/api/app/android.apk?refresh=1');
   final request = http.Request('GET', uri);
   final client = http.Client();
   try {

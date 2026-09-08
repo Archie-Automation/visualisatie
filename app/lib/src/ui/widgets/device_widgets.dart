@@ -3980,6 +3980,8 @@ class _WtwTileState extends ConsumerState<WtwTile> {
   int? _minutesOverride;
   DateTime? _boostEndsAt;
   Timer? _tick;
+  Timer? _boostMinutesWrite;
+  int? _pendingBoostMinutes;
 
   Device get device => widget.device;
 
@@ -4006,6 +4008,8 @@ class _WtwTileState extends ConsumerState<WtwTile> {
   @override
   void dispose() {
     _tick?.cancel();
+    _boostMinutesWrite?.cancel();
+    _flushBoostMinutesWrite();
     super.dispose();
   }
 
@@ -4067,14 +4071,35 @@ class _WtwTileState extends ConsumerState<WtwTile> {
     setState(() {});
   }
 
-  void _setBoostMinutes(int minutes) {
-    final clamped = minutes.clamp(1, 180);
-    setState(() => _minutesOverride = clamped);
+  void _flushBoostMinutesWrite() {
+    final minutes = _pendingBoostMinutes;
+    if (minutes == null) return;
+    _pendingBoostMinutes = null;
+    _boostMinutesWrite?.cancel();
+    _boostMinutesWrite = null;
     ref.read(busProvider.notifier).send({
       'kind': 'wtw.setBoostMinutes',
       'deviceId': device.id,
-      'minutes': clamped,
+      'minutes': minutes,
     });
+  }
+
+  void _setBoostMinutes(int minutes) {
+    final clamped = minutes.clamp(1, 180);
+    setState(() => _minutesOverride = clamped);
+    _pendingBoostMinutes = clamped;
+    _boostMinutesWrite?.cancel();
+    _boostMinutesWrite = Timer(const Duration(milliseconds: 280), () {
+      if (!mounted) return;
+      _flushBoostMinutesWrite();
+    });
+  }
+
+  void _nudgeBoostMinutes(int delta) {
+    final z = _zehnder;
+    if (z == null) return;
+    final now = _setMinutes(z, ref.read(busProvider));
+    _setBoostMinutes(now + delta);
   }
 
   @override
@@ -4152,9 +4177,12 @@ class _WtwTileState extends ConsumerState<WtwTile> {
       for (final s in stands)
         if (configured(s.id))
           DeviceControlItem(
-            icon: deviceControlNumericLabel(s.label) == null
-                ? deviceControlOptionIcon(label: s.label)
-                : null,
+            icon: switch (s.id) {
+              'away' => Icons.luggage_outlined,
+              'boost' => Icons.rocket_launch_outlined,
+              _ => null,
+            },
+            glyph: s.id == 'auto' ? const _WtwAutoGlyph() : null,
             label: deviceControlNumericLabel(s.label) ?? s.label,
             labelMode: deviceControlNumericLabel(s.label) != null
                 ? DeviceControlLabelMode.numeric
@@ -4203,10 +4231,8 @@ class _WtwTileState extends ConsumerState<WtwTile> {
             if (showSetMinutes)
               _WtwSetMinutesRow(
                 minutes: minutes,
-                onDecrease:
-                    timeWrite ? () => _setBoostMinutes(minutes - 5) : null,
-                onIncrease:
-                    timeWrite ? () => _setBoostMinutes(minutes + 5) : null,
+                onDecrease: timeWrite ? () => _nudgeBoostMinutes(-1) : null,
+                onIncrease: timeWrite ? () => _nudgeBoostMinutes(1) : null,
               ),
             if (showRemaining)
               _WtwRemainingRow(
@@ -4284,6 +4310,75 @@ class _WtwTileState extends ConsumerState<WtwTile> {
   }
 }
 
+class _WtwAutoGlyph extends StatelessWidget {
+  const _WtwAutoGlyph();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = IconTheme.of(context);
+    final color = theme.color ?? LuxeColors.ink;
+    final size = theme.size ?? DeviceControlBar.tileGlyphSize;
+    return SizedBox(
+      width: size,
+      height: size,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(color: color, width: 1.7),
+        ),
+        child: Center(
+          child: Text(
+            'A',
+            style: TextStyle(
+              color: color,
+              fontSize: size * 0.52,
+              fontWeight: FontWeight.w700,
+              height: 1,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WtwMetricRow extends StatelessWidget {
+  const _WtwMetricRow({
+    required this.label,
+    required this.trailing,
+    this.alert = false,
+  });
+
+  final String label;
+  final Widget trailing;
+  final bool alert;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = DeviceControlBar.buttonSizeFor(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: SizedBox(
+        height: size,
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: alert ? LuxeColors.danger : LuxeColors.inkSoft,
+                      fontWeight: alert ? FontWeight.w600 : FontWeight.w400,
+                    ),
+              ),
+            ),
+            trailing,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _WtwSetMinutesRow extends StatelessWidget {
   const _WtwSetMinutesRow({
     required this.minutes,
@@ -4296,29 +4391,20 @@ class _WtwSetMinutesRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
+    const gap = DeviceControlBar.gap;
+    return _WtwMetricRow(
+      label: 'Boost-tijd',
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.timer_outlined, size: 16, color: LuxeColors.inkSoft),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Boost-tijd',
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: LuxeColors.inkSoft),
-            ),
-          ),
           if (onDecrease != null) ...[
-            _WtwMiniStep(icon: Icons.remove, onTap: onDecrease),
-            const SizedBox(width: 6),
+            _WtwHoldStepButton(icon: Icons.remove, onStep: onDecrease),
+            const SizedBox(width: gap),
           ],
-          _WtwPulseBadge(text: '$minutes min', pulse: false),
+          _WtwValueBox(text: '$minutes min'),
           if (onIncrease != null) ...[
-            const SizedBox(width: 6),
-            _WtwMiniStep(icon: Icons.add, onTap: onIncrease),
+            const SizedBox(width: gap),
+            _WtwHoldStepButton(icon: Icons.add, onStep: onIncrease),
           ],
         ],
       ),
@@ -4336,65 +4422,128 @@ class _WtwRemainingRow extends StatelessWidget {
     final left = remaining;
     final counting = active && left != null && left.inSeconds > 0;
     final text = !counting ? '—' : _wtwFormatClock(left!);
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Icon(
-            Icons.hourglass_bottom_outlined,
-            size: 16,
-            color: counting ? LuxeColors.brass : LuxeColors.inkSoft,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              'Resterend',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: counting ? LuxeColors.ink : LuxeColors.inkSoft,
-                    fontWeight: counting ? FontWeight.w600 : FontWeight.w400,
-                  ),
-            ),
-          ),
-          _WtwPulseBadge(text: text, pulse: counting),
-        ],
-      ),
+    return _WtwMetricRow(
+      label: 'Resterend',
+      trailing: _WtwValueBox(text: text, pulse: counting, active: counting),
     );
   }
 }
 
-class _WtwMiniStep extends StatelessWidget {
-  const _WtwMiniStep({required this.icon, this.onTap});
+class _WtwHoldStepButton extends StatefulWidget {
+  const _WtwHoldStepButton({required this.icon, this.onStep});
   final IconData icon;
-  final VoidCallback? onTap;
+  final VoidCallback? onStep;
+
+  @override
+  State<_WtwHoldStepButton> createState() => _WtwHoldStepButtonState();
+}
+
+class _WtwHoldStepButtonState extends State<_WtwHoldStepButton> {
+  Timer? _holdTimer;
+  Timer? _repeatTimer;
+  int _ticks = 0;
+  bool _pressed = false;
+
+  @override
+  void dispose() {
+    _stop(visual: false);
+    super.dispose();
+  }
+
+  void _stop({bool visual = true}) {
+    _holdTimer?.cancel();
+    _holdTimer = null;
+    _repeatTimer?.cancel();
+    _repeatTimer = null;
+    _ticks = 0;
+    if (visual && mounted && _pressed) {
+      setState(() => _pressed = false);
+    } else {
+      _pressed = false;
+    }
+  }
+
+  void _fire() => widget.onStep?.call();
+
+  void _scheduleRepeat() {
+    _repeatTimer?.cancel();
+    final ms = _ticks <= 4
+        ? 280
+        : _ticks <= 12
+            ? 110
+            : 55;
+    _repeatTimer = Timer(Duration(milliseconds: ms), () {
+      if (!mounted || !_pressed) return;
+      _fire();
+      _ticks++;
+      _scheduleRepeat();
+    });
+  }
+
+  void _onDown(PointerDownEvent event) {
+    if (widget.onStep == null) return;
+    _stop(visual: false);
+    setState(() => _pressed = true);
+    _fire();
+    _holdTimer = Timer(const Duration(milliseconds: 380), () {
+      if (!mounted || !_pressed) return;
+      _ticks = 1;
+      _scheduleRepeat();
+    });
+  }
+
+  void _onUp(PointerEvent event) => _stop();
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 28,
-      height: 28,
-      child: Material(
-        color: LuxeColors.surfaceDim.withValues(alpha: 0.7),
-        shape: const CircleBorder(),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: Icon(icon, size: 14, color: LuxeColors.inkSoft),
+    final size = DeviceControlBar.buttonSizeFor(context);
+    final disabled = widget.onStep == null;
+    final surface = DeviceControlButtonSurface(
+      pressed: _pressed,
+      width: size,
+      height: size,
+      child: Center(
+        child: Icon(
+          widget.icon,
+          size: DeviceControlBar.glyphSizeFor(context),
+          color: DeviceControlIcons.color(disabled: disabled),
         ),
+      ),
+    );
+    if (disabled) {
+      return SizedBox(width: size, height: size, child: surface);
+    }
+    return Listener(
+      onPointerDown: _onDown,
+      onPointerUp: _onUp,
+      onPointerCancel: _onUp,
+      child: AnimatedScale(
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOutCubic,
+        scale: _pressed ? 0.985 : 1.0,
+        child: SizedBox(width: size, height: size, child: surface),
       ),
     );
   }
 }
 
-class _WtwPulseBadge extends StatefulWidget {
-  const _WtwPulseBadge({required this.text, required this.pulse});
+class _WtwValueBox extends StatefulWidget {
+  const _WtwValueBox({
+    required this.text,
+    this.pulse = false,
+    this.active = false,
+    this.alert = false,
+  });
   final String text;
   final bool pulse;
+  final bool active;
+  final bool alert;
 
   @override
-  State<_WtwPulseBadge> createState() => _WtwPulseBadgeState();
+  State<_WtwValueBox> createState() => _WtwValueBoxState();
 }
 
-class _WtwPulseBadgeState extends State<_WtwPulseBadge>
+class _WtwValueBoxState extends State<_WtwValueBox>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulse;
 
@@ -4409,7 +4558,7 @@ class _WtwPulseBadgeState extends State<_WtwPulseBadge>
   }
 
   @override
-  void didUpdateWidget(covariant _WtwPulseBadge old) {
+  void didUpdateWidget(covariant _WtwValueBox old) {
     super.didUpdateWidget(old);
     if (widget.pulse && !_pulse.isAnimating) {
       _pulse.repeat(reverse: true);
@@ -4428,36 +4577,59 @@ class _WtwPulseBadgeState extends State<_WtwPulseBadge>
 
   @override
   Widget build(BuildContext context) {
-    final badge = Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-      decoration: BoxDecoration(
-        color: widget.pulse
-            ? LuxeColors.brass.withValues(alpha: 0.12)
-            : LuxeColors.surfaceDim.withValues(alpha: 0.60),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: widget.pulse
-              ? LuxeColors.brass.withValues(alpha: 0.35)
-              : LuxeColors.line,
-        ),
-      ),
-      child: Text(
-        widget.text,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: widget.pulse ? LuxeColors.brass : LuxeColors.inkSoft,
-          letterSpacing: 0.4,
-          fontFeatures: const [FontFeature.tabularFigures()],
+    final size = DeviceControlBar.buttonSizeFor(context);
+    final color = widget.alert
+        ? LuxeColors.danger
+        : widget.active
+            ? LuxeColors.brass
+            : LuxeColors.ink;
+    final box = DeviceControlButtonSurface(
+      active: widget.active || widget.alert,
+      height: size,
+      constraints: BoxConstraints(minWidth: size, minHeight: size),
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Center(
+        child: Text(
+          widget.text,
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            height: 1,
+            color: color,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
         ),
       ),
     );
-    if (!widget.pulse) return badge;
+    if (!widget.pulse) return box;
     return FadeTransition(
       opacity: Tween<double>(begin: 0.38, end: 1).animate(
         CurvedAnimation(parent: _pulse, curve: Curves.easeInOut),
       ),
-      child: badge,
+      child: box,
+    );
+  }
+}
+
+class _WtwStatusSquare extends StatelessWidget {
+  const _WtwStatusSquare({required this.icon, required this.alert});
+  final IconData icon;
+  final bool alert;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = DeviceControlBar.buttonSizeFor(context);
+    return DeviceControlButtonSurface(
+      active: alert,
+      width: size,
+      height: size,
+      child: Center(
+        child: Icon(
+          icon,
+          size: DeviceControlBar.glyphSizeFor(context),
+          color: alert ? LuxeColors.danger : LuxeColors.inkSoft,
+        ),
+      ),
     );
   }
 }
@@ -4495,56 +4667,19 @@ class _WtwStatusRow extends StatelessWidget {
         ? (bitActive ? icon1Key : icon0Key)
         : null;
     final useIconBadge = valueIconKey != null && rawValue != null;
-    final dotColor = isAlert ? LuxeColors.danger : LuxeColors.brass;
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 400),
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: dotColor),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: isAlert ? LuxeColors.danger : LuxeColors.inkSoft,
-                    fontWeight: isAlert ? FontWeight.w600 : FontWeight.w400,
-                  ),
+    return _WtwMetricRow(
+      label: label,
+      alert: isAlert,
+      trailing: useIconBadge
+          ? _WtwStatusSquare(
+              icon: kUniversalIconMap[valueIconKey!] ?? Icons.circle,
+              alert: isAlert,
+            )
+          : _WtwValueBox(
+              text: rawValue == null ? '—' : display,
+              alert: isAlert,
             ),
-          ),
-          if (useIconBadge)
-            _WtwIconBadge(iconKey: valueIconKey!, isAlert: isAlert)
-          else
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-              decoration: BoxDecoration(
-                color: isAlert
-                    ? LuxeColors.danger.withValues(alpha: 0.10)
-                    : LuxeColors.surfaceDim.withValues(alpha: 0.60),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: isAlert
-                      ? LuxeColors.danger.withValues(alpha: 0.30)
-                      : LuxeColors.line,
-                ),
-              ),
-              child: Text(
-                rawValue == null ? '—' : display,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: isAlert ? LuxeColors.danger : LuxeColors.inkSoft,
-                  letterSpacing: 0.4,
-                ),
-              ),
-            ),
-        ],
-      ),
     );
   }
 
@@ -4560,27 +4695,6 @@ class _WtwStatusRow extends StatelessWidget {
       return ('${n?.toInt() ?? raw}$suffix', false);
     }
     return ('$raw$suffix', false);
-  }
-}
-
-class _WtwIconBadge extends StatelessWidget {
-  const _WtwIconBadge({required this.iconKey, required this.isAlert});
-  final String iconKey;
-  final bool isAlert;
-
-  @override
-  Widget build(BuildContext context) {
-    final iconData = kUniversalIconMap[iconKey] ?? Icons.circle;
-    final color = isAlert ? LuxeColors.danger : LuxeColors.brass;
-    return Container(
-      padding: const EdgeInsets.all(5),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        shape: BoxShape.circle,
-        border: Border.all(color: color.withValues(alpha: 0.35)),
-      ),
-      child: Icon(iconData, size: 16, color: color),
-    );
   }
 }
 

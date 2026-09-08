@@ -23,10 +23,12 @@ class ApkInstaller(private val activity: Activity) {
     private var receiver: BroadcastReceiver? = null
 
     fun install(path: String, result: MethodChannel.Result) {
+        // Vorige prompt overgeslagen: sessie vrijgeven, anders blijft elke
+        // volgende tik op Installeren op "busy" hangen.
         if (pendingResult != null) {
-            result.error("busy", "Installatie loopt al", null)
-            return
+            completeError("install_aborted", "vervangen")
         }
+        abandonOpenSessions()
 
         val file = File(path)
         if (!file.exists() || file.length() < 1024L) {
@@ -82,6 +84,7 @@ class ApkInstaller(private val activity: Activity) {
         if (pendingResult != null) {
             completeError("install_aborted", "activity gone")
         }
+        abandonOpenSessions()
         unregisterReceiver()
         pendingResult = null
     }
@@ -188,6 +191,16 @@ class ApkInstaller(private val activity: Activity) {
         pendingResult = null
         unregisterReceiver()
         r?.error(code, message, null)
+    }
+
+    private fun abandonOpenSessions() {
+        val installer = activity.packageManager.packageInstaller
+        for (info in installer.mySessions) {
+            try {
+                installer.abandonSession(info.sessionId)
+            } catch (_: Exception) {
+            }
+        }
     }
 
     private fun archiveVersionCode(file: File): Long? {

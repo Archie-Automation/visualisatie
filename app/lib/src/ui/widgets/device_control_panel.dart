@@ -330,18 +330,20 @@ class _LabeledSquareButton extends StatelessWidget {
     final btnSize = DeviceControlBar.buttonSizeFor(layoutContext);
     final glyphSize = DeviceControlBar.glyphSizeFor(layoutContext);
 
+    final glyphItem = item.glyph != null || item.icon != null || item.arrow != null
+        ? item
+        : DeviceControlItem(
+            icon: deviceControlOptionIcon(label: item.label),
+            label: item.label,
+            active: item.active,
+            onTap: item.onTap,
+          );
+
     Widget inner;
     switch (mode) {
       case DeviceControlLabelMode.iconOnly:
         inner = _DeviceControlGlyph(
-          item: item.icon != null || item.arrow != null
-              ? item
-              : DeviceControlItem(
-                  icon: deviceControlOptionIcon(label: item.label),
-                  label: item.label,
-                  active: item.active,
-                  onTap: item.onTap,
-                ),
+          item: glyphItem,
           active: item.active,
           disabled: disabled,
           glyphSize: glyphSize,
@@ -374,12 +376,7 @@ class _LabeledSquareButton extends StatelessWidget {
             children: [
               if (hasIcon) ...[
                 _DeviceControlGlyph(
-                  item: item.icon != null || item.arrow != null
-                      ? item
-                      : DeviceControlItem(
-                          icon: deviceControlOptionIcon(label: item.label),
-                          label: item.label,
-                        ),
+                  item: glyphItem,
                   active: item.active,
                   disabled: disabled,
                   glyphSize: glyphSize,
@@ -464,9 +461,12 @@ class _DeviceControlGlyph extends StatelessWidget {
       return HeaterIcon(size: glyphSize, color: color);
     }
     if (item.glyph != null) {
-      return Opacity(
-        opacity: disabled ? 0.35 : 1,
-        child: item.glyph!,
+      return IconTheme(
+        data: IconThemeData(color: color, size: glyphSize),
+        child: Opacity(
+          opacity: disabled ? 0.35 : 1,
+          child: item.glyph!,
+        ),
       );
     }
     if (item.arrow != null) {
