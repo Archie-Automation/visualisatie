@@ -4009,6 +4009,12 @@ class _WtwTileState extends ConsumerState<WtwTile> {
     super.dispose();
   }
 
+  static String _ga(Map<String, dynamic> z, String key) =>
+      (z[key] as String?)?.trim() ?? '';
+
+  static bool _hasGa(Map<String, dynamic> z, String key) =>
+      _ga(z, key).isNotEmpty;
+
   static bool _bitOn(BusState bus, String? ga) {
     final addr = ga?.trim();
     if (addr == null || addr.isEmpty) return false;
@@ -4101,8 +4107,11 @@ class _WtwTileState extends ConsumerState<WtwTile> {
     final remaining = _localRemaining();
     final remainingLive = remaining != null && remaining > Duration.zero;
     final boostOn = remainingLive;
-    final timeGa = (z['boostTimeGa'] as String?)?.trim() ?? '';
-    final boostGa = (z['boostGa'] as String?)?.trim() ?? '';
+    final timeWrite = _hasGa(z, 'boostTimeGa');
+    final timeStatus = _hasGa(z, 'boostTimeStatusGa');
+    final hasBoost = _hasGa(z, 'boostGa') || _hasGa(z, 'boostStatusGa');
+    final showSetMinutes = timeWrite || timeStatus;
+    final showRemaining = hasBoost && remainingLive;
 
     const stands = <({String id, String label})>[
       (id: 'away', label: 'Away'),
@@ -4113,18 +4122,15 @@ class _WtwTileState extends ConsumerState<WtwTile> {
       (id: 'boost', label: 'Boost'),
     ];
 
-    bool configured(String id) {
-      final key = switch (id) {
-        'away' => 'awayGa',
-        'stand1' => 'stand1Ga',
-        'stand2' => 'stand2Ga',
-        'stand3' => 'stand3Ga',
-        'auto' => 'autoGa',
-        'boost' => 'boostGa',
-        _ => '',
-      };
-      return ((z[key] as String?)?.trim() ?? '').isNotEmpty;
-    }
+    String writeKey(String id) => switch (id) {
+          'away' => 'awayGa',
+          'stand1' => 'stand1Ga',
+          'stand2' => 'stand2Ga',
+          'stand3' => 'stand3Ga',
+          'auto' => 'autoGa',
+          'boost' => 'boostGa',
+          _ => '',
+        };
 
     String? statusKey(String id) => switch (id) {
           'away' => 'awayStatusGa',
@@ -4135,6 +4141,12 @@ class _WtwTileState extends ConsumerState<WtwTile> {
           'boost' => 'boostStatusGa',
           _ => null,
         };
+
+    bool configured(String id) {
+      final status = statusKey(id);
+      return _hasGa(z, writeKey(id)) ||
+          (status != null && _hasGa(z, status));
+    }
 
     final buttonItems = [
       for (final s in stands)
@@ -4150,13 +4162,15 @@ class _WtwTileState extends ConsumerState<WtwTile> {
             active: s.id == 'boost'
                 ? boostOn
                 : _bitOn(bus, z[statusKey(s.id)] as String?),
-            onTap: () {
-              if (s.id == 'boost') {
-                _press('boost', minutes: minutes, on: true);
-              } else {
-                _press(s.id);
-              }
-            },
+            onTap: !_hasGa(z, writeKey(s.id))
+                ? null
+                : () {
+                    if (s.id == 'boost') {
+                      _press('boost', minutes: minutes, on: true);
+                    } else {
+                      _press(s.id);
+                    }
+                  },
           ),
     ];
 
@@ -4182,20 +4196,22 @@ class _WtwTileState extends ConsumerState<WtwTile> {
               child: DeviceControlBar.gridAuto(context, buttonItems),
             ),
           ],
-          if (timeGa.isNotEmpty || boostGa.isNotEmpty) ...[
+          if (showSetMinutes || showRemaining) ...[
             SizedBox(height: DeviceControlBar.sectionSpacing(context)),
             const Divider(height: 1),
             const SizedBox(height: 12),
-            if (timeGa.isNotEmpty)
+            if (showSetMinutes)
               _WtwSetMinutesRow(
                 minutes: minutes,
-                onDecrease: () => _setBoostMinutes(minutes - 5),
-                onIncrease: () => _setBoostMinutes(minutes + 5),
+                onDecrease:
+                    timeWrite ? () => _setBoostMinutes(minutes - 5) : null,
+                onIncrease:
+                    timeWrite ? () => _setBoostMinutes(minutes + 5) : null,
               ),
-            if (boostGa.isNotEmpty)
+            if (showRemaining)
               _WtwRemainingRow(
-                remaining: remainingLive ? remaining : null,
-                active: remainingLive,
+                remaining: remaining,
+                active: true,
               ),
           ],
           ..._zehnderStatusRows(z, bus),
@@ -4205,12 +4221,14 @@ class _WtwTileState extends ConsumerState<WtwTile> {
   }
 
   List<Widget> _zehnderStatusRows(Map<String, dynamic> z, BusState bus) {
-    final hasBoostBlock =
-        ((z['boostTimeGa'] as String?)?.trim() ?? '').isNotEmpty ||
-            ((z['boostGa'] as String?)?.trim() ?? '').isNotEmpty;
-    final hasFault = ((z['faultGa'] as String?)?.trim() ?? '').isNotEmpty;
-    final hasFilter = ((z['filterGa'] as String?)?.trim() ?? '').isNotEmpty;
-    final daysGa = (z['filterDaysGa'] as String?)?.trim() ?? '';
+    final hasBoostBlock = _hasGa(z, 'boostTimeGa') ||
+        _hasGa(z, 'boostTimeStatusGa') ||
+        ((_hasGa(z, 'boostGa') || _hasGa(z, 'boostStatusGa')) &&
+            _boostEndsAt != null &&
+            _boostEndsAt!.isAfter(DateTime.now()));
+    final hasFault = _hasGa(z, 'faultGa');
+    final hasFilter = _hasGa(z, 'filterGa');
+    final daysGa = _ga(z, 'filterDaysGa');
     if (!hasFault && !hasFilter && daysGa.isEmpty) return const [];
 
     final rows = <Widget>[
@@ -4293,11 +4311,15 @@ class _WtwSetMinutesRow extends StatelessWidget {
                   ?.copyWith(color: LuxeColors.inkSoft),
             ),
           ),
-          _WtwMiniStep(icon: Icons.remove, onTap: onDecrease),
-          const SizedBox(width: 6),
+          if (onDecrease != null) ...[
+            _WtwMiniStep(icon: Icons.remove, onTap: onDecrease),
+            const SizedBox(width: 6),
+          ],
           _WtwPulseBadge(text: '$minutes min', pulse: false),
-          const SizedBox(width: 6),
-          _WtwMiniStep(icon: Icons.add, onTap: onIncrease),
+          if (onIncrease != null) ...[
+            const SizedBox(width: 6),
+            _WtwMiniStep(icon: Icons.add, onTap: onIncrease),
+          ],
         ],
       ),
     );
