@@ -839,67 +839,49 @@ export type WtwDpt =
   // ── Speciaal ────────────────────────────────────────────────────────────
   | "hex";    // Allen voor status: waarde als hex-string weergeven
 
-export interface WtwButton {
-  id: string;
-  label: string;
-  /** KNX groepsadres om naartoe te schrijven. */
-  ga: string;
-  /** DPT bepaalt het telegram-type. Hex is niet geldig voor knoppen. */
-  dpt: Exclude<WtwDpt, "hex">;
-  /** Waarde om te versturen. Boolean voor 1.001, getal voor de rest. */
-  value: number | boolean;
-  /** Optioneel terugkoppeling-GA (bepaalt of de knop "actief" is). */
-  statusGa?: string;
-  /** Welke waarde in statusGa de "actief"-toestand aangeeft (standaard true/1). */
-  statusOnValue?: number | boolean;
-  /**
-   * `boost` = 1-bit inschakelen + optionele DPT 7.001-tijd in minuten.
-   * Ontbreekt of `stand` = gewone standknop.
-   */
-  kind?: "stand" | "boost";
-  /** Schrijf DPT 7.001; app in minuten, bus in seconden. */
-  timeGa?: string;
-  /** Lees resterende boost-tijd (DPT 7.001, seconden). */
-  timeStatusGa?: string;
-  /** Standaard boostduur in minuten (1–1092). */
-  minutes?: number;
-}
+/** Welk WTW-model; bepaalt welke GAs en functies de installer toont. */
+export type WtwModel = "zehnder_comfoConnect";
 
-export interface WtwStatusItem {
-  id: string;
-  label: string;
-  /** KNX groepsadres om te lezen. */
-  ga: string;
-  /** DPT bepaalt de weergave-opmaak. */
-  dpt: WtwDpt;
-  /** Optioneel eenheids-achtervoegsel, bijv. "dagen" of "°C". */
-  unit?: string;
-  /**
-   * Icoon-naam (uit de centrale icon-library) die altijd links naast het label
-   * wordt getoond. Optioneel — als `icon0`/`icon1` ook zijn ingesteld, worden
-   * die gebruikt als de waarde bekend is.
-   */
-  icon?: string;
-  /**
-   * Icoon-naam voor waarde 0 / false / "OK" (bijv. check, fan_off, lock).
-   * Vervangt de tekst-badge als ingesteld.
-   */
-  icon0?: string;
-  /**
-   * Icoon-naam voor waarde 1 / true / "Actief" (bijv. warning, filter_full).
-   * Vervangt de tekst-badge als ingesteld.
-   */
-  icon1?: string;
-  /**
-   * Aflopende teller. KNX-waarde is resterende tijd in die eenheid.
-   * `off` dwingt een vast getal, ook als de eenheid “dagen” is.
-   */
-  countdown?: "off" | "seconds" | "minutes" | "days";
+export type WtwZehnderStandId =
+  | "away"
+  | "stand1"
+  | "stand2"
+  | "stand3"
+  | "auto"
+  | "boost";
+
+/**
+ * Zehnder ComfoConnect KNX: elke stand is 1-bit schrijven (waarde 1) met
+ * een eigen status-bit. Boost-tijd schrijven en resterende tijd lezen zijn
+ * aparte 2-byte adressen (app in minuten, bus in seconden).
+ */
+export interface WtwZehnderComfoConnect {
+  awayGa?: string;
+  awayStatusGa?: string;
+  stand1Ga?: string;
+  stand1StatusGa?: string;
+  stand2Ga?: string;
+  stand2StatusGa?: string;
+  stand3Ga?: string;
+  stand3StatusGa?: string;
+  autoGa?: string;
+  autoStatusGa?: string;
+  boostGa?: string;
+  boostStatusGa?: string;
+  /** Ingestelde boostduur schrijven, DPT 7.001, seconden. */
+  boostTimeGa?: string;
+  /** Resterende boost-tijd lezen, DPT 7.001, seconden. Alle panelen lezen dit. */
+  boostRemainingGa?: string;
+  /** Standaard boostduur in minuten. */
+  minutes?: number;
+  faultGa?: string;
+  filterGa?: string;
+  filterDaysGa?: string;
 }
 
 export interface WtwConfig {
-  buttons?: WtwButton[];
-  status?: WtwStatusItem[];
+  model?: WtwModel;
+  zehnder?: WtwZehnderComfoConnect;
 }
 
 export interface WtwDevice extends DeviceBase {

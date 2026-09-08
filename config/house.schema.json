@@ -839,20 +839,15 @@
         },
         "wtw": {
           "type": "object",
-          "description": "WTW / HRV ventilatie — instelbare knoppen en statusmeldingen.",
+          "description": "WTW / HRV. Eerst een type kiezen; velden hangen daarvan af.",
+          "additionalProperties": false,
           "properties": {
-            "buttons": {
-              "type": "array",
-              "description": "Standen/modi-knoppen (bijv. Stand 1, Stand 2, Boost).",
-              "items": { "$ref": "#/definitions/wtwButton" },
-              "maxItems": 8
+            "model": {
+              "type": "string",
+              "enum": ["zehnder_comfoConnect"],
+              "description": "Merk/type. Nieuwe types komen hier bij."
             },
-            "status": {
-              "type": "array",
-              "description": "Status- en storingsmeldingen (bijv. filter vuil, dagenteller, storingscode).",
-              "items": { "$ref": "#/definitions/wtwStatusItem" },
-              "maxItems": 12
-            }
+            "zehnder": { "$ref": "#/definitions/wtwZehnderComfoConnect" }
           }
         },
         "melding": {
@@ -987,97 +982,40 @@
         "confirm": { "$ref": "#/definitions/confirmPrompt" }
       }
     },
-    "wtwButton": {
+    "wtwZehnderComfoConnect": {
       "type": "object",
-      "required": ["id", "label", "ga", "dpt", "value"],
+      "additionalProperties": false,
+      "description": "Zehnder ComfoConnect: standen als 1-bit + eigen status-bit; boost-tijd en resterende tijd apart.",
       "properties": {
-        "id": { "type": "string" },
-        "label": { "type": "string" },
-        "ga": { "$ref": "#/definitions/gaPattern" },
-        "dpt": {
-          "type": "string",
-          "enum": [
-            "1.001","1.002","1.008","1.009","1.011",
-            "5.001","5.010",
-            "6.001",
-            "7.001","8.001",
-            "9.001","9.002","9.004","9.005","9.006","9.007","9.008","9.009","9.020","9.021",
-            "12.001","13.001",
-            "14.019","14.068"
-          ],
-          "description": "KNX DPT-type van het te versturen telegram."
-        },
-        "value": {
-          "oneOf": [{ "type": "boolean" }, { "type": "number" }],
-          "description": "Te versturen waarde; moet bij het DPT passen (bit alleen 0/1)."
-        },
-        "statusGa": { "$ref": "#/definitions/gaPattern" },
-        "statusOnValue": {
-          "oneOf": [{ "type": "boolean" }, { "type": "number" }]
-        },
-        "kind": {
-          "type": "string",
-          "enum": ["stand", "boost"],
-          "description": "boost = 1-bit inschakelen plus optionele tijd in minuten (DPT 7.001)."
-        },
-        "timeGa": {
+        "awayGa": { "$ref": "#/definitions/gaPattern" },
+        "awayStatusGa": { "$ref": "#/definitions/gaPattern" },
+        "stand1Ga": { "$ref": "#/definitions/gaPattern" },
+        "stand1StatusGa": { "$ref": "#/definitions/gaPattern" },
+        "stand2Ga": { "$ref": "#/definitions/gaPattern" },
+        "stand2StatusGa": { "$ref": "#/definitions/gaPattern" },
+        "stand3Ga": { "$ref": "#/definitions/gaPattern" },
+        "stand3StatusGa": { "$ref": "#/definitions/gaPattern" },
+        "autoGa": { "$ref": "#/definitions/gaPattern" },
+        "autoStatusGa": { "$ref": "#/definitions/gaPattern" },
+        "boostGa": { "$ref": "#/definitions/gaPattern" },
+        "boostStatusGa": { "$ref": "#/definitions/gaPattern" },
+        "boostTimeGa": {
           "$ref": "#/definitions/gaPattern",
-          "description": "Boost-tijd schrijven, DPT 7.001, app in minuten, KNX in seconden."
+          "description": "Ingestelde boostduur schrijven, DPT 7.001, seconden."
         },
-        "timeStatusGa": {
+        "boostRemainingGa": {
           "$ref": "#/definitions/gaPattern",
-          "description": "Boost-tijd teruglezen, DPT 7.001, seconden op de bus."
+          "description": "Resterende boost-tijd lezen, DPT 7.001, seconden."
         },
         "minutes": {
           "type": "integer",
           "minimum": 1,
-          "maximum": 65535,
+          "maximum": 1092,
           "description": "Standaard boostduur in minuten."
-        }
-      }
-    },
-    "wtwStatusItem": {
-      "type": "object",
-      "required": ["id", "label", "ga", "dpt"],
-      "properties": {
-        "id": { "type": "string" },
-        "label": { "type": "string", "description": "Weergavenaam, bijv. 'Filter vuil'." },
-        "ga": { "$ref": "#/definitions/gaPattern" },
-        "dpt": {
-          "type": "string",
-          "enum": [
-            "1.001","1.002","1.008","1.009","1.011",
-            "5.001","5.010",
-            "6.001",
-            "7.001","8.001",
-            "9.001","9.002","9.004","9.005","9.006","9.007","9.008","9.009","9.020","9.021",
-            "12.001","13.001",
-            "14.019","14.068",
-            "hex"
-          ],
-          "description": "Bepaalt de opmaak: bit → ja/nee, 5.010 → getal, hex → hex-string."
         },
-        "unit": {
-          "type": "string",
-          "description": "Optioneel eenheids-achtervoegsel, bijv. 'dagen' of '°C'."
-        },
-        "icon": {
-          "type": "string",
-          "description": "Icoon-sleutel (uit de icon-library) die altijd links naast het label staat."
-        },
-        "icon0": {
-          "type": "string",
-          "description": "Icoon-sleutel die wordt getoond bij waarde 0/false. Vervangt de tekst-badge."
-        },
-        "icon1": {
-          "type": "string",
-          "description": "Icoon-sleutel die wordt getoond bij waarde 1/true. Vervangt de tekst-badge."
-        },
-        "countdown": {
-          "type": "string",
-          "enum": ["off", "seconds", "minutes", "days"],
-          "description": "Aflopende teller: KNX-waarde is resterende tijd in die eenheid; de app telt lokaal af."
-        }
+        "faultGa": { "$ref": "#/definitions/gaPattern" },
+        "filterGa": { "$ref": "#/definitions/gaPattern" },
+        "filterDaysGa": { "$ref": "#/definitions/gaPattern" }
       }
     },
     "meldingItem": {

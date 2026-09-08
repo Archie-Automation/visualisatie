@@ -1072,56 +1072,13 @@
       "name": "WTW",
       "type": "wtw",
       "wtw": {
-        "buttons": [
-          {
-            "id": "0fbc8687",
-            "label": "Stand 1",
-            "ga": "5/6/7",
-            "dpt": "5.010",
-            "value": 1
-          },
-          {
-            "id": "b5f4a0aa",
-            "label": "Stand 2",
-            "ga": "5/7/8",
-            "dpt": "5.010",
-            "value": 2
-          },
-          {
-            "id": "803348b9",
-            "label": "Stand 3",
-            "ga": "5/9/0",
-            "dpt": "5.010",
-            "value": 3
-          }
-        ],
-        "status": [
-          {
-            "id": "88074445",
-            "label": "Storing",
-            "ga": "6/7/8",
-            "dpt": "1.001",
-            "unit": "",
-            "icon0": "check",
-            "icon1": "warning"
-          },
-          {
-            "id": "15440c8b",
-            "label": "Filter vervangen",
-            "ga": "7/8/9",
-            "dpt": "1.001",
-            "unit": "",
-            "icon0": "filter",
-            "icon1": "filter_full"
-          },
-          {
-            "id": "e0e222a5",
-            "label": "Filter vervangen over",
-            "ga": "5/9/0",
-            "dpt": "7.001",
-            "unit": "dagen"
-          }
-        ]
+        "model": "zehnder_comfoConnect",
+        "zehnder": {
+          "minutes": 30,
+          "faultGa": "6/7/8",
+          "filterGa": "7/8/9",
+          "filterDaysGa": "5/9/0"
+        }
       }
     },
     {

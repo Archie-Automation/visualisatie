@@ -85,10 +85,11 @@ describe("nextVolume", () => {
     assert.equal(nextVolume(40, true), 45);
     assert.equal(nextVolume(40, false), 35);
     assert.equal(nextVolume(98, true), 100);
-    assert.equal(nextVolume(8, false), VOLUME_MIN);
+    assert.equal(nextVolume(8, false), 3);
+    assert.equal(nextVolume(4, false), VOLUME_MIN);
     assert.equal(nextVolume(VOLUME_MIN, false), VOLUME_MIN);
     assert.equal(nextVolume(0, false), VOLUME_MIN);
-    assert.equal(nextVolume(undefined, true), VOLUME_MIN);
+    assert.equal(nextVolume(undefined, true), 5);
   });
 });
 

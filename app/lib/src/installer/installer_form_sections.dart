@@ -2162,27 +2162,7 @@ class _InstallerDropdown extends StatelessWidget {
 // WTW / HRV ventilatie installer section
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// DPTs for WTW stand-knoppen. Bit-waarde alleen 0/1; byte 0–255.
-const _wtwDptButtonOptions = <String>[
-  '5.010',
-  '1.001',
-  '5.001',
-];
-
-/// Status: bits, stand, tijd/teller, klimaat van de WTW.
-const _wtwDptStatusOptions = <String>[
-  '1.001',
-  '5.001',
-  '5.010',
-  '7.001',
-  '9.001',
-  '9.007',
-  '9.008',
-  '9.009',
-  'hex',
-];
-
-/// Human-readable label per DPT code.
+/// Human-readable label per DPT code (meldingen-installer).
 const _wtwDptLabels = <String, String>{
   '1.001': 'Bit 0/1 (DPT 1.001)',
   '5.001': 'Procent 0–100 (DPT 5.001)',
@@ -2195,24 +2175,7 @@ const _wtwDptLabels = <String, String>{
   'hex': 'Hex-weergave (alleen status)',
 };
 
-bool _wtwDptIsBit(String dpt) => dpt.startsWith('1.');
-
-({int min, int max}) _wtwValueRange(String dpt) {
-  if (_wtwDptIsBit(dpt)) return (min: 0, max: 1);
-  if (dpt == '5.001') return (min: 0, max: 100);
-  if (dpt == '7.001') return (min: 0, max: 65535);
-  return (min: 0, max: 255);
-}
-
-int _clampWtwValue(String dpt, num n) {
-  final r = _wtwValueRange(dpt);
-  return n.round().clamp(r.min, r.max);
-}
-
-List<String> _wtwDptOptionsWithCurrent(List<String> options, String value) {
-  if (value.isEmpty || options.contains(value)) return options;
-  return [...options, value];
-}
+const _wtwModelNone = '__none__';
 
 class WtwInstallerSection extends StatefulWidget {
   const WtwInstallerSection({
@@ -2228,612 +2191,285 @@ class WtwInstallerSection extends StatefulWidget {
 }
 
 class _WtwInstallerSectionState extends State<WtwInstallerSection> {
-  static const _uuid = Uuid();
+  Map<String, dynamic> get _wtw => _ensureMap(widget.device, 'wtw');
 
-  Map<String, dynamic> get _wtw {
-    var m = widget.device['wtw'];
-    if (m is! Map<String, dynamic>) {
-      m = <String, dynamic>{};
-      widget.device['wtw'] = m;
+  void _notify() {
+    widget.onChanged();
+    setState(() {});
+  }
+
+  void _setModel(String raw) {
+    _wtw.remove('buttons');
+    _wtw.remove('status');
+    if (raw == _wtwModelNone) {
+      _wtw.remove('model');
+      _wtw.remove('zehnder');
+    } else {
+      _wtw['model'] = raw;
+      if (raw == 'zehnder_comfoConnect') {
+        final z = _ensureMap(_wtw, 'zehnder');
+        z['minutes'] ??= 30;
+      }
     }
-    return m as Map<String, dynamic>;
-  }
-
-  List<Map<String, dynamic>> get _buttons {
-    final v = _wtw['buttons'];
-    if (v is! List) {
-      _wtw['buttons'] = <dynamic>[];
-      return [];
-    }
-    return (v as List).cast<Map<String, dynamic>>();
-  }
-
-  List<Map<String, dynamic>> get _status {
-    final v = _wtw['status'];
-    if (v is! List) {
-      _wtw['status'] = <dynamic>[];
-      return [];
-    }
-    return (v as List).cast<Map<String, dynamic>>();
-  }
-
-  void _addButton() {
-    setState(() {
-      _buttons.add({
-        'id': _uuid.v4().substring(0, 8),
-        'label': 'Stand ${_buttons.length + 1}',
-        'ga': '',
-        'dpt': '5.010',
-        'value': _buttons.length + 1,
-      });
-      widget.onChanged();
-    });
-  }
-
-  void _removeButton(int i) {
-    setState(() {
-      _buttons.removeAt(i);
-      widget.onChanged();
-    });
-  }
-
-  void _addStatus() {
-    setState(() {
-      _status.add({
-        'id': _uuid.v4().substring(0, 8),
-        'label': 'Melding ${_status.length + 1}',
-        'ga': '',
-        'dpt': '1.001',
-        'unit': '',
-      });
-      widget.onChanged();
-    });
-  }
-
-  void _removeStatus(int i) {
-    setState(() {
-      _status.removeAt(i);
-      widget.onChanged();
-    });
+    _notify();
   }
 
   @override
   Widget build(BuildContext context) {
-    final buttons = _buttons;
-    final statusItems = _status;
-
+    final model = _wtw['model'] as String? ?? '';
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _InstallerInfoTitle(
-          title: 'Standen / knoppen',
-          body:
-              'Knoptekst is wat op de knop staat. Stand: byte 0–255, bit 0/1 of procent 0–100. '
-              'Boost: 1-bit plus tijd in minuten (KNX krijgt seconden). '
-              'Status met 2-byte kan een aflopende teller zijn (filterdagen, resterende tijd).',
-          trailing: TextButton.icon(
-            onPressed: buttons.length < 8 ? _addButton : null,
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('Toevoegen'),
-          ),
+        KeyedSubtree(
+          key: ValueKey(model.isEmpty ? _wtwModelNone : model),
+          child: _InstallerDropdown(
+          label: 'Type WTW',
+          value: model.isEmpty ? _wtwModelNone : model,
+          options: const [_wtwModelNone, 'zehnder_comfoConnect'],
+          optionLabels: const {
+            _wtwModelNone: 'Kies type…',
+            'zehnder_comfoConnect': 'Zehnder ComfoConnect',
+          },
+          onChanged: _setModel,
         ),
-        if (buttons.isEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: Text(
-              'Nog geen standen.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
+        ),
+        if (model == 'zehnder_comfoConnect')
+          _WtwZehnderInstaller(
+            zehnder: _ensureMap(_wtw, 'zehnder'),
+            onChanged: _notify,
           )
-        else ...[
-          const _OverviewColHeader([
-            (label: 'Knoptekst', flex: 2, width: null),
-            (label: 'Soort', flex: 0, width: 108.0),
-            (label: 'Groepsadres', flex: 2, width: null),
-            (label: 'DPT', flex: 2, width: null),
-            (label: 'Waarde', flex: 1, width: null),
-            (label: 'Status-GA', flex: 2, width: null),
-            (label: '', flex: 0, width: 40.0),
-          ]),
-          for (int i = 0; i < buttons.length; i++)
-            _WtwButtonEditor(
-              key: ValueKey(buttons[i]['id'] ?? i),
-              button: buttons[i],
-              onChanged: () => setState(widget.onChanged),
-              onDelete: () => _removeButton(i),
-            ),
-        ],
-        const SizedBox(height: 16),
-        _InstallerInfoTitle(
-          title: 'Status- en storingsmeldingen',
-          body:
-              'Elke regel leest een KNX-GA. Teller: resterende tijd telt in de app af '
-              '(seconden, minuten of dagen — bijv. filter). Icoon 0/1 alleen bij 1-bit.',
-          trailing: TextButton.icon(
-            onPressed: statusItems.length < 12 ? _addStatus : null,
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('Toevoegen'),
-          ),
-        ),
-        if (statusItems.isEmpty)
+        else
           Text(
-            'Nog geen statusmeldingen.',
+            'Kies eerst het type. Velden en functies hangen daarvan af.',
             style: Theme.of(context).textTheme.bodySmall,
-          )
-        else ...[
-          const _OverviewColHeader([
-            (label: 'Label', flex: 2, width: null),
-            (label: 'Groepsadres', flex: 2, width: null),
-            (label: 'DPT', flex: 2, width: null),
-            (label: 'Teller', flex: 0, width: 108.0),
-            (label: 'Eenheid', flex: 1, width: null),
-            (label: 'Icoon', flex: 1, width: null),
-            (label: 'Icoon 0', flex: 1, width: null),
-            (label: 'Icoon 1', flex: 1, width: null),
-            (label: '', flex: 0, width: 40.0),
-          ]),
-          for (int i = 0; i < statusItems.length; i++)
-            _WtwStatusEditor(
-              key: ValueKey(statusItems[i]['id'] ?? i),
-              item: statusItems[i],
-              onChanged: () => setState(widget.onChanged),
-              onDelete: () => _removeStatus(i),
-            ),
-        ],
+          ),
       ],
     );
   }
 }
 
-class _WtwButtonEditor extends StatelessWidget {
-  const _WtwButtonEditor({
-    super.key,
-    required this.button,
+class _WtwZehnderInstaller extends StatelessWidget {
+  const _WtwZehnderInstaller({
+    required this.zehnder,
     required this.onChanged,
-    required this.onDelete,
   });
-  final Map<String, dynamic> button;
+  final Map<String, dynamic> zehnder;
   final VoidCallback onChanged;
-  final VoidCallback onDelete;
-
-  bool get _isBoost => button['kind'] == 'boost';
-
-  String get _dpt =>
-      _isBoost ? '1.001' : (button['dpt'] as String? ?? '5.010');
-
-  void _setKind(String kind) {
-    if (kind == 'boost') {
-      button['kind'] = 'boost';
-      button['dpt'] = '1.001';
-      button['value'] = 1;
-      button['minutes'] ??= 30;
-    } else {
-      button.remove('kind');
-      button.remove('timeGa');
-      button.remove('timeStatusGa');
-      button.remove('minutes');
-      if (_wtwDptIsBit(button['dpt'] as String? ?? '')) {
-        button['dpt'] = '5.010';
-        button['value'] = _clampWtwValue('5.010', 1);
-      }
-    }
-    onChanged();
-  }
 
   @override
   Widget build(BuildContext context) {
-    final dpt = _dpt;
-    final isBit = _wtwDptIsBit(dpt);
-    final range = _wtwValueRange(dpt);
-    final valueInt = _clampWtwValue(
-      dpt,
-      button['value'] is num
-          ? button['value'] as num
-          : (button['value'] == true ? 1 : 0),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _InstallerInfoTitle(
+          title: 'Standen',
+          body:
+              'Elke stand stuurt bit 1. Eigen status-GA bepaalt welke knop actief is.',
+        ),
+        _WtwBitGaPair(
+          label: 'Away',
+          writeKey: 'awayGa',
+          statusKey: 'awayStatusGa',
+          map: zehnder,
+          onChanged: onChanged,
+        ),
+        _WtwBitGaPair(
+          label: 'Stand 1',
+          writeKey: 'stand1Ga',
+          statusKey: 'stand1StatusGa',
+          map: zehnder,
+          onChanged: onChanged,
+        ),
+        _WtwBitGaPair(
+          label: 'Stand 2',
+          writeKey: 'stand2Ga',
+          statusKey: 'stand2StatusGa',
+          map: zehnder,
+          onChanged: onChanged,
+        ),
+        _WtwBitGaPair(
+          label: 'Stand 3',
+          writeKey: 'stand3Ga',
+          statusKey: 'stand3StatusGa',
+          map: zehnder,
+          onChanged: onChanged,
+        ),
+        _WtwBitGaPair(
+          label: 'Auto',
+          writeKey: 'autoGa',
+          statusKey: 'autoStatusGa',
+          map: zehnder,
+          onChanged: onChanged,
+        ),
+        const SizedBox(height: 12),
+        _InstallerInfoTitle(
+          title: 'Boost',
+          body:
+              'Bit 1 schakelt boost in. Ingestelde tijd en resterende tijd zijn '
+              'aparte GAs (DPT 7.001, app in minuten, bus in seconden), zodat je '
+              'tijdens boost een nieuwe duur kunt zetten en opnieuw starten. '
+              'Resterend komt van de bus — elk paneel toont hetzelfde.',
+        ),
+        _WtwBitGaPair(
+          label: 'Boost',
+          writeKey: 'boostGa',
+          statusKey: 'boostStatusGa',
+          map: zehnder,
+          onChanged: onChanged,
+        ),
+        _InstallerStrField(
+          label: 'Ingestelde tijd GA (schrijven, DPT 7.001)',
+          value: zehnder['boostTimeGa'] as String? ?? '',
+          gaSearch: true,
+          gaDptHint: 'DPT7.001',
+          onChanged: (v) {
+            if (v.trim().isEmpty) {
+              zehnder.remove('boostTimeGa');
+            } else {
+              zehnder['boostTimeGa'] = v.trim();
+            }
+            onChanged();
+          },
+        ),
+        _InstallerStrField(
+          label: 'Resterende tijd GA (lezen, DPT 7.001)',
+          value: zehnder['boostRemainingGa'] as String? ?? '',
+          gaSearch: true,
+          gaDptHint: 'DPT7.001',
+          onChanged: (v) {
+            if (v.trim().isEmpty) {
+              zehnder.remove('boostRemainingGa');
+            } else {
+              zehnder['boostRemainingGa'] = v.trim();
+            }
+            onChanged();
+          },
+        ),
+        _InstallerStrField(
+          label: 'Standaard minuten',
+          value: '${(zehnder['minutes'] as num?)?.round() ?? 30}',
+          number: true,
+          hint: '1–180',
+          onChanged: (v) {
+            final n = int.tryParse(v);
+            if (n == null) return;
+            zehnder['minutes'] = n.clamp(1, 180);
+            onChanged();
+          },
+        ),
+        const SizedBox(height: 8),
+        _InstallerInfoTitle(
+          title: 'Storing en filter',
+          body:
+              'Storing en filter vervangen zijn 1-bit. Filterdagen is DPT 7.001.',
+        ),
+        _InstallerStrField(
+          label: 'Storing GA (DPT 1.001)',
+          value: zehnder['faultGa'] as String? ?? '',
+          gaSearch: true,
+          gaDptHint: 'DPT1.001',
+          onChanged: (v) {
+            if (v.trim().isEmpty) {
+              zehnder.remove('faultGa');
+            } else {
+              zehnder['faultGa'] = v.trim();
+            }
+            onChanged();
+          },
+        ),
+        _InstallerStrField(
+          label: 'Filter vervangen GA (DPT 1.001)',
+          value: zehnder['filterGa'] as String? ?? '',
+          gaSearch: true,
+          gaDptHint: 'DPT1.001',
+          onChanged: (v) {
+            if (v.trim().isEmpty) {
+              zehnder.remove('filterGa');
+            } else {
+              zehnder['filterGa'] = v.trim();
+            }
+            onChanged();
+          },
+        ),
+        _InstallerStrField(
+          label: 'Filter vervangen over (dagen, DPT 7.001)',
+          value: zehnder['filterDaysGa'] as String? ?? '',
+          gaSearch: true,
+          gaDptHint: 'DPT7.001',
+          onChanged: (v) {
+            if (v.trim().isEmpty) {
+              zehnder.remove('filterDaysGa');
+            } else {
+              zehnder['filterDaysGa'] = v.trim();
+            }
+            onChanged();
+          },
+        ),
+      ],
     );
-    final dptOptions = _isBoost
-        ? const ['1.001']
-        : _wtwDptOptionsWithCurrent(_wtwDptButtonOptions, dpt);
+  }
+}
 
+class _WtwBitGaPair extends StatelessWidget {
+  const _WtwBitGaPair({
+    required this.label,
+    required this.writeKey,
+    required this.statusKey,
+    required this.map,
+    required this.onChanged,
+  });
+  final String label;
+  final String writeKey;
+  final String statusKey;
+  final Map<String, dynamic> map;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(label, style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 6),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                flex: 2,
-                child: _StrField(
-                  label: 'Knoptekst',
-                  value: button['label'] as String? ?? '',
-                  compact: true,
-                  onChanged: (v) {
-                    button['label'] = v;
-                    onChanged();
-                  },
-                ),
-              ),
-              const SizedBox(width: 10),
-              SizedBox(
-                width: 108,
-                child: _WtwKindDropdown(
-                  key: ValueKey('${button['id']}-kind-${_isBoost}'),
-                  value: _isBoost ? 'boost' : 'stand',
-                  onChanged: _setKind,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 2,
-                child: _StrField(
-                  label: 'Groepsadres',
-                  value: button['ga'] as String? ?? '',
-                  compact: true,
+                child: _InstallerStrField(
+                  label: 'Commando-GA (DPT 1.001)',
+                  value: map[writeKey] as String? ?? '',
                   gaSearch: true,
-                  gaDptHint: 'DPT$dpt',
+                  gaDptHint: 'DPT1.001',
                   onChanged: (v) {
-                    button['ga'] = v;
-                    onChanged();
-                  },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 2,
-                child: _DptDropdown(
-                  key: ValueKey('${button['id']}-dpt-$dpt'),
-                  label: 'DPT',
-                  value: dpt,
-                  options: dptOptions,
-                  compact: true,
-                  onChanged: _isBoost
-                      ? (_) {}
-                      : (v) {
-                          button['dpt'] = v;
-                          button['value'] = _clampWtwValue(
-                            v,
-                            button['value'] is num
-                                ? button['value'] as num
-                                : (button['value'] == true ? 1 : 0),
-                          );
-                          onChanged();
-                        },
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 1,
-                child: isBit
-                    ? DropdownButtonFormField<int>(
-                        initialValue: valueInt,
-                        isExpanded: true,
-                        decoration: luxeFilledDecoration().copyWith(
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 10),
-                        ),
-                        items: const [
-                          DropdownMenuItem(value: 0, child: Text('0')),
-                          DropdownMenuItem(value: 1, child: Text('1')),
-                        ],
-                        onChanged: _isBoost
-                            ? null
-                            : (v) {
-                                if (v == null) return;
-                                button['value'] = v;
-                                onChanged();
-                              },
-                      )
-                    : _StrField(
-                        label: 'Waarde',
-                        value: '$valueInt',
-                        compact: true,
-                        number: true,
-                        hint: '${range.min}–${range.max}',
-                        onChanged: (v) {
-                          final n = num.tryParse(v);
-                          if (n == null) return;
-                          button['value'] = _clampWtwValue(dpt, n);
-                          onChanged();
-                        },
-                      ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 2,
-                child: _StrField(
-                  label: 'Status-GA',
-                  value: button['statusGa'] as String? ?? '',
-                  compact: true,
-                  gaSearch: true,
-                  gaDptHint: _isBoost ? 'DPT1.001' : 'DPT$dpt',
-                  onChanged: (v) {
-                    if (v.isEmpty) {
-                      button.remove('statusGa');
+                    if (v.trim().isEmpty) {
+                      map.remove(writeKey);
                     } else {
-                      button['statusGa'] = v;
+                      map[writeKey] = v.trim();
                     }
                     onChanged();
                   },
                 ),
               ),
-              SizedBox(
-                width: 40,
-                child: IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  color: LuxeColors.inkSoft,
-                  onPressed: onDelete,
+              const SizedBox(width: 10),
+              Expanded(
+                child: _InstallerStrField(
+                  label: 'Status-GA',
+                  value: map[statusKey] as String? ?? '',
+                  gaSearch: true,
+                  gaDptHint: 'DPT1.001',
+                  onChanged: (v) {
+                    if (v.trim().isEmpty) {
+                      map.remove(statusKey);
+                    } else {
+                      map[statusKey] = v.trim();
+                    }
+                    onChanged();
+                  },
                 ),
               ),
             ],
-          ),
-          if (_isBoost) ...[
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 2,
-                  child: _StrField(
-                    label: 'Boost-tijd GA (minuten, DPT 7.001)',
-                    value: button['timeGa'] as String? ?? '',
-                    gaSearch: true,
-                    gaDptHint: 'DPT7.001',
-                    onChanged: (v) {
-                      if (v.isEmpty) {
-                        button.remove('timeGa');
-                      } else {
-                        button['timeGa'] = v;
-                      }
-                      onChanged();
-                    },
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  flex: 2,
-                  child: _StrField(
-                    label: 'Tijd-status GA',
-                    value: button['timeStatusGa'] as String? ?? '',
-                    gaSearch: true,
-                    gaDptHint: 'DPT7.001',
-                    onChanged: (v) {
-                      if (v.isEmpty) {
-                        button.remove('timeStatusGa');
-                      } else {
-                        button['timeStatusGa'] = v;
-                      }
-                      onChanged();
-                    },
-                  ),
-                ),
-                const SizedBox(width: 10),
-                SizedBox(
-                  width: 108,
-                  child: _StrField(
-                    label: 'Minuten',
-                    value: '${(button['minutes'] as num?)?.round() ?? 30}',
-                    number: true,
-                    hint: '1–65535',
-                    onChanged: (v) {
-                      final n = int.tryParse(v);
-                      if (n == null) return;
-                      button['minutes'] = n.clamp(1, 65535);
-                      onChanged();
-                    },
-                  ),
-                ),
-                const SizedBox(width: 50),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _WtwKindDropdown extends StatelessWidget {
-  const _WtwKindDropdown({super.key, required this.value, required this.onChanged});
-  final String value;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return DropdownButtonFormField<String>(
-      initialValue: value,
-      isExpanded: true,
-      decoration: luxeFilledDecoration().copyWith(
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      ),
-      items: const [
-        DropdownMenuItem(value: 'stand', child: Text('Stand')),
-        DropdownMenuItem(value: 'boost', child: Text('Boost')),
-      ],
-      onChanged: (v) {
-        if (v != null) onChanged(v);
-      },
-    );
-  }
-}
-
-class _WtwStatusEditor extends StatelessWidget {
-  const _WtwStatusEditor({
-    super.key,
-    required this.item,
-    required this.onChanged,
-    required this.onDelete,
-  });
-  final Map<String, dynamic> item;
-  final VoidCallback onChanged;
-  final VoidCallback onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final is1bit = (item['dpt'] as String? ?? '1.001').startsWith('1.');
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Expanded(
-            flex: 2,
-            child: _StrField(
-              label: 'Label',
-              value: item['label'] as String? ?? '',
-              compact: true,
-              onChanged: (v) {
-                item['label'] = v;
-                onChanged();
-              },
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            flex: 2,
-            child: _StrField(
-              label: 'Groepsadres',
-              value: item['ga'] as String? ?? '',
-              compact: true,
-              gaSearch: true,
-              gaDptHint: 'DPT${item['dpt'] ?? '1.001'}',
-              onChanged: (v) {
-                item['ga'] = v;
-                onChanged();
-              },
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            flex: 2,
-            child: _DptDropdown(
-              label: 'DPT',
-              value: item['dpt'] as String? ?? '1.001',
-              options: _wtwDptOptionsWithCurrent(
-                _wtwDptStatusOptions,
-                item['dpt'] as String? ?? '1.001',
-              ),
-              compact: true,
-              onChanged: (v) {
-                item['dpt'] = v;
-                if (v.startsWith('1.')) item.remove('countdown');
-                onChanged();
-              },
-            ),
-          ),
-          const SizedBox(width: 10),
-          SizedBox(
-            width: 108,
-            child: is1bit
-                ? const SizedBox.shrink()
-                : DropdownButtonFormField<String>(
-                    key: ValueKey('${item['id']}-countdown'),
-                    initialValue: () {
-                      final c = item['countdown'] as String? ?? 'off';
-                      return const ['off', 'seconds', 'minutes', 'days']
-                              .contains(c)
-                          ? c
-                          : 'off';
-                    }(),
-                    isExpanded: true,
-                    decoration: luxeFilledDecoration().copyWith(
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 10),
-                    ),
-                    items: const [
-                      DropdownMenuItem(value: 'off', child: Text('Uit')),
-                      DropdownMenuItem(value: 'seconds', child: Text('Sec')),
-                      DropdownMenuItem(value: 'minutes', child: Text('Min')),
-                      DropdownMenuItem(value: 'days', child: Text('Dagen')),
-                    ],
-                    onChanged: (v) {
-                      if (v == null || v == 'off') {
-                        item.remove('countdown');
-                      } else {
-                        item['countdown'] = v;
-                      }
-                      onChanged();
-                    },
-                  ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            flex: 1,
-            child: _StrField(
-              label: 'Eenheid',
-              value: item['unit'] as String? ?? '',
-              compact: true,
-              onChanged: (v) {
-                if (v.isEmpty) {
-                  item.remove('unit');
-                } else {
-                  item['unit'] = v;
-                }
-                onChanged();
-              },
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            flex: 1,
-            child: _IconPickerField(
-              label: 'Icoon',
-              value: item['icon'] as String?,
-              compact: true,
-              onChanged: (v) {
-                if (v == null) {
-                  item.remove('icon');
-                } else {
-                  item['icon'] = v;
-                }
-                onChanged();
-              },
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            flex: 1,
-            child: is1bit
-                ? _IconPickerField(
-                    label: 'Icoon 0',
-                    value: item['icon0'] as String?,
-                    compact: true,
-                    onChanged: (v) {
-                      if (v == null) {
-                        item.remove('icon0');
-                      } else {
-                        item['icon0'] = v;
-                      }
-                      onChanged();
-                    },
-                  )
-                : const SizedBox.shrink(),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            flex: 1,
-            child: is1bit
-                ? _IconPickerField(
-                    label: 'Icoon 1',
-                    value: item['icon1'] as String?,
-                    compact: true,
-                    onChanged: (v) {
-                      if (v == null) {
-                        item.remove('icon1');
-                      } else {
-                        item['icon1'] = v;
-                      }
-                      onChanged();
-                    },
-                  )
-                : const SizedBox.shrink(),
-          ),
-          SizedBox(
-            width: 40,
-            child: IconButton(
-              icon: const Icon(Icons.delete_outline, size: 18),
-              color: LuxeColors.inkSoft,
-              onPressed: onDelete,
-            ),
           ),
         ],
       ),
@@ -3656,7 +3292,7 @@ class _MediaKnxInstallerSectionState extends State<MediaKnxInstallerSection> {
           body:
               'DPT 3.007, één groepadres voor omhoog én omlaag. '
               'Vasthouden herhaalt stappen van 5% tot het stoptelegram (0). '
-              'Zakt niet onder 5%, zodat er altijd geluid blijft; mute is apart. '
+              'Zakt niet onder 1%, zodat er altijd geluid blijft; mute is apart. '
               'Standaard alleen deze zone; zie de schakelaar hieronder voor de groep.',
           keyName: 'volumeDim',
           dptHint: 'DPT3.007',
