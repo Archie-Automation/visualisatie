@@ -852,8 +852,8 @@ export type WtwZehnderStandId =
 
 /**
  * Zehnder ComfoConnect KNX: elke stand is 1-bit schrijven (waarde 1) met
- * een eigen status-bit. Boost-tijd schrijven en resterende tijd lezen zijn
- * aparte 2-byte adressen (app in minuten, bus in seconden).
+ * een eigen status-bit. Boost-tijd: set-GA schrijven, status-set-GA lezen
+ * (DPT 7.001, app in minuten, bus in seconden). Aftellen gebeurt in de app.
  */
 export interface WtwZehnderComfoConnect {
   awayGa?: string;
@@ -870,8 +870,8 @@ export interface WtwZehnderComfoConnect {
   boostStatusGa?: string;
   /** Ingestelde boostduur schrijven, DPT 7.001, seconden. */
   boostTimeGa?: string;
-  /** Resterende boost-tijd lezen, DPT 7.001, seconden. Alle panelen lezen dit. */
-  boostRemainingGa?: string;
+  /** Teruglezing van de ingestelde boostduur, DPT 7.001, seconden. */
+  boostTimeStatusGa?: string;
   /** Standaard boostduur in minuten. */
   minutes?: number;
   faultGa?: string;

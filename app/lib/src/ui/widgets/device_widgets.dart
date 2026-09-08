@@ -3978,6 +3978,8 @@ class WtwTile extends ConsumerStatefulWidget {
 
 class _WtwTileState extends ConsumerState<WtwTile> {
   int? _minutesOverride;
+  DateTime? _boostEndsAt;
+  Timer? _tick;
 
   Device get device => widget.device;
 
@@ -3986,6 +3988,25 @@ class _WtwTileState extends ConsumerState<WtwTile> {
     if (wtw == null || wtw['model'] != 'zehnder_comfoConnect') return null;
     final z = wtw['zehnder'];
     return z is Map<String, dynamic> ? z : null;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || _boostEndsAt == null) return;
+      setState(() {
+        if (!_boostEndsAt!.isAfter(DateTime.now())) {
+          _boostEndsAt = null;
+        }
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
   }
 
   static bool _bitOn(BusState bus, String? ga) {
@@ -4002,24 +4023,33 @@ class _WtwTileState extends ConsumerState<WtwTile> {
 
   int _setMinutes(Map<String, dynamic> z, BusState bus) {
     if (_minutesOverride != null) return _minutesOverride!.clamp(1, 180);
-    final ga = (z['boostTimeGa'] as String?)?.trim() ?? '';
-    if (ga.isNotEmpty) {
+    for (final key in ['boostTimeStatusGa', 'boostTimeGa']) {
+      final ga = (z[key] as String?)?.trim() ?? '';
+      if (ga.isEmpty) continue;
       final v = num.tryParse(bus.values[ga]?.toString() ?? '');
       if (v != null) return _minutesFromSetGa(v);
     }
     return (z['minutes'] as num?)?.round().clamp(1, 180) ?? 30;
   }
 
-  Duration? _remaining(Map<String, dynamic> z, BusState bus) {
-    final ga = (z['boostRemainingGa'] as String?)?.trim() ?? '';
-    if (ga.isEmpty) return null;
-    final v = num.tryParse(bus.values[ga]?.toString() ?? '');
-    if (v == null) return null;
-    final sec = v.round().clamp(0, 65535);
-    return Duration(seconds: sec);
+  Duration? _localRemaining() {
+    final ends = _boostEndsAt;
+    if (ends == null) return null;
+    final left = ends.difference(DateTime.now());
+    if (left <= Duration.zero) return Duration.zero;
+    return left;
+  }
+
+  void _armBoost(int minutes) {
+    _boostEndsAt = DateTime.now().add(Duration(minutes: minutes));
   }
 
   void _press(String id, {int? minutes, bool? on}) {
+    if (id == 'boost' && on != false) {
+      _armBoost(minutes ?? 30);
+    } else if (id != 'boost') {
+      _boostEndsAt = null;
+    }
     final payload = <String, dynamic>{
       'kind': 'wtw.press',
       'deviceId': device.id,
@@ -4028,6 +4058,7 @@ class _WtwTileState extends ConsumerState<WtwTile> {
     if (minutes != null) payload['minutes'] = minutes;
     if (on != null) payload['on'] = on;
     ref.read(busProvider.notifier).send(payload);
+    setState(() {});
   }
 
   void _setBoostMinutes(int minutes) {
@@ -4057,13 +4088,21 @@ class _WtwTileState extends ConsumerState<WtwTile> {
 
     final bus = ref.watch(busProvider);
     final minutes = _setMinutes(z, bus);
-    final remaining = _remaining(z, bus);
-    final remainingLive =
-        remaining != null && remaining > Duration.zero;
-    final boostOn = _bitOn(bus, z['boostStatusGa'] as String?) &&
-        (remaining == null || remainingLive);
+    ref.listen<BusState>(busProvider, (prev, next) {
+      if (prev == null) return;
+      final on = _bitOn(next, z['boostStatusGa'] as String?);
+      final was = _bitOn(prev, z['boostStatusGa'] as String?);
+      if (on && !was) {
+        setState(() => _armBoost(_setMinutes(z, next)));
+      } else if (!on && was) {
+        setState(() => _boostEndsAt = null);
+      }
+    });
+    final remaining = _localRemaining();
+    final remainingLive = remaining != null && remaining > Duration.zero;
+    final boostOn = remainingLive;
     final timeGa = (z['boostTimeGa'] as String?)?.trim() ?? '';
-    final remainingGa = (z['boostRemainingGa'] as String?)?.trim() ?? '';
+    final boostGa = (z['boostGa'] as String?)?.trim() ?? '';
 
     const stands = <({String id, String label})>[
       (id: 'away', label: 'Away'),
@@ -4143,7 +4182,7 @@ class _WtwTileState extends ConsumerState<WtwTile> {
               child: DeviceControlBar.gridAuto(context, buttonItems),
             ),
           ],
-          if (timeGa.isNotEmpty || remainingGa.isNotEmpty) ...[
+          if (timeGa.isNotEmpty || boostGa.isNotEmpty) ...[
             SizedBox(height: DeviceControlBar.sectionSpacing(context)),
             const Divider(height: 1),
             const SizedBox(height: 12),
@@ -4153,10 +4192,10 @@ class _WtwTileState extends ConsumerState<WtwTile> {
                 onDecrease: () => _setBoostMinutes(minutes - 5),
                 onIncrease: () => _setBoostMinutes(minutes + 5),
               ),
-            if (remainingGa.isNotEmpty)
+            if (boostGa.isNotEmpty)
               _WtwRemainingRow(
                 remaining: remainingLive ? remaining : null,
-                active: boostOn && remainingLive,
+                active: remainingLive,
               ),
           ],
           ..._zehnderStatusRows(z, bus),
@@ -4168,7 +4207,7 @@ class _WtwTileState extends ConsumerState<WtwTile> {
   List<Widget> _zehnderStatusRows(Map<String, dynamic> z, BusState bus) {
     final hasBoostBlock =
         ((z['boostTimeGa'] as String?)?.trim() ?? '').isNotEmpty ||
-            ((z['boostRemainingGa'] as String?)?.trim() ?? '').isNotEmpty;
+            ((z['boostGa'] as String?)?.trim() ?? '').isNotEmpty;
     final hasFault = ((z['faultGa'] as String?)?.trim() ?? '').isNotEmpty;
     final hasFilter = ((z['filterGa'] as String?)?.trim() ?? '').isNotEmpty;
     final daysGa = (z['filterDaysGa'] as String?)?.trim() ?? '';

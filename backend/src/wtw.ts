@@ -40,7 +40,7 @@ export function collectZehnderSubscriptions(z: WtwZehnderComfoConnect): Array<{
     add(z[s.status], "bit");
   }
   add(z.boostTimeGa, "uint16");
-  add(z.boostRemainingGa, "uint16");
+  add(z.boostTimeStatusGa, "uint16");
   add(z.faultGa, "bit");
   add(z.filterGa, "bit");
   add(z.filterDaysGa, "uint16");

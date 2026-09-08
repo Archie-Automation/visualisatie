@@ -5437,8 +5437,9 @@ class _DeviceForm extends StatelessWidget {
                     title: 'WTW',
                     body:
                         'Kies eerst het type. Zehnder ComfoConnect: standen en boost '
-                        'als 1-bit met eigen status-GA. Boost-tijd en resterende tijd '
-                        'zijn aparte adressen (minuten in de app, seconden op de bus).',
+                        'als 1-bit met eigen status-GA. Boost-tijd: set-GA en '
+                        'status-set-GA (minuten in de app, seconden op de bus). '
+                        'De afteller loopt in de app.',
                   ),
                   'melding' => const LuxeInfoIconButton(
                     title: 'Meldingen',

@@ -2305,10 +2305,10 @@ class _WtwZehnderInstaller extends StatelessWidget {
         _InstallerInfoTitle(
           title: 'Boost',
           body:
-              'Bit 1 schakelt boost in. Ingestelde tijd en resterende tijd zijn '
-              'aparte GAs (DPT 7.001, app in minuten, bus in seconden), zodat je '
-              'tijdens boost een nieuwe duur kunt zetten en opnieuw starten. '
-              'Resterend komt van de bus — elk paneel toont hetzelfde.',
+              'Bit 1 schakelt boost in. Twee tijd-objecten: set (schrijven) en '
+              'status-set (teruglezen), DPT 7.001 — app in minuten, bus in seconden. '
+              'De afteller loopt in de app; bij 0:00 stopt het knipperen. '
+              'Tijdens boost kun je een nieuwe duur zetten en opnieuw starten.',
         ),
         _WtwBitGaPair(
           label: 'Boost',
@@ -2318,7 +2318,7 @@ class _WtwZehnderInstaller extends StatelessWidget {
           onChanged: onChanged,
         ),
         _InstallerStrField(
-          label: 'Ingestelde tijd GA (schrijven, DPT 7.001)',
+          label: 'Ingestelde tijd GA (set, DPT 7.001)',
           value: zehnder['boostTimeGa'] as String? ?? '',
           gaSearch: true,
           gaDptHint: 'DPT7.001',
@@ -2332,15 +2332,15 @@ class _WtwZehnderInstaller extends StatelessWidget {
           },
         ),
         _InstallerStrField(
-          label: 'Resterende tijd GA (lezen, DPT 7.001)',
-          value: zehnder['boostRemainingGa'] as String? ?? '',
+          label: 'Status ingestelde tijd GA (DPT 7.001)',
+          value: zehnder['boostTimeStatusGa'] as String? ?? '',
           gaSearch: true,
           gaDptHint: 'DPT7.001',
           onChanged: (v) {
             if (v.trim().isEmpty) {
-              zehnder.remove('boostRemainingGa');
+              zehnder.remove('boostTimeStatusGa');
             } else {
-              zehnder['boostRemainingGa'] = v.trim();
+              zehnder['boostTimeStatusGa'] = v.trim();
             }
             onChanged();
           },
