@@ -3295,6 +3295,7 @@ class _MediaKnxInstallerSectionState extends State<MediaKnxInstallerSection> {
           body:
               'DPT 3.007, één groepadres voor omhoog én omlaag. '
               'Vasthouden herhaalt stappen van 5% tot het stoptelegram (0). '
+              'Zakt niet onder 10%, zodat er altijd geluid blijft; mute is apart. '
               'Standaard alleen deze zone; zie de schakelaar hieronder voor de groep.',
           keyName: 'volumeDim',
           dptHint: 'DPT3.007',

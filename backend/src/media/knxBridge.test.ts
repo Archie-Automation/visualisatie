@@ -10,7 +10,8 @@ import {
   muteToggleValue,
   nextVolume,
   playPauseToggleAction,
-  resolveVolumeTarget
+  resolveVolumeTarget,
+  VOLUME_MIN
 } from "./knxBridge";
 
 describe("isBitHigh", () => {
@@ -80,12 +81,14 @@ describe("decodeDimControl", () => {
 });
 
 describe("nextVolume", () => {
-  it("steps 5% and clamps 0–100", () => {
+  it("steps 5% and clamps VOLUME_MIN–100 so the rocker cannot mute", () => {
     assert.equal(nextVolume(40, true), 45);
     assert.equal(nextVolume(40, false), 35);
     assert.equal(nextVolume(98, true), 100);
-    assert.equal(nextVolume(2, false), 0);
-    assert.equal(nextVolume(undefined, true), 5);
+    assert.equal(nextVolume(12, false), VOLUME_MIN);
+    assert.equal(nextVolume(VOLUME_MIN, false), VOLUME_MIN);
+    assert.equal(nextVolume(0, false), VOLUME_MIN);
+    assert.equal(nextVolume(undefined, true), VOLUME_MIN);
   });
 });
 
