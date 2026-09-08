@@ -3978,177 +3978,143 @@ class WtwTile extends ConsumerStatefulWidget {
 
 class _WtwTileState extends ConsumerState<WtwTile> {
   int? _minutesOverride;
-  DateTime? _boostEndsAt;
-  Timer? _tick;
-  bool _lastBoostActive = false;
 
   Device get device => widget.device;
 
-  static bool _isBoost(Map<String, dynamic> b) => b['kind'] == 'boost';
-
-  @override
-  void initState() {
-    super.initState();
-    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
+  Map<String, dynamic>? get _zehnder {
+    final wtw = device.raw['wtw'] as Map<String, dynamic>?;
+    if (wtw == null || wtw['model'] != 'zehnder_comfoConnect') return null;
+    final z = wtw['zehnder'];
+    return z is Map<String, dynamic> ? z : null;
   }
 
-  @override
-  void dispose() {
-    _tick?.cancel();
-    super.dispose();
+  static bool _bitOn(BusState bus, String? ga) {
+    final addr = ga?.trim();
+    if (addr == null || addr.isEmpty) return false;
+    final current = bus.values[addr];
+    return current == true || current == 1 || current?.toString() == '1';
   }
 
-  static bool _wtwButtonActive(Map<String, dynamic> b, BusState bus) {
-    final statusGa = b['statusGa'] as String?;
-    if (statusGa == null) return false;
-    final current = bus.values[statusGa];
-    if (current == null) return false;
-    final onValue = b['statusOnValue'] ?? b['value'];
-    final n = num.tryParse(current.toString());
-    final onN = num.tryParse(onValue.toString());
-    return n != null && onN != null
-        ? n == onN
-        : current.toString() == onValue.toString();
-  }
-
-  /// Bus holds seconds (DPT 7.001); the app shows minutes.
-  static int _minutesFromKnx(num v) {
-    if (v >= 60) return (v / 60).round().clamp(1, 1092);
+  static int _minutesFromSetGa(num v) {
+    if (v >= 60) return (v / 60).round().clamp(1, 180);
     return v.round().clamp(1, 180);
   }
 
-  int _boostMinutes(Map<String, dynamic> boost, BusState bus) {
+  int _setMinutes(Map<String, dynamic> z, BusState bus) {
     if (_minutesOverride != null) return _minutesOverride!.clamp(1, 180);
-    final writeGa = (boost['timeGa'] as String?)?.trim();
-    if (writeGa != null && writeGa.isNotEmpty) {
-      final v = num.tryParse(bus.values[writeGa]?.toString() ?? '');
-      if (v != null) return _minutesFromKnx(v).clamp(1, 180);
+    final ga = (z['boostTimeGa'] as String?)?.trim() ?? '';
+    if (ga.isNotEmpty) {
+      final v = num.tryParse(bus.values[ga]?.toString() ?? '');
+      if (v != null) return _minutesFromSetGa(v);
     }
-    return (boost['minutes'] as num?)?.round().clamp(1, 180) ?? 30;
+    return (z['minutes'] as num?)?.round().clamp(1, 180) ?? 30;
   }
 
-  void _press(Map<String, dynamic> b, BusState bus) {
+  Duration? _remaining(Map<String, dynamic> z, BusState bus) {
+    final ga = (z['boostRemainingGa'] as String?)?.trim() ?? '';
+    if (ga.isEmpty) return null;
+    final v = num.tryParse(bus.values[ga]?.toString() ?? '');
+    if (v == null) return null;
+    final sec = v.round().clamp(0, 65535);
+    return Duration(seconds: sec);
+  }
+
+  void _press(String id, {int? minutes, bool? on}) {
     final payload = <String, dynamic>{
       'kind': 'wtw.press',
       'deviceId': device.id,
-      'buttonId': b['id'],
+      'buttonId': id,
     };
-    if (_isBoost(b)) {
-      final active = _wtwButtonActive(b, bus);
-      payload['on'] = !active;
-      final minutes = _boostMinutes(b, bus);
-      if (!active) {
-        payload['minutes'] = minutes;
-        _boostEndsAt = DateTime.now().add(Duration(minutes: minutes));
-      } else {
-        _boostEndsAt = null;
-      }
-    }
+    if (minutes != null) payload['minutes'] = minutes;
+    if (on != null) payload['on'] = on;
     ref.read(busProvider.notifier).send(payload);
-    setState(() {});
   }
 
-  void _setMinutes(Map<String, dynamic> boost, int minutes) {
+  void _setBoostMinutes(int minutes) {
     final clamped = minutes.clamp(1, 180);
     setState(() => _minutesOverride = clamped);
     ref.read(busProvider.notifier).send({
       'kind': 'wtw.setBoostMinutes',
       'deviceId': device.id,
-      'buttonId': boost['id'],
       'minutes': clamped,
-    });
-  }
-
-  void _syncBoostTimer(bool active, int minutes, bool hasTimeStatus) {
-    final rising = active && !_lastBoostActive;
-    final falling = !active && _lastBoostActive;
-    _lastBoostActive = active;
-    if (!rising && !falling) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() {
-        if (rising && !hasTimeStatus) {
-          _boostEndsAt ??= DateTime.now().add(Duration(minutes: minutes));
-        }
-        if (!active) _boostEndsAt = null;
-      });
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    final cfg = device.raw['wtw'] as Map<String, dynamic>?;
-    if (cfg == null) {
-      return _Placeholder(name: device.name, hint: 'WTW config ontbreekt');
+    final wtw = device.raw['wtw'] as Map<String, dynamic>?;
+    final model = wtw?['model'] as String?;
+    if (model == null || model.isEmpty) {
+      return _Placeholder(
+        name: device.name,
+        hint: 'Kies het WTW-type in de installer',
+      );
     }
-    final buttons =
-        (cfg['buttons'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final statusItems =
-        (cfg['status'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final z = _zehnder;
+    if (z == null) {
+      return _Placeholder(name: device.name, hint: 'WTW-config ontbreekt');
+    }
+
     final bus = ref.watch(busProvider);
+    final minutes = _setMinutes(z, bus);
+    final remaining = _remaining(z, bus);
+    final boostOn = _bitOn(bus, z['boostStatusGa'] as String?);
+    final timeGa = (z['boostTimeGa'] as String?)?.trim() ?? '';
+    final remainingGa = (z['boostRemainingGa'] as String?)?.trim() ?? '';
 
-    Map<String, dynamic>? boostBtn;
-    for (final b in buttons) {
-      if (_isBoost(b)) {
-        boostBtn = b;
-        break;
-      }
-    }
-    final timeGa = (boostBtn?['timeGa'] as String?)?.trim() ?? '';
-    final timeStatusGa = (boostBtn?['timeStatusGa'] as String?)?.trim() ?? '';
-    final showBoostTime = boostBtn != null;
-    final minutes =
-        boostBtn == null ? 30 : _boostMinutes(boostBtn, bus);
-    final boostActive =
-        boostBtn != null && _wtwButtonActive(boostBtn, bus);
-    _syncBoostTimer(boostActive, minutes, timeStatusGa.isNotEmpty);
-
-    Duration? remaining;
-    if (_boostEndsAt != null) {
-      final left = _boostEndsAt!.difference(DateTime.now());
-      remaining = left.isNegative ? Duration.zero : left;
-    } else if (boostActive && timeStatusGa.isNotEmpty) {
-      final v = num.tryParse(bus.values[timeStatusGa]?.toString() ?? '');
-      if (v != null && v < minutes * 60) {
-        remaining = Duration(seconds: v.round());
-      }
-    }
-
-    final skipGas = <String>{
-      if (timeGa.isNotEmpty) timeGa,
-      if (timeStatusGa.isNotEmpty) timeStatusGa,
-    };
-
-    final extraStatus = [
-      for (final s in statusItems)
-        if (!skipGas.contains((s['ga'] as String?)?.trim() ?? '')) s,
+    const stands = <({String id, String label})>[
+      (id: 'away', label: 'Away'),
+      (id: 'stand1', label: '1'),
+      (id: 'stand2', label: '2'),
+      (id: 'stand3', label: '3'),
+      (id: 'auto', label: 'Auto'),
+      (id: 'boost', label: 'Boost'),
     ];
+
+    bool configured(String id) {
+      final key = switch (id) {
+        'away' => 'awayGa',
+        'stand1' => 'stand1Ga',
+        'stand2' => 'stand2Ga',
+        'stand3' => 'stand3Ga',
+        'auto' => 'autoGa',
+        'boost' => 'boostGa',
+        _ => '',
+      };
+      return ((z[key] as String?)?.trim() ?? '').isNotEmpty;
+    }
+
+    String? statusKey(String id) => switch (id) {
+          'away' => 'awayStatusGa',
+          'stand1' => 'stand1StatusGa',
+          'stand2' => 'stand2StatusGa',
+          'stand3' => 'stand3StatusGa',
+          'auto' => 'autoStatusGa',
+          'boost' => 'boostStatusGa',
+          _ => null,
+        };
 
     final buttonItems = [
-      for (final b in buttons)
-        () {
-          final lbl = b['label'] as String? ?? '';
-          final numeric = deviceControlNumericLabel(lbl);
-          return DeviceControlItem(
-            icon: numeric == null ? deviceControlOptionIcon(label: lbl) : null,
-            label: numeric ?? lbl,
-            labelMode: numeric != null
+      for (final s in stands)
+        if (configured(s.id))
+          DeviceControlItem(
+            icon: deviceControlNumericLabel(s.label) == null
+                ? deviceControlOptionIcon(label: s.label)
+                : null,
+            label: deviceControlNumericLabel(s.label) ?? s.label,
+            labelMode: deviceControlNumericLabel(s.label) != null
                 ? DeviceControlLabelMode.numeric
                 : DeviceControlLabelMode.iconOnly,
-            active: _wtwButtonActive(b, bus),
-            onTap: () => _press(b, bus),
-          );
-        }(),
+            active: _bitOn(bus, z[statusKey(s.id)] as String?),
+            onTap: () {
+              if (s.id == 'boost') {
+                _press('boost', minutes: minutes, on: true);
+              } else {
+                _press(s.id);
+              }
+            },
+          ),
     ];
-
-    final boostLabel = (boostBtn?['label'] as String?)?.trim();
-    final timeLabel = (boostLabel == null || boostLabel.isEmpty)
-        ? 'Boost-tijd'
-        : (boostLabel.toLowerCase().contains('tijd')
-            ? boostLabel
-            : '$boostLabel-tijd');
 
     return DeviceTileShell(
       child: Column(
@@ -4157,10 +4123,14 @@ class _WtwTileState extends ConsumerState<WtwTile> {
           DeviceTileLayout.headerRow(
             context: context,
             leading: DeviceTileIconBadge(icon: Icons.air_outlined),
-            content: Text(device.name,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
+            content: Text(
+              device.name,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
           ),
-
           if (buttonItems.isNotEmpty) ...[
             SizedBox(height: DeviceControlBar.sectionSpacing(context)),
             DeviceControlSection(
@@ -4168,80 +4138,157 @@ class _WtwTileState extends ConsumerState<WtwTile> {
               child: DeviceControlBar.gridAuto(context, buttonItems),
             ),
           ],
-
-          if (showBoostTime || extraStatus.isNotEmpty) ...[
+          if (timeGa.isNotEmpty || remainingGa.isNotEmpty) ...[
             SizedBox(height: DeviceControlBar.sectionSpacing(context)),
             const Divider(height: 1),
             const SizedBox(height: 12),
-            if (showBoostTime)
-              _WtwBoostTimeRow(
-                label: timeLabel,
+            if (timeGa.isNotEmpty)
+              _WtwSetMinutesRow(
                 minutes: minutes,
-                remaining: remaining,
-                active: boostActive,
-                onDecrease: (boostActive || timeGa.isEmpty)
-                    ? null
-                    : () => _setMinutes(boostBtn!, minutes - 5),
-                onIncrease: (boostActive || timeGa.isEmpty)
-                    ? null
-                    : () => _setMinutes(boostBtn!, minutes + 5),
+                onDecrease: () => _setBoostMinutes(minutes - 5),
+                onIncrease: () => _setBoostMinutes(minutes + 5),
               ),
-            ...extraStatus.map((s) => _WtwStatusRow(item: s, bus: bus)),
+            if (remainingGa.isNotEmpty)
+              _WtwRemainingRow(
+                remaining: remaining,
+                active: boostOn,
+              ),
           ],
+          ..._zehnderStatusRows(z, bus),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _zehnderStatusRows(Map<String, dynamic> z, BusState bus) {
+    final hasBoostBlock =
+        ((z['boostTimeGa'] as String?)?.trim() ?? '').isNotEmpty ||
+            ((z['boostRemainingGa'] as String?)?.trim() ?? '').isNotEmpty;
+    final hasFault = ((z['faultGa'] as String?)?.trim() ?? '').isNotEmpty;
+    final hasFilter = ((z['filterGa'] as String?)?.trim() ?? '').isNotEmpty;
+    final daysGa = (z['filterDaysGa'] as String?)?.trim() ?? '';
+    if (!hasFault && !hasFilter && daysGa.isEmpty) return const [];
+
+    final rows = <Widget>[
+      SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+      if (!hasBoostBlock) ...[
+        const Divider(height: 1),
+        const SizedBox(height: 12),
+      ],
+    ];
+
+    if (hasFault) {
+      rows.add(
+        _WtwStatusRow(
+          item: {
+            'label': 'Storing',
+            'ga': z['faultGa'],
+            'dpt': '1.001',
+            'icon0': 'check',
+            'icon1': 'warning',
+          },
+          bus: bus,
+        ),
+      );
+    }
+    if (hasFilter) {
+      rows.add(
+        _WtwStatusRow(
+          item: {
+            'label': 'Filter vervangen',
+            'ga': z['filterGa'],
+            'dpt': '1.001',
+            'icon0': 'filter',
+            'icon1': 'filter_full',
+          },
+          bus: bus,
+        ),
+      );
+    }
+    if (daysGa.isNotEmpty) {
+      rows.add(
+        _WtwStatusRow(
+          item: {
+            'label': 'Filter vervangen over',
+            'ga': daysGa,
+            'dpt': '7.001',
+            'unit': 'dagen',
+          },
+          bus: bus,
+        ),
+      );
+    }
+    return rows;
+  }
+}
+
+class _WtwSetMinutesRow extends StatelessWidget {
+  const _WtwSetMinutesRow({
+    required this.minutes,
+    this.onDecrease,
+    this.onIncrease,
+  });
+  final int minutes;
+  final VoidCallback? onDecrease;
+  final VoidCallback? onIncrease;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Icon(Icons.timer_outlined, size: 16, color: LuxeColors.inkSoft),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Boost-tijd',
+              style: Theme.of(context)
+                  .textTheme
+                  .bodySmall
+                  ?.copyWith(color: LuxeColors.inkSoft),
+            ),
+          ),
+          _WtwMiniStep(icon: Icons.remove, onTap: onDecrease),
+          const SizedBox(width: 6),
+          _WtwPulseBadge(text: '$minutes min', pulse: false),
+          const SizedBox(width: 6),
+          _WtwMiniStep(icon: Icons.add, onTap: onIncrease),
         ],
       ),
     );
   }
 }
 
-class _WtwBoostTimeRow extends StatelessWidget {
-  const _WtwBoostTimeRow({
-    required this.label,
-    required this.minutes,
-    required this.remaining,
-    required this.active,
-    this.onDecrease,
-    this.onIncrease,
-  });
-
-  final String label;
-  final int minutes;
+class _WtwRemainingRow extends StatelessWidget {
+  const _WtwRemainingRow({required this.remaining, required this.active});
   final Duration? remaining;
   final bool active;
-  final VoidCallback? onDecrease;
-  final VoidCallback? onIncrease;
 
   @override
   Widget build(BuildContext context) {
-    final counting = remaining != null;
-    final pulse = active || counting;
-    final text = counting ? _wtwFormatClock(remaining!) : '$minutes min';
+    final counting = active && remaining != null;
+    final text = remaining == null ? '—' : _wtwFormatClock(remaining!);
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          Icon(Icons.timer_outlined,
-              size: 16,
-              color: pulse ? LuxeColors.brass : LuxeColors.inkSoft),
+          Icon(
+            Icons.hourglass_bottom_outlined,
+            size: 16,
+            color: counting ? LuxeColors.brass : LuxeColors.inkSoft,
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              label,
+              'Resterend',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: pulse ? LuxeColors.ink : LuxeColors.inkSoft,
-                    fontWeight: pulse ? FontWeight.w600 : FontWeight.w400,
+                    color: counting ? LuxeColors.ink : LuxeColors.inkSoft,
+                    fontWeight: counting ? FontWeight.w600 : FontWeight.w400,
                   ),
             ),
           ),
-          if (!pulse && (onDecrease != null || onIncrease != null)) ...[
-            _WtwMiniStep(icon: Icons.remove, onTap: onDecrease),
-            const SizedBox(width: 6),
-          ],
-          _WtwPulseBadge(text: text, pulse: pulse),
-          if (!pulse && (onDecrease != null || onIncrease != null)) ...[
-            const SizedBox(width: 6),
-            _WtwMiniStep(icon: Icons.add, onTap: onIncrease),
-          ],
+          _WtwPulseBadge(text: text, pulse: counting),
         ],
       ),
     );
@@ -4358,118 +4405,41 @@ String _wtwFormatClock(Duration d) {
   return '${d.inMinutes}:$s';
 }
 
-String? _wtwCountdownUnit(Map<String, dynamic> item) {
-  final c = item['countdown'] as String?;
-  if (c == 'off') return null;
-  if (c == 'seconds' || c == 'minutes' || c == 'days') return c;
-  final dpt = item['dpt'] as String? ?? '';
-  if (dpt != '7.001' && dpt != '5.010') return null;
-  final u = (item['unit'] as String? ?? '').toLowerCase();
-  if (u.contains('dag') || u.contains('day')) return 'days';
-  if (u.contains('min')) return 'minutes';
-  if (u.contains('sec') || u == 's') return 'seconds';
-  return null;
-}
-
-Duration? _wtwCountdownFromRaw(num raw, String unit) {
-  switch (unit) {
-    case 'seconds':
-      return Duration(seconds: raw.round());
-    case 'minutes':
-      return Duration(minutes: raw.round());
-    case 'days':
-      return Duration(days: raw.round());
-    default:
-      return null;
-  }
-}
-
-class _WtwStatusRow extends StatefulWidget {
+class _WtwStatusRow extends StatelessWidget {
   const _WtwStatusRow({required this.item, required this.bus});
   final Map<String, dynamic> item;
   final BusState bus;
 
   @override
-  State<_WtwStatusRow> createState() => _WtwStatusRowState();
-}
-
-class _WtwStatusRowState extends State<_WtwStatusRow> {
-  num? _anchorRaw;
-  DateTime? _anchoredAt;
-
-  @override
   Widget build(BuildContext context) {
-    final item = widget.item;
-    final bus = widget.bus;
     final label = item['label'] as String? ?? '';
     final ga = item['ga'] as String? ?? '';
     final dpt = item['dpt'] as String? ?? '1.001';
     final unit = item['unit'] as String? ?? '';
-    final iconKey = item['icon'] as String?;
     final icon0Key = item['icon0'] as String?;
     final icon1Key = item['icon1'] as String?;
     final rawValue = bus.values[ga];
-    final countdownUnit = _wtwCountdownUnit(item);
+    final (display, isAlert) = _formatWtwStatus(dpt, rawValue, unit);
 
-    Duration? remaining;
-    if (countdownUnit != null && countdownUnit != 'days') {
-      final n = num.tryParse(rawValue?.toString() ?? '');
-      if (n != null) {
-        if (_anchorRaw != n) {
-          _anchorRaw = n;
-          _anchoredAt = DateTime.now();
-        }
-        final base = _wtwCountdownFromRaw(n, countdownUnit);
-        if (base != null && _anchoredAt != null) {
-          final left = base - DateTime.now().difference(_anchoredAt!);
-          remaining = left.isNegative ? Duration.zero : left;
-        }
-      }
-    }
-
-    final (display, isAlert) = remaining != null
-        ? (
-            countdownUnit == 'minutes'
-                ? '${remaining.inMinutes} min'
-                : _wtwFormatClock(remaining),
-            false,
-          )
-        : _WtwStatusRowState._formatWtwStatus(dpt, rawValue, unit);
-
-    // Resolve value icon for bit types when icon0/icon1 are configured.
     final isBit = dpt.startsWith('1.');
     final bitActive = isBit &&
         (rawValue == true || rawValue == 1 || rawValue?.toString() == '1');
-    final valueIconKey =
-        isBit && (icon0Key != null || icon1Key != null)
-            ? (bitActive ? icon1Key : icon0Key)
-            : null;
-    final useIconBadge = valueIconKey != null && rawValue != null;
-
-    // Leading: icon from `icon` field OR animated dot.
-    final leadingIconData = iconKey != null
-        ? (kUniversalIconMap[iconKey] ?? Icons.circle_outlined)
+    final valueIconKey = isBit && (icon0Key != null || icon1Key != null)
+        ? (bitActive ? icon1Key : icon0Key)
         : null;
-
+    final useIconBadge = valueIconKey != null && rawValue != null;
     final dotColor = isAlert ? LuxeColors.danger : LuxeColors.brass;
 
     return Padding(
-      padding: EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         children: [
-          // Leading indicator: icon or dot
-          if (leadingIconData != null)
-            Icon(leadingIconData, size: 16, color: dotColor)
-          else
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 400),
-              width: 8,
-              height: 8,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: dotColor,
-              ),
-            ),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 400),
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: dotColor),
+          ),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
@@ -4480,20 +4450,11 @@ class _WtwStatusRowState extends State<_WtwStatusRow> {
                   ),
             ),
           ),
-          // Value badge: icon or text
           if (useIconBadge)
-            _WtwIconBadge(
-              iconKey: valueIconKey!,
-              isAlert: isAlert,
-            )
-          else if (remaining != null)
-            _WtwPulseBadge(
-              text: display,
-              pulse: false,
-            )
+            _WtwIconBadge(iconKey: valueIconKey!, isAlert: isAlert)
           else
             Container(
-              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
               decoration: BoxDecoration(
                 color: isAlert
                     ? LuxeColors.danger.withValues(alpha: 0.10)
@@ -4520,77 +4481,21 @@ class _WtwStatusRowState extends State<_WtwStatusRow> {
     );
   }
 
-  /// Returns (displayString, isAlert).
-  static (String, bool) _formatWtwStatus(
-      String dpt, dynamic raw, String unit) {
+  static (String, bool) _formatWtwStatus(String dpt, dynamic raw, String unit) {
     if (raw == null) return ('—', false);
     final suffix = unit.isNotEmpty ? ' $unit' : '';
-    // All 1-bit DPTs: active/inactive
     if (dpt.startsWith('1.')) {
       final active = raw == true || raw == 1 || raw.toString() == '1';
       return (active ? 'Actief' : 'OK', active);
     }
-    switch (dpt) {
-      case '5.001':
-        final n = num.tryParse(raw.toString());
-        return ('${n?.toStringAsFixed(0) ?? raw}%$suffix', false);
-      case '5.010':
-      case '7.001':
-      case '12.001':
-        final n = num.tryParse(raw.toString());
-        return ('${n?.toInt() ?? raw}$suffix', false);
-      case '6.001':
-      case '8.001':
-      case '13.001':
-        final n = num.tryParse(raw.toString());
-        return ('${n?.toInt() ?? raw}$suffix', false);
-      case '9.001':
-        final n = num.tryParse(raw.toString());
-        return ('${n?.toStringAsFixed(1) ?? raw} °C$suffix', false);
-      case '9.002':
-        final n = num.tryParse(raw.toString());
-        return ('${n?.toStringAsFixed(1) ?? raw} K$suffix', false);
-      case '9.004':
-        final n = num.tryParse(raw.toString());
-        return ('${n?.toStringAsFixed(0) ?? raw} lux$suffix', false);
-      case '9.005':
-      case '14.068':
-        final n = num.tryParse(raw.toString());
-        return ('${n?.toStringAsFixed(1) ?? raw} m/s$suffix', false);
-      case '9.006':
-        final n = num.tryParse(raw.toString());
-        return ('${n?.toStringAsFixed(0) ?? raw} Pa$suffix', false);
-      case '9.007':
-        final n = num.tryParse(raw.toString());
-        return ('${n?.toStringAsFixed(0) ?? raw} %RH$suffix', false);
-      case '9.008':
-        final n = num.tryParse(raw.toString());
-        return ('${n?.toStringAsFixed(0) ?? raw} ppm$suffix', false);
-      case '9.009':
-        final n = num.tryParse(raw.toString());
-        return ('${n?.toStringAsFixed(0) ?? raw} m³/h$suffix', false);
-      case '9.020':
-        final n = num.tryParse(raw.toString());
-        return ('${n?.toStringAsFixed(0) ?? raw} mV$suffix', false);
-      case '9.021':
-        final n = num.tryParse(raw.toString());
-        return ('${n?.toStringAsFixed(0) ?? raw} mA$suffix', false);
-      case '14.019':
-        final n = num.tryParse(raw.toString());
-        return ('${n?.toStringAsFixed(1) ?? raw} W$suffix', false);
-      case 'hex':
-        final n = int.tryParse(raw.toString());
-        final hexStr = n != null
-            ? '0x${n.toRadixString(16).padLeft(2, '0').toUpperCase()}'
-            : raw.toString();
-        return ('$hexStr$suffix', false);
-      default:
-        return ('$raw$suffix', false);
+    if (dpt == '7.001') {
+      final n = num.tryParse(raw.toString());
+      return ('${n?.toInt() ?? raw}$suffix', false);
     }
+    return ('$raw$suffix', false);
   }
 }
 
-/// Small icon pill badge used in WTW status rows when icon0/icon1 are configured.
 class _WtwIconBadge extends StatelessWidget {
   const _WtwIconBadge({required this.iconKey, required this.isAlert});
   final String iconKey;
@@ -4611,6 +4516,7 @@ class _WtwIconBadge extends StatelessWidget {
     );
   }
 }
+
 
 /* ══════════════════════════════════════════════════════════════════════════
    Meldingen tile – KNX alarm/notification monitor

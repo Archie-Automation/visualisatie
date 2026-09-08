@@ -244,6 +244,10 @@ IconData deviceControlOptionIcon({
   }
   if (l.contains('ventil') || l.contains('fan')) return Icons.air;
   if (l.contains('auto')) return Icons.auto_mode_outlined;
+  if (l.contains('away') || l.contains('afwezig')) {
+    return Icons.home_outlined;
+  }
+  if (l.contains('boost')) return Icons.flash_on_outlined;
   if (l.contains('droog') || l.contains('dry')) return Icons.water_drop_outlined;
   if (l.contains('open') || l.contains('omhoog')) return Icons.arrow_upward_rounded;
   if (l.contains('dicht') || l.contains('omlaag')) return Icons.arrow_downward_rounded;

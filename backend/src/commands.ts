@@ -8,6 +8,7 @@ import { walkDevices } from "./config";
 import { hvacSwitchLock } from "./hvacSwitchLock";
 import { fireplaceVirtual } from "./fireplaceVirtual";
 import { pulseKnxGa } from "./fireplacePulse";
+import { zehnderWriteGa } from "./wtw";
 
 type PositionControllableDevice = ShadingDevice | PositionActuatorDevice;
 
@@ -217,8 +218,8 @@ export const CommandSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("wtw.setBoostMinutes"),
     deviceId: z.string(),
-    buttonId: z.string(),
-    minutes: z.number().int().min(1).max(65535)
+    minutes: z.number().int().min(1).max(65535),
+    buttonId: z.string().optional()
   }),
 
   /* --------------------------- Media ------------------------------ */
@@ -709,29 +710,35 @@ export async function dispatch(
 
     case "wtw.press": {
       if (device.type !== "wtw") throw new Error("not a WTW device");
-      const btn = (device.wtw.buttons ?? []).find((b) => b.id === cmd.buttonId);
-      if (!btn) throw new Error("unknown WTW button");
-      const role = wtwDptToRole(btn.dpt);
-      if (btn.kind === "boost" && btn.timeGa && cmd.on !== false) {
-        const minutes = cmd.minutes ?? btn.minutes ?? 30;
-        const seconds = Math.min(65535, Math.max(1, minutes * 60));
-        await bus.write(btn.timeGa, "uint16", seconds);
+      if (device.wtw.model !== "zehnder_comfoConnect" || !device.wtw.zehnder) {
+        throw new Error("WTW-type is niet ingesteld");
       }
-      let val: number | boolean = btn.value;
-      if (cmd.on === false) val = false;
-      else if (cmd.on === true) val = true;
-      if (role === "bit") val = typeof val === "boolean" ? val : val !== 0;
-      await bus.write(btn.ga, role, val);
+      const z = device.wtw.zehnder;
+      const ga = zehnderWriteGa(z, cmd.buttonId);
+      if (!ga) throw new Error("onbekende of lege WTW-stand");
+      if (cmd.buttonId === "boost" && cmd.on !== false && z.boostTimeGa) {
+        const minutes = cmd.minutes ?? z.minutes ?? 30;
+        await bus.write(
+          z.boostTimeGa,
+          "uint16",
+          Math.min(65535, Math.max(1, minutes * 60))
+        );
+      }
+      await bus.write(ga, "bit", cmd.on === false ? false : true);
       return;
     }
 
     case "wtw.setBoostMinutes": {
       if (device.type !== "wtw") throw new Error("not a WTW device");
-      const btn = (device.wtw.buttons ?? []).find((b) => b.id === cmd.buttonId);
-      if (!btn || btn.kind !== "boost" || !btn.timeGa) {
+      const timeGa = device.wtw.zehnder?.boostTimeGa;
+      if (device.wtw.model !== "zehnder_comfoConnect" || !timeGa) {
         throw new Error("WTW boost-tijd is niet geconfigureerd");
       }
-      await bus.write(btn.timeGa, "uint16", Math.min(65535, Math.max(1, cmd.minutes * 60)));
+      await bus.write(
+        timeGa,
+        "uint16",
+        Math.min(65535, Math.max(1, cmd.minutes * 60))
+      );
       return;
     }
 
@@ -759,21 +766,4 @@ async function writeUniversalAction(a: UniversalAction, bus: KnxBus) {
     value = value ? 1 : 0;
   }
   await bus.write(a.ga, role, value);
-}
-
-/** Maps a WTW DPT string to a KnxBus role string. */
-function wtwDptToRole(dpt: string): string {
-  if (dpt.startsWith("1.")) return "bit";
-  if (dpt.startsWith("9.")) return "temperature"; // all DPT9.x share the same 2-byte float encoding
-  if (dpt.startsWith("14.")) return "float4byte";
-  const map: Record<string, string> = {
-    "5.001": "percent",
-    "5.010": "byte",
-    "6.001": "signed_byte",
-    "7.001": "uint16",
-    "8.001": "signed_2byte",
-    "12.001": "uint32",
-    "13.001": "int32",
-  };
-  return map[dpt] ?? "byte";
 }

@@ -7,6 +7,7 @@ import { effectiveIntercomReleaseMode } from "./intercomReleaseMode";
 import { logger } from "./logger";
 import type { Device, HouseConfig, GA } from "./types";
 import { normalizeVoip } from "./voip/normalize";
+import { collectZehnderSubscriptions } from "./wtw";
 
 let cached: HouseConfig | null = null;
 let configVersion = 0;
@@ -170,14 +171,8 @@ export function collectAllGAs(cfg: HouseConfig): GA[] {
       }
     }
     if (d.type === "wtw") {
-      for (const b of d.wtw.buttons ?? []) {
-        add(b.ga);
-        add(b.statusGa);
-        add(b.timeGa);
-        add(b.timeStatusGa);
-      }
-      for (const s of d.wtw.status ?? []) {
-        add(s.ga);
+      if (d.wtw.model === "zehnder_comfoConnect" && d.wtw.zehnder) {
+        for (const { ga } of collectZehnderSubscriptions(d.wtw.zehnder)) add(ga);
       }
     }
     if (d.type === "melding") {
@@ -333,16 +328,10 @@ export function buildGAIndex(cfg: HouseConfig): Map<GA, GARole[]> {
       }
     }
     if (d.type === "wtw") {
-      for (const b of d.wtw.buttons ?? []) {
-        const role = wtwDptToRoleConfig(b.dpt);
-        pushGA(index, b.ga, role, d.id, d.type);
-        if (b.statusGa) pushGA(index, b.statusGa, role, d.id, d.type);
-        if (b.timeGa) pushGA(index, b.timeGa, "uint16", d.id, d.type);
-        if (b.timeStatusGa) pushGA(index, b.timeStatusGa, "uint16", d.id, d.type);
-      }
-      for (const s of d.wtw.status ?? []) {
-        const role = wtwDptToRoleConfig(s.dpt === "hex" ? "5.010" : s.dpt);
-        pushGA(index, s.ga, role, d.id, d.type);
+      if (d.wtw.model === "zehnder_comfoConnect" && d.wtw.zehnder) {
+        for (const { ga, role } of collectZehnderSubscriptions(d.wtw.zehnder)) {
+          pushGA(index, ga, role, d.id, d.type);
+        }
       }
     }
     if (d.type === "melding") {

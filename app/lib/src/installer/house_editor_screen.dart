@@ -1795,10 +1795,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           'id': id,
           'name': 'WTW',
           'type': 'wtw',
-          'wtw': {
-            'buttons': <Map<String, dynamic>>[],
-            'status': <Map<String, dynamic>>[],
-          },
+          'wtw': <String, dynamic>{},
         };
       case 'melding':
         return {
@@ -5439,10 +5436,9 @@ class _DeviceForm extends StatelessWidget {
                   'wtw' => const LuxeInfoIconButton(
                     title: 'WTW',
                     body:
-                        'Standknop: knoptekst, DPT en een waarde die bij dat DPT past '
-                        '(bit alleen 0 of 1). Boost: 1-bit aan/uit, status-bit, '
-                        'en 2-byte tijd (app: minuten, bus: seconden). '
-                        'In de statuslijst: ingestelde minuten, bij boost knipperen en aftellen.',
+                        'Kies eerst het type. Zehnder ComfoConnect: standen en boost '
+                        'als 1-bit met eigen status-GA. Boost-tijd en resterende tijd '
+                        'zijn aparte adressen (minuten in de app, seconden op de bus).',
                   ),
                   'melding' => const LuxeInfoIconButton(
                     title: 'Meldingen',
@@ -5657,9 +5653,9 @@ String _deviceConfigSubtitle(String type) => switch (type) {
         'Modus en groepadressen. Zoek elk adres in de geïmporteerde catalogus.',
       'shading' || 'position_actuator' =>
         'Jaloezie-object: schrijf- en statusadressen, plus weergave in de app.',
-      'climate' || 'ac' || 'fan' || 'fireplace' =>
+      'climate' || 'ac' || 'fan' || 'fireplace' || 'wtw' =>
         'Vul per functie het groepadres in. Status-GA\'s zijn optioneel.',
-      'universal' || 'wtw' || 'melding' =>
+      'universal' || 'melding' =>
         'Zelfde opbouw: label, groepadres, DPT/waarde — met zoeken in de catalogus.',
       'media_sonos' || 'media_bluesound' =>
         'Host en poort, plus optioneel KNX-drukknoppen voor play, volume en skip.',
