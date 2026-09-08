@@ -253,6 +253,85 @@ class SatelPartitionConfig {
       };
 }
 
+/// One-shot dump of DLOADX names from GET /satel/discover.
+class SatelDiscoverResult {
+  const SatelDiscoverResult({
+    required this.partitions,
+    required this.zones,
+  });
+
+  final List<SatelPartitionConfig> partitions;
+  final List<SatelZoneMapping> zones;
+
+  factory SatelDiscoverResult.fromJson(Map<String, dynamic> j) =>
+      SatelDiscoverResult(
+        partitions: ((j['partitions'] as List?) ?? [])
+            .map((e) => SatelPartitionConfig.fromJson((e as Map).cast()))
+            .toList(),
+        zones: ((j['zone_mapping'] as List?) ?? [])
+            .map((e) => SatelZoneMapping.fromJson((e as Map).cast()))
+            .toList(),
+      );
+}
+
+/// Latest panel dump waiting to be merged into the installer editors.
+class SatelDiscoverImport {
+  const SatelDiscoverImport({required this.seq, required this.data});
+  final int seq;
+  final SatelDiscoverResult data;
+}
+
+class SatelDiscoverImportNotifier extends Notifier<SatelDiscoverImport?> {
+  @override
+  SatelDiscoverImport? build() => null;
+
+  void publish(SatelDiscoverResult data) {
+    state = SatelDiscoverImport(seq: (state?.seq ?? 0) + 1, data: data);
+  }
+}
+
+final satelDiscoverImportProvider =
+    NotifierProvider<SatelDiscoverImportNotifier, SatelDiscoverImport?>(
+        SatelDiscoverImportNotifier.new);
+
+/// First-run default from the Python schema — treat as empty for import.
+bool satelPartitionsArePlaceholder(List<SatelPartitionConfig> partitions) =>
+    partitions.length == 1 &&
+    partitions.first.number == 1 &&
+    partitions.first.name == 'Geheel huis';
+
+/// Merge a panel dump into the installer list. Existing rows (including
+/// renamed labels, arm modes, rooms) stay; only missing numbers are added.
+List<SatelPartitionConfig> mergeImportedSatelPartitions(
+  List<SatelPartitionConfig> existing,
+  List<SatelPartitionConfig> discovered,
+) {
+  if (existing.isEmpty || satelPartitionsArePlaceholder(existing)) {
+    return List.of(discovered);
+  }
+  final have = existing.map((p) => p.number).toSet();
+  final out = List<SatelPartitionConfig>.of(existing);
+  for (final p in discovered) {
+    if (!have.contains(p.number)) out.add(p);
+  }
+  out.sort((a, b) => a.number.compareTo(b.number));
+  return out;
+}
+
+List<SatelZoneMapping> mergeImportedSatelZones(
+  List<SatelZoneMapping> existing,
+  List<SatelZoneMapping> discovered,
+) {
+  if (existing.isEmpty) return List.of(discovered);
+  final have = existing.map((z) => z.zoneNumber).toSet();
+  final out = List<SatelZoneMapping>.of(existing);
+  for (final z in discovered) {
+    if (!have.contains(z.zoneNumber)) out.add(z);
+  }
+  out.sort((a, b) => a.zoneNumber.compareTo(b.zoneNumber));
+  return out;
+}
+
 /// Result of GET /satel/config — includes has_pin flag (actual PIN never returned).
 class SatelServiceConfig {
   const SatelServiceConfig({
@@ -733,6 +812,36 @@ Future<({bool ok, String? error})> saveSatelEncryptionKey(String key) async {
     return (ok: false, error: msg ?? 'HTTP ${res.statusCode}');
   } catch (e) {
     return (ok: false, error: e.toString());
+  }
+}
+
+/// Read partition + zone names from the panel. Does not save.
+Future<({bool ok, String? error, SatelDiscoverResult? data})>
+    discoverSatelPanel() async {
+  try {
+    final res = await http
+        .get(Uri.parse('$satelBase/satel/discover'))
+        .timeout(const Duration(seconds: 90));
+    if (res.statusCode == 200) {
+      return (
+        ok: true,
+        error: null,
+        data: SatelDiscoverResult.fromJson(
+            jsonDecode(res.body) as Map<String, dynamic>),
+      );
+    }
+    final body = res.body;
+    String? msg;
+    if (body.isNotEmpty) {
+      try {
+        msg = (jsonDecode(body) as Map<String, dynamic>)['detail'] as String?;
+      } catch (_) {
+        msg = null;
+      }
+    }
+    return (ok: false, error: msg ?? 'HTTP ${res.statusCode}', data: null);
+  } catch (e) {
+    return (ok: false, error: e.toString(), data: null);
   }
 }
 

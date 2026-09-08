@@ -15,12 +15,18 @@ import '../models.dart';
 import '../satel_api.dart'
     show
         SatelArmMode,
+        SatelDiscoverImport,
+        SatelDiscoverResult,
         SatelPartitionConfig,
         SatelPartitionState,
         SatelServiceConfig,
         SatelZoneMapping,
+        discoverSatelPanel,
+        mergeImportedSatelPartitions,
+        mergeImportedSatelZones,
         satelDeviceTypes,
         satelDeviceTypeLabel,
+        satelDiscoverImportProvider,
         satelEnabledProvider,
         satelMainConfigProvider,
         satelServiceConfigProvider,
@@ -6788,7 +6794,8 @@ class _SatelInstallerPanel extends ConsumerWidget {
                   title: 'Satel',
                   body:
                       'Koppeling met een Satel INTEGRA via ETHM-1 / INT-ETHER. '
-                      'Zet aan, vul IP-adres en poort in (standaard 7094), daarna partities, zones en pincode.',
+                      'Zet aan, vul IP-adres en poort in (standaard 7094). '
+                      'Partities en zones kun je uitlezen uit DLOADX; kamers koppel je zelf.',
                 ),
               ),
               if (loading)
@@ -6819,6 +6826,7 @@ class _SatelInstallerPanel extends ConsumerWidget {
         ),
         if (enabled) ...[
           LuxeListCard(child: _SatelLiveStatus()),
+          LuxeListCard(child: _SatelDiscoverCard()),
           LuxeListCard(child: _SatelPartitionsCard()),
           LuxeListCard(child: _SatelZonesCard()),
           LuxeListCard(child: _SatelPinCard()),
@@ -7016,6 +7024,100 @@ class _SatelConnectionCardState extends ConsumerState<_SatelConnectionCard> {
 }
 
 // ---------------------------------------------------------------------------
+// Panel name dump (DLOADX via ETHM-1 0xEE)
+// ---------------------------------------------------------------------------
+
+class _SatelDiscoverCard extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_SatelDiscoverCard> createState() => _SatelDiscoverCardState();
+}
+
+class _SatelDiscoverCardState extends ConsumerState<_SatelDiscoverCard> {
+  bool _busy = false;
+  String? _error;
+  String? _ok;
+
+  Future<void> _run() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+      _ok = null;
+    });
+    final result = await discoverSatelPanel();
+    if (!mounted) return;
+    if (!result.ok || result.data == null) {
+      setState(() {
+        _busy = false;
+        _error = result.error ?? 'Uitlezen mislukt.';
+      });
+      return;
+    }
+    final data = result.data!;
+    ref.read(satelDiscoverImportProvider.notifier).publish(data);
+    setState(() {
+      _busy = false;
+      _ok =
+          '${data.partitions.length} partities, ${data.zones.length} zones. '
+          'Koppel kamers en sla daarna op. Bestaande rijen blijven staan.';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final connected = ref.watch(satelStatusProvider).connected;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const LuxeSectionTitle(
+          icon: Icons.download_outlined,
+          title: 'Uitlezen van paneel',
+          trailing: LuxeInfoIconButton(
+            title: 'Uitlezen',
+            body:
+                'Haalt partitie- en zonenamen uit DLOADX (ETHM-1). '
+                'Kamers in het alarm komen niet overeen met Archie-kamers — die koppel je zelf. '
+                'Opnieuw uitlezen overschrijft geen bestaande namen, types of kamers; alleen nieuwe nummers komen erbij. '
+                'Daarna per kaart Opslaan.',
+          ),
+        ),
+        if (!connected) ...[
+          Text(
+            'Eerst ETHM-1 verbinden (IP-adres opslaan). Kan tot een minuut duren.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+        ],
+        Align(
+          alignment: Alignment.centerRight,
+          child: FilledButton.icon(
+            onPressed: _busy ? null : _run,
+            icon: _busy
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : const Icon(Icons.download_outlined, size: 18),
+            label: Text(_busy ? 'Uitlezen…' : 'Uitlezen van paneel'),
+          ),
+        ),
+        if (_error != null) ...[
+          const SizedBox(height: 8),
+          Text(_error!,
+              style: TextStyle(color: LuxeColors.danger, fontSize: 12)),
+        ],
+        if (_ok != null) ...[
+          const SizedBox(height: 8),
+          Text(_ok!,
+              style: TextStyle(color: LuxeColors.inkSoft, fontSize: 12)),
+        ],
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Partitions editor
 // ---------------------------------------------------------------------------
 
@@ -7029,12 +7131,22 @@ class _SatelPartitionsCardState extends ConsumerState<_SatelPartitionsCard> {
   List<SatelPartitionConfig>? _local; // null = not yet loaded / editing
   bool _saving = false;
   String? _error;
+  int _formEpoch = 0;
+  int _appliedImportSeq = 0;
 
   @override
   void initState() {
     super.initState();
     // Load after first frame so providers are ready.
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  void _mergeImport(SatelDiscoverResult data) {
+    if (_local == null) return;
+    setState(() {
+      _formEpoch++;
+      _local = mergeImportedSatelPartitions(_local!, data.partitions);
+    });
   }
 
   Future<void> _load() async {
@@ -7048,12 +7160,17 @@ class _SatelPartitionsCardState extends ConsumerState<_SatelPartitionsCard> {
         ? mainCfg.partitions
         : (svc?.partitions ?? const <SatelPartitionConfig>[]);
 
-    final merged = base.map((p) {
+    var merged = base.map((p) {
       final modes = svcByNum[p.number]?.armModes;
       return p.copyWith(
         armModes: (modes != null && modes.isNotEmpty) ? modes : p.armModes,
       );
     }).toList();
+    final import = ref.read(satelDiscoverImportProvider);
+    if (import != null) {
+      merged = mergeImportedSatelPartitions(merged, import.data.partitions);
+      _appliedImportSeq = import.seq;
+    }
     if (mounted) setState(() => _local = merged);
   }
 
@@ -7087,6 +7204,15 @@ class _SatelPartitionsCardState extends ConsumerState<_SatelPartitionsCard> {
   Widget build(BuildContext context) {
     final list = _local;
 
+    ref.listen<SatelDiscoverImport?>(satelDiscoverImportProvider, (prev, next) {
+      if (next == null || next.seq == _appliedImportSeq) return;
+      _appliedImportSeq = next.seq;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _mergeImport(next.data);
+      });
+    });
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -7100,7 +7226,8 @@ class _SatelPartitionsCardState extends ConsumerState<_SatelPartitionsCard> {
                 title: 'Partities',
                 body:
                     'Nummer zoals in DLOADX (1–32). '
-                    'Inschakelmodi: 0 = volledig, 1–3 = deelinschakeling uit DLOADX.',
+                    'Inschakelmodi: 0 = volledig, 1–3 = deelinschakeling uit DLOADX. '
+                    'Uitlezen van paneel vult nummers en namen; daarna finetunen.',
               ),
               if (list != null)
                 TextButton.icon(
@@ -7129,6 +7256,7 @@ class _SatelPartitionsCardState extends ConsumerState<_SatelPartitionsCard> {
           ...List.generate(list.length, (i) {
             final p = list[i];
             return Padding(
+              key: ValueKey('satel-p-$_formEpoch-${p.number}-$i'),
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 children: [
@@ -7310,6 +7438,8 @@ class _SatelZonesCardState extends ConsumerState<_SatelZonesCard> {
   List<SatelZoneMapping>? _local; // null = not yet loaded
   bool _saving = false;
   String? _error;
+  int _formEpoch = 0;
+  int _appliedImportSeq = 0;
 
   @override
   void initState() {
@@ -7317,11 +7447,25 @@ class _SatelZonesCardState extends ConsumerState<_SatelZonesCard> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
+  void _mergeImport(SatelDiscoverResult data) {
+    if (_local == null) return;
+    setState(() {
+      _formEpoch++;
+      _local = mergeImportedSatelZones(_local!, data.zones);
+    });
+  }
+
   Future<void> _load() async {
     setState(() => _error = null);
     final cfg = await ref.read(satelServiceConfigProvider.future);
+    var list = List<SatelZoneMapping>.of(cfg?.zoneMappings ?? const []);
+    final import = ref.read(satelDiscoverImportProvider);
+    if (import != null) {
+      list = mergeImportedSatelZones(list, import.data.zones);
+      _appliedImportSeq = import.seq;
+    }
     if (mounted) {
-      setState(() => _local = List.of(cfg?.zoneMappings ?? const []));
+      setState(() => _local = list);
     }
   }
 
@@ -7375,6 +7519,15 @@ class _SatelZonesCardState extends ConsumerState<_SatelZonesCard> {
     final rooms = _roomOptions(cfg);
     final knownRoomIds = rooms.map((r) => r.id).toSet();
 
+    ref.listen<SatelDiscoverImport?>(satelDiscoverImportProvider, (prev, next) {
+      if (next == null || next.seq == _appliedImportSeq) return;
+      _appliedImportSeq = next.seq;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _mergeImport(next.data);
+      });
+    });
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -7388,7 +7541,8 @@ class _SatelZonesCardState extends ConsumerState<_SatelZonesCard> {
                 title: 'Zones',
                 body:
                     'Zonenummer zoals in DLOADX (1–128). '
-                    'Type en kamer bepalen hoe de sensor in de app verschijnt.',
+                    'Type en kamer bepalen hoe de sensor in de app verschijnt. '
+                    'Uitlezen vult namen; kamer koppel je zelf (DLOADX-kamers komen niet overeen).',
               ),
               if (list != null)
                 TextButton.icon(
@@ -7421,6 +7575,7 @@ class _SatelZonesCardState extends ConsumerState<_SatelZonesCard> {
                     ? z.roomId
                     : null;
             return Padding(
+              key: ValueKey('satel-z-$_formEpoch-${z.zoneNumber}-$i'),
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 children: [
