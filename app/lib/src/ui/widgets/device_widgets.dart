@@ -4569,10 +4569,6 @@ class _WtwTileState extends ConsumerState<WtwTile> {
       ];
     }
 
-    final hasFault = _hasGa(mv, 'faultGa');
-    final hasFilter = _hasGa(mv, 'filterGa');
-    final daysGa = _ga(mv, 'filterDaysGa');
-
     return DeviceTileShell(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -4609,42 +4605,6 @@ class _WtwTileState extends ConsumerState<WtwTile> {
                 perRow: standButtons.length <= 3 ? standButtons.length : 3,
               ),
             ),
-          if (hasFault || hasFilter || daysGa.isNotEmpty) ...[
-            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
-            const Divider(height: 1),
-            const SizedBox(height: 12),
-            if (hasFault)
-              _WtwStatusRow(
-                item: {
-                  'label': 'Storing',
-                  'ga': mv['faultGa'],
-                  'dpt': '1.001',
-                  'icon0': 'check',
-                  'icon1': 'warning',
-                },
-                bus: bus,
-              ),
-            if (hasFilter)
-              _WtwStatusRow(
-                item: {
-                  'label': 'Filtervervangen',
-                  'ga': mv['filterGa'],
-                  'dpt': '1.001',
-                  'icon0': 'check',
-                  'icon1': 'warning',
-                },
-                bus: bus,
-              ),
-            if (daysGa.isNotEmpty)
-              _WtwStatusRow(
-                item: {
-                  'label': 'Filtervervangen over',
-                  'ga': daysGa,
-                  'dpt': '7.001',
-                },
-                bus: bus,
-              ),
-          ],
         ],
       ),
     );

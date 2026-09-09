@@ -1088,10 +1088,6 @@ export interface WtwMvConfig {
   commandGa?: string;
   statusGa?: string;
   stands?: MvStand[];
-  /* gedeeld */
-  faultGa?: string;
-  filterGa?: string;
-  filterDaysGa?: string;
   logics?: WtwMvLogic[];
 }
 

@@ -358,9 +358,6 @@ export function collectMvSubscriptions(
     add(mv.commandGa, "byte");
     add(mv.statusGa, "byte");
   }
-  add(mv.faultGa, "bit");
-  add(mv.filterGa, "bit");
-  add(mv.filterDaysGa, "uint16");
   for (const logic of mvLogics(mv)) {
     add(logic.triggerGa, "bit");
     add(logic.orGa, "bit");
