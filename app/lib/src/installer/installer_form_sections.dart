@@ -2206,11 +2206,15 @@ class _WtwInstallerSectionState extends State<WtwInstallerSection> {
     if (raw == _wtwModelNone) {
       _wtw.remove('model');
       _wtw.remove('zehnder');
+      _wtw.remove('duco');
     } else {
       _wtw['model'] = raw;
       if (raw == 'zehnder_comfoConnect') {
         final z = _ensureMap(_wtw, 'zehnder');
         z['minutes'] ??= 30;
+      }
+      if (raw == 'duco_connectivity_board') {
+        _ensureMap(_wtw, 'duco');
       }
     }
     _notify();
@@ -2227,10 +2231,15 @@ class _WtwInstallerSectionState extends State<WtwInstallerSection> {
           child: _InstallerDropdown(
           label: 'Type WTW',
           value: model.isEmpty ? _wtwModelNone : model,
-          options: const [_wtwModelNone, 'zehnder_comfoConnect'],
+          options: const [
+            _wtwModelNone,
+            'zehnder_comfoConnect',
+            'duco_connectivity_board',
+          ],
           optionLabels: const {
             _wtwModelNone: 'Kies type…',
             'zehnder_comfoConnect': 'Zehnder ComfoConnect',
+            'duco_connectivity_board': 'Duco Connectivity Board',
           },
           onChanged: _setModel,
         ),
@@ -2238,6 +2247,11 @@ class _WtwInstallerSectionState extends State<WtwInstallerSection> {
         if (model == 'zehnder_comfoConnect')
           _WtwZehnderInstaller(
             zehnder: _ensureMap(_wtw, 'zehnder'),
+            onChanged: _notify,
+          )
+        else if (model == 'duco_connectivity_board')
+          _WtwDucoInstaller(
+            duco: _ensureMap(_wtw, 'duco'),
             onChanged: _notify,
           )
         else
@@ -2416,13 +2430,104 @@ class _WtwZehnderInstaller extends StatelessWidget {
   }
 }
 
+class _WtwDucoInstaller extends StatelessWidget {
+  const _WtwDucoInstaller({
+    required this.duco,
+    required this.onChanged,
+  });
+  final Map<String, dynamic> duco;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _InstallerInfoTitle(
+          title: 'Commando & status',
+          body:
+              'Eén command-GA (byte 0-255): 0=Auto, 7=Afwezig, 8=Stand 1, '
+              '9=Stand 2, 10=Stand 3. Eén status-GA leest de huidige stand terug.',
+        ),
+        _InstallerStrField(
+          label: 'Command GA (byte)',
+          value: duco['commandGa'] as String? ?? '',
+          gaSearch: true,
+          onChanged: (v) {
+            if (v.trim().isEmpty) {
+              duco.remove('commandGa');
+            } else {
+              duco['commandGa'] = v.trim();
+            }
+            onChanged();
+          },
+        ),
+        _InstallerStrField(
+          label: 'Status GA (byte)',
+          value: duco['statusGa'] as String? ?? '',
+          gaSearch: true,
+          onChanged: (v) {
+            if (v.trim().isEmpty) {
+              duco.remove('statusGa');
+            } else {
+              duco['statusGa'] = v.trim();
+            }
+            onChanged();
+          },
+        ),
+        const SizedBox(height: 8),
+        _InstallerInfoTitle(
+          title: 'Filter',
+          body: 'Filter vervangen: 1-bit. Filterdagen: DPT 7.001 (2 bytes).',
+        ),
+        _InstallerStrField(
+          label: 'Filter vervangen GA (DPT 1.001)',
+          value: duco['filterGa'] as String? ?? '',
+          gaSearch: true,
+          gaDptHint: 'DPT1.001',
+          onChanged: (v) {
+            if (v.trim().isEmpty) {
+              duco.remove('filterGa');
+            } else {
+              duco['filterGa'] = v.trim();
+            }
+            onChanged();
+          },
+        ),
+        _InstallerStrField(
+          label: 'Filter vervangen over (dagen, DPT 7.001)',
+          value: duco['filterDaysGa'] as String? ?? '',
+          gaSearch: true,
+          gaDptHint: 'DPT7.001',
+          onChanged: (v) {
+            if (v.trim().isEmpty) {
+              duco.remove('filterDaysGa');
+            } else {
+              duco['filterDaysGa'] = v.trim();
+            }
+            onChanged();
+          },
+        ),
+        const SizedBox(height: 12),
+        _WtwLogicListEditor(
+          zehnder: duco,
+          onChanged: onChanged,
+          hasBoost: false,
+        ),
+      ],
+    );
+  }
+}
+
 class _WtwLogicListEditor extends StatelessWidget {
   const _WtwLogicListEditor({
     required this.zehnder,
     required this.onChanged,
+    this.hasBoost = true,
   });
   final Map<String, dynamic> zehnder;
   final VoidCallback onChanged;
+  final bool hasBoost;
 
   @override
   Widget build(BuildContext context) {
@@ -2503,6 +2608,7 @@ class _WtwLogicListEditor extends StatelessWidget {
       builder: (_) => _WtwLogicEditorSheet(
         logic: logic,
         isNew: isNew,
+        hasBoost: hasBoost,
       ),
     ).then((saved) {
       if (saved == true) onChanged();
@@ -2644,9 +2750,11 @@ class _WtwLogicEditorSheet extends StatefulWidget {
   const _WtwLogicEditorSheet({
     required this.logic,
     this.isNew = false,
+    this.hasBoost = true,
   });
   final Map<String, dynamic> logic;
   final bool isNew;
+  final bool hasBoost;
 
   @override
   State<_WtwLogicEditorSheet> createState() => _WtwLogicEditorSheetState();
@@ -3249,7 +3357,9 @@ class _WtwLogicEditorSheetState extends State<_WtwLogicEditorSheet> {
           label: 'stand',
           child: _WtwLogicSelect(
             value: standId,
-            options: const ['stand1', 'stand2', 'stand3', 'away', 'boost'],
+            options: widget.hasBoost
+                ? const ['stand1', 'stand2', 'stand3', 'away', 'boost']
+                : const ['stand1', 'stand2', 'stand3', 'away'],
             labels: _standLabels,
             onChanged: (v) => _set('standId', v),
           ),

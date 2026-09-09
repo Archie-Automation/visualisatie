@@ -710,6 +710,10 @@ export async function dispatch(
 
     case "wtw.press": {
       if (device.type !== "wtw") throw new Error("not a WTW device");
+      if (device.wtw.model === "duco_connectivity_board" && device.wtw.duco) {
+        await wtwRuntime.pressDuco(device, bus, cmd);
+        return;
+      }
       if (device.wtw.model !== "zehnder_comfoConnect" || !device.wtw.zehnder) {
         throw new Error("WTW-type is niet ingesteld");
       }
