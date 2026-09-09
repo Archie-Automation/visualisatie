@@ -76,11 +76,33 @@ type LogicRun = {
 
 type LogicListener = (runs: WtwLogicStatus[]) => void;
 
+/** Shared trigger/until fields — Zehnder, Duco, MV and Modbus logics. */
+type WtwLogicArmsSource = {
+  enabled?: boolean;
+  triggerGa?: string;
+  triggerValue?: string | number;
+  triggerEquals?: boolean;
+  triggerMinutes?: number;
+  orGa?: string;
+  orValue?: string | number;
+  orEquals?: boolean;
+  orMinutes?: number;
+  when?: WtwLogicClause[];
+  whenJoin?: WtwLogicJoin;
+  untilGa?: string;
+  untilValue?: string | number;
+  untilEquals?: boolean;
+  untilMinutes?: number;
+  untilWhen?: WtwLogicClause[];
+  untilJoin?: WtwLogicJoin;
+  minutes?: number;
+};
+
 function asWtw(d: Device): WtwDevice | null {
   return d.type === "wtw" ? d : null;
 }
 
-function logicEnabled(l: WtwZehnderLogic): boolean {
+function logicEnabled(l: { enabled?: boolean }): boolean {
   return l.enabled !== false;
 }
 
@@ -119,15 +141,15 @@ function valueMatches(actual: unknown, want: unknown): boolean {
   return String(actual).trim().toLowerCase() === lower;
 }
 
-function triggerWant(logic: WtwZehnderLogic): unknown {
+function triggerWant(logic: WtwLogicArmsSource): unknown {
   return wantedValue(logic.triggerValue, logic.triggerEquals, true);
 }
 
-function untilWant(logic: WtwZehnderLogic): unknown {
+function untilWant(logic: WtwLogicArmsSource): unknown {
   return wantedValue(logic.untilValue, logic.untilEquals, false);
 }
 
-function orWant(logic: WtwZehnderLogic): unknown {
+function orWant(logic: WtwLogicArmsSource): unknown {
   return wantedValue(logic.orValue, logic.orEquals, true);
 }
 
@@ -168,7 +190,7 @@ function armsFromClauses(
   return out;
 }
 
-function whenArms(logic: WtwZehnderLogic): TriggerArm[] {
+function whenArms(logic: WtwLogicArmsSource): TriggerArm[] {
   const fromList = armsFromClauses(logic.when, "w", true, 0, 0);
   if (fromList.length > 0) return fromList;
   const out: TriggerArm[] = [];
@@ -193,7 +215,7 @@ function whenArms(logic: WtwZehnderLogic): TriggerArm[] {
   return out;
 }
 
-function untilArms(logic: WtwZehnderLogic): TriggerArm[] {
+function untilArms(logic: WtwLogicArmsSource): TriggerArm[] {
   const fromList = armsFromClauses(logic.untilWhen, "u", false, 5, 1);
   if (fromList.length > 0) return fromList;
   const ga = asGa(logic.untilGa) ?? asGa(logic.triggerGa);
