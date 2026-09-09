@@ -53,6 +53,21 @@ export function zehnderAutoIsOn(
   return bitOn(st.value);
 }
 
+/** Actieve stand; Auto wint als die aan is, ook als een snelheid-bit nog 1 is. */
+export function readZehnderActiveStand(
+  bus: KnxBus,
+  z: WtwZehnderComfoConnect
+): WtwZehnderStandId {
+  if (zehnderAutoIsOn(bus, z)) return "auto";
+  for (const s of ZEHN_STANDS) {
+    if (s.id === "auto") continue;
+    const ga = asGa(z[s.status]);
+    if (!ga) continue;
+    if (bitOn(bus.getState(ga)?.value)) return s.id;
+  }
+  return "auto";
+}
+
 export function zehnderWriteGa(
   z: WtwZehnderComfoConnect,
   id: string
