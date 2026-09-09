@@ -190,6 +190,7 @@ class SoftwareVersionStatus {
     required this.clientStale,
     required this.androidApkUpdateAvailable,
     required this.androidApkPending,
+    this.autoUpdateEnabled = true,
     this.serverUpdate,
     this.clientVersion,
   });
@@ -203,6 +204,8 @@ class SoftwareVersionStatus {
   final bool androidApkUpdateAvailable;
   /// Tablet hinterloopt de server, maar de GitHub-APK is nog niet nieuwer.
   final bool androidApkPending;
+  /// `false` = beheerder heeft automatische updates uitgeschakeld in de config.
+  final bool autoUpdateEnabled;
   final ServerUpdateSnapshot? serverUpdate;
   /// Installed app version used for APK comparison (package or dart-define).
   final SoftwareVersionInfo? clientVersion;
@@ -260,6 +263,7 @@ final softwareVersionStatusProvider =
     final androidApkPending = supportsAndroidApkUpdate &&
         clientStale &&
         !androidApkUpdateAvailable;
+    final autoUpdateEnabled = body['autoUpdate'] != false;
     return SoftwareVersionStatus(
       running: running,
       latest: latest,
@@ -267,6 +271,7 @@ final softwareVersionStatusProvider =
       clientStale: clientStale,
       androidApkUpdateAvailable: androidApkUpdateAvailable,
       androidApkPending: androidApkPending,
+      autoUpdateEnabled: autoUpdateEnabled,
       serverUpdate: serverUpdate,
       clientVersion: client,
     );

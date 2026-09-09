@@ -1258,6 +1258,11 @@ export interface HouseConfig {
     enabled?: boolean;
     partitions?: Array<{ number: number; name: string }>;
   };
+  /**
+   * Automatische software-updates. `true` (standaard) = update-banners en
+   * APK-installatie worden aangeboden. `false` = updates onderdrukt.
+   */
+  autoUpdate?: boolean;
   /** Wandtablet idle timeout + screensaver (Android client). */
   displayPanel?: {
     enabled?: boolean;

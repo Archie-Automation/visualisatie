@@ -365,10 +365,12 @@ export function buildRouter(
     const latest = await getGithubLatest(force);
     const updateAvailable = isUpdateAvailableOnGithub(latest);
     const serverUpdate = readServerUpdateStatus();
+    const cfg = getConfig();
     res.json({
       version: appVersionInfo.version,
       semver: appVersionInfo.semver,
       build: appVersionInfo.build,
+      autoUpdate: cfg.autoUpdate !== false,
       githubRepo: process.env.GITHUB_REPO?.trim() || "Archie-Automation/visualisatie",
       latest: latest
         ? {
@@ -710,6 +712,18 @@ export function buildRouter(
       return;
     }
     res.json({ ok: true, ...result.status });
+  });
+
+  r.put("/admin/auto-update", requireAuth, requireAdmin, (req, res) => {
+    const enabled = (req.body as { enabled?: boolean })?.enabled;
+    if (typeof enabled !== "boolean") {
+      res.status(400).json({ error: "missing_enabled", message: "enabled (bool) verplicht" });
+      return;
+    }
+    updateConfig((draft) => {
+      draft.autoUpdate = enabled;
+    });
+    res.json({ ok: true, autoUpdate: enabled });
   });
 
   r.get("/installer/house", requireAuth, requireAdmin, (_req, res) => {

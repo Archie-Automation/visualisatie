@@ -193,6 +193,9 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
     }
     if (status == null) return const SizedBox.shrink();
 
+    // Beheerder heeft automatische updates uitgeschakeld.
+    if (!status.autoUpdateEnabled) return const SizedBox.shrink();
+
     final apkReady = apkOffered;
     if (apkReady) {
       final latest = status.latest;
