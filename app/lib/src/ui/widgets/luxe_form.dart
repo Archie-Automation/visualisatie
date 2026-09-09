@@ -29,13 +29,16 @@ class LuxeOnOffSwitch extends StatelessWidget {
 InputDecoration luxeFilledDecoration({
   String? hint,
   String? helper,
+  String? error,
   Widget? suffixIcon,
   int helperMaxLines = 2,
 }) =>
     InputDecoration(
       hintText: hint,
-      helperText: helper,
+      helperText: error == null ? helper : null,
       helperMaxLines: helperMaxLines,
+      errorText: error,
+      errorMaxLines: 2,
       suffixIcon: suffixIcon,
       floatingLabelBehavior: FloatingLabelBehavior.never,
       filled: true,
@@ -52,6 +55,14 @@ InputDecoration luxeFilledDecoration({
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(14),
         borderSide: BorderSide(color: LuxeColors.line),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: Colors.redAccent, width: 1),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: const BorderSide(color: Colors.redAccent, width: 1.5),
       ),
     );
 

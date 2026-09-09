@@ -1850,6 +1850,25 @@ class _InstallerStrField extends StatefulWidget {
   State<_InstallerStrField> createState() => _InstallerStrFieldState();
 }
 
+/// Validates a KNX group address: `main/middle/sub` where
+/// main = 0-31, middle = 0-7, sub = 0-255.
+String? validateKnxGa(String input) {
+  final s = input.trim();
+  if (s.isEmpty) return null; // leeg is optioneel
+  final parts = s.split('/');
+  if (parts.length != 3) return 'Formaat: hoofd/midden/sub (bijv. 1/2/3)';
+  final main = int.tryParse(parts[0]);
+  final middle = int.tryParse(parts[1]);
+  final sub = int.tryParse(parts[2]);
+  if (main == null || middle == null || sub == null) {
+    return 'Alleen gehele getallen gescheiden door /';
+  }
+  if (main < 0 || main > 31) return 'Hoofdgroep: 0–31 (is $main)';
+  if (middle < 0 || middle > 7) return 'Middengroep: 0–7 (is $middle)';
+  if (sub < 0 || sub > 255) return 'Subgroep: 0–255 (is $sub)';
+  return null;
+}
+
 class _InstallerStrFieldState extends State<_InstallerStrField> {
   late final TextEditingController _c;
 
@@ -1891,7 +1910,8 @@ class _InstallerStrFieldState extends State<_InstallerStrField> {
   @override
   Widget build(BuildContext context) {
     final gaSearch = _gaSearchEnabled;
-    final resolvedName = gaSearch && _c.text.trim().isNotEmpty
+    final gaError = gaSearch ? validateKnxGa(_c.text) : null;
+    final resolvedName = gaSearch && _c.text.trim().isNotEmpty && gaError == null
         ? KnxGaCatalog.instance.nameFor(_c.text)
         : null;
     return Padding(
@@ -1905,6 +1925,7 @@ class _InstallerStrFieldState extends State<_InstallerStrField> {
             decoration: luxeFilledDecoration(
               hint: widget.compact ? null : widget.hint,
               helper: widget.compact ? null : resolvedName,
+              error: gaError,
               suffixIcon: gaSearch
                   ? IconButton(
                       icon: const Icon(Icons.search),
