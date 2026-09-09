@@ -8,6 +8,9 @@ import type {
   WtwDevice,
   WtwDucoConnectivityBoard,
   WtwDucoLogic,
+  WtwMvConfig,
+  WtwMvLogic,
+  WtwModel,
   WtwZehnderComfoConnect,
   WtwZehnderLogic,
   WtwZehnderStandId,
@@ -21,10 +24,13 @@ import {
   collectDucoSubscriptions,
   ducoLogics,
   DUCO_STAND_BYTE,
+  mvLogics,
   pressDucoStand,
+  pressMvStand,
   pressZehnderStand,
   readBoostMinutes,
   readDucoActiveStand,
+  readMvActiveStand,
   readZehnderActiveStand,
   writeBoostMinutes,
   writeZehnderAuto,
@@ -278,9 +284,10 @@ class WtwRuntime {
     walkDevices(cfg, (d) => {
       const w = asWtw(d);
       if (!w) return;
-      const allLogics: Array<WtwZehnderLogic | WtwDucoLogic> = [
+      const allLogics: Array<WtwZehnderLogic | WtwDucoLogic | WtwMvLogic> = [
         ...(w.wtw.zehnder ? zehnderLogics(w.wtw.zehnder) : []),
-        ...(w.wtw.duco ? ducoLogics(w.wtw.duco) : [])
+        ...(w.wtw.duco ? ducoLogics(w.wtw.duco) : []),
+        ...(w.wtw.mv ? mvLogics(w.wtw.mv) : [])
       ];
       for (const logic of allLogics) {
         if (logic.triggerMode === "tempRise" && logic.tempRise) {
@@ -348,6 +355,18 @@ class WtwRuntime {
     if (!d) throw new Error("Duco-config ontbreekt");
     this.cancelDeviceLogics(device.id);
     await pressDucoStand(d, bus, cmd);
+  }
+
+  async pressMv(
+    device: WtwDevice,
+    bus: KnxBus,
+    cmd: { buttonId: string }
+  ): Promise<void> {
+    const mv = device.wtw.mv;
+    const model = device.wtw.model;
+    if (!mv || !model) throw new Error("MV-config ontbreekt");
+    this.cancelDeviceLogics(device.id);
+    await pressMvStand(model, mv, bus, cmd.buttonId);
   }
 
   async press(
@@ -539,6 +558,33 @@ class WtwRuntime {
     return found;
   }
 
+  private mvOf(deviceId: string): { model: WtwModel; mv: WtwMvConfig } | null {
+    const cfg = getConfig();
+    let found: { model: WtwModel; mv: WtwMvConfig } | null = null;
+    walkDevices(cfg, (d) => {
+      const w = asWtw(d);
+      if (w && w.id === deviceId && w.wtw.model?.startsWith("mv_") && w.wtw.mv) {
+        found = { model: w.wtw.model, mv: w.wtw.mv };
+      }
+    });
+    return found;
+  }
+
+  private mvLogicOf(
+    deviceId: string,
+    logicId: string
+  ): { device: WtwDevice; model: WtwModel; mv: WtwMvConfig; logic: WtwMvLogic } | null {
+    const cfg = getConfig();
+    let found: { device: WtwDevice; model: WtwModel; mv: WtwMvConfig; logic: WtwMvLogic } | null = null;
+    walkDevices(cfg, (d) => {
+      const w = asWtw(d);
+      if (!w || w.id !== deviceId || !w.wtw.model?.startsWith("mv_") || !w.wtw.mv) return;
+      const logic = mvLogics(w.wtw.mv).find((l) => l.id === logicId);
+      if (logic) found = { device: w, model: w.wtw.model, mv: w.wtw.mv, logic };
+    });
+    return found;
+  }
+
   private onBusState(state: GAState): void {
     const prev = this.prev.get(state.ga);
     this.prev.set(state.ga, state.value);
@@ -552,6 +598,9 @@ class WtwRuntime {
       }
       if (w.wtw.duco) {
         this.onDucoLogicTelegram(w, w.wtw.duco, state, prev);
+      }
+      if (w.wtw.model?.startsWith("mv_") && w.wtw.mv) {
+        this.onMvLogicTelegram(w, w.wtw.mv, state, prev);
       }
     });
   }
@@ -894,6 +943,205 @@ class WtwRuntime {
       logger.info({ deviceId, logicId, reason, target }, "Duco-logica klaar — terug naar stand");
     } catch (err) {
       logger.warn({ err, deviceId, logicId, target }, "Duco-logica terugzetten mislukt");
+    }
+  }
+
+  /* ===== MV logic handlers ============================================ */
+
+  private onMvLogicTelegram(
+    device: WtwDevice,
+    mv: WtwMvConfig,
+    state: GAState,
+    prev: unknown
+  ): void {
+    const bus = this.bus;
+    if (!bus) return;
+    if (typeof state.value === "number") {
+      this.tempHistory.push(state.ga, state.value);
+    }
+    for (const logic of mvLogics(mv)) {
+      if (!logicEnabled(logic) || !logic.id) continue;
+      if (logic.triggerMode === "tempRise") {
+        this.tickMvTempRise(device, mv, logic, state);
+      } else {
+        for (const arm of whenArms(logic)) {
+          if (state.ga === arm.ga) {
+            this.tickMvTrigger(device, mv, logic, arm, state.value, prev);
+          }
+        }
+      }
+      if (logic.end === "untilStatus") {
+        for (const arm of untilArms(logic)) {
+          if (state.ga === arm.ga) {
+            this.tickMvUntil(device.id, logic, arm, state.value);
+          }
+        }
+      }
+    }
+  }
+
+  private tickMvTempRise(
+    device: WtwDevice, mv: WtwMvConfig, logic: WtwMvLogic, state: GAState
+  ): void {
+    const tr = logic.tempRise;
+    if (!tr) return;
+    const ga = asGa(tr.ga);
+    if (!ga || state.ga !== ga) return;
+    const runKey = this.logicKey(device.id, logic.id);
+    if (this.logicRuns.has(runKey)) return;
+    const current = typeof state.value === "number" ? state.value : null;
+    if (current === null) return;
+    const minVal = this.tempHistory.minInWindow(ga, tr.windowSec);
+    if (minVal === null) return;
+    if (current - minVal >= tr.deltaDeg) {
+      const live = this.mvLogicOf(device.id, logic.id);
+      if (!live || !logicEnabled(live.logic)) return;
+      void this.startMvLogic(live.device, live.model, live.mv, live.logic);
+    }
+  }
+
+  private tickMvTrigger(
+    device: WtwDevice, mv: WtwMvConfig, logic: WtwMvLogic,
+    arm: TriggerArm, value: unknown, prev: unknown
+  ): void {
+    const runKey = this.logicKey(device.id, logic.id);
+    if (this.logicRuns.has(runKey)) return;
+    const timerKey = this.clauseKey(device.id, logic.id, arm.suffix);
+    const join = joinOf(logic.whenJoin);
+    if (!valueMatches(value, arm.want)) { this.clearTrigger(timerKey); return; }
+    const fire = (): void => {
+      const live = this.mvLogicOf(device.id, logic.id);
+      if (!live || !logicEnabled(live.logic)) return;
+      const bus = this.bus;
+      if (!bus) return;
+      if (joinOf(live.logic.whenJoin) === "and") {
+        if (this.allArmsReady(bus, device.id, logic.id, whenArms(live.logic))) {
+          void this.startMvLogic(live.device, live.model, live.mv, live.logic);
+        }
+        return;
+      }
+      void this.startMvLogic(live.device, live.model, live.mv, live.logic);
+    };
+    if (arm.minutes <= 0) {
+      const rising = prev !== undefined && !valueMatches(prev, arm.want);
+      if (join === "or") { if (rising) fire(); return; }
+      if (rising || prev === undefined) fire();
+      return;
+    }
+    if (this.triggerTimers.has(timerKey) || this.triggerHeld.has(timerKey)) return;
+    this.triggerTimers.set(timerKey, setTimeout(() => {
+      this.triggerTimers.delete(timerKey);
+      const bus = this.bus;
+      if (!bus) return;
+      const st = bus.getState(arm.ga);
+      if (!st || !valueMatches(st.value, arm.want)) return;
+      this.triggerHeld.add(timerKey);
+      fire();
+    }, arm.minutes * 60_000));
+  }
+
+  private tickMvUntil(
+    deviceId: string, logic: WtwMvLogic, arm: TriggerArm, value: unknown
+  ): void {
+    const key = this.logicKey(deviceId, logic.id);
+    const run = this.logicRuns.get(key);
+    if (!run) return;
+    const timerKey = this.clauseKey(deviceId, logic.id, arm.suffix);
+    const join = joinOf(logic.untilJoin);
+    if (!valueMatches(value, arm.want)) {
+      this.clearTrigger(timerKey);
+      if (run.untilTimer && join === "and") {
+        clearTimeout(run.untilTimer); run.untilTimer = undefined;
+        run.untilMs = null; this.emit();
+      }
+      return;
+    }
+    const maybeEnd = (): void => {
+      const live = this.mvLogicOf(deviceId, logic.id);
+      if (!live) return;
+      const bus = this.bus;
+      if (!bus) return;
+      if (joinOf(live.logic.untilJoin) === "and") {
+        if (!this.allArmsReady(bus, deviceId, logic.id, untilArms(live.logic))) return;
+      }
+      void this.endMvLogic(deviceId, logic.id, "until");
+    };
+    if (arm.minutes <= 0) { maybeEnd(); return; }
+    if (this.triggerTimers.has(timerKey) || this.triggerHeld.has(timerKey)) return;
+    const untilMs = Date.now() + arm.minutes * 60_000;
+    if (join === "or" || run.untilMs == null || untilMs < run.untilMs) run.untilMs = untilMs;
+    this.triggerTimers.set(timerKey, setTimeout(() => {
+      this.triggerTimers.delete(timerKey);
+      const bus = this.bus;
+      if (!bus) return;
+      const st = bus.getState(arm.ga);
+      if (!st || !valueMatches(st.value, arm.want)) return;
+      this.triggerHeld.add(timerKey);
+      maybeEnd();
+    }, arm.minutes * 60_000));
+    this.emit();
+  }
+
+  private async startMvLogic(
+    device: WtwDevice, model: WtwModel, mv: WtwMvConfig, logic: WtwMvLogic
+  ): Promise<void> {
+    const bus = this.bus;
+    if (!bus || !logic.standId) return;
+    const key = this.logicKey(device.id, logic.id);
+    if (this.logicRuns.has(key)) return;
+    this.clearLogicTriggers(device.id, logic.id);
+    const restoreStand = readMvActiveStand(model, bus, mv) as string;
+    const minutes = clampInt(logic.minutes, 15, 1, 1440);
+    const end = logic.end === "untilStatus" ? "untilStatus" : "duration";
+    try {
+      await pressMvStand(model, mv, bus, logic.standId);
+    } catch (err) {
+      logger.warn({ err, deviceId: device.id, logicId: logic.id }, "MV-logica stand mislukt");
+      return;
+    }
+    const run: LogicRun = {
+      deviceId: device.id, logicId: logic.id,
+      label: (logic.label ?? "").trim(), standId: logic.standId,
+      end, restoreStand: restoreStand as WtwZehnderStandId,
+      after: logic.after ?? "previous", restoreBoostMinutes: null,
+      untilMs: null, boostUntilMs: null
+    };
+    this.logicRuns.set(key, run);
+    if (end !== "untilStatus") {
+      run.untilMs = Date.now() + minutes * 60_000;
+      run.durationTimer = setTimeout(() => {
+        void this.endMvLogic(device.id, logic.id, "duration");
+      }, minutes * 60_000);
+    } else {
+      for (const arm of untilArms(logic)) {
+        const st = bus.getState(arm.ga);
+        if (st) this.tickMvUntil(device.id, logic, arm, st.value);
+      }
+    }
+    this.emit();
+    logger.info({ deviceId: device.id, logicId: logic.id, stand: logic.standId, end }, "MV-logica gestart");
+  }
+
+  private async endMvLogic(
+    deviceId: string, logicId: string, reason: "duration" | "until"
+  ): Promise<void> {
+    const key = this.logicKey(deviceId, logicId);
+    const run = this.logicRuns.get(key);
+    if (!run) return;
+    this.logicRuns.delete(key);
+    this.clearRunTimers(run);
+    this.clearLogicTriggers(deviceId, logicId);
+    this.emit();
+    if ([...this.logicRuns.values()].some((r) => r.deviceId === deviceId)) return;
+    const bus = this.bus;
+    const info = this.mvOf(deviceId);
+    if (!bus || !info) return;
+    const target = run.after === "previous" || !run.after ? run.restoreStand : run.after;
+    try {
+      await pressMvStand(info.model, info.mv, bus, target);
+      logger.info({ deviceId, logicId, reason, target }, "MV-logica klaar — terug naar stand");
+    } catch (err) {
+      logger.warn({ err, deviceId, logicId, target }, "MV-logica terugzetten mislukt");
     }
   }
 

@@ -7,7 +7,7 @@ import { effectiveIntercomReleaseMode } from "./intercomReleaseMode";
 import { logger } from "./logger";
 import type { Device, HouseConfig, GA } from "./types";
 import { normalizeVoip } from "./voip/normalize";
-import { collectZehnderSubscriptions, collectDucoSubscriptions } from "./wtw";
+import { collectZehnderSubscriptions, collectDucoSubscriptions, collectMvSubscriptions } from "./wtw";
 
 let cached: HouseConfig | null = null;
 let configVersion = 0;
@@ -177,6 +177,9 @@ export function collectAllGAs(cfg: HouseConfig): GA[] {
       if (d.wtw.model === "duco_connectivity_board" && d.wtw.duco) {
         for (const { ga } of collectDucoSubscriptions(d.wtw.duco)) add(ga);
       }
+      if (d.wtw.model?.startsWith("mv_") && d.wtw.mv) {
+        for (const { ga } of collectMvSubscriptions(d.wtw.model, d.wtw.mv)) add(ga);
+      }
     }
     if (d.type === "melding") {
       for (const item of d.melding?.items ?? []) {
@@ -338,6 +341,11 @@ export function buildGAIndex(cfg: HouseConfig): Map<GA, GARole[]> {
       }
       if (d.wtw.model === "duco_connectivity_board" && d.wtw.duco) {
         for (const { ga, role } of collectDucoSubscriptions(d.wtw.duco)) {
+          pushGA(index, ga, role, d.id, d.type);
+        }
+      }
+      if (d.wtw.model?.startsWith("mv_") && d.wtw.mv) {
+        for (const { ga, role } of collectMvSubscriptions(d.wtw.model, d.wtw.mv)) {
           pushGA(index, ga, role, d.id, d.type);
         }
       }

@@ -839,16 +839,17 @@
         },
         "wtw": {
           "type": "object",
-          "description": "WTW / HRV. Eerst een type kiezen; velden hangen daarvan af.",
+          "description": "WTW / HRV / MV. Eerst een type kiezen; velden hangen daarvan af.",
           "additionalProperties": false,
           "properties": {
             "model": {
               "type": "string",
-              "enum": ["zehnder_comfoConnect", "duco_connectivity_board"],
-              "description": "Merk/type. Nieuwe types komen hier bij."
+              "enum": ["zehnder_comfoConnect", "duco_connectivity_board", "mv_1contact", "mv_scene", "mv_0_10v"],
+              "description": "Merk/type. WTW of MV."
             },
             "zehnder": { "$ref": "#/definitions/wtwZehnderComfoConnect" },
-            "duco": { "$ref": "#/definitions/wtwDucoConnectivityBoard" }
+            "duco": { "$ref": "#/definitions/wtwDucoConnectivityBoard" },
+            "mv": { "$ref": "#/definitions/wtwMvConfig" }
           }
         },
         "melding": {
@@ -1095,6 +1096,101 @@
         "after": {
           "type": "string",
           "enum": ["previous", "auto", "stand1", "stand2", "stand3", "away"]
+        }
+      }
+    },
+    "wtwMvConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Mechanische Ventilatie. Drie varianten: 1-contact (bit), scene (2 contacten), 0–10V (byte).",
+      "properties": {
+        "switchGa": { "$ref": "#/definitions/gaPattern", "description": "1-contact: bit-GA om hoog in te schakelen." },
+        "switchStatusGa": { "$ref": "#/definitions/gaPattern", "description": "1-contact: status-GA." },
+        "sceneGa": { "$ref": "#/definitions/gaPattern", "description": "Scene: KNX scene-adres." },
+        "sceneLow": { "type": "integer", "minimum": 0, "maximum": 63, "description": "Scene-nummer voor stand laag." },
+        "sceneMid": { "type": "integer", "minimum": 0, "maximum": 63, "description": "Scene-nummer voor stand midden." },
+        "sceneHigh": { "type": "integer", "minimum": 0, "maximum": 63, "description": "Scene-nummer voor stand hoog." },
+        "commandGa": { "$ref": "#/definitions/gaPattern", "description": "0–10V: byte-GA schrijven (0-255 = 0-100%)." },
+        "statusGa": { "$ref": "#/definitions/gaPattern", "description": "0–10V: byte-status-GA lezen." },
+        "stands": {
+          "type": "array",
+          "description": "0–10V: instelbare standen met percentage.",
+          "items": { "$ref": "#/definitions/mvStand" },
+          "maxItems": 10
+        },
+        "faultGa": { "$ref": "#/definitions/gaPattern" },
+        "filterGa": { "$ref": "#/definitions/gaPattern" },
+        "filterDaysGa": { "$ref": "#/definitions/gaPattern" },
+        "logics": {
+          "type": "array",
+          "description": "KNX-status → MV-stand. Meerdere regels mogelijk.",
+          "items": { "$ref": "#/definitions/wtwMvLogic" }
+        }
+      }
+    },
+    "mvStand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "percent"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "percent": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "wtwMvLogic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "standId", "minutes"],
+      "properties": {
+        "id": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "label": { "type": "string" },
+        "triggerMode": {
+          "type": "string",
+          "enum": ["status", "tempRise"]
+        },
+        "tempRise": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ga": { "$ref": "#/definitions/gaPattern" },
+            "deltaDeg": { "type": "number", "minimum": 0.1, "maximum": 50 },
+            "windowSec": { "type": "integer", "minimum": 5, "maximum": 600 }
+          },
+          "required": ["ga", "deltaDeg", "windowSec"]
+        },
+        "triggerGa": { "$ref": "#/definitions/gaPattern" },
+        "triggerValue": { "type": ["string", "number"] },
+        "triggerEquals": { "type": "boolean" },
+        "triggerMinutes": { "type": "integer", "minimum": 0, "maximum": 1440 },
+        "orGa": { "$ref": "#/definitions/gaPattern" },
+        "orValue": { "type": ["string", "number"] },
+        "orEquals": { "type": "boolean" },
+        "orMinutes": { "type": "integer", "minimum": 0, "maximum": 1440 },
+        "when": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/wtwLogicClause" }
+        },
+        "whenJoin": { "type": "string", "enum": ["or", "and"] },
+        "standId": {
+          "type": "string",
+          "description": "Stand-id: 'low'/'high' (1-contact), 'low'/'mid'/'high' (scene), of vrij id uit stands[] (0–10V)."
+        },
+        "end": { "type": "string", "enum": ["duration", "untilStatus"] },
+        "minutes": { "type": "integer", "minimum": 1, "maximum": 1440 },
+        "untilGa": { "$ref": "#/definitions/gaPattern" },
+        "untilValue": { "type": ["string", "number"] },
+        "untilEquals": { "type": "boolean" },
+        "untilMinutes": { "type": "integer", "minimum": 1, "maximum": 1440 },
+        "untilWhen": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/wtwLogicClause" }
+        },
+        "untilJoin": { "type": "string", "enum": ["or", "and"] },
+        "after": {
+          "type": "string",
+          "description": "'previous' of een stand-id."
         }
       }
     },
