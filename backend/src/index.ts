@@ -20,6 +20,7 @@ import { syncGo2rtcProcessAfterConfigWritten } from "./go2rtcSpawn";
 import { MediaManager } from "./media/manager";
 import { attachMediaKnxBridge } from "./media/knxBridge";
 import { LutronIntegrationManager } from "./lutron/manager";
+import { attachWtwRuntime } from "./wtwRuntime";
 import {
   getConnectivitySnapshot,
   logStartupConnectivityReport
@@ -130,6 +131,7 @@ function main() {
   media.rebuild(cfg);
   media.start();
   attachMediaKnxBridge(bus, media);
+  attachWtwRuntime(bus);
 
   void bus
     .connect(collectAllGAs(cfg))

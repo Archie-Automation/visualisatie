@@ -1,4 +1,8 @@
-import type { WtwZehnderComfoConnect, WtwZehnderStandId } from "./types";
+import type {
+  WtwZehnderComfoConnect,
+  WtwZehnderLogic,
+  WtwZehnderStandId
+} from "./types";
 import type { KnxBus } from "./knxBus";
 
 export const ZEHN_STANDS: ReadonlyArray<{
@@ -14,29 +18,39 @@ export const ZEHN_STANDS: ReadonlyArray<{
   { id: "boost", ga: "boostGa", status: "boostStatusGa" }
 ];
 
-/** ComfoConnect moet Auto uit hebben voordat een handmatige stand pakt. */
-const AUTO_OFF_SETTLE_MS = 150;
+const MANUAL_STANDS = new Set<string>([
+  "stand1",
+  "stand2",
+  "stand3",
+  "away",
+  "boost"
+]);
 
-function asGa(v: unknown): string | undefined {
+/** ComfoConnect moet Auto-uit hebben verwerkt voordat een handmatige stand pakt. */
+const AUTO_OFF_SETTLE_MS = 200;
+
+export function asGa(v: unknown): string | undefined {
   const s = typeof v === "string" ? v.trim() : "";
   return s || undefined;
 }
 
-function bitOn(value: unknown): boolean {
-  return value === true || value === 1 || value === "1";
+export function bitOn(value: unknown): boolean {
+  return value === true || value === 1 || value === "1" || value === "true";
 }
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** `undefined` = geen status (nog) bekend — behandel als mogelijk aan. */
-function autoIsOff(bus: KnxBus, z: WtwZehnderComfoConnect): boolean {
+export function zehnderAutoIsOn(
+  bus: KnxBus,
+  z: WtwZehnderComfoConnect
+): boolean {
   const ga = asGa(z.autoStatusGa);
   if (!ga) return false;
   const st = bus.getState(ga);
   if (!st) return false;
-  return !bitOn(st.value);
+  return bitOn(st.value);
 }
 
 export function zehnderWriteGa(
@@ -47,6 +61,21 @@ export function zehnderWriteGa(
   return row ? asGa(z[row.ga]) : undefined;
 }
 
+export async function writeZehnderAuto(
+  z: WtwZehnderComfoConnect,
+  bus: KnxBus,
+  on: boolean
+): Promise<boolean> {
+  const ga = asGa(z.autoGa);
+  if (!ga) return false;
+  await bus.write(ga, "bit", on);
+  return true;
+}
+
+/**
+ * Handmatige stand (1/2/3, afwezig, boost): altijd eerst Auto uit, daarna de stand.
+ * Auto zelf is alleen aan/uit.
+ */
 export async function pressZehnderStand(
   z: WtwZehnderComfoConnect,
   bus: KnxBus,
@@ -60,9 +89,8 @@ export async function pressZehnderStand(
     return;
   }
 
-  const autoGa = asGa(z.autoGa);
-  if (autoGa && !autoIsOff(bus, z)) {
-    await bus.write(autoGa, "bit", false);
+  if (MANUAL_STANDS.has(cmd.buttonId) && asGa(z.autoGa)) {
+    await writeZehnderAuto(z, bus, false);
     await delay(AUTO_OFF_SETTLE_MS);
   }
 
@@ -75,6 +103,12 @@ export async function pressZehnderStand(
     );
   }
   await bus.write(ga, "bit", cmd.on === false ? false : true);
+}
+
+export function zehnderLogics(
+  z: WtwZehnderComfoConnect
+): WtwZehnderLogic[] {
+  return Array.isArray(z.logics) ? z.logics : [];
 }
 
 export function collectZehnderSubscriptions(z: WtwZehnderComfoConnect): Array<{
@@ -95,5 +129,9 @@ export function collectZehnderSubscriptions(z: WtwZehnderComfoConnect): Array<{
   add(z.faultGa, "bit");
   add(z.filterGa, "bit");
   add(z.filterDaysGa, "uint16");
+  for (const logic of zehnderLogics(z)) {
+    add(logic.triggerGa, "bit");
+    add(logic.untilGa, "bit");
+  }
   return out;
 }

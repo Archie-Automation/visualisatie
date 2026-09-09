@@ -12,6 +12,7 @@ import type { IntercomDevice } from "./types";
 import type { MediaManager } from "./media/manager";
 import { hvacSwitchLock, type HvacLockEntry } from "./hvacSwitchLock";
 import { fireplaceVirtual, type FireplaceVirtualEntry } from "./fireplaceVirtual";
+import { wtwRuntime, type WtwLogicStatus } from "./wtwRuntime";
 import { captureOnIntercomRing } from "./intercomCaptures";
 import { userIdsInVoipGroup } from "./voip/ringTargets";
 
@@ -26,6 +27,7 @@ type Outgoing =
   | { type: "hvac.lock"; payload: HvacLockEntry }
   | { type: "fireplace.virtual.snapshot"; payload: FireplaceVirtualEntry[] }
   | { type: "fireplace.virtual"; payload: FireplaceVirtualEntry }
+  | { type: "wtw.logic.snapshot"; payload: WtwLogicStatus[] }
   | {
       type: "intercom.ring";
       payload: { intercomId: string; name: string; ts: number };
@@ -65,6 +67,10 @@ export function attachWebSocket(
     broadcastAll({ type: "fireplace.virtual", payload: entry });
   });
 
+  const unsubWtwLogic = wtwRuntime.onChange((runs) => {
+    broadcastAll({ type: "wtw.logic.snapshot", payload: runs });
+  });
+
   const wsUser = new WeakMap<WebSocket, string>();
 
   wss.on("connection", (ws, req) => {
@@ -90,6 +96,7 @@ export function attachWebSocket(
       type: "fireplace.virtual.snapshot",
       payload: fireplaceVirtual.getAll()
     });
+    send(ws, { type: "wtw.logic.snapshot", payload: wtwRuntime.getAll() });
   });
 
   let idxVersion = -1;
@@ -169,6 +176,7 @@ export function attachWebSocket(
     async close() {
       unsubHvac();
       unsubFireplace();
+      unsubWtwLogic();
       media.off("stateChanged", onMediaState);
       bus.off("stateChanged", onBusState);
       for (const client of wss.clients) {

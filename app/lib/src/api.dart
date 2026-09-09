@@ -10,6 +10,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'media_api.dart';
 import 'hvac_switch_lock.dart';
 import 'fireplace_virtual.dart';
+import 'wtw_logic.dart';
 import 'models.dart';
 import 'roles.dart';
 
@@ -349,6 +350,10 @@ class BusController extends Notifier<BusState> {
             (data['fireplaceVirtual'] as List?)?.cast<Map<String, dynamic>>() ??
                 const [];
         ref.read(fireplaceVirtualProvider.notifier).snapshot(fpVirtual);
+        final wtwLogics =
+            (data['wtwLogics'] as List?)?.cast<Map<String, dynamic>>() ??
+                const [];
+        ref.read(wtwLogicProvider.notifier).snapshot(wtwLogics);
       }
     } catch (_) {/* offline — ws will provide state */}
 
@@ -408,6 +413,10 @@ class BusController extends Notifier<BusState> {
                     fp['deviceId'] as String,
                     fp['on'] as bool,
                   );
+            case 'wtw.logic.snapshot':
+              final wtwList =
+                  (msg['payload'] as List).cast<Map<String, dynamic>>();
+              ref.read(wtwLogicProvider.notifier).snapshot(wtwList);
             case 'intercom.ring':
               final p = msg['payload'] as Map<String, dynamic>;
               ref.read(intercomRingProvider.notifier).push(IntercomRing(

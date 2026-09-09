@@ -850,12 +850,34 @@ export type WtwZehnderStandId =
   | "auto"
   | "boost";
 
+export type WtwZehnderLogicStandId = Exclude<WtwZehnderStandId, "auto">;
+
+/**
+ * KNX-status → WTW-stand. `duration`: stand voor N minuten.
+ * `untilStatus`: stand blijft tot `untilGa` (default trigger) waarde
+ * `untilEquals` aanhoudt voor N minuten.
+ */
+export interface WtwZehnderLogic {
+  id: string;
+  enabled?: boolean;
+  label?: string;
+  triggerGa: string;
+  /** Default true (stijgende 1). */
+  triggerEquals?: boolean;
+  standId: WtwZehnderLogicStandId;
+  end?: "duration" | "untilStatus";
+  minutes: number;
+  untilGa?: string;
+  /** Default false (tot de status uit is). */
+  untilEquals?: boolean;
+}
+
 /**
  * Zehnder ComfoConnect KNX: elke stand is 1-bit schrijven (waarde 1) met
  * een eigen status-bit. Auto is aan/uit; handmatige standen (1–3, afwezig,
- * boost) vereisen Auto uit — de backend zet Auto uit vóór die write.
- * Boost-tijd: set-GA schrijven, status-set-GA lezen (DPT 7.001, app in
- * minuten, bus in seconden). Aftellen gebeurt in de app.
+ * boost) schrijven altijd eerst Auto uit. Boost vanuit Auto: na afloop
+ * Auto weer aan. Boost-tijd: set-GA schrijven, status-set-GA lezen
+ * (DPT 7.001, app in minuten, bus in seconden). Aftellen in de app.
  */
 export interface WtwZehnderComfoConnect {
   awayGa?: string;
@@ -879,6 +901,7 @@ export interface WtwZehnderComfoConnect {
   faultGa?: string;
   filterGa?: string;
   filterDaysGa?: string;
+  logics?: WtwZehnderLogic[];
 }
 
 export interface WtwConfig {
