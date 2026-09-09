@@ -4186,10 +4186,13 @@ class _WtwTileState extends ConsumerState<WtwTile> {
     final showRemaining = hasBoost && remainingLive;
 
     final autoOn = _bitOn(bus, zz['autoStatusGa'] as String?);
-    const stands = <({String id, String label})>[
+
+    const speedStands = <({String id, String label})>[
       (id: 'stand1', label: '1'),
       (id: 'stand2', label: '2'),
       (id: 'stand3', label: '3'),
+    ];
+    const modeStands = <({String id, String label})>[
       (id: 'auto', label: 'Automatisch'),
       (id: 'away', label: 'Afwezig'),
       (id: 'boost', label: 'Boost'),
@@ -4221,35 +4224,40 @@ class _WtwTileState extends ConsumerState<WtwTile> {
           (status != null && _hasGa(zz, status));
     }
 
-    final buttonItems = [
-      for (final s in stands)
-        if (configured(s.id))
-          DeviceControlItem(
-            icon: switch (s.id) {
-              'away' => Icons.luggage_outlined,
-              'boost' => Icons.rocket_launch_outlined,
-              _ => null,
-            },
-            glyph: s.id == 'auto' ? const _WtwAutoGlyph() : null,
-            label: deviceControlNumericLabel(s.label) ?? s.label,
-            labelMode: deviceControlNumericLabel(s.label) != null
-                ? DeviceControlLabelMode.numeric
-                : DeviceControlLabelMode.iconOnly,
-            active: s.id == 'boost'
-                ? boostOn
-                : _bitOn(bus, zz[statusKey(s.id)] as String?),
-            onTap: !_hasGa(zz, writeKey(s.id))
-                ? null
-                : () {
-                    if (s.id == 'auto') {
-                      _press('auto', on: !autoOn);
-                    } else if (s.id == 'boost') {
-                      _press('boost', minutes: minutes, on: true);
-                    } else {
-                      _press(s.id);
-                    }
-                  },
-          ),
+    DeviceControlItem _zehnderBtn(({String id, String label}) s) {
+      return DeviceControlItem(
+        icon: switch (s.id) {
+          'away' => Icons.luggage_outlined,
+          'boost' => Icons.rocket_launch_outlined,
+          _ => null,
+        },
+        glyph: s.id == 'auto' ? const _WtwAutoGlyph() : null,
+        label: deviceControlNumericLabel(s.label) ?? s.label,
+        labelMode: deviceControlNumericLabel(s.label) != null
+            ? DeviceControlLabelMode.numeric
+            : DeviceControlLabelMode.iconOnly,
+        active: s.id == 'boost'
+            ? boostOn
+            : _bitOn(bus, zz[statusKey(s.id)] as String?),
+        onTap: !_hasGa(zz, writeKey(s.id))
+            ? null
+            : () {
+                if (s.id == 'auto') {
+                  _press('auto', on: !autoOn);
+                } else if (s.id == 'boost') {
+                  _press('boost', minutes: minutes, on: true);
+                } else {
+                  _press(s.id);
+                }
+              },
+      );
+    }
+
+    final speedButtons = [
+      for (final s in speedStands) if (configured(s.id)) _zehnderBtn(s),
+    ];
+    final modeButtons = [
+      for (final s in modeStands) if (configured(s.id)) _zehnderBtn(s),
     ];
 
     return DeviceTileShell(
@@ -4267,14 +4275,25 @@ class _WtwTileState extends ConsumerState<WtwTile> {
                   ?.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
-          if (buttonItems.isNotEmpty) ...[
+          if (speedButtons.isNotEmpty) ...[
             SizedBox(height: DeviceControlBar.sectionSpacing(context)),
             DeviceControlSection(
               title: 'STAND',
               child: DeviceControlBar.grid(
                 context,
-                buttonItems,
-                perRow: DeviceControlBar.autoPerRow(context, 6),
+                speedButtons,
+                perRow: 3,
+              ),
+            ),
+          ],
+          if (modeButtons.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            DeviceControlSection(
+              title: 'MODUS',
+              child: DeviceControlBar.grid(
+                context,
+                modeButtons,
+                perRow: 3,
               ),
             ),
           ],
@@ -4362,7 +4381,14 @@ class _WtwTileState extends ConsumerState<WtwTile> {
             active: activeStand == s.id,
             onTap: commandGa.isEmpty
                 ? null
-                : () => _press(s.id),
+                : () {
+                    if (s.id == 'auto') {
+                      // Toggle: auto uit → stand 1
+                      _press(activeStand == 'auto' ? 'stand1' : 'auto');
+                    } else {
+                      _press(s.id);
+                    }
+                  },
           ),
       ];
     }
@@ -4428,7 +4454,7 @@ class _WtwTileState extends ConsumerState<WtwTile> {
             if (hasFilter)
               _WtwStatusRow(
                 item: {
-                  'label': 'Filter',
+                  'label': 'Filtervervangen',
                   'ga': duc['filterGa'],
                   'dpt': '1.001',
                   'icon0': 'check',
@@ -4439,7 +4465,7 @@ class _WtwTileState extends ConsumerState<WtwTile> {
             if (daysGa.isNotEmpty)
               _WtwStatusRow(
                 item: {
-                  'label': 'Filterdagen',
+                  'label': 'Filtervervangen over',
                   'ga': daysGa,
                   'dpt': '7.001',
                 },
@@ -4488,11 +4514,11 @@ class _WtwTileState extends ConsumerState<WtwTile> {
       rows.add(
         _WtwStatusRow(
           item: {
-            'label': 'Filter vervangen',
+            'label': 'Filtervervangen',
             'ga': z['filterGa'],
             'dpt': '1.001',
-            'icon0': 'filter',
-            'icon1': 'filter_full',
+            'icon0': 'check',
+            'icon1': 'warning',
           },
           bus: bus,
         ),
@@ -4502,7 +4528,7 @@ class _WtwTileState extends ConsumerState<WtwTile> {
       rows.add(
         _WtwStatusRow(
           item: {
-            'label': 'Filter vervangen over',
+            'label': 'Filtervervangen over',
             'ga': daysGa,
             'dpt': '7.001',
             'unit': 'dagen',
