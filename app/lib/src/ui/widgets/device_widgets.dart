@@ -4381,14 +4381,7 @@ class _WtwTileState extends ConsumerState<WtwTile> {
             active: activeStand == s.id,
             onTap: commandGa.isEmpty
                 ? null
-                : () {
-                    if (s.id == 'auto') {
-                      // Toggle: auto uit → stand 1
-                      _press(activeStand == 'auto' ? 'stand1' : 'auto');
-                    } else {
-                      _press(s.id);
-                    }
-                  },
+                : () => _press(s.id),
           ),
       ];
     }
