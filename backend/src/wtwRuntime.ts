@@ -60,8 +60,47 @@ function logicEnabled(l: WtwZehnderLogic): boolean {
   return l.enabled !== false;
 }
 
-function valueIs(actual: unknown, wantOn: boolean): boolean {
-  return wantOn ? bitOn(actual) : !bitOn(actual);
+function wantedValue(
+  raw: unknown,
+  equals: boolean | undefined,
+  defaultOn: boolean
+): unknown {
+  if (raw != null && String(raw).trim() !== "") return raw;
+  if (typeof equals === "boolean") return equals;
+  return defaultOn;
+}
+
+function valueMatches(actual: unknown, want: unknown): boolean {
+  if (typeof want === "boolean") return want ? bitOn(actual) : !bitOn(actual);
+  const wantStr = String(want).trim();
+  if (wantStr === "") return false;
+  const lower = wantStr.toLowerCase();
+  if (lower === "true" || lower === "on") return bitOn(actual);
+  if (lower === "false" || lower === "off") return !bitOn(actual);
+  if (wantStr === "1" || wantStr === "0") {
+    const bitLike =
+      typeof actual === "boolean" ||
+      actual === 0 ||
+      actual === 1 ||
+      actual === "0" ||
+      actual === "1";
+    if (bitLike) return wantStr === "1" ? bitOn(actual) : !bitOn(actual);
+  }
+  const wantNum = Number(wantStr.replace(",", "."));
+  const actualNum =
+    typeof actual === "number" ? actual : Number(String(actual).replace(",", "."));
+  if (Number.isFinite(wantNum) && Number.isFinite(actualNum)) {
+    return Math.abs(actualNum - wantNum) < 1e-6;
+  }
+  return String(actual).trim().toLowerCase() === lower;
+}
+
+function triggerWant(logic: WtwZehnderLogic): unknown {
+  return wantedValue(logic.triggerValue, logic.triggerEquals, true);
+}
+
+function untilWant(logic: WtwZehnderLogic): unknown {
+  return wantedValue(logic.untilValue, logic.untilEquals, false);
 }
 
 function clampInt(n: unknown, fallback: number, min: number, max: number): number {
@@ -315,14 +354,14 @@ class WtwRuntime {
   ): void {
     const key = this.logicKey(device.id, logic.id);
     if (this.logicRuns.has(key)) return;
-    const want = logic.triggerEquals !== false;
-    if (!valueIs(value, want)) {
+    const want = triggerWant(logic);
+    if (!valueMatches(value, want)) {
       this.clearTrigger(key);
       return;
     }
     const holdMin = clampInt(logic.triggerMinutes, 0, 0, 1440);
     if (holdMin <= 0) {
-      if (prev !== undefined && !valueIs(prev, want)) {
+      if (prev !== undefined && !valueMatches(prev, want)) {
         void this.startLogic(device, z, logic);
       }
       return;
@@ -338,7 +377,7 @@ class WtwRuntime {
         const ga = asGa(live.logic.triggerGa);
         if (!bus || !ga) return;
         const st = bus.getState(ga);
-        if (!st || !valueIs(st.value, live.logic.triggerEquals !== false)) return;
+        if (!st || !valueMatches(st.value, triggerWant(live.logic))) return;
         void this.startLogic(live.device, live.z, live.logic);
       }, holdMin * 60_000)
     );
@@ -352,8 +391,8 @@ class WtwRuntime {
     const key = this.logicKey(deviceId, logic.id);
     const run = this.logicRuns.get(key);
     if (!run) return;
-    const want = logic.untilEquals === true;
-    if (valueIs(value, want)) {
+    const want = untilWant(logic);
+    if (valueMatches(value, want)) {
       if (run.untilTimer) return;
       const minutes = clampInt(logic.untilMinutes ?? logic.minutes, 5, 1, 1440);
       run.untilMs = Date.now() + minutes * 60_000;

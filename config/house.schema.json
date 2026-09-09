@@ -1032,6 +1032,7 @@
         "enabled": { "type": "boolean" },
         "label": { "type": "string" },
         "triggerGa": { "$ref": "#/definitions/gaPattern" },
+        "triggerValue": { "type": ["string", "number"] },
         "triggerEquals": { "type": "boolean" },
         "triggerMinutes": {
           "type": "integer",
@@ -1046,6 +1047,7 @@
         "end": { "type": "string", "enum": ["duration", "untilStatus"] },
         "minutes": { "type": "integer", "minimum": 1, "maximum": 1440 },
         "untilGa": { "$ref": "#/definitions/gaPattern" },
+        "untilValue": { "type": ["string", "number"] },
         "untilEquals": { "type": "boolean" },
         "untilMinutes": { "type": "integer", "minimum": 1, "maximum": 1440 },
         "after": {

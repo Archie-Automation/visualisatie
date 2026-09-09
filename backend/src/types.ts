@@ -870,7 +870,9 @@ export interface WtwZehnderLogic {
   enabled?: boolean;
   label?: string;
   triggerGa: string;
-  /** Default true (aan). */
+  /** Vergelijkingswaarde (DPT van het groepsadres). Oud: triggerEquals. */
+  triggerValue?: string | number;
+  /** @deprecated gebruik triggerValue; true = 1, false = 0. */
   triggerEquals?: boolean;
   /** 0 = meteen bij status. */
   triggerMinutes?: number;
@@ -879,6 +881,8 @@ export interface WtwZehnderLogic {
   /** Duur van de stand als end = duration. */
   minutes: number;
   untilGa?: string;
+  untilValue?: string | number;
+  /** @deprecated gebruik untilValue. */
   untilEquals?: boolean;
   untilMinutes?: number;
   /** Default previous. */

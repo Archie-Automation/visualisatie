@@ -2432,9 +2432,9 @@ class _WtwLogicListEditor extends StatelessWidget {
           title: 'Logica',
           body:
               'Wanneer groepsadres = waarde voor x min → dan stand voor x min, '
-              'of tot groepsadres = waarde voor x min. Daarna vorige of een vaste stand. '
-              'Boost voor x min schrijft die duur op het toestel (boost-tijd-GA); '
-              'de boost-tijd van de tegel blijft en gaat na afloop terug. '
+              'of tot groepsadres = waarde voor x min. De waarde is die van het DPT '
+              '(1/0, getal, …), geen aan/uit-label. '
+              'Boost voor x min schrijft die duur op het toestel; de tegel-tijd gaat na afloop terug. '
               '0 min bij wanneer = direct op flank. In de app: Regeling actief.',
           trailing: TextButton.icon(
             onPressed: () {
@@ -2442,12 +2442,12 @@ class _WtwLogicListEditor extends StatelessWidget {
                 'id': 'wtw-logic-${_uuid.v4()}',
                 'enabled': true,
                 'label': 'Nieuwe logica',
-                'triggerEquals': true,
+                'triggerValue': '1',
                 'triggerMinutes': 0,
                 'standId': 'stand3',
                 'end': 'duration',
                 'minutes': 15,
-                'untilEquals': false,
+                'untilValue': '0',
                 'untilMinutes': 5,
                 'after': 'previous',
               });
@@ -2459,7 +2459,7 @@ class _WtwLogicListEditor extends StatelessWidget {
         ),
         if (logics.isEmpty)
           Text(
-            'Nog geen logica. Voorbeeld: status aan voor 5 min → stand 3 voor 20 min, daarna vorige (vaak Auto).',
+            'Nog geen logica. Voorbeeld: groepsadres = 1 voor 5 min → stand 3 voor 20 min, daarna vorige.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         for (var i = 0; i < logics.length; i++)
@@ -2514,54 +2514,30 @@ class _WtwLogicCard extends StatelessWidget {
     'away': 'Afwezig',
   };
 
-  static const _valueLabels = {
-    'true': 'Aan (1)',
-    'false': 'Uit (0)',
-  };
-
-  Widget _gaField(String key) {
-    return _WtwLogicBox(
-      width: 196,
-      child: _InstallerStrField(
-        label: 'groepsadres',
-        value: logic[key] as String? ?? '',
-        compact: true,
-        gaSearch: true,
-        gaDptHint: 'DPT1.001',
-        onChanged: (v) => _set(key, v.trim()),
-      ),
-    );
+  String _valueText(String valueKey, String equalsKey, {required bool defaultTrue}) {
+    final raw = logic[valueKey];
+    if (raw != null && '$raw'.trim().isNotEmpty) return '$raw'.trim();
+    final eq = logic[equalsKey];
+    if (eq == false) return '0';
+    if (eq == true) return '1';
+    return defaultTrue ? '1' : '0';
   }
 
-  Widget _valueSelect(String key, {required bool defaultTrue}) {
-    final raw = logic[key];
-    final on = defaultTrue ? raw != false : raw == true;
-    return _WtwLogicBox(
-      width: 128,
-      child: _WtwLogicSelect(
-        value: on ? 'true' : 'false',
-        options: const ['true', 'false'],
-        labels: _valueLabels,
-        onChanged: (v) => _set(key, v == 'true'),
-      ),
-    );
-  }
-
-  Widget _minField(String key, {required int fallback, int min = 0}) {
-    return _WtwLogicBox(
-      width: 64,
-      child: _InstallerStrField(
-        label: 'min',
-        value: '${(logic[key] as num?)?.round() ?? fallback}',
-        compact: true,
-        number: true,
-        onChanged: (v) {
-          final n = int.tryParse(v);
-          if (n == null) return;
-          _set(key, n.clamp(min, 1440));
-        },
-      ),
-    );
+  void _setValue(String valueKey, String equalsKey, String raw) {
+    final v = raw.trim();
+    if (v.isEmpty) {
+      logic.remove(valueKey);
+    } else {
+      logic[valueKey] = v;
+    }
+    if (v == '1' || v.toLowerCase() == 'true') {
+      logic[equalsKey] = true;
+    } else if (v == '0' || v.toLowerCase() == 'false') {
+      logic[equalsKey] = false;
+    } else {
+      logic.remove(equalsKey);
+    }
+    onChanged();
   }
 
   @override
@@ -2570,6 +2546,7 @@ class _WtwLogicCard extends StatelessWidget {
     final end = logic['end'] as String? ?? 'duration';
     final standId = logic['standId'] as String? ?? 'stand3';
     final after = logic['after'] as String? ?? 'previous';
+    final title = Theme.of(context).textTheme.titleSmall;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: LuxeInsetCard(
@@ -2582,7 +2559,6 @@ class _WtwLogicCard extends StatelessWidget {
                   child: _InstallerStrField(
                     label: 'Naam',
                     value: logic['label'] as String? ?? '',
-                    compact: true,
                     onChanged: (v) => _set('label', v.trim()),
                   ),
                 ),
@@ -2597,64 +2573,92 @@ class _WtwLogicCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            _WtwLogicLine(children: [
-              const _WtwLogicWord('wanneer'),
-              _gaField('triggerGa'),
-              const _WtwLogicWord('='),
-              _valueSelect('triggerEquals', defaultTrue: true),
-              const _WtwLogicWord('voor'),
-              _minField('triggerMinutes', fallback: 0),
-              const _WtwLogicWord('min'),
-            ]),
-            _WtwLogicLine(children: [
-              const _WtwLogicWord('dan'),
-              _WtwLogicBox(
-                width: 140,
-                child: _WtwLogicSelect(
-                  value: standId,
-                  options: const [
-                    'stand1',
-                    'stand2',
-                    'stand3',
-                    'away',
-                    'boost',
-                  ],
-                  labels: _standLabels,
-                  onChanged: (v) => _set('standId', v),
-                ),
+            Text('wanneer', style: title),
+            const SizedBox(height: 6),
+            _InstallerStrField(
+              label: 'groepsadres',
+              value: logic['triggerGa'] as String? ?? '',
+              gaSearch: true,
+              onChanged: (v) => _set('triggerGa', v.trim()),
+            ),
+            _InstallerStrField(
+              label: 'waarde',
+              hint: 'volgens DPT van het groepsadres (1, 0, getal, …)',
+              value: _valueText('triggerValue', 'triggerEquals', defaultTrue: true),
+              onChanged: (v) => _setValue('triggerValue', 'triggerEquals', v),
+            ),
+            _InstallerStrField(
+              label: 'voor (min)',
+              value: '${(logic['triggerMinutes'] as num?)?.round() ?? 0}',
+              number: true,
+              onChanged: (v) {
+                final n = int.tryParse(v);
+                if (n == null) return;
+                _set('triggerMinutes', n.clamp(0, 1440));
+              },
+            ),
+            Text('dan', style: title),
+            const SizedBox(height: 6),
+            _WtwLogicLabeled(
+              label: 'stand',
+              child: _WtwLogicSelect(
+                value: standId,
+                options: const ['stand1', 'stand2', 'stand3', 'away', 'boost'],
+                labels: _standLabels,
+                onChanged: (v) => _set('standId', v),
               ),
-              _WtwLogicBox(
-                width: 88,
-                child: _WtwLogicSelect(
-                  value: end == 'untilStatus' ? 'untilStatus' : 'duration',
-                  options: const ['duration', 'untilStatus'],
-                  labels: const {
-                    'duration': 'voor',
-                    'untilStatus': 'tot',
-                  },
-                  onChanged: (v) => _set('end', v),
-                ),
+            ),
+            _WtwLogicLabeled(
+              label: 'einde',
+              child: _WtwLogicSelect(
+                value: end == 'untilStatus' ? 'untilStatus' : 'duration',
+                options: const ['duration', 'untilStatus'],
+                labels: const {
+                  'duration': 'voor x min',
+                  'untilStatus': 'tot groepsadres = waarde',
+                },
+                onChanged: (v) => _set('end', v),
               ),
-              if (end != 'untilStatus') ...[
-                _minField('minutes', fallback: 15, min: 1),
-                const _WtwLogicWord('min'),
-              ] else ...[
-                _gaField('untilGa'),
-                const _WtwLogicWord('='),
-                _valueSelect('untilEquals', defaultTrue: false),
-                const _WtwLogicWord('voor'),
-                _minField(
-                  'untilMinutes',
-                  fallback: (logic['minutes'] as num?)?.round() ?? 5,
-                  min: 1,
-                ),
-                const _WtwLogicWord('min'),
-              ],
-            ]),
+            ),
+            if (end != 'untilStatus')
+              _InstallerStrField(
+                label: standId == 'boost' ? 'boost-tijd / voor (min)' : 'voor (min)',
+                value: '${(logic['minutes'] as num?)?.round() ?? 15}',
+                number: true,
+                onChanged: (v) {
+                  final n = int.tryParse(v);
+                  if (n == null) return;
+                  _set('minutes', n.clamp(1, 1440));
+                },
+              )
+            else ...[
+              _InstallerStrField(
+                label: 'tot groepsadres',
+                value: logic['untilGa'] as String? ?? '',
+                gaSearch: true,
+                onChanged: (v) => _set('untilGa', v.trim()),
+              ),
+              _InstallerStrField(
+                label: 'waarde',
+                hint: 'volgens DPT van het groepsadres (1, 0, getal, …)',
+                value: _valueText('untilValue', 'untilEquals', defaultTrue: false),
+                onChanged: (v) => _setValue('untilValue', 'untilEquals', v),
+              ),
+              _InstallerStrField(
+                label: 'voor (min)',
+                value:
+                    '${(logic['untilMinutes'] as num?)?.round() ?? (logic['minutes'] as num?)?.round() ?? 5}',
+                number: true,
+                onChanged: (v) {
+                  final n = int.tryParse(v);
+                  if (n == null) return;
+                  _set('untilMinutes', n.clamp(1, 1440));
+                },
+              ),
+            ],
             if (standId == 'boost')
               Padding(
-                padding: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.only(bottom: 16),
                 child: Text(
                   end == 'untilStatus'
                       ? 'Boost schrijft boost-tijd op het toestel (180 min) tot de eindstatus; daarna de tegel-tijd terug.'
@@ -2662,25 +2666,21 @@ class _WtwLogicCard extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),
-            _WtwLogicLine(children: [
-              const _WtwLogicWord('daarna terug naar'),
-              _WtwLogicBox(
-                width: 180,
-                child: _WtwLogicSelect(
-                  value: _afterLabels.containsKey(after) ? after : 'previous',
-                  options: const [
-                    'previous',
-                    'auto',
-                    'stand1',
-                    'stand2',
-                    'stand3',
-                    'away',
-                  ],
-                  labels: _afterLabels,
-                  onChanged: (v) => _set('after', v),
-                ),
-              ),
-            ]),
+            Text('daarna terug naar', style: title),
+            const SizedBox(height: 6),
+            _WtwLogicSelect(
+              value: _afterLabels.containsKey(after) ? after : 'previous',
+              options: const [
+                'previous',
+                'auto',
+                'stand1',
+                'stand2',
+                'stand3',
+                'away',
+              ],
+              labels: _afterLabels,
+              onChanged: (v) => _set('after', v),
+            ),
           ],
         ),
       ),
@@ -2688,42 +2688,23 @@ class _WtwLogicCard extends StatelessWidget {
   }
 }
 
-class _WtwLogicLine extends StatelessWidget {
-  const _WtwLogicLine({required this.children});
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: children,
-      ),
-    );
-  }
-}
-
-class _WtwLogicWord extends StatelessWidget {
-  const _WtwLogicWord(this.text);
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(text, style: Theme.of(context).textTheme.bodyMedium);
-  }
-}
-
-class _WtwLogicBox extends StatelessWidget {
-  const _WtwLogicBox({required this.width, required this.child});
-  final double width;
+class _WtwLogicLabeled extends StatelessWidget {
+  const _WtwLogicLabeled({required this.label, required this.child});
+  final String label;
   final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(width: width, child: child);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LuxeFieldLabel(label),
+          child,
+        ],
+      ),
+    );
   }
 }
 
@@ -2745,23 +2726,16 @@ class _WtwLogicSelect extends StatelessWidget {
     return DropdownButtonFormField<String>(
       key: ValueKey('$v-${labels[v]}'),
       initialValue: v,
-      isDense: true,
+      isDense: false,
       isExpanded: true,
       decoration: luxeFilledDecoration().copyWith(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       ),
       items: [
         for (final o in options)
           DropdownMenuItem(
             value: o,
             child: Text(labels[o] ?? o),
-          ),
-      ],
-      selectedItemBuilder: (context) => [
-        for (final o in options)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Text(labels[o] ?? o, maxLines: 1, softWrap: false),
           ),
       ],
       onChanged: (x) {
