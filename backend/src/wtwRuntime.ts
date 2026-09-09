@@ -13,7 +13,9 @@ import {
   asGa,
   bitOn,
   pressZehnderStand,
+  readBoostMinutes,
   readZehnderActiveStand,
+  writeBoostMinutes,
   writeZehnderAuto,
   zehnderAutoIsOn,
   zehnderLogics
@@ -42,6 +44,7 @@ type LogicRun = {
   end: "duration" | "untilStatus";
   restoreStand: WtwZehnderStandId;
   after: string;
+  restoreBoostMinutes: number | null;
   untilMs: number | null;
   untilTimer?: ReturnType<typeof setTimeout>;
   durationTimer?: ReturnType<typeof setTimeout>;
@@ -381,11 +384,22 @@ class WtwRuntime {
 
     const restoreStand = readZehnderActiveStand(bus, z);
     const minutes = clampInt(logic.minutes, 15, 1, 1440);
+    const end = logic.end === "untilStatus" ? "untilStatus" : "duration";
     const cmd: { buttonId: WtwZehnderStandId; minutes?: number; on?: boolean } = {
       buttonId: stand,
       on: true
     };
-    if (stand === "boost") cmd.minutes = minutes;
+    let restoreBoostMinutes: number | null = null;
+    if (stand === "boost") {
+      restoreBoostMinutes = readBoostMinutes(bus, z);
+      cmd.minutes = end === "untilStatus" ? 180 : minutes;
+      if (!asGa(z.boostTimeGa)) {
+        logger.warn(
+          { deviceId: device.id, logicId: logic.id },
+          "WTW-logica boost zonder boostTimeGa — toestel gebruikt de laatst gezette tijd"
+        );
+      }
+    }
 
     try {
       await pressZehnderStand(z, bus, cmd);
@@ -394,7 +408,6 @@ class WtwRuntime {
       return;
     }
 
-    const end = logic.end === "untilStatus" ? "untilStatus" : "duration";
     const run: LogicRun = {
       deviceId: device.id,
       logicId: logic.id,
@@ -403,6 +416,7 @@ class WtwRuntime {
       end,
       restoreStand,
       after: logic.after ?? "previous",
+      restoreBoostMinutes,
       untilMs: null
     };
     this.logicRuns.set(key, run);
@@ -457,8 +471,12 @@ class WtwRuntime {
     try {
       await pressZehnderStand(z, bus, {
         buttonId: target,
-        on: true
+        on: true,
+        minutes: target === "boost" ? run.restoreBoostMinutes ?? undefined : undefined
       });
+      if (run.restoreBoostMinutes != null && target !== "boost") {
+        await writeBoostMinutes(z, bus, run.restoreBoostMinutes);
+      }
       logger.info(
         { deviceId, logicId, reason, target },
         "WTW-logica klaar — terug naar stand"

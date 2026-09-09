@@ -76,6 +76,35 @@ export function zehnderWriteGa(
   return row ? asGa(z[row.ga]) : undefined;
 }
 
+export async function writeBoostMinutes(
+  z: WtwZehnderComfoConnect,
+  bus: KnxBus,
+  minutes: number
+): Promise<boolean> {
+  const ga = asGa(z.boostTimeGa);
+  if (!ga) return false;
+  const clamped = Math.min(180, Math.max(1, Math.round(minutes)));
+  await bus.write(ga, "uint16", Math.min(65535, clamped * 60));
+  return true;
+}
+
+/** Ingestelde boostduur in minuten (status-GA, anders set-GA, anders config). */
+export function readBoostMinutes(
+  bus: KnxBus,
+  z: WtwZehnderComfoConnect
+): number {
+  for (const key of ["boostTimeStatusGa", "boostTimeGa"] as const) {
+    const ga = asGa(z[key]);
+    if (!ga) continue;
+    const raw = bus.getState(ga)?.value;
+    const n = typeof raw === "number" ? raw : Number(raw);
+    if (!Number.isFinite(n) || n <= 0) continue;
+    if (n >= 60) return Math.min(180, Math.max(1, Math.round(n / 60)));
+    return Math.min(180, Math.max(1, Math.round(n)));
+  }
+  return Math.min(180, Math.max(1, z.minutes ?? 30));
+}
+
 export async function writeZehnderAuto(
   z: WtwZehnderComfoConnect,
   bus: KnxBus,
@@ -109,13 +138,8 @@ export async function pressZehnderStand(
     await delay(AUTO_OFF_SETTLE_MS);
   }
 
-  if (cmd.buttonId === "boost" && cmd.on !== false && z.boostTimeGa) {
-    const minutes = cmd.minutes ?? z.minutes ?? 30;
-    await bus.write(
-      z.boostTimeGa,
-      "uint16",
-      Math.min(65535, Math.max(1, minutes * 60))
-    );
+  if (cmd.buttonId === "boost" && cmd.on !== false) {
+    await writeBoostMinutes(z, bus, cmd.minutes ?? z.minutes ?? 30);
   }
   await bus.write(ga, "bit", cmd.on === false ? false : true);
 }
