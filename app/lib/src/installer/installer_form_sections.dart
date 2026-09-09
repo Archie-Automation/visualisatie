@@ -2273,9 +2273,12 @@ class _WtwInstallerSectionState extends State<WtwInstallerSection> {
             _wtwModelNone: 'Kies type…',
             'zehnder_comfoConnect': 'Zehnder ComfoConnect',
             'duco_connectivity_board': 'Duco Connectivity Board',
-            'mv_1contact': 'MV — 1 contact (aan/uit)',
-            'mv_scene': 'MV — Scene (2 contacten)',
-            'mv_0_10v': 'MV — 0–10V (percentage)',
+            'mv_1contact':
+                'Mechanische Ventilatie — 2 standen, 1 contact (aan/uit)',
+            'mv_scene':
+                'Mechanische Ventilatie — 3 standen, 2 contacten (scene sturing)',
+            'mv_0_10v':
+                'Mechanische Ventilatie — 4 standen, 0–10V (percentage)',
             'modbus_universal': 'Universeel (Modbus / vrij)',
           },
           onChanged: _setModel,
@@ -2682,7 +2685,7 @@ class _WtwMvInstallerState extends State<_WtwMvInstaller> {
       children: [
         if (_is1Contact) ...[
           _InstallerInfoTitle(
-            title: '1 contact (aan/uit)',
+            title: '2 standen, 1 contact (aan/uit)',
             body: 'Eén bitcontact: aan = hoog toerental, uit = laag.',
           ),
           _gaEditor('switchGa', 'Schakel GA (DPT 1.001)', dpt: 'DPT1.001'),
@@ -2690,7 +2693,7 @@ class _WtwMvInstallerState extends State<_WtwMvInstaller> {
         ],
         if (_isScene) ...[
           _InstallerInfoTitle(
-            title: 'Scene (2 contacten)',
+            title: '3 standen, 2 contacten (scene sturing)',
             body:
                 'Twee relaiscontacten via KNX scene:\n'
                 '• Beide uit = laag\n'
@@ -2708,10 +2711,10 @@ class _WtwMvInstallerState extends State<_WtwMvInstaller> {
         ],
         if (_is0_10v) ...[
           _InstallerInfoTitle(
-            title: '0–10V (percentage)',
+            title: '4 standen, 0–10V (percentage)',
             body:
                 'Byte-waarde 0–255 op de bus (= 0–100%). '
-                'Maak hieronder standen aan met een gewenst percentage.',
+                'Maak hieronder max. 4 standen aan met een gewenst percentage.',
           ),
           _gaEditor('commandGa', 'Command GA (DPT 5.001)', dpt: 'DPT5.001'),
           _gaEditor('statusGa', 'Status GA (DPT 5.001)', dpt: 'DPT5.001'),
@@ -2724,14 +2727,6 @@ class _WtwMvInstallerState extends State<_WtwMvInstaller> {
             },
           ),
         ],
-        const SizedBox(height: 8),
-        _InstallerInfoTitle(
-          title: 'Storing en filter',
-          body: 'Optioneel: storingsbit, filter-indicator.',
-        ),
-        _gaEditor('faultGa', 'Storing GA (DPT 1.001)', dpt: 'DPT1.001'),
-        _gaEditor('filterGa', 'Filter vervangen GA (DPT 1.001)', dpt: 'DPT1.001'),
-        _gaEditor('filterDaysGa', 'Filter vervangen over (dagen, DPT 7.001)', dpt: 'DPT7.001'),
         const SizedBox(height: 12),
         _WtwLogicListEditor(
           zehnder: widget.mv,
@@ -3152,25 +3147,31 @@ class _MvStandsEditor extends StatelessWidget {
   final Map<String, dynamic> mv;
   final VoidCallback onChanged;
 
+  static const _maxStands = 4;
+
   @override
   Widget build(BuildContext context) {
     final stands = _ensureList(mv, 'stands');
+    final canAdd = stands.length < _maxStands;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Row(
           children: [
-            Text('Standen', style: Theme.of(context).textTheme.titleSmall),
+            Text('Standen (max $_maxStands)',
+                style: Theme.of(context).textTheme.titleSmall),
             const Spacer(),
             TextButton.icon(
-              onPressed: () {
-                stands.add(<String, dynamic>{
-                  'id': 'stand${stands.length + 1}',
-                  'label': 'Stand ${stands.length + 1}',
-                  'percent': 50,
-                });
-                onChanged();
-              },
+              onPressed: canAdd
+                  ? () {
+                      stands.add(<String, dynamic>{
+                        'id': 'stand${stands.length + 1}',
+                        'label': 'Stand ${stands.length + 1}',
+                        'percent': 50,
+                      });
+                      onChanged();
+                    }
+                  : null,
               icon: const Icon(Icons.add, size: 18),
               label: const Text('Stand'),
             ),
@@ -3180,7 +3181,7 @@ class _MvStandsEditor extends StatelessWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Text(
-              'Nog geen standen. Tik + om een stand aan te maken.',
+              'Nog geen standen. Tik + om een stand aan te maken (max $_maxStands).',
               style: Theme.of(context).textTheme.bodySmall,
             ),
           ),
@@ -3201,8 +3202,12 @@ class _MvStandsEditor extends StatelessWidget {
                         value: stands[i]['label']?.toString() ?? '',
                         onChanged: (v) {
                           stands[i]['label'] = v.trim();
-                          final id = v.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
-                          stands[i]['id'] = id.isEmpty ? 'stand${i + 1}' : id;
+                          final id = v
+                              .trim()
+                              .toLowerCase()
+                              .replaceAll(RegExp(r'[^a-z0-9]'), '_');
+                          stands[i]['id'] =
+                              id.isEmpty ? 'stand${i + 1}' : id;
                           onChanged();
                         },
                       ),

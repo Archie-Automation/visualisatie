@@ -1115,13 +1115,10 @@
         "statusGa": { "$ref": "#/definitions/gaPattern", "description": "0–10V: byte-status-GA lezen." },
         "stands": {
           "type": "array",
-          "description": "0–10V: instelbare standen met percentage.",
+          "description": "0–10V: instelbare standen met percentage (max 4).",
           "items": { "$ref": "#/definitions/mvStand" },
-          "maxItems": 10
+          "maxItems": 4
         },
-        "faultGa": { "$ref": "#/definitions/gaPattern" },
-        "filterGa": { "$ref": "#/definitions/gaPattern" },
-        "filterDaysGa": { "$ref": "#/definitions/gaPattern" },
         "logics": {
           "type": "array",
           "description": "KNX-status → MV-stand. Meerdere regels mogelijk.",
