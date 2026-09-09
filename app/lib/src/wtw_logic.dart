@@ -8,6 +8,7 @@ class WtwLogicActive {
     required this.standId,
     required this.end,
     this.untilMs,
+    this.boostUntilMs,
   });
 
   final String deviceId;
@@ -16,65 +17,26 @@ class WtwLogicActive {
   final String standId;
   final String end;
   final int? untilMs;
+  final int? boostUntilMs;
 
   factory WtwLogicActive.fromJson(Map<String, dynamic> j) {
-    final until = j['untilMs'];
+    int? asMs(Object? v) => v is num ? v.toInt() : null;
     return WtwLogicActive(
       deviceId: j['deviceId'] as String? ?? '',
       logicId: j['logicId'] as String? ?? '',
       label: (j['label'] as String? ?? '').trim(),
       standId: j['standId'] as String? ?? '',
       end: j['end'] as String? ?? 'duration',
-      untilMs: until is num ? until.toInt() : null,
+      untilMs: asMs(j['untilMs']),
+      boostUntilMs: asMs(j['boostUntilMs']),
     );
   }
 
-  DateTime? get until {
-    final ms = untilMs;
+  DateTime? get boostUntil {
+    final ms = boostUntilMs ?? (standId == 'boost' ? untilMs : null);
     if (ms == null) return null;
     if (ms <= DateTime.now().millisecondsSinceEpoch) return null;
     return DateTime.fromMillisecondsSinceEpoch(ms);
-  }
-
-  Duration? remaining([DateTime? now]) {
-    final u = until;
-    if (u == null) return null;
-    final left = u.difference(now ?? DateTime.now());
-    if (left <= Duration.zero) return null;
-    return left;
-  }
-
-  String standLabel() => switch (standId) {
-        'stand1' => 'stand 1',
-        'stand2' => 'stand 2',
-        'stand3' => 'stand 3',
-        'away' => 'afwezig',
-        'boost' => 'boost',
-        _ => standId,
-      };
-
-  String statusText([DateTime? now]) {
-    final parts = <String>['Actief'];
-    if (label.isNotEmpty) parts.add(label);
-    parts.add(standLabel());
-    final left = remaining(now);
-    if (left != null) parts.add(_formatLeft(left));
-    return parts.join(' · ');
-  }
-
-  static String _formatLeft(Duration d) {
-    final total = d.inMinutes;
-    if (total >= 60) {
-      final h = d.inHours;
-      final m = d.inMinutes.remainder(60);
-      if (m == 0) return '$h u';
-      return '$h u ${m.toString().padLeft(2, '0')} min';
-    }
-    if (total < 1) {
-      final s = d.inSeconds.clamp(1, 59);
-      return '$s s';
-    }
-    return '$total min';
   }
 }
 
@@ -90,6 +52,19 @@ class WtwLogicStore extends Notifier<List<WtwLogicActive>> {
 extension WtwLogicActiveList on List<WtwLogicActive> {
   List<WtwLogicActive> forDevice(String id) =>
       [for (final r in this) if (r.deviceId == id) r];
+
+  DateTime? boostUntilFor(String deviceId) {
+    DateTime? best;
+    for (final r in forDevice(deviceId)) {
+      final t = r.boostUntil;
+      if (t == null) continue;
+      if (best == null || t.isAfter(best)) best = t;
+    }
+    return best;
+  }
+
+  bool boostActiveFor(String deviceId) =>
+      forDevice(deviceId).any((r) => r.standId == 'boost');
 }
 
 final wtwLogicProvider =

@@ -860,22 +860,39 @@ export type WtwZehnderLogicAfter =
   | "stand3"
   | "away";
 
+export type WtwLogicJoin = "or" | "and";
+
+export interface WtwLogicClause {
+  ga: string;
+  value?: string | number;
+  equals?: boolean;
+  minutes?: number;
+}
+
 /**
  * Wanneer status-GA = waarde voor N min → stand.
- * Einde: voor N min, of tot (andere) status-GA = waarde voor N min.
+ * Meerdere statussen: whenJoin en/of. Einde: duur, of tot untilWhen (en/of).
  * Daarna: vorige stand (incl. Auto) of een gekozen stand.
  */
 export interface WtwZehnderLogic {
   id: string;
   enabled?: boolean;
   label?: string;
-  triggerGa: string;
+  triggerGa?: string;
   /** Vergelijkingswaarde (DPT van het groepsadres). Oud: triggerEquals. */
   triggerValue?: string | number;
   /** @deprecated gebruik triggerValue; true = 1, false = 0. */
   triggerEquals?: boolean;
   /** 0 = meteen bij status. */
   triggerMinutes?: number;
+  /** Tweede wanneer-voorwaarde (legacy; gebruik `when`). */
+  orGa?: string;
+  orValue?: string | number;
+  orEquals?: boolean;
+  orMinutes?: number;
+  /** Wanneer-statussen. Leeg = triggerGa (+ orGa). */
+  when?: WtwLogicClause[];
+  whenJoin?: WtwLogicJoin;
   standId: WtwZehnderLogicStandId;
   end?: "duration" | "untilStatus";
   /** Duur van de stand als end = duration. */
@@ -885,6 +902,8 @@ export interface WtwZehnderLogic {
   /** @deprecated gebruik untilValue. */
   untilEquals?: boolean;
   untilMinutes?: number;
+  untilWhen?: WtwLogicClause[];
+  untilJoin?: WtwLogicJoin;
   /** Default previous. */
   after?: WtwZehnderLogicAfter;
 }

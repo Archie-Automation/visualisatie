@@ -4008,6 +4008,10 @@ class _WtwTileState extends ConsumerState<WtwTile> {
         }
       });
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _applyLogicBoostTimer(ref.read(wtwLogicProvider)));
+    });
   }
 
   @override
@@ -4036,8 +4040,7 @@ class _WtwTileState extends ConsumerState<WtwTile> {
     return v.round().clamp(1, 180);
   }
 
-  int _setMinutes(Map<String, dynamic> z, BusState bus) {
-    if (_minutesOverride != null) return _minutesOverride!.clamp(1, 180);
+  int _busBoostMinutes(Map<String, dynamic> z, BusState bus) {
     for (final key in ['boostTimeStatusGa', 'boostTimeGa']) {
       final ga = (z[key] as String?)?.trim() ?? '';
       if (ga.isEmpty) continue;
@@ -4045,6 +4048,24 @@ class _WtwTileState extends ConsumerState<WtwTile> {
       if (v != null) return _minutesFromSetGa(v);
     }
     return (z['minutes'] as num?)?.round().clamp(1, 180) ?? 30;
+  }
+
+  int _setMinutes(Map<String, dynamic> z, BusState bus) {
+    if (_minutesOverride != null) return _minutesOverride!.clamp(1, 180);
+    if (ref.read(wtwLogicProvider).boostActiveFor(device.id)) {
+      return (z['minutes'] as num?)?.round().clamp(1, 180) ?? 30;
+    }
+    return _busBoostMinutes(z, bus);
+  }
+
+  void _applyLogicBoostTimer(List<WtwLogicActive> all) {
+    final until = all.boostUntilFor(device.id);
+    if (until == null) return;
+    if (_boostEndsAt != null &&
+        (_boostEndsAt!.difference(until).inSeconds.abs() < 2)) {
+      return;
+    }
+    _boostEndsAt = until;
   }
 
   Duration? _localRemaining() {
@@ -4124,13 +4145,23 @@ class _WtwTileState extends ConsumerState<WtwTile> {
 
     final bus = ref.watch(busProvider);
     final logicRuns = ref.watch(wtwLogicProvider).forDevice(device.id);
+    ref.listen<List<WtwLogicActive>>(wtwLogicProvider, (prev, next) {
+      setState(() => _applyLogicBoostTimer(next));
+    });
     final minutes = _setMinutes(z, bus);
     ref.listen<BusState>(busProvider, (prev, next) {
       if (prev == null) return;
       final on = _bitOn(next, z['boostStatusGa'] as String?);
       final was = _bitOn(prev, z['boostStatusGa'] as String?);
       if (on && !was) {
-        setState(() => _armBoost(_setMinutes(z, next)));
+        setState(() {
+          final logicUntil = ref.read(wtwLogicProvider).boostUntilFor(device.id);
+          if (logicUntil != null) {
+            _boostEndsAt = logicUntil;
+          } else {
+            _armBoost(_busBoostMinutes(z, next));
+          }
+        });
       } else if (!on && was) {
         setState(() => _boostEndsAt = null);
       }
@@ -4241,7 +4272,7 @@ class _WtwTileState extends ConsumerState<WtwTile> {
             SizedBox(height: DeviceControlBar.sectionSpacing(context)),
             const Divider(height: 1),
             const SizedBox(height: 12),
-            _WtwLogicActiveRow(runs: logicRuns),
+            const _WtwLogicActiveRow(),
           ],
           if (showSetMinutes || showRemaining) ...[
             SizedBox(height: DeviceControlBar.sectionSpacing(context)),
@@ -4449,18 +4480,13 @@ class _WtwRemainingRow extends StatelessWidget {
 }
 
 class _WtwLogicActiveRow extends StatelessWidget {
-  const _WtwLogicActiveRow({required this.runs});
-  final List<WtwLogicActive> runs;
+  const _WtwLogicActiveRow();
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-    final text = runs.length == 1
-        ? runs.first.statusText(now)
-        : '${runs.length} actief · ${runs.map((r) => r.statusText(now)).join(' · ')}';
     return _WtwMetricRow(
       label: 'Regeling',
-      trailing: _WtwValueBox(text: text, pulse: true, active: true),
+      trailing: const _WtwValueBox(text: 'Actief', pulse: true, active: true),
     );
   }
 }

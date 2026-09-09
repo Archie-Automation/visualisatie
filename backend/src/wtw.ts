@@ -170,7 +170,10 @@ export function collectZehnderSubscriptions(z: WtwZehnderComfoConnect): Array<{
   add(z.filterDaysGa, "uint16");
   for (const logic of zehnderLogics(z)) {
     add(logic.triggerGa, "bit");
+    add(logic.orGa, "bit");
     add(logic.untilGa, "bit");
+    for (const c of logic.when ?? []) add(c.ga, "bit");
+    for (const c of logic.untilWhen ?? []) add(c.ga, "bit");
   }
   return out;
 }

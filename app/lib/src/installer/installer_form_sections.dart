@@ -2431,24 +2431,27 @@ class _WtwLogicListEditor extends StatelessWidget {
         _InstallerInfoTitle(
           title: 'Logica',
           body:
-              'Wanneer groepsadres = waarde voor x min → dan stand voor x min, '
-              'of tot groepsadres = waarde voor x min. De waarde is die van het DPT '
-              '(1/0, getal, …), geen aan/uit-label. '
-              'Boost voor x min schrijft die duur op het toestel; de tegel-tijd gaat na afloop terug. '
-              '0 min bij wanneer = direct op flank. In de app: Regeling actief.',
+              'Wanneer één of meer groepsadressen = waarde (en/of). '
+              'Dan stand voor x min, of tot één of meer statussen (en/of). '
+              'Waarde volgens DPT. Boost: zelfde resterend-timer als handmatig. '
+              '+ status voor extra GA. 0 min bij wanneer = direct.',
           trailing: TextButton.icon(
             onPressed: () {
               logics.add({
                 'id': 'wtw-logic-${_uuid.v4()}',
                 'enabled': true,
                 'label': 'Nieuwe logica',
-                'triggerValue': '1',
-                'triggerMinutes': 0,
+                'when': [
+                  {'ga': '', 'value': '1', 'minutes': 0},
+                ],
+                'whenJoin': 'or',
                 'standId': 'stand3',
                 'end': 'duration',
                 'minutes': 15,
-                'untilValue': '0',
-                'untilMinutes': 5,
+                'untilWhen': [
+                  {'ga': '', 'value': '0', 'minutes': 5},
+                ],
+                'untilJoin': 'or',
                 'after': 'previous',
               });
               onChanged();
@@ -2514,32 +2517,6 @@ class _WtwLogicCard extends StatelessWidget {
     'away': 'Afwezig',
   };
 
-  String _valueText(String valueKey, String equalsKey, {required bool defaultTrue}) {
-    final raw = logic[valueKey];
-    if (raw != null && '$raw'.trim().isNotEmpty) return '$raw'.trim();
-    final eq = logic[equalsKey];
-    if (eq == false) return '0';
-    if (eq == true) return '1';
-    return defaultTrue ? '1' : '0';
-  }
-
-  void _setValue(String valueKey, String equalsKey, String raw) {
-    final v = raw.trim();
-    if (v.isEmpty) {
-      logic.remove(valueKey);
-    } else {
-      logic[valueKey] = v;
-    }
-    if (v == '1' || v.toLowerCase() == 'true') {
-      logic[equalsKey] = true;
-    } else if (v == '0' || v.toLowerCase() == 'false') {
-      logic[equalsKey] = false;
-    } else {
-      logic.remove(equalsKey);
-    }
-    onChanged();
-  }
-
   @override
   Widget build(BuildContext context) {
     final enabled = logic['enabled'] != false;
@@ -2575,27 +2552,14 @@ class _WtwLogicCard extends StatelessWidget {
             ),
             Text('wanneer', style: title),
             const SizedBox(height: 6),
-            _InstallerStrField(
-              label: 'groepsadres',
-              value: logic['triggerGa'] as String? ?? '',
-              gaSearch: true,
-              onChanged: (v) => _set('triggerGa', v.trim()),
-            ),
-            _InstallerStrField(
-              label: 'waarde',
-              hint: 'volgens DPT van het groepsadres (1, 0, getal, …)',
-              value: _valueText('triggerValue', 'triggerEquals', defaultTrue: true),
-              onChanged: (v) => _setValue('triggerValue', 'triggerEquals', v),
-            ),
-            _InstallerStrField(
-              label: 'voor (min)',
-              value: '${(logic['triggerMinutes'] as num?)?.round() ?? 0}',
-              number: true,
-              onChanged: (v) {
-                final n = int.tryParse(v);
-                if (n == null) return;
-                _set('triggerMinutes', n.clamp(0, 1440));
-              },
+            _WtwLogicClauseList(
+              logic: logic,
+              listKey: 'when',
+              joinKey: 'whenJoin',
+              defaultTrue: true,
+              defaultMinutes: 0,
+              minMinutes: 0,
+              onChanged: onChanged,
             ),
             Text('dan', style: title),
             const SizedBox(height: 6),
@@ -2632,28 +2596,14 @@ class _WtwLogicCard extends StatelessWidget {
                 },
               )
             else ...[
-              _InstallerStrField(
-                label: 'tot groepsadres',
-                value: logic['untilGa'] as String? ?? '',
-                gaSearch: true,
-                onChanged: (v) => _set('untilGa', v.trim()),
-              ),
-              _InstallerStrField(
-                label: 'waarde',
-                hint: 'volgens DPT van het groepsadres (1, 0, getal, …)',
-                value: _valueText('untilValue', 'untilEquals', defaultTrue: false),
-                onChanged: (v) => _setValue('untilValue', 'untilEquals', v),
-              ),
-              _InstallerStrField(
-                label: 'voor (min)',
-                value:
-                    '${(logic['untilMinutes'] as num?)?.round() ?? (logic['minutes'] as num?)?.round() ?? 5}',
-                number: true,
-                onChanged: (v) {
-                  final n = int.tryParse(v);
-                  if (n == null) return;
-                  _set('untilMinutes', n.clamp(1, 1440));
-                },
+              _WtwLogicClauseList(
+                logic: logic,
+                listKey: 'untilWhen',
+                joinKey: 'untilJoin',
+                defaultTrue: false,
+                defaultMinutes: 5,
+                minMinutes: 1,
+                onChanged: onChanged,
               ),
             ],
             if (standId == 'boost')
@@ -2686,6 +2636,214 @@ class _WtwLogicCard extends StatelessWidget {
       ),
     );
   }
+}
+
+}
+
+class _WtwLogicClauseList extends StatelessWidget {
+  const _WtwLogicClauseList({
+    required this.logic,
+    required this.listKey,
+    required this.joinKey,
+    required this.defaultTrue,
+    required this.defaultMinutes,
+    required this.minMinutes,
+    required this.onChanged,
+  });
+  final Map<String, dynamic> logic;
+  final String listKey;
+  final String joinKey;
+  final bool defaultTrue;
+  final int defaultMinutes;
+  final int minMinutes;
+  final VoidCallback onChanged;
+
+  List<Map<String, dynamic>> _clauses() {
+    if (listKey == 'when') _migrateWhen(logic);
+    if (listKey == 'untilWhen') _migrateUntil(logic);
+    return _ensureList(logic, listKey);
+  }
+
+  String _valueOf(Map<String, dynamic> c) {
+    final raw = c['value'];
+    if (raw != null && '$raw'.trim().isNotEmpty) return '$raw'.trim();
+    final eq = c['equals'];
+    if (eq == false) return '0';
+    if (eq == true) return '1';
+    return defaultTrue ? '1' : '0';
+  }
+
+  void _setValue(Map<String, dynamic> c, String raw) {
+    final v = raw.trim();
+    if (v.isEmpty) {
+      c.remove('value');
+    } else {
+      c['value'] = v;
+    }
+    if (v == '1' || v.toLowerCase() == 'true') {
+      c['equals'] = true;
+    } else if (v == '0' || v.toLowerCase() == 'false') {
+      c['equals'] = false;
+    } else {
+      c.remove('equals');
+    }
+    onChanged();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final clauses = _clauses();
+    if (clauses.isEmpty) {
+      clauses.add({
+        'ga': '',
+        'value': defaultTrue ? '1' : '0',
+        'minutes': defaultMinutes,
+      });
+    }
+    final join = logic[joinKey] == 'and' ? 'and' : 'or';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: _WtwLogicSelect(
+                value: join,
+                options: const ['or', 'and'],
+                labels: const {'or': 'of (één van de statussen)', 'and': 'en (alle statussen)'},
+                onChanged: (v) {
+                  logic[joinKey] = v;
+                  onChanged();
+                },
+              ),
+            ),
+            IconButton(
+              tooltip: 'Status toevoegen',
+              onPressed: () {
+                clauses.add({
+                  'ga': '',
+                  'value': defaultTrue ? '1' : '0',
+                  'minutes': defaultMinutes,
+                });
+                onChanged();
+              },
+              icon: const Icon(Icons.add),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        for (var i = 0; i < clauses.length; i++) ...[
+          if (i > 0)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Text(
+                join == 'and' ? 'en' : 'of',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+          _InstallerStrField(
+            label: 'groepsadres',
+            value: clauses[i]['ga'] as String? ?? '',
+            gaSearch: true,
+            onChanged: (v) {
+              clauses[i]['ga'] = v.trim();
+              onChanged();
+            },
+          ),
+          _InstallerStrField(
+            label: 'waarde',
+            hint: 'volgens DPT van het groepsadres (1, 0, getal, …)',
+            value: _valueOf(clauses[i]),
+            onChanged: (v) => _setValue(clauses[i], v),
+          ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _InstallerStrField(
+                  label: 'voor (min)',
+                  value: '${(clauses[i]['minutes'] as num?)?.round() ?? defaultMinutes}',
+                  number: true,
+                  onChanged: (v) {
+                    final n = int.tryParse(v);
+                    if (n == null) return;
+                    clauses[i]['minutes'] = n.clamp(minMinutes, 1440);
+                    onChanged();
+                  },
+                ),
+              ),
+              if (clauses.length > 1)
+                IconButton(
+                  tooltip: 'Status verwijderen',
+                  onPressed: () {
+                    clauses.removeAt(i);
+                    onChanged();
+                  },
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+Map<String, dynamic> _clause({
+  required String ga,
+  required String value,
+  required int minutes,
+}) =>
+    {'ga': ga, 'value': value, 'minutes': minutes};
+
+void _migrateWhen(Map<String, dynamic> logic) {
+  final raw = logic['when'];
+  if (raw is List && raw.isNotEmpty) return;
+  final first = _clause(
+    ga: (logic['triggerGa'] as String?) ?? '',
+    value: () {
+      final v = logic['triggerValue'];
+      if (v != null && '$v'.trim().isNotEmpty) return '$v'.trim();
+      return logic['triggerEquals'] == false ? '0' : '1';
+    }(),
+    minutes: (logic['triggerMinutes'] as num?)?.round() ?? 0,
+  );
+  final when = <Map<String, dynamic>>[first];
+  final orGa = (logic['orGa'] as String?)?.trim() ?? '';
+  if (orGa.isNotEmpty) {
+    when.add(
+      _clause(
+        ga: orGa,
+        value: () {
+          final v = logic['orValue'];
+          if (v != null && '$v'.trim().isNotEmpty) return '$v'.trim();
+          return logic['orEquals'] == false ? '0' : '1';
+        }(),
+        minutes: (logic['orMinutes'] as num?)?.round() ?? 0,
+      ),
+    );
+    logic['whenJoin'] ??= 'or';
+  }
+  logic['when'] = when;
+}
+
+void _migrateUntil(Map<String, dynamic> logic) {
+  final raw = logic['untilWhen'];
+  if (raw is List && raw.isNotEmpty) return;
+  final ga = (logic['untilGa'] as String?) ?? '';
+  logic['untilWhen'] = [
+    _clause(
+      ga: ga,
+      value: () {
+        final v = logic['untilValue'];
+        if (v != null && '$v'.trim().isNotEmpty) return '$v'.trim();
+        return logic['untilEquals'] == true ? '1' : '0';
+      }(),
+      minutes: (logic['untilMinutes'] as num?)?.round() ??
+          (logic['minutes'] as num?)?.round() ??
+          5,
+    ),
+  ];
 }
 
 class _WtwLogicLabeled extends StatelessWidget {

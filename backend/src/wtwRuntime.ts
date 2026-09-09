@@ -7,7 +7,9 @@ import type {
   WtwDevice,
   WtwZehnderComfoConnect,
   WtwZehnderLogic,
-  WtwZehnderStandId
+  WtwZehnderStandId,
+  WtwLogicClause,
+  WtwLogicJoin
 } from "./types";
 import {
   asGa,
@@ -29,6 +31,8 @@ export interface WtwLogicStatus {
   end: "duration" | "untilStatus";
   /** Epoch ms waarop de huidige timer eindigt; null = actief zonder afteller. */
   untilMs: number | null;
+  /** Boost-einde (zelfde als app-timer); null = geen boost van deze logica. */
+  boostUntilMs: number | null;
 }
 
 type BoostRestore = {
@@ -46,6 +50,7 @@ type LogicRun = {
   after: string;
   restoreBoostMinutes: number | null;
   untilMs: number | null;
+  boostUntilMs: number | null;
   untilTimer?: ReturnType<typeof setTimeout>;
   durationTimer?: ReturnType<typeof setTimeout>;
 };
@@ -103,6 +108,87 @@ function untilWant(logic: WtwZehnderLogic): unknown {
   return wantedValue(logic.untilValue, logic.untilEquals, false);
 }
 
+function orWant(logic: WtwZehnderLogic): unknown {
+  return wantedValue(logic.orValue, logic.orEquals, true);
+}
+
+function clauseWant(c: WtwLogicClause, defaultOn: boolean): unknown {
+  return wantedValue(c.value, c.equals, defaultOn);
+}
+
+function joinOf(raw: WtwLogicJoin | undefined): WtwLogicJoin {
+  return raw === "and" ? "and" : "or";
+}
+
+type TriggerArm = {
+  suffix: string;
+  ga: string;
+  want: unknown;
+  minutes: number;
+};
+
+function armsFromClauses(
+  clauses: WtwLogicClause[] | undefined,
+  prefix: string,
+  defaultOn: boolean,
+  minutesFallback: number,
+  minutesMin: number
+): TriggerArm[] {
+  if (!Array.isArray(clauses)) return [];
+  const out: TriggerArm[] = [];
+  clauses.forEach((c, i) => {
+    const ga = asGa(c.ga);
+    if (!ga) return;
+    out.push({
+      suffix: `${prefix}${i}`,
+      ga,
+      want: clauseWant(c, defaultOn),
+      minutes: clampInt(c.minutes, minutesFallback, minutesMin, 1440)
+    });
+  });
+  return out;
+}
+
+function whenArms(logic: WtwZehnderLogic): TriggerArm[] {
+  const fromList = armsFromClauses(logic.when, "w", true, 0, 0);
+  if (fromList.length > 0) return fromList;
+  const out: TriggerArm[] = [];
+  const ga = asGa(logic.triggerGa);
+  if (ga) {
+    out.push({
+      suffix: "main",
+      ga,
+      want: triggerWant(logic),
+      minutes: clampInt(logic.triggerMinutes, 0, 0, 1440)
+    });
+  }
+  const orGa = asGa(logic.orGa);
+  if (orGa) {
+    out.push({
+      suffix: "or",
+      ga: orGa,
+      want: orWant(logic),
+      minutes: clampInt(logic.orMinutes, 0, 0, 1440)
+    });
+  }
+  return out;
+}
+
+function untilArms(logic: WtwZehnderLogic): TriggerArm[] {
+  const fromList = armsFromClauses(logic.untilWhen, "u", false, 5, 1);
+  if (fromList.length > 0) return fromList;
+  const ga = asGa(logic.untilGa) ?? asGa(logic.triggerGa);
+  if (!ga) return [];
+  return [
+    {
+      suffix: "u0",
+      ga,
+      want: untilWant(logic),
+      minutes: clampInt(logic.untilMinutes ?? logic.minutes, 5, 1, 1440)
+    }
+  ];
+}
+
 function clampInt(n: unknown, fallback: number, min: number, max: number): number {
   const v = typeof n === "number" ? n : Number(n);
   if (!Number.isFinite(v)) return fallback;
@@ -116,6 +202,7 @@ class WtwRuntime {
   private boostRestore = new Map<string, BoostRestore>();
   private logicRuns = new Map<string, LogicRun>();
   private triggerTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private triggerHeld = new Set<string>();
   private listeners = new Set<LogicListener>();
 
   attach(bus: KnxBus): void {
@@ -136,6 +223,7 @@ class WtwRuntime {
     this.logicRuns.clear();
     for (const t of this.triggerTimers.values()) clearTimeout(t);
     this.triggerTimers.clear();
+    this.triggerHeld.clear();
     this.prev.clear();
     this.emit();
   }
@@ -157,7 +245,11 @@ class WtwRuntime {
         label: run.label,
         standId: run.standId,
         end: run.end,
-        untilMs
+        untilMs,
+        boostUntilMs:
+          run.boostUntilMs != null && run.boostUntilMs > now
+            ? run.boostUntilMs
+            : null
       });
     }
     return out;
@@ -251,6 +343,9 @@ class WtwRuntime {
       clearTimeout(t);
       this.triggerTimers.delete(key);
     }
+    for (const key of [...this.triggerHeld]) {
+      if (key.startsWith(`${deviceId}:`)) this.triggerHeld.delete(key);
+    }
     this.emit();
   }
 
@@ -263,9 +358,43 @@ class WtwRuntime {
 
   private clearTrigger(key: string): void {
     const t = this.triggerTimers.get(key);
-    if (!t) return;
-    clearTimeout(t);
-    this.triggerTimers.delete(key);
+    if (t) {
+      clearTimeout(t);
+      this.triggerTimers.delete(key);
+    }
+    this.triggerHeld.delete(key);
+  }
+
+  private clearLogicTriggers(deviceId: string, logicId: string): void {
+    const base = this.logicKey(deviceId, logicId);
+    this.clearTrigger(base);
+    for (const key of [...this.triggerTimers.keys()]) {
+      if (key.startsWith(`${base}:`)) this.clearTrigger(key);
+    }
+    for (const key of [...this.triggerHeld]) {
+      if (key === base || key.startsWith(`${base}:`)) this.triggerHeld.delete(key);
+    }
+  }
+
+  private clauseKey(deviceId: string, logicId: string, suffix: string): string {
+    return `${this.logicKey(deviceId, logicId)}:${suffix}`;
+  }
+
+  private allArmsReady(
+    bus: KnxBus,
+    deviceId: string,
+    logicId: string,
+    arms: TriggerArm[]
+  ): boolean {
+    if (arms.length === 0) return false;
+    for (const arm of arms) {
+      const st = bus.getState(arm.ga);
+      if (!st || !valueMatches(st.value, arm.want)) return false;
+      if (arm.minutes > 0 && !this.triggerHeld.has(this.clauseKey(deviceId, logicId, arm.suffix))) {
+        return false;
+      }
+    }
+    return true;
   }
 
   private zehnderOf(deviceId: string): WtwZehnderComfoConnect | null {
@@ -332,14 +461,16 @@ class WtwRuntime {
     if (!bus) return;
     for (const logic of zehnderLogics(z)) {
       if (!logicEnabled(logic) || !logic.id) continue;
-      const triggerGa = asGa(logic.triggerGa);
-      if (triggerGa && state.ga === triggerGa) {
-        this.tickTrigger(device, z, logic, state.value, prev);
+      for (const arm of whenArms(logic)) {
+        if (state.ga === arm.ga) {
+          this.tickTrigger(device, z, logic, arm, state.value, prev);
+        }
       }
       if (logic.end === "untilStatus") {
-        const untilGa = asGa(logic.untilGa) ?? triggerGa;
-        if (untilGa && state.ga === untilGa) {
-          this.tickUntilHold(device.id, logic, state.value);
+        for (const arm of untilArms(logic)) {
+          if (state.ga === arm.ga) {
+            this.tickUntil(device.id, logic, arm, state.value);
+          }
         }
       }
     }
@@ -349,63 +480,110 @@ class WtwRuntime {
     device: WtwDevice,
     z: WtwZehnderComfoConnect,
     logic: WtwZehnderLogic,
+    arm: TriggerArm,
     value: unknown,
     prev: unknown
   ): void {
-    const key = this.logicKey(device.id, logic.id);
-    if (this.logicRuns.has(key)) return;
-    const want = triggerWant(logic);
-    if (!valueMatches(value, want)) {
-      this.clearTrigger(key);
+    const runKey = this.logicKey(device.id, logic.id);
+    if (this.logicRuns.has(runKey)) return;
+    const timerKey = this.clauseKey(device.id, logic.id, arm.suffix);
+    const join = joinOf(logic.whenJoin);
+    if (!valueMatches(value, arm.want)) {
+      this.clearTrigger(timerKey);
       return;
     }
-    const holdMin = clampInt(logic.triggerMinutes, 0, 0, 1440);
-    if (holdMin <= 0) {
-      if (prev !== undefined && !valueMatches(prev, want)) {
-        void this.startLogic(device, z, logic);
+    const fire = (): void => {
+      const live = this.logicOf(device.id, logic.id);
+      if (!live || !logicEnabled(live.logic)) return;
+      const bus = this.bus;
+      if (!bus) return;
+      const arms = whenArms(live.logic);
+      if (joinOf(live.logic.whenJoin) === "and") {
+        if (this.allArmsReady(bus, device.id, logic.id, arms)) {
+          void this.startLogic(live.device, live.z, live.logic);
+        }
+        return;
       }
+      void this.startLogic(live.device, live.z, live.logic);
+    };
+    if (arm.minutes <= 0) {
+      const rising = prev !== undefined && !valueMatches(prev, arm.want);
+      if (join === "or") {
+        if (rising) fire();
+        return;
+      }
+      if (rising || prev === undefined) fire();
       return;
     }
-    if (this.triggerTimers.has(key)) return;
+    if (this.triggerTimers.has(timerKey) || this.triggerHeld.has(timerKey)) return;
     this.triggerTimers.set(
-      key,
+      timerKey,
       setTimeout(() => {
-        this.triggerTimers.delete(key);
-        const live = this.logicOf(device.id, logic.id);
-        if (!live || !logicEnabled(live.logic)) return;
+        this.triggerTimers.delete(timerKey);
         const bus = this.bus;
-        const ga = asGa(live.logic.triggerGa);
-        if (!bus || !ga) return;
-        const st = bus.getState(ga);
-        if (!st || !valueMatches(st.value, triggerWant(live.logic))) return;
-        void this.startLogic(live.device, live.z, live.logic);
-      }, holdMin * 60_000)
+        if (!bus) return;
+        const st = bus.getState(arm.ga);
+        if (!st || !valueMatches(st.value, arm.want)) return;
+        this.triggerHeld.add(timerKey);
+        fire();
+      }, arm.minutes * 60_000)
     );
   }
 
-  private tickUntilHold(
+  private tickUntil(
     deviceId: string,
     logic: WtwZehnderLogic,
+    arm: TriggerArm,
     value: unknown
   ): void {
     const key = this.logicKey(deviceId, logic.id);
     const run = this.logicRuns.get(key);
     if (!run) return;
-    const want = untilWant(logic);
-    if (valueMatches(value, want)) {
-      if (run.untilTimer) return;
-      const minutes = clampInt(logic.untilMinutes ?? logic.minutes, 5, 1, 1440);
-      run.untilMs = Date.now() + minutes * 60_000;
-      run.untilTimer = setTimeout(() => {
-        void this.endLogic(deviceId, logic.id, "until");
-      }, minutes * 60_000);
-      this.emit();
-    } else if (run.untilTimer) {
-      clearTimeout(run.untilTimer);
-      run.untilTimer = undefined;
-      run.untilMs = null;
-      this.emit();
+    const timerKey = this.clauseKey(deviceId, logic.id, arm.suffix);
+    const join = joinOf(logic.untilJoin);
+    if (!valueMatches(value, arm.want)) {
+      this.clearTrigger(timerKey);
+      if (run.untilTimer && join === "and") {
+        clearTimeout(run.untilTimer);
+        run.untilTimer = undefined;
+        run.untilMs = null;
+        this.emit();
+      }
+      return;
     }
+    const maybeEnd = (): void => {
+      const live = this.logicOf(deviceId, logic.id);
+      if (!live) return;
+      const bus = this.bus;
+      if (!bus) return;
+      const arms = untilArms(live.logic);
+      if (joinOf(live.logic.untilJoin) === "and") {
+        if (!this.allArmsReady(bus, deviceId, logic.id, arms)) return;
+      }
+      void this.endLogic(deviceId, logic.id, "until");
+    };
+    if (arm.minutes <= 0) {
+      maybeEnd();
+      return;
+    }
+    if (this.triggerTimers.has(timerKey) || this.triggerHeld.has(timerKey)) return;
+    const untilMs = Date.now() + arm.minutes * 60_000;
+    if (join === "or" || run.untilMs == null || untilMs < run.untilMs) {
+      run.untilMs = untilMs;
+    }
+    this.triggerTimers.set(
+      timerKey,
+      setTimeout(() => {
+        this.triggerTimers.delete(timerKey);
+        const bus = this.bus;
+        if (!bus) return;
+        const st = bus.getState(arm.ga);
+        if (!st || !valueMatches(st.value, arm.want)) return;
+        this.triggerHeld.add(timerKey);
+        maybeEnd();
+      }, arm.minutes * 60_000)
+    );
+    this.emit();
   }
 
   private async startLogic(
@@ -419,7 +597,7 @@ class WtwRuntime {
     if (!stand) return;
     const key = this.logicKey(device.id, logic.id);
     if (this.logicRuns.has(key)) return;
-    this.clearTrigger(key);
+    this.clearLogicTriggers(device.id, logic.id);
 
     const restoreStand = readZehnderActiveStand(bus, z);
     const minutes = clampInt(logic.minutes, 15, 1, 1440);
@@ -429,9 +607,11 @@ class WtwRuntime {
       on: true
     };
     let restoreBoostMinutes: number | null = null;
+    let boostUntilMs: number | null = null;
     if (stand === "boost") {
       restoreBoostMinutes = readBoostMinutes(bus, z);
       cmd.minutes = end === "untilStatus" ? 180 : minutes;
+      boostUntilMs = Date.now() + cmd.minutes * 60_000;
       if (!asGa(z.boostTimeGa)) {
         logger.warn(
           { deviceId: device.id, logicId: logic.id },
@@ -456,7 +636,8 @@ class WtwRuntime {
       restoreStand,
       after: logic.after ?? "previous",
       restoreBoostMinutes,
-      untilMs: null
+      untilMs: null,
+      boostUntilMs
     };
     this.logicRuns.set(key, run);
     if (end !== "untilStatus") {
@@ -465,10 +646,9 @@ class WtwRuntime {
         void this.endLogic(device.id, logic.id, "duration");
       }, minutes * 60_000);
     } else {
-      const untilGa = asGa(logic.untilGa) ?? asGa(logic.triggerGa);
-      if (untilGa) {
-        const st = bus.getState(untilGa);
-        if (st) this.tickUntilHold(device.id, logic, st.value);
+      for (const arm of untilArms(logic)) {
+        const st = bus.getState(arm.ga);
+        if (st) this.tickUntil(device.id, logic, arm, st.value);
       }
     }
     this.emit();
@@ -496,6 +676,7 @@ class WtwRuntime {
     if (!run) return;
     this.logicRuns.delete(key);
     this.clearRunTimers(run);
+    this.clearLogicTriggers(deviceId, logicId);
     this.emit();
     const others = [...this.logicRuns.values()].some((r) => r.deviceId === deviceId);
     if (others) {

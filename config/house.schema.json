@@ -1023,6 +1023,19 @@
         }
       }
     },
+    "wtwLogicClause": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ga": {
+          "type": "string",
+          "pattern": "^$|^([0-9]{1,2})/([0-9]{1,2})/([0-9]{1,3})$"
+        },
+        "value": { "type": ["string", "number"] },
+        "equals": { "type": "boolean" },
+        "minutes": { "type": "integer", "minimum": 0, "maximum": 1440 }
+      }
+    },
     "wtwZehnderLogic": {
       "type": "object",
       "additionalProperties": false,
@@ -1040,6 +1053,19 @@
           "maximum": 1440,
           "description": "Status moet zolang aanhouden voordat de stand start. 0 = meteen."
         },
+        "orGa": { "$ref": "#/definitions/gaPattern" },
+        "orValue": { "type": ["string", "number"] },
+        "orEquals": { "type": "boolean" },
+        "orMinutes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1440
+        },
+        "when": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/wtwLogicClause" }
+        },
+        "whenJoin": { "type": "string", "enum": ["or", "and"] },
         "standId": {
           "type": "string",
           "enum": ["stand1", "stand2", "stand3", "away", "boost"]
@@ -1050,6 +1076,11 @@
         "untilValue": { "type": ["string", "number"] },
         "untilEquals": { "type": "boolean" },
         "untilMinutes": { "type": "integer", "minimum": 1, "maximum": 1440 },
+        "untilWhen": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/wtwLogicClause" }
+        },
+        "untilJoin": { "type": "string", "enum": ["or", "and"] },
         "after": {
           "type": "string",
           "enum": ["previous", "auto", "stand1", "stand2", "stand3", "away"]
