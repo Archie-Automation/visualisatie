@@ -2498,8 +2498,22 @@ class _WtwDucoInstaller extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         _InstallerInfoTitle(
-          title: 'Filter',
-          body: 'Filter vervangen: 1-bit. Filterdagen: DPT 7.001 (2 bytes).',
+          title: 'Storing en filter',
+          body: 'Storing en filter vervangen: 1-bit. Filterdagen: DPT 7.001 (2 bytes).',
+        ),
+        _InstallerStrField(
+          label: 'Storing GA (DPT 1.001)',
+          value: duco['faultGa'] as String? ?? '',
+          gaSearch: true,
+          gaDptHint: 'DPT1.001',
+          onChanged: (v) {
+            if (v.trim().isEmpty) {
+              duco.remove('faultGa');
+            } else {
+              duco['faultGa'] = v.trim();
+            }
+            onChanged();
+          },
         ),
         _InstallerStrField(
           label: 'Filter vervangen GA (DPT 1.001)',

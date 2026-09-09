@@ -4335,33 +4335,39 @@ class _WtwTileState extends ConsumerState<WtwTile> {
     final activeStand = _ducoActiveStand(bus, statusGa);
     final commandGa = (duc['commandGa'] as String?)?.trim() ?? '';
 
-    const stands = <({String id, String label})>[
+    const speedStands = <({String id, String label})>[
       (id: 'stand1', label: '1'),
       (id: 'stand2', label: '2'),
       (id: 'stand3', label: '3'),
+    ];
+    const modeStands = <({String id, String label})>[
       (id: 'auto', label: 'Automatisch'),
       (id: 'away', label: 'Afwezig'),
     ];
 
-    final buttonItems = [
-      for (final s in stands)
-        DeviceControlItem(
-          icon: switch (s.id) {
-            'away' => Icons.luggage_outlined,
-            _ => null,
-          },
-          glyph: s.id == 'auto' ? const _WtwAutoGlyph() : null,
-          label: deviceControlNumericLabel(s.label) ?? s.label,
-          labelMode: deviceControlNumericLabel(s.label) != null
-              ? DeviceControlLabelMode.numeric
-              : DeviceControlLabelMode.iconOnly,
-          active: activeStand == s.id,
-          onTap: commandGa.isEmpty
-              ? null
-              : () => _press(s.id),
-        ),
-    ];
+    List<DeviceControlItem> _ducoButtons(
+        List<({String id, String label})> stands) {
+      return [
+        for (final s in stands)
+          DeviceControlItem(
+            icon: switch (s.id) {
+              'away' => Icons.luggage_outlined,
+              _ => null,
+            },
+            glyph: s.id == 'auto' ? const _WtwAutoGlyph() : null,
+            label: deviceControlNumericLabel(s.label) ?? s.label,
+            labelMode: deviceControlNumericLabel(s.label) != null
+                ? DeviceControlLabelMode.numeric
+                : DeviceControlLabelMode.iconOnly,
+            active: activeStand == s.id,
+            onTap: commandGa.isEmpty
+                ? null
+                : () => _press(s.id),
+          ),
+      ];
+    }
 
+    final hasFault = _hasGa(duc, 'faultGa');
     final hasFilter = _hasGa(duc, 'filterGa');
     final daysGa = _ga(duc, 'filterDaysGa');
 
@@ -4380,27 +4386,45 @@ class _WtwTileState extends ConsumerState<WtwTile> {
                   ?.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
-          if (buttonItems.isNotEmpty) ...[
-            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
-            DeviceControlSection(
-              title: 'STAND',
-              child: DeviceControlBar.grid(
-                context,
-                buttonItems,
-                perRow: DeviceControlBar.autoPerRow(context, 5),
-              ),
+          SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+          DeviceControlSection(
+            title: 'STAND',
+            child: DeviceControlBar.grid(
+              context,
+              _ducoButtons(speedStands),
+              perRow: 3,
             ),
-          ],
+          ),
+          const SizedBox(height: 8),
+          DeviceControlSection(
+            title: 'MODUS',
+            child: DeviceControlBar.grid(
+              context,
+              _ducoButtons(modeStands),
+              perRow: 2,
+            ),
+          ),
           if (logicRuns.isNotEmpty) ...[
             SizedBox(height: DeviceControlBar.sectionSpacing(context)),
             const Divider(height: 1),
             const SizedBox(height: 12),
             const _WtwLogicActiveRow(),
           ],
-          if (hasFilter || daysGa.isNotEmpty) ...[
+          if (hasFault || hasFilter || daysGa.isNotEmpty) ...[
             SizedBox(height: DeviceControlBar.sectionSpacing(context)),
             const Divider(height: 1),
             const SizedBox(height: 12),
+            if (hasFault)
+              _WtwStatusRow(
+                item: {
+                  'label': 'Storing',
+                  'ga': duc['faultGa'],
+                  'dpt': '1.001',
+                  'icon0': 'check',
+                  'icon1': 'warning',
+                },
+                bus: bus,
+              ),
             if (hasFilter)
               _WtwStatusRow(
                 item: {

@@ -241,6 +241,7 @@ export function collectDucoSubscriptions(d: WtwDucoConnectivityBoard): Array<{
   };
   add(d.commandGa, "byte");
   add(d.statusGa, "byte");
+  add(d.faultGa, "bit");
   add(d.filterGa, "bit");
   add(d.filterDaysGa, "uint16");
   for (const logic of ducoLogics(d)) {
