@@ -2638,8 +2638,6 @@ class _WtwLogicCard extends StatelessWidget {
   }
 }
 
-}
-
 class _WtwLogicClauseList extends StatelessWidget {
   const _WtwLogicClauseList({
     required this.logic,
