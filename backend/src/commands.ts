@@ -714,6 +714,10 @@ export async function dispatch(
         await wtwRuntime.pressDuco(device, bus, cmd);
         return;
       }
+      if (device.wtw.model?.startsWith("mv_") && device.wtw.mv) {
+        await wtwRuntime.pressMv(device, bus, cmd);
+        return;
+      }
       if (device.wtw.model !== "zehnder_comfoConnect" || !device.wtw.zehnder) {
         throw new Error("WTW-type is niet ingesteld");
       }

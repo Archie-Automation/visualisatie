@@ -840,7 +840,12 @@ export type WtwDpt =
   | "hex";    // Allen voor status: waarde als hex-string weergeven
 
 /** Welk WTW-model; bepaalt welke GAs en functies de installer toont. */
-export type WtwModel = "zehnder_comfoConnect" | "duco_connectivity_board";
+export type WtwModel =
+  | "zehnder_comfoConnect"
+  | "duco_connectivity_board"
+  | "mv_1contact"
+  | "mv_scene"
+  | "mv_0_10v";
 
 export type WtwZehnderStandId =
   | "away"
@@ -1018,10 +1023,82 @@ export interface WtwDucoConnectivityBoard {
   logics?: WtwDucoLogic[];
 }
 
+/* ---------- MV (mechanische ventilatie) ------------------------------- */
+
+/** Gebruikersdefineerde stand voor 0–10V MV. */
+export interface MvStand {
+  id: string;
+  label: string;
+  /** Percentage (0-100). Wordt als byte (0-255) op de bus geschreven. */
+  percent: number;
+}
+
+/**
+ * MV logic: identiek aan Duco-logica maar standId is een vrije string
+ * ("low"/"high" voor 1-contact, "low"/"mid"/"high" voor scene,
+ * of een stand-id uit de stands-array voor 0–10V).
+ */
+export interface WtwMvLogic {
+  id: string;
+  enabled?: boolean;
+  label?: string;
+  triggerMode?: "status" | "tempRise";
+  tempRise?: WtwTempRiseTrigger;
+  triggerGa?: string;
+  triggerValue?: string | number;
+  triggerEquals?: boolean;
+  triggerMinutes?: number;
+  orGa?: string;
+  orValue?: string | number;
+  orEquals?: boolean;
+  orMinutes?: number;
+  when?: WtwLogicClause[];
+  whenJoin?: WtwLogicJoin;
+  /** Stand-id: "low"/"high"/"mid" of custom id uit stands[]. */
+  standId: string;
+  end?: "duration" | "untilStatus";
+  minutes: number;
+  untilGa?: string;
+  untilValue?: string | number;
+  untilEquals?: boolean;
+  untilMinutes?: number;
+  untilWhen?: WtwLogicClause[];
+  untilJoin?: WtwLogicJoin;
+  /** "previous" of een stand-id. */
+  after?: string;
+}
+
+/**
+ * Mechanische Ventilatie (MV). Drie varianten:
+ * - mv_1contact: 1 bit aan/uit (hoog/laag)
+ * - mv_scene: KNX scene-adres met 3 scene-nummers (laag/midden/hoog)
+ * - mv_0_10v: byte (0-255) met instelbare standen
+ */
+export interface WtwMvConfig {
+  /* 1-contact */
+  switchGa?: string;
+  switchStatusGa?: string;
+  /* scene */
+  sceneGa?: string;
+  sceneLow?: number;
+  sceneMid?: number;
+  sceneHigh?: number;
+  /* 0-10v */
+  commandGa?: string;
+  statusGa?: string;
+  stands?: MvStand[];
+  /* gedeeld */
+  faultGa?: string;
+  filterGa?: string;
+  filterDaysGa?: string;
+  logics?: WtwMvLogic[];
+}
+
 export interface WtwConfig {
   model?: WtwModel;
   zehnder?: WtwZehnderComfoConnect;
   duco?: WtwDucoConnectivityBoard;
+  mv?: WtwMvConfig;
 }
 
 export interface WtwDevice extends DeviceBase {

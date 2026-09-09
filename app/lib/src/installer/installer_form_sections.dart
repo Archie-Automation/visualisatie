@@ -2228,6 +2228,7 @@ class _WtwInstallerSectionState extends State<WtwInstallerSection> {
       _wtw.remove('model');
       _wtw.remove('zehnder');
       _wtw.remove('duco');
+      _wtw.remove('mv');
     } else {
       _wtw['model'] = raw;
       if (raw == 'zehnder_comfoConnect') {
@@ -2236,6 +2237,9 @@ class _WtwInstallerSectionState extends State<WtwInstallerSection> {
       }
       if (raw == 'duco_connectivity_board') {
         _ensureMap(_wtw, 'duco');
+      }
+      if (raw.startsWith('mv_')) {
+        _ensureMap(_wtw, 'mv');
       }
     }
     _notify();
@@ -2256,11 +2260,17 @@ class _WtwInstallerSectionState extends State<WtwInstallerSection> {
             _wtwModelNone,
             'zehnder_comfoConnect',
             'duco_connectivity_board',
+            'mv_1contact',
+            'mv_scene',
+            'mv_0_10v',
           ],
           optionLabels: const {
             _wtwModelNone: 'Kies type…',
             'zehnder_comfoConnect': 'Zehnder ComfoConnect',
             'duco_connectivity_board': 'Duco Connectivity Board',
+            'mv_1contact': 'MV — 1 contact (aan/uit)',
+            'mv_scene': 'MV — Scene (2 contacten)',
+            'mv_0_10v': 'MV — 0–10V (percentage)',
           },
           onChanged: _setModel,
         ),
@@ -2273,6 +2283,12 @@ class _WtwInstallerSectionState extends State<WtwInstallerSection> {
         else if (model == 'duco_connectivity_board')
           _WtwDucoInstaller(
             duco: _ensureMap(_wtw, 'duco'),
+            onChanged: _notify,
+          )
+        else if (model.startsWith('mv_'))
+          _WtwMvInstaller(
+            model: model,
+            mv: _ensureMap(_wtw, 'mv'),
             onChanged: _notify,
           )
         else
@@ -2554,15 +2570,285 @@ class _WtwDucoInstaller extends StatelessWidget {
   }
 }
 
+/* ---------- MV installer widget -------------------------------------- */
+
+class _WtwMvInstaller extends StatefulWidget {
+  const _WtwMvInstaller({
+    required this.model,
+    required this.mv,
+    required this.onChanged,
+  });
+  final String model;
+  final Map<String, dynamic> mv;
+  final VoidCallback onChanged;
+
+  @override
+  State<_WtwMvInstaller> createState() => _WtwMvInstallerState();
+}
+
+class _WtwMvInstallerState extends State<_WtwMvInstaller> {
+  bool get _is1Contact => widget.model == 'mv_1contact';
+  bool get _isScene => widget.model == 'mv_scene';
+  bool get _is0_10v => widget.model == 'mv_0_10v';
+
+  List<String> get _standOptions {
+    if (_is1Contact) return const ['low', 'high'];
+    if (_isScene) return const ['low', 'mid', 'high'];
+    if (_is0_10v) {
+      final stands = widget.mv['stands'] as List? ?? [];
+      return ['low', ...stands.map((s) => (s as Map)['id']?.toString() ?? '')];
+    }
+    return const ['low', 'high'];
+  }
+
+  Map<String, String> get _standLabels {
+    if (_is1Contact) return const {'low': 'Laag', 'high': 'Hoog'};
+    if (_isScene) return const {'low': 'Laag', 'mid': 'Midden', 'high': 'Hoog'};
+    if (_is0_10v) {
+      final stands = widget.mv['stands'] as List? ?? [];
+      final map = <String, String>{'low': 'Laag (0%)'};
+      for (final s in stands) {
+        if (s is Map) {
+          final id = s['id']?.toString() ?? '';
+          final label = s['label']?.toString() ?? id;
+          final pct = (s['percent'] as num?)?.round() ?? 0;
+          map[id] = '$label ($pct%)';
+        }
+      }
+      return map;
+    }
+    return const {'low': 'Laag', 'high': 'Hoog'};
+  }
+
+  List<String> get _afterOptions => ['previous', ..._standOptions];
+
+  Map<String, String> get _afterLabels => {
+        'previous': 'Vorige stand',
+        ..._standLabels,
+      };
+
+  void _gaField(String key, String label, {String? dpt}) {
+    // helper, not used inline — we build them in build() instead
+  }
+
+  Widget _gaEditor(String key, String label, {String? dpt}) {
+    return _InstallerStrField(
+      label: label,
+      value: widget.mv[key] as String? ?? '',
+      gaSearch: true,
+      gaDptHint: dpt,
+      onChanged: (v) {
+        if (v.trim().isEmpty) {
+          widget.mv.remove(key);
+        } else {
+          widget.mv[key] = v.trim();
+        }
+        widget.onChanged();
+      },
+    );
+  }
+
+  Widget _intField(String key, String label) {
+    return _InstallerStrField(
+      label: label,
+      value: widget.mv[key]?.toString() ?? '',
+      onChanged: (v) {
+        final n = int.tryParse(v.trim());
+        if (n != null) {
+          widget.mv[key] = n;
+        } else {
+          widget.mv.remove(key);
+        }
+        widget.onChanged();
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_is1Contact) ...[
+          _InstallerInfoTitle(
+            title: '1 contact (aan/uit)',
+            body: 'Eén bitcontact: aan = hoog toerental, uit = laag.',
+          ),
+          _gaEditor('switchGa', 'Schakel GA (DPT 1.001)', dpt: 'DPT1.001'),
+          _gaEditor('switchStatusGa', 'Status GA (DPT 1.001)', dpt: 'DPT1.001'),
+        ],
+        if (_isScene) ...[
+          _InstallerInfoTitle(
+            title: 'Scene (2 contacten)',
+            body:
+                'Twee relaiscontacten via KNX scene:\n'
+                '• Beide uit = laag\n'
+                '• Contact 1 aan = midden\n'
+                '• Contact 2 aan = hoog\n\n'
+                'Tip: maak een kleine inschakelvertraging in KNX '
+                'zodat er niet kort twee contacten tegelijk aan staan.\n'
+                'Configureer één scene-adres met 3 scene-nummers '
+                '(een per stand).',
+          ),
+          _gaEditor('sceneGa', 'Scene GA'),
+          _intField('sceneLow', 'Scene-nummer Laag'),
+          _intField('sceneMid', 'Scene-nummer Midden'),
+          _intField('sceneHigh', 'Scene-nummer Hoog'),
+        ],
+        if (_is0_10v) ...[
+          _InstallerInfoTitle(
+            title: '0–10V (percentage)',
+            body:
+                'Byte-waarde 0–255 op de bus (= 0–100%). '
+                'Maak hieronder standen aan met een gewenst percentage.',
+          ),
+          _gaEditor('commandGa', 'Command GA (DPT 5.001)', dpt: 'DPT5.001'),
+          _gaEditor('statusGa', 'Status GA (DPT 5.001)', dpt: 'DPT5.001'),
+          const SizedBox(height: 8),
+          _MvStandsEditor(
+            mv: widget.mv,
+            onChanged: () {
+              widget.onChanged();
+              setState(() {});
+            },
+          ),
+        ],
+        const SizedBox(height: 8),
+        _InstallerInfoTitle(
+          title: 'Storing en filter',
+          body: 'Optioneel: storingsbit, filter-indicator.',
+        ),
+        _gaEditor('faultGa', 'Storing GA (DPT 1.001)', dpt: 'DPT1.001'),
+        _gaEditor('filterGa', 'Filter vervangen GA (DPT 1.001)', dpt: 'DPT1.001'),
+        _gaEditor('filterDaysGa', 'Filter vervangen over (dagen, DPT 7.001)', dpt: 'DPT7.001'),
+        const SizedBox(height: 12),
+        _WtwLogicListEditor(
+          zehnder: widget.mv,
+          onChanged: widget.onChanged,
+          hasBoost: false,
+          defaultStandId: _is1Contact ? 'high' : 'high',
+          standOptions: _standOptions,
+          standLabelsOverride: _standLabels,
+          afterOptions: _afterOptions,
+          afterLabelsOverride: _afterLabels,
+        ),
+      ],
+    );
+  }
+}
+
+/* ---------- MV 0-10V stands editor ----------------------------------- */
+
+class _MvStandsEditor extends StatelessWidget {
+  const _MvStandsEditor({required this.mv, required this.onChanged});
+  final Map<String, dynamic> mv;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final stands = _ensureList(mv, 'stands');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Text('Standen', style: Theme.of(context).textTheme.titleSmall),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: () {
+                stands.add(<String, dynamic>{
+                  'id': 'stand${stands.length + 1}',
+                  'label': 'Stand ${stands.length + 1}',
+                  'percent': 50,
+                });
+                onChanged();
+              },
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Stand'),
+            ),
+          ],
+        ),
+        if (stands.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Nog geen standen. Tik + om een stand aan te maken.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        for (var i = 0; i < stands.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Material(
+              color: LuxeColors.surface.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: _InstallerStrField(
+                        label: 'Label',
+                        value: stands[i]['label']?.toString() ?? '',
+                        onChanged: (v) {
+                          stands[i]['label'] = v.trim();
+                          final id = v.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+                          stands[i]['id'] = id.isEmpty ? 'stand${i + 1}' : id;
+                          onChanged();
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: _InstallerStrField(
+                        label: '%',
+                        value: stands[i]['percent']?.toString() ?? '50',
+                        onChanged: (v) {
+                          final n = int.tryParse(v.trim());
+                          if (n != null && n >= 0 && n <= 100) {
+                            stands[i]['percent'] = n;
+                            onChanged();
+                          }
+                        },
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 20),
+                      onPressed: () {
+                        stands.removeAt(i);
+                        onChanged();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _WtwLogicListEditor extends StatelessWidget {
   const _WtwLogicListEditor({
     required this.zehnder,
     required this.onChanged,
     this.hasBoost = true,
+    this.defaultStandId = 'stand3',
+    this.standOptions,
+    this.standLabelsOverride,
+    this.afterOptions,
+    this.afterLabelsOverride,
   });
   final Map<String, dynamic> zehnder;
   final VoidCallback onChanged;
   final bool hasBoost;
+  final String defaultStandId;
+  final List<String>? standOptions;
+  final Map<String, String>? standLabelsOverride;
+  final List<String>? afterOptions;
+  final Map<String, String>? afterLabelsOverride;
 
   @override
   Widget build(BuildContext context) {
@@ -2587,7 +2873,7 @@ class _WtwLogicListEditor extends StatelessWidget {
                   {'ga': '', 'value': '1', 'minutes': 0},
                 ],
                 'whenJoin': 'or',
-                'standId': 'stand3',
+                'standId': defaultStandId,
                 'end': 'duration',
                 'minutes': 15,
                 'untilWhen': <Map<String, dynamic>>[
@@ -2644,6 +2930,10 @@ class _WtwLogicListEditor extends StatelessWidget {
         logic: logic,
         isNew: isNew,
         hasBoost: hasBoost,
+        standOptions: standOptions,
+        standLabelsOverride: standLabelsOverride,
+        afterOptions: afterOptions,
+        afterLabelsOverride: afterLabelsOverride,
       ),
     ).then((saved) {
       if (saved == true) onChanged();
@@ -2672,6 +2962,9 @@ class _WtwLogicSummaryCard extends StatelessWidget {
     'stand3': 'Stand 3',
     'away': 'Afwezig',
     'boost': 'Boost',
+    'low': 'Laag',
+    'mid': 'Midden',
+    'high': 'Hoog',
   };
 
   String _whenSummary() {
@@ -2786,10 +3079,18 @@ class _WtwLogicEditorSheet extends StatefulWidget {
     required this.logic,
     this.isNew = false,
     this.hasBoost = true,
+    this.standOptions,
+    this.standLabelsOverride,
+    this.afterOptions,
+    this.afterLabelsOverride,
   });
   final Map<String, dynamic> logic;
   final bool isNew;
   final bool hasBoost;
+  final List<String>? standOptions;
+  final Map<String, String>? standLabelsOverride;
+  final List<String>? afterOptions;
+  final Map<String, String>? afterLabelsOverride;
 
   @override
   State<_WtwLogicEditorSheet> createState() => _WtwLogicEditorSheetState();
@@ -3392,10 +3693,11 @@ class _WtwLogicEditorSheetState extends State<_WtwLogicEditorSheet> {
           label: 'stand',
           child: _WtwLogicSelect(
             value: standId,
-            options: widget.hasBoost
-                ? const ['stand1', 'stand2', 'stand3', 'away', 'boost']
-                : const ['stand1', 'stand2', 'stand3', 'away'],
-            labels: _standLabels,
+            options: widget.standOptions ??
+                (widget.hasBoost
+                    ? const ['stand1', 'stand2', 'stand3', 'away', 'boost']
+                    : const ['stand1', 'stand2', 'stand3', 'away']),
+            labels: widget.standLabelsOverride ?? _standLabels,
             onChanged: (v) => _set('standId', v),
           ),
         ),
@@ -3535,8 +3837,8 @@ class _WtwLogicEditorSheetState extends State<_WtwLogicEditorSheet> {
         ),
         const SizedBox(height: 14),
         _WtwLogicSelect(
-          value: _afterLabels.containsKey(after) ? after : 'previous',
-          options: const [
+          value: (widget.afterLabelsOverride ?? _afterLabels).containsKey(after) ? after : 'previous',
+          options: widget.afterOptions ?? const [
             'previous',
             'auto',
             'stand1',
@@ -3544,7 +3846,7 @@ class _WtwLogicEditorSheetState extends State<_WtwLogicEditorSheet> {
             'stand3',
             'away',
           ],
-          labels: _afterLabels,
+          labels: widget.afterLabelsOverride ?? _afterLabels,
           onChanged: (v) => _set('after', v),
         ),
       ],

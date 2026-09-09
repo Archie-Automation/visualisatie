@@ -4000,6 +4000,19 @@ class _WtwTileState extends ConsumerState<WtwTile> {
     return d is Map<String, dynamic> ? d : null;
   }
 
+  String? get _mvModel {
+    final wtw = device.raw['wtw'] as Map<String, dynamic>?;
+    final m = wtw?['model'] as String?;
+    return (m != null && m.startsWith('mv_')) ? m : null;
+  }
+
+  Map<String, dynamic>? get _mv {
+    if (_mvModel == null) return null;
+    final wtw = device.raw['wtw'] as Map<String, dynamic>?;
+    final mv = wtw?['mv'];
+    return mv is Map<String, dynamic> ? mv : null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -4147,10 +4160,13 @@ class _WtwTileState extends ConsumerState<WtwTile> {
     }
     final z = _zehnder;
     final duc = _duco;
-    if (z == null && duc == null) {
+    final mvCfg = _mv;
+    final mvMdl = _mvModel;
+    if (z == null && duc == null && mvCfg == null) {
       return _Placeholder(name: device.name, hint: 'WTW-config ontbreekt');
     }
     if (duc != null) return _buildDuco(context, duc);
+    if (mvCfg != null && mvMdl != null) return _buildMv(context, mvMdl, mvCfg);
     final zz = z!;
 
     final bus = ref.watch(busProvider);
@@ -4449,6 +4465,161 @@ class _WtwTileState extends ConsumerState<WtwTile> {
                 item: {
                   'label': 'Filtervervangen',
                   'ga': duc['filterGa'],
+                  'dpt': '1.001',
+                  'icon0': 'check',
+                  'icon1': 'warning',
+                },
+                bus: bus,
+              ),
+            if (daysGa.isNotEmpty)
+              _WtwStatusRow(
+                item: {
+                  'label': 'Filtervervangen over',
+                  'ga': daysGa,
+                  'dpt': '7.001',
+                },
+                bus: bus,
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /* ---- MV (Mechanische Ventilatie) UI ---- */
+
+  Widget _buildMv(BuildContext context, String model, Map<String, dynamic> mv) {
+    final bus = ref.watch(busProvider);
+    final logicRuns = ref.watch(wtwLogicProvider).forDevice(device.id);
+
+    String activeStand = '';
+    if (model == 'mv_1contact') {
+      final ga = (mv['switchStatusGa'] as String? ?? '').trim();
+      if (ga.isNotEmpty) {
+        final raw = bus.values[ga];
+        activeStand = (raw == true || raw == 1) ? 'high' : 'low';
+      } else {
+        activeStand = 'low';
+      }
+    } else if (model == 'mv_0_10v') {
+      final ga = (mv['statusGa'] as String? ?? '').trim();
+      if (ga.isNotEmpty) {
+        final raw = bus.values[ga];
+        final n = raw is num ? raw : num.tryParse(raw?.toString() ?? '');
+        if (n != null) {
+          final pct = (n / 255 * 100).round();
+          final stands = mv['stands'] as List? ?? [];
+          int bestDist = 999;
+          for (final s in stands) {
+            if (s is Map) {
+              final sp = (s['percent'] as num?)?.round() ?? 0;
+              if ((pct - sp).abs() < bestDist) {
+                bestDist = (pct - sp).abs();
+                activeStand = s['id']?.toString() ?? '';
+              }
+            }
+          }
+        }
+      }
+    }
+
+    List<({String id, String label})> standButtons;
+    if (model == 'mv_1contact') {
+      standButtons = [
+        (id: 'low', label: 'Laag'),
+        (id: 'high', label: 'Hoog'),
+      ];
+    } else if (model == 'mv_scene') {
+      standButtons = [
+        (id: 'low', label: 'Laag'),
+        (id: 'mid', label: 'Midden'),
+        (id: 'high', label: 'Hoog'),
+      ];
+    } else {
+      final stands = mv['stands'] as List? ?? [];
+      standButtons = [
+        for (final s in stands)
+          if (s is Map)
+            (
+              id: s['id']?.toString() ?? '',
+              label: s['label']?.toString() ?? s['id']?.toString() ?? '',
+            ),
+      ];
+    }
+
+    List<DeviceControlItem> mvButtons(
+        List<({String id, String label})> items) {
+      return [
+        for (final s in items)
+          DeviceControlItem(
+            label: s.label,
+            active: activeStand == s.id ||
+                logicRuns.any((r) => r.standId == s.id),
+            onTap: () => _press(s.id),
+          ),
+      ];
+    }
+
+    final hasFault = _hasGa(mv, 'faultGa');
+    final hasFilter = _hasGa(mv, 'filterGa');
+    final daysGa = _ga(mv, 'filterDaysGa');
+
+    return DeviceTileShell(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DeviceTileLayout.headerRow(
+            context: context,
+            leading: DeviceTileIconBadge(icon: Icons.air_outlined),
+            content: Text(
+              device.name,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+          if (logicRuns.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6, top: 4),
+              child: Text(
+                'Actief',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: LuxeColors.brass,
+                    ),
+              ),
+            ),
+          ],
+          SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+          if (standButtons.isNotEmpty)
+            DeviceControlSection(
+              title: 'STAND',
+              child: DeviceControlBar.grid(
+                context,
+                mvButtons(standButtons),
+                perRow: standButtons.length <= 3 ? standButtons.length : 3,
+              ),
+            ),
+          if (hasFault || hasFilter || daysGa.isNotEmpty) ...[
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            if (hasFault)
+              _WtwStatusRow(
+                item: {
+                  'label': 'Storing',
+                  'ga': mv['faultGa'],
+                  'dpt': '1.001',
+                  'icon0': 'check',
+                  'icon1': 'warning',
+                },
+                bus: bus,
+              ),
+            if (hasFilter)
+              _WtwStatusRow(
+                item: {
+                  'label': 'Filtervervangen',
+                  'ga': mv['filterGa'],
                   'dpt': '1.001',
                   'icon0': 'check',
                   'icon1': 'warning',

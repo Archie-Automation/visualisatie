@@ -4,7 +4,10 @@ import type {
   WtwZehnderStandId,
   WtwDucoConnectivityBoard,
   WtwDucoLogic,
-  DucoStandId
+  DucoStandId,
+  WtwMvConfig,
+  WtwMvLogic,
+  WtwModel
 } from "./types";
 import type { KnxBus } from "./knxBus";
 
@@ -245,6 +248,117 @@ export function collectDucoSubscriptions(d: WtwDucoConnectivityBoard): Array<{
   add(d.filterGa, "bit");
   add(d.filterDaysGa, "uint16");
   for (const logic of ducoLogics(d)) {
+    add(logic.triggerGa, "bit");
+    add(logic.orGa, "bit");
+    add(logic.untilGa, "bit");
+    for (const c of logic.when ?? []) add(c.ga, "bit");
+    for (const c of logic.untilWhen ?? []) add(c.ga, "bit");
+    if (logic.triggerMode === "tempRise" && logic.tempRise) {
+      add(logic.tempRise.ga, "temperature");
+    }
+  }
+  return out;
+}
+
+/* ===================================================================== */
+/*  MV — Mechanische Ventilatie                                          */
+/* ===================================================================== */
+
+export function mvLogics(mv: WtwMvConfig): WtwMvLogic[] {
+  return Array.isArray(mv.logics) ? mv.logics : [];
+}
+
+function readMv1ContactStand(bus: KnxBus, mv: WtwMvConfig): string {
+  const ga = asGa(mv.switchStatusGa);
+  if (!ga) return "low";
+  return bitOn(bus.getState(ga)?.value) ? "high" : "low";
+}
+
+function readMv0_10vStand(bus: KnxBus, mv: WtwMvConfig): string {
+  const ga = asGa(mv.statusGa);
+  if (!ga || !mv.stands?.length) return "";
+  const raw = bus.getState(ga)?.value;
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n)) return mv.stands[0]?.id ?? "";
+  const pct = Math.round((n / 255) * 100);
+  let best = mv.stands[0];
+  let bestDist = Math.abs(pct - (best?.percent ?? 0));
+  for (const s of mv.stands) {
+    const dist = Math.abs(pct - s.percent);
+    if (dist < bestDist) { best = s; bestDist = dist; }
+  }
+  return best?.id ?? "";
+}
+
+export function readMvActiveStand(
+  model: WtwModel,
+  bus: KnxBus,
+  mv: WtwMvConfig
+): string {
+  if (model === "mv_1contact") return readMv1ContactStand(bus, mv);
+  if (model === "mv_0_10v") return readMv0_10vStand(bus, mv);
+  return "";
+}
+
+export async function pressMvStand(
+  model: WtwModel,
+  mv: WtwMvConfig,
+  bus: KnxBus,
+  standId: string
+): Promise<void> {
+  if (model === "mv_1contact") {
+    const ga = asGa(mv.switchGa);
+    if (!ga) throw new Error("MV switchGa ontbreekt");
+    await bus.write(ga, "bit", standId === "high");
+    return;
+  }
+  if (model === "mv_scene") {
+    const ga = asGa(mv.sceneGa);
+    if (!ga) throw new Error("MV sceneGa ontbreekt");
+    const sceneNum =
+      standId === "low" ? mv.sceneLow :
+      standId === "mid" ? mv.sceneMid :
+      standId === "high" ? mv.sceneHigh : undefined;
+    if (sceneNum == null) throw new Error(`MV scene-nummer voor '${standId}' ontbreekt`);
+    await bus.write(ga, "scene_number", sceneNum);
+    return;
+  }
+  if (model === "mv_0_10v") {
+    const ga = asGa(mv.commandGa);
+    if (!ga) throw new Error("MV commandGa ontbreekt");
+    const stand = (mv.stands ?? []).find((s) => s.id === standId);
+    if (!stand) throw new Error(`MV stand '${standId}' niet gevonden`);
+    const byte = Math.round((stand.percent / 100) * 255);
+    await bus.write(ga, "byte", Math.min(255, Math.max(0, byte)));
+    return;
+  }
+  throw new Error(`Onbekend MV-model: ${model}`);
+}
+
+export function collectMvSubscriptions(
+  model: WtwModel,
+  mv: WtwMvConfig
+): Array<{ ga: string; role: string }> {
+  const out: Array<{ ga: string; role: string }> = [];
+  const add = (raw: unknown, role: string) => {
+    const ga = asGa(raw);
+    if (ga) out.push({ ga, role });
+  };
+  if (model === "mv_1contact") {
+    add(mv.switchGa, "bit");
+    add(mv.switchStatusGa, "bit");
+  }
+  if (model === "mv_scene") {
+    add(mv.sceneGa, "scene_number");
+  }
+  if (model === "mv_0_10v") {
+    add(mv.commandGa, "byte");
+    add(mv.statusGa, "byte");
+  }
+  add(mv.faultGa, "bit");
+  add(mv.filterGa, "bit");
+  add(mv.filterDaysGa, "uint16");
+  for (const logic of mvLogics(mv)) {
     add(logic.triggerGa, "bit");
     add(logic.orGa, "bit");
     add(logic.untilGa, "bit");
