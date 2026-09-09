@@ -5,7 +5,9 @@ import 'package:uuid/uuid.dart';
 import '../ac_mode_config.dart';
 import '../room_control_category.dart';
 import '../theme.dart';
+import '../ui/widgets/back_pill.dart';
 import '../ui/widgets/confirm_dialog.dart';
+import '../ui/widgets/glass_card.dart';
 import '../ui/widgets/heater_icon.dart';
 import '../ui/widgets/luxe_form.dart';
 import 'knx_ga_catalog.dart';
@@ -2431,45 +2433,54 @@ class _WtwLogicListEditor extends StatelessWidget {
         _InstallerInfoTitle(
           title: 'Logica',
           body:
-              'Wanneer één of meer groepsadressen = waarde (en/of). '
-              'Dan stand voor x min, of tot één of meer statussen (en/of). '
-              'Waarde volgens DPT. Boost: zelfde resterend-timer als handmatig. '
-              '+ status voor extra GA. 0 min bij wanneer = direct.',
+              'KNX-status → WTW-stand. Tik op een regel om te bewerken.\n\n'
+              'Wanneer: één of meer groepsadressen = waarde (en/of).\n'
+              'Dan: welke stand, voor hoe lang of tot een status.\n'
+              'Daarna: waar de WTW heen gaat als de logica stopt.',
           trailing: TextButton.icon(
             onPressed: () {
-              logics.add({
+              final newLogic = <String, dynamic>{
                 'id': 'wtw-logic-${_uuid.v4()}',
                 'enabled': true,
-                'label': 'Nieuwe logica',
-                'when': [
+                'label': '',
+                'when': <Map<String, dynamic>>[
                   {'ga': '', 'value': '1', 'minutes': 0},
                 ],
                 'whenJoin': 'or',
                 'standId': 'stand3',
                 'end': 'duration',
                 'minutes': 15,
-                'untilWhen': [
+                'untilWhen': <Map<String, dynamic>>[
                   {'ga': '', 'value': '0', 'minutes': 5},
                 ],
                 'untilJoin': 'or',
                 'after': 'previous',
-              });
+              };
+              logics.add(newLogic);
               onChanged();
+              _openLogicSheet(context, newLogic, isNew: true);
             },
             icon: const Icon(Icons.add, size: 18),
             label: const Text('Logica'),
           ),
         ),
         if (logics.isEmpty)
-          Text(
-            'Nog geen logica. Voorbeeld: groepsadres = 1 voor 5 min → stand 3 voor 20 min, daarna vorige.',
-            style: Theme.of(context).textTheme.bodySmall,
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Nog geen logica. Tik + om een regel toe te voegen.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ),
         for (var i = 0; i < logics.length; i++)
-          _WtwLogicCard(
+          _WtwLogicSummaryCard(
             key: ValueKey(logics[i]['id'] ?? 'l$i'),
             logic: logics[i],
-            onChanged: onChanged,
+            onTap: () => _openLogicSheet(context, logics[i]),
+            onToggle: (v) {
+              logics[i]['enabled'] = v;
+              onChanged();
+            },
             onDelete: () {
               logics.removeAt(i);
               onChanged();
@@ -2478,27 +2489,41 @@ class _WtwLogicListEditor extends StatelessWidget {
       ],
     );
   }
+
+  void _openLogicSheet(
+    BuildContext context,
+    Map<String, dynamic> logic, {
+    bool isNew = false,
+  }) {
+    showModalBottomSheet<bool>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _WtwLogicEditorSheet(
+        logic: logic,
+        isNew: isNew,
+      ),
+    ).then((saved) {
+      if (saved == true) onChanged();
+    });
+  }
 }
 
-class _WtwLogicCard extends StatelessWidget {
-  const _WtwLogicCard({
+/* ---------- compact summary card for each logic ---------------------- */
+
+class _WtwLogicSummaryCard extends StatelessWidget {
+  const _WtwLogicSummaryCard({
     super.key,
     required this.logic,
-    required this.onChanged,
+    required this.onTap,
+    required this.onToggle,
     required this.onDelete,
   });
   final Map<String, dynamic> logic;
-  final VoidCallback onChanged;
+  final VoidCallback onTap;
+  final ValueChanged<bool> onToggle;
   final VoidCallback onDelete;
-
-  void _set(String key, Object? value) {
-    if (value == null || (value is String && value.trim().isEmpty)) {
-      logic.remove(key);
-    } else {
-      logic[key] = value;
-    }
-    onChanged();
-  }
 
   static const _standLabels = {
     'stand1': 'Stand 1',
@@ -2508,6 +2533,130 @@ class _WtwLogicCard extends StatelessWidget {
     'boost': 'Boost',
   };
 
+  String _whenSummary() {
+    _migrateWhen(logic);
+    final clauses = logic['when'] as List? ?? [];
+    if (clauses.isEmpty) return 'Geen trigger';
+    final join = logic['whenJoin'] == 'and' ? ' EN ' : ' OF ';
+    final parts = <String>[];
+    for (final c in clauses) {
+      if (c is! Map) continue;
+      final ga = (c['ga'] as String? ?? '').trim();
+      final val = (c['value'] ?? '1').toString();
+      final min = (c['minutes'] as num?)?.round() ?? 0;
+      if (ga.isEmpty) {
+        parts.add('(geen GA)');
+      } else {
+        parts.add('$ga=$val${min > 0 ? ' ${min}m' : ''}');
+      }
+    }
+    return parts.join(join);
+  }
+
+  String _actionSummary() {
+    final standId = logic['standId'] as String? ?? 'stand3';
+    final stand = _standLabels[standId] ?? standId;
+    final end = logic['end'] as String? ?? 'duration';
+    if (end == 'untilStatus') return '$stand tot status';
+    final min = (logic['minutes'] as num?)?.round() ?? 15;
+    return '$stand voor ${min}m';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = logic['enabled'] != false;
+    final label = (logic['label'] as String? ?? '').trim();
+    final name = label.isEmpty ? 'Naamloze logica' : label;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Opacity(
+        opacity: enabled ? 1.0 : 0.55,
+        child: Material(
+          color: LuxeColors.surface.withValues(alpha: 0.8),
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: LuxeColors.lineSoft),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _whenSummary(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          _actionSummary(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: LuxeColors.brassDeep,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  LuxeOnOffSwitch(
+                    value: enabled,
+                    onChanged: onToggle,
+                  ),
+                  Icon(Icons.chevron_right_rounded,
+                      size: 20, color: LuxeColors.inkSoft),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/* ---------- full-screen bottom sheet editor (like schedules) ---------- */
+
+enum _WtwLogicPane { overview, name, when, action, after }
+
+class _WtwLogicEditorSheet extends StatefulWidget {
+  const _WtwLogicEditorSheet({
+    required this.logic,
+    this.isNew = false,
+  });
+  final Map<String, dynamic> logic;
+  final bool isNew;
+
+  @override
+  State<_WtwLogicEditorSheet> createState() => _WtwLogicEditorSheetState();
+}
+
+class _WtwLogicEditorSheetState extends State<_WtwLogicEditorSheet> {
+  late Map<String, dynamic> _draft;
+  _WtwLogicPane _pane = _WtwLogicPane.overview;
+
+  static const _standLabels = {
+    'stand1': 'Stand 1',
+    'stand2': 'Stand 2',
+    'stand3': 'Stand 3',
+    'away': 'Afwezig',
+    'boost': 'Boost',
+  };
   static const _afterLabels = {
     'previous': 'Vorige stand',
     'auto': 'Automatisch',
@@ -2517,120 +2666,772 @@ class _WtwLogicCard extends StatelessWidget {
     'away': 'Afwezig',
   };
 
+  static const _createSteps = [
+    _WtwLogicPane.name,
+    _WtwLogicPane.when,
+    _WtwLogicPane.action,
+    _WtwLogicPane.after,
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _migrateWhen(widget.logic);
+    _migrateUntil(widget.logic);
+    _draft = _deepCopyMap(widget.logic);
+    if (widget.isNew) _pane = _WtwLogicPane.name;
+  }
+
+  static Map<String, dynamic> _deepCopyMap(Map<String, dynamic> src) {
+    final out = <String, dynamic>{};
+    for (final e in src.entries) {
+      if (e.value is Map<String, dynamic>) {
+        out[e.key] = _deepCopyMap(e.value as Map<String, dynamic>);
+      } else if (e.value is List) {
+        out[e.key] = _deepCopyList(e.value as List);
+      } else {
+        out[e.key] = e.value;
+      }
+    }
+    return out;
+  }
+
+  static List _deepCopyList(List src) {
+    return [
+      for (final item in src)
+        if (item is Map<String, dynamic>)
+          _deepCopyMap(item)
+        else if (item is List)
+          _deepCopyList(item)
+        else
+          item,
+    ];
+  }
+
+  void _set(String key, Object? value) {
+    setState(() {
+      if (value == null || (value is String && value.trim().isEmpty)) {
+        _draft.remove(key);
+      } else {
+        _draft[key] = value;
+      }
+    });
+  }
+
+  void _save() {
+    widget.logic.clear();
+    widget.logic.addAll(_draft);
+    Navigator.of(context).pop(true);
+  }
+
+  void _delete() {
+    Navigator.of(context).pop(true);
+    // Caller checks if logic is still in the list — we signal "changed".
+  }
+
+  bool get _isCreate => widget.isNew;
+  bool get _atRoot =>
+      (!_isCreate && _pane == _WtwLogicPane.overview) ||
+      (_isCreate && _pane == _WtwLogicPane.name);
+
+  String? _paneError(_WtwLogicPane pane) {
+    switch (pane) {
+      case _WtwLogicPane.overview:
+        return null;
+      case _WtwLogicPane.name:
+        final n = (_draft['label'] as String? ?? '').trim();
+        return n.isEmpty ? 'Vul een naam in.' : null;
+      case _WtwLogicPane.when:
+        final clauses = _draft['when'] as List? ?? [];
+        if (clauses.isEmpty) return 'Voeg minstens één trigger toe.';
+        for (final c in clauses) {
+          if (c is Map && ((c['ga'] as String?) ?? '').trim().isEmpty) {
+            return 'Vul alle groepsadressen in.';
+          }
+        }
+        return null;
+      case _WtwLogicPane.action:
+        return null;
+      case _WtwLogicPane.after:
+        return null;
+    }
+  }
+
+  void _openPane(_WtwLogicPane pane) => setState(() => _pane = pane);
+
+  void _back() {
+    if (_isCreate) {
+      final i = _createSteps.indexOf(_pane);
+      if (i <= 0) {
+        Navigator.of(context).pop(false);
+        return;
+      }
+      setState(() => _pane = _createSteps[i - 1]);
+      return;
+    }
+    setState(() => _pane = _WtwLogicPane.overview);
+  }
+
+  void _next() {
+    final err = _paneError(_pane);
+    if (err != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: LuxeColors.danger,
+          behavior: SnackBarBehavior.floating,
+          shape: const StadiumBorder(),
+          content: Text(err),
+        ),
+      );
+      return;
+    }
+    if (_isCreate) {
+      final i = _createSteps.indexOf(_pane);
+      if (i >= _createSteps.length - 1) {
+        _save();
+        return;
+      }
+      setState(() => _pane = _createSteps[i + 1]);
+      return;
+    }
+    setState(() => _pane = _WtwLogicPane.overview);
+  }
+
+  /* ---- summaries for overview rows ---- */
+
+  String _nameSummary() {
+    final n = (_draft['label'] as String? ?? '').trim();
+    return n.isEmpty ? 'Geen naam' : n;
+  }
+
+  String _whenSummary() {
+    final clauses = _draft['when'] as List? ?? [];
+    if (clauses.isEmpty) return 'Geen trigger';
+    final join = _draft['whenJoin'] == 'and' ? ' EN ' : ' OF ';
+    final parts = <String>[];
+    for (final c in clauses) {
+      if (c is! Map) continue;
+      final ga = (c['ga'] as String? ?? '').trim();
+      final val = (c['value'] ?? '1').toString();
+      final min = (c['minutes'] as num?)?.round() ?? 0;
+      if (ga.isEmpty) {
+        parts.add('(geen GA)');
+      } else {
+        parts.add('$ga = $val${min > 0 ? ' (${min}m)' : ''}');
+      }
+    }
+    if (parts.length > 2) return '${parts.length} triggers (${join.trim().toLowerCase()})';
+    return parts.join(join);
+  }
+
+  String _actionSummary() {
+    final standId = _draft['standId'] as String? ?? 'stand3';
+    final stand = _standLabels[standId] ?? standId;
+    final end = _draft['end'] as String? ?? 'duration';
+    if (end == 'untilStatus') {
+      final until = _draft['untilWhen'] as List? ?? [];
+      final n = until.length;
+      return '$stand tot ${n == 1 ? 'status' : '$n statussen'}';
+    }
+    final min = (_draft['minutes'] as num?)?.round() ?? 15;
+    return '$stand voor $min min';
+  }
+
+  String _afterSummary() {
+    final after = _draft['after'] as String? ?? 'previous';
+    return _afterLabels[after] ?? after;
+  }
+
+  /* ---- build ---- */
+
   @override
   Widget build(BuildContext context) {
-    final enabled = logic['enabled'] != false;
-    final end = logic['end'] as String? ?? 'duration';
-    final standId = logic['standId'] as String? ?? 'stand3';
-    final after = logic['after'] as String? ?? 'previous';
-    final title = Theme.of(context).textTheme.titleSmall;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: LuxeInsetCard(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
+    return PopScope(
+      canPop: _atRoot,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _back();
+      },
+      child: DraggableScrollableSheet(
+        initialChildSize: 0.92,
+        minChildSize: 0.5,
+        maxChildSize: 0.96,
+        expand: false,
+        builder: (ctx, scrollCtl) => Container(
+          decoration: BoxDecoration(
+            color: LuxeColors.cream,
+            borderRadius:
+                const BorderRadius.vertical(top: Radius.circular(32)),
+            boxShadow: LuxeShadows.lift,
+          ),
+          child: SafeArea(
+            top: false,
+            child: Column(
               children: [
-                Expanded(
-                  child: _InstallerStrField(
-                    label: 'Naam',
-                    value: logic['label'] as String? ?? '',
-                    onChanged: (v) => _set('label', v.trim()),
+                _buildHeader(ctx),
+                Expanded(child: _buildBody(scrollCtl)),
+                _buildFooter(),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context) {
+    final name = (_draft['label'] as String? ?? '').trim();
+    final (title, infoTitle, infoBody) = switch (_pane) {
+      _WtwLogicPane.overview => (
+          name.isEmpty ? 'Logica' : name,
+          'Logica',
+          'Naam, trigger, actie en terugkeerstand. '
+              'Tik op een rij om die sectie te bewerken.',
+        ),
+      _WtwLogicPane.name => (
+          'Naam',
+          'Naam',
+          'Hoe deze logica in de lijst heet.',
+        ),
+      _WtwLogicPane.when => (
+          'Wanneer',
+          'Wanneer',
+          'Eén of meer groepsadres-condities (AND/OR).\n\n'
+              '• Groepsadres: het KNX-adres dat gecontroleerd wordt.\n'
+              '• Waarde: volgens het DPT van dat adres (1, 0, getal, …).\n'
+              '• Minuten: hoe lang de waarde waar moet zijn. 0 = direct.',
+        ),
+      _WtwLogicPane.action => (
+          'Dan',
+          'Dan',
+          'Welke WTW-stand wordt geactiveerd en hoe lang.\n\n'
+              '• Stand: de ventilatie-stand die wordt ingesteld.\n'
+              '• Einde: voor x minuten, of tot een groepsadres-status.\n'
+              '• Boost: schrijft de duur als boost-tijd op het toestel.',
+        ),
+      _WtwLogicPane.after => (
+          'Daarna',
+          'Daarna',
+          'Waar de WTW heen gaat als de logica stopt.\n\n'
+              '• Vorige stand: terug naar wat er vóór de logica was.\n'
+              '• Automatisch: schakelt terug naar auto-modus.',
+        ),
+    };
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 8),
+      child: SizedBox(
+        height: HeaderIconButton.size,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            IgnorePointer(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: HeaderIconButton.size + 8),
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: LuxeColors.ink,
+                    height: 1.25,
                   ),
                 ),
-                LuxeOnOffSwitch(
-                  value: enabled,
-                  onChanged: (v) => _set('enabled', v),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  tooltip: 'Verwijderen',
-                  onPressed: onDelete,
-                ),
-              ],
-            ),
-            Text('wanneer', style: title),
-            const SizedBox(height: 6),
-            _WtwLogicClauseList(
-              logic: logic,
-              listKey: 'when',
-              joinKey: 'whenJoin',
-              defaultTrue: true,
-              defaultMinutes: 0,
-              minMinutes: 0,
-              onChanged: onChanged,
-            ),
-            Text('dan', style: title),
-            const SizedBox(height: 6),
-            _WtwLogicLabeled(
-              label: 'stand',
-              child: _WtwLogicSelect(
-                value: standId,
-                options: const ['stand1', 'stand2', 'stand3', 'away', 'boost'],
-                labels: _standLabels,
-                onChanged: (v) => _set('standId', v),
               ),
             ),
-            _WtwLogicLabeled(
-              label: 'einde',
-              child: _WtwLogicSelect(
-                value: end == 'untilStatus' ? 'untilStatus' : 'duration',
-                options: const ['duration', 'untilStatus'],
-                labels: const {
-                  'duration': 'voor x min',
-                  'untilStatus': 'tot groepsadres = waarde',
+            Align(
+              alignment: Alignment.centerRight,
+              child: LuxeInfoIconButton(title: infoTitle, body: infoBody),
+            ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: BackPill(
+                onTap: () {
+                  if (_atRoot) {
+                    Navigator.of(context).pop(false);
+                    return;
+                  }
+                  _back();
                 },
-                onChanged: (v) => _set('end', v),
               ),
             ),
-            if (end != 'untilStatus')
-              _InstallerStrField(
-                label: standId == 'boost' ? 'boost-tijd / voor (min)' : 'voor (min)',
-                value: '${(logic['minutes'] as num?)?.round() ?? 15}',
-                number: true,
-                onChanged: (v) {
-                  final n = int.tryParse(v);
-                  if (n == null) return;
-                  _set('minutes', n.clamp(1, 1440));
-                },
-              )
-            else ...[
-              _WtwLogicClauseList(
-                logic: logic,
-                listKey: 'untilWhen',
-                joinKey: 'untilJoin',
-                defaultTrue: false,
-                defaultMinutes: 5,
-                minMinutes: 1,
-                onChanged: onChanged,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody(ScrollController scrollCtl) {
+    return switch (_pane) {
+      _WtwLogicPane.overview => _overviewPane(scrollCtl),
+      _WtwLogicPane.name => _namePane(scrollCtl),
+      _WtwLogicPane.when => _whenPane(scrollCtl),
+      _WtwLogicPane.action => _actionPane(scrollCtl),
+      _WtwLogicPane.after => _afterPane(scrollCtl),
+    };
+  }
+
+  /* ---- overview ---- */
+
+  Widget _overviewPane(ScrollController ctl) {
+    return ListView(
+      controller: ctl,
+      padding: const EdgeInsets.fromLTRB(22, 12, 22, 16),
+      children: [
+        GlassCard(
+          radius: 16,
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              _LogicSettingRow(
+                title: 'Naam',
+                subtitle: _nameSummary(),
+                done: _paneError(_WtwLogicPane.name) == null,
+                onTap: () => _openPane(_WtwLogicPane.name),
+              ),
+              Divider(height: 1, indent: 16, color: LuxeColors.lineSoft),
+              _LogicSettingRow(
+                title: 'Wanneer',
+                subtitle: _whenSummary(),
+                done: _paneError(_WtwLogicPane.when) == null,
+                onTap: () => _openPane(_WtwLogicPane.when),
+              ),
+              Divider(height: 1, indent: 16, color: LuxeColors.lineSoft),
+              _LogicSettingRow(
+                title: 'Dan',
+                subtitle: _actionSummary(),
+                done: true,
+                onTap: () => _openPane(_WtwLogicPane.action),
+              ),
+              Divider(height: 1, indent: 16, color: LuxeColors.lineSoft),
+              _LogicSettingRow(
+                title: 'Daarna',
+                subtitle: _afterSummary(),
+                done: true,
+                onTap: () => _openPane(_WtwLogicPane.after),
               ),
             ],
-            if (standId == 'boost')
-              Padding(
-                padding: const EdgeInsets.only(bottom: 16),
-                child: Text(
-                  end == 'untilStatus'
-                      ? 'Boost schrijft boost-tijd op het toestel (180 min) tot de eindstatus; daarna de tegel-tijd terug.'
-                      : 'Boost schrijft deze x min als boost-tijd op het toestel. De tegel-tijd blijft en gaat na afloop terug.',
-                  style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextButton.icon(
+          icon: Icon(Icons.delete_outline, size: 18, color: LuxeColors.danger),
+          label:
+              Text('Logica verwijderen', style: TextStyle(color: LuxeColors.danger)),
+          onPressed: _delete,
+        ),
+      ],
+    );
+  }
+
+  /* ---- name pane ---- */
+
+  Widget _namePane(ScrollController ctl) {
+    return ListView(
+      controller: ctl,
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+      children: [
+        _InstallerStrField(
+          label: 'Naam',
+          value: _draft['label'] as String? ?? '',
+          onChanged: (v) => _set('label', v.trim().isEmpty ? null : v.trim()),
+        ),
+      ],
+    );
+  }
+
+  /* ---- when pane ---- */
+
+  Widget _whenPane(ScrollController ctl) {
+    final clauses = _ensureList(_draft, 'when');
+    if (clauses.isEmpty) {
+      clauses.add({'ga': '', 'value': '1', 'minutes': 0});
+    }
+    final join = _draft['whenJoin'] == 'and' ? 'and' : 'or';
+    return ListView(
+      controller: ctl,
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+      children: [
+        _WtwLogicSelect(
+          value: join,
+          options: const ['or', 'and'],
+          labels: const {
+            'or': 'OF (één van de statussen)',
+            'and': 'EN (alle statussen)',
+          },
+          onChanged: (v) => setState(() => _draft['whenJoin'] = v),
+        ),
+        const SizedBox(height: 14),
+        for (var i = 0; i < clauses.length; i++) ...[
+          if (i > 0) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Center(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: LuxeColors.brass.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    join == 'and' ? 'EN' : 'OF',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: LuxeColors.brassDeep,
+                      letterSpacing: 1,
+                    ),
+                  ),
                 ),
               ),
-            Text('daarna terug naar', style: title),
-            const SizedBox(height: 6),
-            _WtwLogicSelect(
-              value: _afterLabels.containsKey(after) ? after : 'previous',
-              options: const [
-                'previous',
-                'auto',
-                'stand1',
-                'stand2',
-                'stand3',
-                'away',
-              ],
-              labels: _afterLabels,
-              onChanged: (v) => _set('after', v),
             ),
+          ],
+          _WtwClauseCard(
+            clause: clauses[i],
+            index: i,
+            defaultTrue: true,
+            defaultMinutes: 0,
+            minMinutes: 0,
+            canDelete: clauses.length > 1,
+            onChanged: () => setState(() {}),
+            onDelete: () => setState(() => clauses.removeAt(i)),
+          ),
+        ],
+        const SizedBox(height: 14),
+        OutlinedButton.icon(
+          onPressed: () => setState(() {
+            clauses.add({'ga': '', 'value': '1', 'minutes': 0});
+          }),
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Status toevoegen'),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(44),
+            shape: const StadiumBorder(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /* ---- action pane ---- */
+
+  Widget _actionPane(ScrollController ctl) {
+    final standId = _draft['standId'] as String? ?? 'stand3';
+    final end = _draft['end'] as String? ?? 'duration';
+    return ListView(
+      controller: ctl,
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+      children: [
+        _WtwLogicLabeled(
+          label: 'stand',
+          child: _WtwLogicSelect(
+            value: standId,
+            options: const ['stand1', 'stand2', 'stand3', 'away', 'boost'],
+            labels: _standLabels,
+            onChanged: (v) => _set('standId', v),
+          ),
+        ),
+        const SizedBox(height: 4),
+        _WtwLogicLabeled(
+          label: 'einde',
+          child: _WtwLogicSelect(
+            value: end == 'untilStatus' ? 'untilStatus' : 'duration',
+            options: const ['duration', 'untilStatus'],
+            labels: const {
+              'duration': 'Voor x minuten',
+              'untilStatus': 'Tot groepsadres = waarde',
+            },
+            onChanged: (v) => _set('end', v),
+          ),
+        ),
+        const SizedBox(height: 4),
+        if (end != 'untilStatus')
+          _InstallerStrField(
+            label: standId == 'boost'
+                ? 'boost-tijd / voor (min)'
+                : 'voor (min)',
+            value:
+                '${(_draft['minutes'] as num?)?.round() ?? 15}',
+            number: true,
+            onChanged: (v) {
+              final n = int.tryParse(v);
+              if (n == null) return;
+              _set('minutes', n.clamp(1, 1440));
+            },
+          )
+        else ...[
+          _buildUntilClauses(),
+        ],
+        if (standId == 'boost')
+          Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Text(
+              end == 'untilStatus'
+                  ? 'Boost schrijft boost-tijd op het toestel (180 min) tot de eindstatus; daarna de tegel-tijd terug.'
+                  : 'Boost schrijft deze minuten als boost-tijd op het toestel. De tegel-tijd blijft en gaat na afloop terug.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildUntilClauses() {
+    final clauses = _ensureList(_draft, 'untilWhen');
+    if (clauses.isEmpty) {
+      clauses.add({'ga': '', 'value': '0', 'minutes': 5});
+    }
+    final join = _draft['untilJoin'] == 'and' ? 'and' : 'or';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('TOT', style: TextStyle(
+          fontSize: 11,
+          letterSpacing: 2.0,
+          fontWeight: FontWeight.w700,
+          color: LuxeColors.inkSoft,
+        )),
+        const SizedBox(height: 8),
+        _WtwLogicSelect(
+          value: join,
+          options: const ['or', 'and'],
+          labels: const {
+            'or': 'OF (één van de statussen)',
+            'and': 'EN (alle statussen)',
+          },
+          onChanged: (v) => setState(() => _draft['untilJoin'] = v),
+        ),
+        const SizedBox(height: 12),
+        for (var i = 0; i < clauses.length; i++) ...[
+          if (i > 0)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Center(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: LuxeColors.brass.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    join == 'and' ? 'EN' : 'OF',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: LuxeColors.brassDeep,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          _WtwClauseCard(
+            clause: clauses[i],
+            index: i,
+            defaultTrue: false,
+            defaultMinutes: 5,
+            minMinutes: 1,
+            canDelete: clauses.length > 1,
+            onChanged: () => setState(() {}),
+            onDelete: () => setState(() => clauses.removeAt(i)),
+          ),
+        ],
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: () => setState(() {
+            clauses.add({'ga': '', 'value': '0', 'minutes': 5});
+          }),
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Status toevoegen'),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(44),
+            shape: const StadiumBorder(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /* ---- after pane ---- */
+
+  Widget _afterPane(ScrollController ctl) {
+    final after = _draft['after'] as String? ?? 'previous';
+    return ListView(
+      controller: ctl,
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
+      children: [
+        Text(
+          'Waar gaat de WTW heen als de logica stopt?',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 14),
+        _WtwLogicSelect(
+          value: _afterLabels.containsKey(after) ? after : 'previous',
+          options: const [
+            'previous',
+            'auto',
+            'stand1',
+            'stand2',
+            'stand3',
+            'away',
+          ],
+          labels: _afterLabels,
+          onChanged: (v) => _set('after', v),
+        ),
+      ],
+    );
+  }
+
+  /* ---- footer ---- */
+
+  Widget _buildFooter() {
+    if (_isCreate) {
+      final last = _pane == _createSteps.last;
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 18),
+        child: Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _back,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                  shape: const StadiumBorder(),
+                ),
+                child: const Text('Terug'),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: FilledButton(
+                onPressed: _next,
+                style: FilledButton.styleFrom(
+                  backgroundColor: LuxeColors.ink,
+                  foregroundColor: LuxeColors.onInk,
+                  minimumSize: const Size.fromHeight(52),
+                  shape: const StadiumBorder(),
+                ),
+                child: Text(last ? 'Opslaan' : 'Volgende'),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (_pane != _WtwLogicPane.overview) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 18),
+        child: Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _back,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                  shape: const StadiumBorder(),
+                ),
+                child: const Text('Terug'),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: FilledButton(
+                onPressed: _next,
+                style: FilledButton.styleFrom(
+                  backgroundColor: LuxeColors.ink,
+                  foregroundColor: LuxeColors.onInk,
+                  minimumSize: const Size.fromHeight(52),
+                  shape: const StadiumBorder(),
+                ),
+                child: const Text('OK'),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 18),
+      child: Row(
+        children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+                shape: const StadiumBorder(),
+              ),
+              child: const Text('Annuleren'),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: FilledButton(
+              onPressed: _save,
+              style: FilledButton.styleFrom(
+                backgroundColor: LuxeColors.ink,
+                foregroundColor: LuxeColors.onInk,
+                minimumSize: const Size.fromHeight(52),
+                shape: const StadiumBorder(),
+              ),
+              child: const Text('Opslaan'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/* ---------- setting row (matches schedule overview) ------------------- */
+
+class _LogicSettingRow extends StatelessWidget {
+  const _LogicSettingRow({
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+    this.done = false,
+  });
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+  final bool done;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: Theme.of(context).textTheme.bodyLarge),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            if (done)
+              Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: Icon(Icons.check_rounded,
+                    size: 18, color: LuxeColors.brassDeep),
+              ),
+            Icon(Icons.chevron_right_rounded,
+                size: 20, color: LuxeColors.inkSoft),
           ],
         ),
       ),
@@ -2638,154 +3439,124 @@ class _WtwLogicCard extends StatelessWidget {
   }
 }
 
-class _WtwLogicClauseList extends StatelessWidget {
-  const _WtwLogicClauseList({
-    required this.logic,
-    required this.listKey,
-    required this.joinKey,
+/* ---------- single clause card (GA + value + minutes) ----------------- */
+
+class _WtwClauseCard extends StatelessWidget {
+  const _WtwClauseCard({
+    required this.clause,
+    required this.index,
     required this.defaultTrue,
     required this.defaultMinutes,
     required this.minMinutes,
+    required this.canDelete,
     required this.onChanged,
+    required this.onDelete,
   });
-  final Map<String, dynamic> logic;
-  final String listKey;
-  final String joinKey;
+  final Map<String, dynamic> clause;
+  final int index;
   final bool defaultTrue;
   final int defaultMinutes;
   final int minMinutes;
+  final bool canDelete;
   final VoidCallback onChanged;
+  final VoidCallback onDelete;
 
-  List<Map<String, dynamic>> _clauses() {
-    if (listKey == 'when') _migrateWhen(logic);
-    if (listKey == 'untilWhen') _migrateUntil(logic);
-    return _ensureList(logic, listKey);
-  }
-
-  String _valueOf(Map<String, dynamic> c) {
-    final raw = c['value'];
+  String _valueOf() {
+    final raw = clause['value'];
     if (raw != null && '$raw'.trim().isNotEmpty) return '$raw'.trim();
-    final eq = c['equals'];
+    final eq = clause['equals'];
     if (eq == false) return '0';
     if (eq == true) return '1';
     return defaultTrue ? '1' : '0';
   }
 
-  void _setValue(Map<String, dynamic> c, String raw) {
+  void _setValue(String raw) {
     final v = raw.trim();
     if (v.isEmpty) {
-      c.remove('value');
+      clause.remove('value');
     } else {
-      c['value'] = v;
+      clause['value'] = v;
     }
     if (v == '1' || v.toLowerCase() == 'true') {
-      c['equals'] = true;
+      clause['equals'] = true;
     } else if (v == '0' || v.toLowerCase() == 'false') {
-      c['equals'] = false;
+      clause['equals'] = false;
     } else {
-      c.remove('equals');
+      clause.remove('equals');
     }
     onChanged();
   }
 
   @override
   Widget build(BuildContext context) {
-    final clauses = _clauses();
-    if (clauses.isEmpty) {
-      clauses.add({
-        'ga': '',
-        'value': defaultTrue ? '1' : '0',
-        'minutes': defaultMinutes,
-      });
-    }
-    final join = logic[joinKey] == 'and' ? 'and' : 'or';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _WtwLogicSelect(
-                value: join,
-                options: const ['or', 'and'],
-                labels: const {'or': 'of (één van de statussen)', 'and': 'en (alle statussen)'},
-                onChanged: (v) {
-                  logic[joinKey] = v;
-                  onChanged();
-                },
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
+      decoration: BoxDecoration(
+        color: LuxeColors.surface.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: LuxeColors.lineSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Status ${index + 1}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    letterSpacing: 1.5,
+                    fontWeight: FontWeight.w700,
+                    color: LuxeColors.inkSoft,
+                  ),
+                ),
               ),
-            ),
-            IconButton(
-              tooltip: 'Status toevoegen',
-              onPressed: () {
-                clauses.add({
-                  'ga': '',
-                  'value': defaultTrue ? '1' : '0',
-                  'minutes': defaultMinutes,
-                });
-                onChanged();
-              },
-              icon: const Icon(Icons.add),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        for (var i = 0; i < clauses.length; i++) ...[
-          if (i > 0)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Text(
-                join == 'and' ? 'en' : 'of',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-            ),
+              if (canDelete)
+                IconButton(
+                  icon: const Icon(Icons.delete_outline,
+                      color: Colors.red, size: 20),
+                  tooltip: 'Verwijderen',
+                  onPressed: onDelete,
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
           _InstallerStrField(
-            label: 'groepsadres',
-            value: clauses[i]['ga'] as String? ?? '',
+            label: 'Groepsadres',
+            value: clause['ga'] as String? ?? '',
             gaSearch: true,
             onChanged: (v) {
-              clauses[i]['ga'] = v.trim();
+              clause['ga'] = v.trim();
               onChanged();
             },
           ),
           _InstallerStrField(
-            label: 'waarde',
-            hint: 'volgens DPT van het groepsadres (1, 0, getal, …)',
-            value: _valueOf(clauses[i]),
-            onChanged: (v) => _setValue(clauses[i], v),
+            label: 'Waarde',
+            hint: 'volgens DPT (1, 0, getal, …)',
+            value: _valueOf(),
+            onChanged: _setValue,
           ),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _InstallerStrField(
-                  label: 'voor (min)',
-                  value: '${(clauses[i]['minutes'] as num?)?.round() ?? defaultMinutes}',
-                  number: true,
-                  onChanged: (v) {
-                    final n = int.tryParse(v);
-                    if (n == null) return;
-                    clauses[i]['minutes'] = n.clamp(minMinutes, 1440);
-                    onChanged();
-                  },
-                ),
-              ),
-              if (clauses.length > 1)
-                IconButton(
-                  tooltip: 'Status verwijderen',
-                  onPressed: () {
-                    clauses.removeAt(i);
-                    onChanged();
-                  },
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                ),
-            ],
+          _InstallerStrField(
+            label: 'Minuten',
+            hint: '0 = direct',
+            value:
+                '${(clause['minutes'] as num?)?.round() ?? defaultMinutes}',
+            number: true,
+            onChanged: (v) {
+              final n = int.tryParse(v);
+              if (n == null) return;
+              clause['minutes'] = n.clamp(minMinutes, 1440);
+              onChanged();
+            },
           ),
         ],
-      ],
+      ),
     );
   }
 }
+
+/* ---------- shared helpers (migration, labels, select) ---------------- */
 
 Map<String, dynamic> _clause({
   required String ga,
