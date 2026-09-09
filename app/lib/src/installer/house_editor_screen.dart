@@ -68,6 +68,10 @@ const _deviceTypesKnx = [
   'ac',
   'fan',
   'universal',
+];
+
+/// Huisbrede apparaten (niet aan één kamer gekoppeld) — sectie Algemeen.
+const _deviceTypesGeneral = [
   'wtw',
   'melding',
 ];
@@ -158,6 +162,49 @@ Future<DeviceTypePick?> showPickDeviceTypeSheet(
   );
 }
 
+/// Picker voor huisbrede apparaten (Algemeen): WTW/MV, meldingen, …
+Future<DeviceTypePick?> showPickGeneralDeviceTypeSheet(BuildContext context) {
+  return showModalBottomSheet<DeviceTypePick>(
+    context: context,
+    isScrollControlled: true,
+    builder: (ctx) {
+      final theme = Theme.of(ctx);
+      final bottom = MediaQuery.paddingOf(ctx).bottom;
+      return SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              child: Text(
+                'Algemeen apparaat',
+                style: theme.textTheme.titleMedium,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Text(
+                'Niet gekoppeld aan één kamer — voor het hele huis.',
+                style: theme.textTheme.bodySmall,
+              ),
+            ),
+            for (final dt in _deviceTypesGeneral)
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                title: Text(_deviceTypeLabels[dt] ?? dt),
+                onTap: () => Navigator.pop(
+                  ctx,
+                  DeviceTypePick(type: dt, bus: DeviceBusCategory.knx),
+                ),
+              ),
+            SizedBox(height: 8 + bottom),
+          ],
+        ),
+      );
+    },
+  );
+}
+
 const _deviceTypeLabels = <String, String>{
   'light_switch': 'Licht (aan/uit)',
   'light_dimmer': 'Licht (dimmen)',
@@ -173,9 +220,9 @@ const _deviceTypeLabels = <String, String>{
   'ac': 'Airco',
   'fan': 'Ventilator',
   'universal': 'Universeel knoppaneel',
-  'wtw': 'WTW / HRV ventilatie',
+  'wtw': 'WTW / MV / ventilatie',
   'melding': 'Meldingen / Alarmen monitor',
-  'lutron_homeworks': 'Lutron Homeworks ? KNX',
+  'lutron_homeworks': 'Lutron Homeworks → KNX',
 };
 
 class _DeviceTypePickerSheet extends StatefulWidget {
@@ -2012,7 +2059,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         _FocusKind.floor => 'Verdieping',
         _FocusKind.room => 'Kamer',
         _FocusKind.device => 'Apparaat',
-        _FocusKind.globalDevices => 'Apparaten',
+        _FocusKind.globalDevices => 'Algemeen',
         _FocusKind.globalDevice => 'Apparaat',
       };
 
@@ -2269,7 +2316,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               div(),
               LuxeNavRow(
                 icon: Icons.devices_other_outlined,
-                title: 'Apparaten',
+                title: 'Algemeen',
                 selected: _sel.kind == _FocusKind.globalDevices ||
                     _sel.kind == _FocusKind.globalDevice,
                 onTap: () => _selectFocus(const _Focus.globalDevices()),
@@ -2719,12 +2766,13 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                 padding: EdgeInsets.fromLTRB(16, 12, 8, 4),
                 child: LuxeSectionTitle(
                   icon: Icons.devices_other_outlined,
-                  title: 'Apparaten',
+                  title: 'Algemeen',
                   trailing: LuxeInfoIconButton(
-                    title: 'Apparaten',
+                    title: 'Algemeen',
                     body:
-                        'Apparaten die bij het hele huis horen, niet bij één kamer. '
-                        'Bijvoorbeeld WTW of een paneel in de meterkast.',
+                        'Apparaten die bij het hele huis horen, niet bij één kamer.\n\n'
+                        '• WTW / MV — warmteterugwinning of mechanische ventilatie\n'
+                        '• Meldingen — alarm- en statusmonitor voor KNX-contacten',
                   ),
                 ),
               ),
@@ -2732,7 +2780,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
                   child: Text(
-                    'Nog geen apparaat',
+                    'Nog geen algemeen apparaat',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
@@ -2750,9 +2798,9 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               if (list.isNotEmpty)
                 Divider(height: 1, color: LuxeColors.lineSoft),
               LuxeAddRow(
-                label: 'Apparaat toevoegen',
+                label: 'Toevoegen',
                 onTap: () async {
-                  final pick = await showPickDeviceTypeSheet(context);
+                  final pick = await showPickGeneralDeviceTypeSheet(context);
                   if (!context.mounted) return;
                   if (pick != null) _addGlobalDevice(pick);
                 },
