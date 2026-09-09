@@ -40,6 +40,7 @@ import type { LogStore } from "./logStore";
 import type { LogSamplerHandle } from "./logSampler";
 import { hvacSwitchLock } from "./hvacSwitchLock";
 import { fireplaceVirtual } from "./fireplaceVirtual";
+import { wtwRuntime } from "./wtwRuntime";
 import { probeSonos } from "./media/sonos";
 import * as spotify from "./media/spotify";
 import type { KnxBus } from "./knxBus";
@@ -1662,7 +1663,8 @@ export function buildRouter(
     res.json({
       states: bus.getAll(),
       hvacLocks: hvacSwitchLock.getAll(),
-      fireplaceVirtual: fireplaceVirtual.getAll()
+      fireplaceVirtual: fireplaceVirtual.getAll(),
+      wtwLogics: wtwRuntime.getAll()
     });
   });
 

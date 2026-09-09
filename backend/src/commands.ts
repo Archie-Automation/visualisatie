@@ -8,7 +8,7 @@ import { walkDevices } from "./config";
 import { hvacSwitchLock } from "./hvacSwitchLock";
 import { fireplaceVirtual } from "./fireplaceVirtual";
 import { pulseKnxGa } from "./fireplacePulse";
-import { pressZehnderStand } from "./wtw";
+import { wtwRuntime } from "./wtwRuntime";
 
 type PositionControllableDevice = ShadingDevice | PositionActuatorDevice;
 
@@ -713,7 +713,7 @@ export async function dispatch(
       if (device.wtw.model !== "zehnder_comfoConnect" || !device.wtw.zehnder) {
         throw new Error("WTW-type is niet ingesteld");
       }
-      await pressZehnderStand(device.wtw.zehnder, bus, cmd);
+      await wtwRuntime.press(device, bus, cmd);
       return;
     }
 

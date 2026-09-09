@@ -1015,7 +1015,32 @@
         },
         "faultGa": { "$ref": "#/definitions/gaPattern" },
         "filterGa": { "$ref": "#/definitions/gaPattern" },
-        "filterDaysGa": { "$ref": "#/definitions/gaPattern" }
+        "filterDaysGa": { "$ref": "#/definitions/gaPattern" },
+        "logics": {
+          "type": "array",
+          "description": "KNX-status → WTW-stand. Meerdere regels mogelijk.",
+          "items": { "$ref": "#/definitions/wtwZehnderLogic" }
+        }
+      }
+    },
+    "wtwZehnderLogic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "standId", "minutes"],
+      "properties": {
+        "id": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "label": { "type": "string" },
+        "triggerGa": { "$ref": "#/definitions/gaPattern" },
+        "triggerEquals": { "type": "boolean" },
+        "standId": {
+          "type": "string",
+          "enum": ["stand1", "stand2", "stand3", "away", "boost"]
+        },
+        "end": { "type": "string", "enum": ["duration", "untilStatus"] },
+        "minutes": { "type": "integer", "minimum": 1, "maximum": 1440 },
+        "untilGa": { "$ref": "#/definitions/gaPattern" },
+        "untilEquals": { "type": "boolean" }
       }
     },
     "meldingItem": {

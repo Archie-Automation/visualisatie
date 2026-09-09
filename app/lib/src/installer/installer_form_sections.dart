@@ -2407,7 +2407,201 @@ class _WtwZehnderInstaller extends StatelessWidget {
             onChanged();
           },
         ),
+        const SizedBox(height: 12),
+        _WtwLogicListEditor(zehnder: zehnder, onChanged: onChanged),
       ],
+    );
+  }
+}
+
+class _WtwLogicListEditor extends StatelessWidget {
+  const _WtwLogicListEditor({
+    required this.zehnder,
+    required this.onChanged,
+  });
+  final Map<String, dynamic> zehnder;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final logics = _ensureList(zehnder, 'logics');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _InstallerInfoTitle(
+          title: 'Logica',
+          body:
+              'Bij een KNX-status (stijgende 1 of 0) gaat de WTW naar een stand. '
+              'Einde: voor N minuten, of tot die (of een andere) status X minuten '
+              'aanhoudt. Auto gaat uit vóór de stand; was Auto aan, dan gaat die '
+              'daarna weer aan. In de app: Regeling actief.',
+          trailing: TextButton.icon(
+            onPressed: () {
+              logics.add({
+                'id': 'wtw-logic-${_uuid.v4()}',
+                'enabled': true,
+                'label': 'Nieuwe logica',
+                'triggerEquals': true,
+                'standId': 'stand3',
+                'end': 'duration',
+                'minutes': 15,
+                'untilEquals': false,
+              });
+              onChanged();
+            },
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Logica'),
+          ),
+        ),
+        if (logics.isEmpty)
+          Text(
+            'Nog geen logica. Voeg een regel toe, bijvoorbeeld: vochtsensor aan → stand 3 voor 20 min.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        for (var i = 0; i < logics.length; i++)
+          _WtwLogicCard(
+            key: ValueKey(logics[i]['id'] ?? 'l$i'),
+            logic: logics[i],
+            onChanged: onChanged,
+            onDelete: () {
+              logics.removeAt(i);
+              onChanged();
+            },
+          ),
+      ],
+    );
+  }
+}
+
+class _WtwLogicCard extends StatelessWidget {
+  const _WtwLogicCard({
+    super.key,
+    required this.logic,
+    required this.onChanged,
+    required this.onDelete,
+  });
+  final Map<String, dynamic> logic;
+  final VoidCallback onChanged;
+  final VoidCallback onDelete;
+
+  void _set(String key, Object? value) {
+    if (value == null || (value is String && value.trim().isEmpty)) {
+      logic.remove(key);
+    } else {
+      logic[key] = value;
+    }
+    onChanged();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = logic['enabled'] != false;
+    final end = logic['end'] as String? ?? 'duration';
+    final standId = logic['standId'] as String? ?? 'stand3';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: LuxeInsetCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    (logic['label'] as String?)?.trim().isNotEmpty == true
+                        ? logic['label'] as String
+                        : 'Logica',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                ),
+                Switch(
+                  value: enabled,
+                  onChanged: (v) => _set('enabled', v),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  tooltip: 'Verwijderen',
+                  onPressed: onDelete,
+                ),
+              ],
+            ),
+            _InstallerStrField(
+              label: 'Naam (in de app bij Regeling actief)',
+              value: logic['label'] as String? ?? '',
+              onChanged: (v) => _set('label', v.trim()),
+            ),
+            _InstallerStrField(
+              label: 'KNX-status GA (DPT 1.001)',
+              value: logic['triggerGa'] as String? ?? '',
+              gaSearch: true,
+              gaDptHint: 'DPT1.001',
+              onChanged: (v) => _set('triggerGa', v.trim()),
+            ),
+            _InstallerDropdown(
+              label: 'Start bij status',
+              value: logic['triggerEquals'] == false ? 'false' : 'true',
+              options: const ['true', 'false'],
+              optionLabels: const {'true': 'Aan (1)', 'false': 'Uit (0)'},
+              onChanged: (v) => _set('triggerEquals', v == 'true'),
+            ),
+            _InstallerDropdown(
+              label: 'Stand',
+              value: standId,
+              options: const ['stand1', 'stand2', 'stand3', 'away', 'boost'],
+              optionLabels: const {
+                'stand1': 'Stand 1',
+                'stand2': 'Stand 2',
+                'stand3': 'Stand 3',
+                'away': 'Afwezig',
+                'boost': 'Boost',
+              },
+              onChanged: (v) => _set('standId', v),
+            ),
+            _InstallerDropdown(
+              label: 'Einde',
+              value: end == 'untilStatus' ? 'untilStatus' : 'duration',
+              options: const ['duration', 'untilStatus'],
+              optionLabels: const {
+                'duration': 'Na N minuten terug',
+                'untilStatus': 'Tot status X minuten aanhoudt',
+              },
+              onChanged: (v) => _set('end', v),
+            ),
+            _InstallerStrField(
+              label: end == 'untilStatus'
+                  ? 'Minuten dat de eindstatus moet aanhouden'
+                  : 'Minuten op deze stand',
+              value: '${(logic['minutes'] as num?)?.round() ?? 15}',
+              number: true,
+              hint: '1–1440',
+              onChanged: (v) {
+                final n = int.tryParse(v);
+                if (n == null) return;
+                _set('minutes', n.clamp(1, 1440));
+              },
+            ),
+            if (end == 'untilStatus') ...[
+              _InstallerStrField(
+                label: 'Eind-status GA (leeg = zelfde als start)',
+                value: logic['untilGa'] as String? ?? '',
+                gaSearch: true,
+                gaDptHint: 'DPT1.001',
+                onChanged: (v) => _set('untilGa', v.trim()),
+              ),
+              _InstallerDropdown(
+                label: 'Eindstatus',
+                value: logic['untilEquals'] == true ? 'true' : 'false',
+                options: const ['false', 'true'],
+                optionLabels: const {
+                  'false': 'Uit (0)',
+                  'true': 'Aan (1)',
+                },
+                onChanged: (v) => _set('untilEquals', v == 'true'),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

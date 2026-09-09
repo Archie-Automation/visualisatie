@@ -12,6 +12,7 @@ import '../../fireplace_step_ranges.dart';
 import '../../fireplace_virtual.dart';
 import '../../hvac_switch_lock.dart';
 import '../../models.dart';
+import '../../wtw_logic.dart';
 import '../../shading_subtype_glyph.dart';
 import '../../room_control_category.dart';
 import '../../theme.dart';
@@ -3996,9 +3997,13 @@ class _WtwTileState extends ConsumerState<WtwTile> {
   void initState() {
     super.initState();
     _tick = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted || _boostEndsAt == null) return;
+      if (!mounted) return;
+      final boostLive = _boostEndsAt != null;
+      if (!boostLive && ref.read(wtwLogicProvider).forDevice(device.id).isEmpty) {
+        return;
+      }
       setState(() {
-        if (!_boostEndsAt!.isAfter(DateTime.now())) {
+        if (_boostEndsAt != null && !_boostEndsAt!.isAfter(DateTime.now())) {
           _boostEndsAt = null;
         }
       });
@@ -4118,6 +4123,7 @@ class _WtwTileState extends ConsumerState<WtwTile> {
     }
 
     final bus = ref.watch(busProvider);
+    final logicRuns = ref.watch(wtwLogicProvider).forDevice(device.id);
     final minutes = _setMinutes(z, bus);
     ref.listen<BusState>(busProvider, (prev, next) {
       if (prev == null) return;
@@ -4230,6 +4236,12 @@ class _WtwTileState extends ConsumerState<WtwTile> {
                 perRow: DeviceControlBar.autoPerRow(context, 6),
               ),
             ),
+          ],
+          if (logicRuns.isNotEmpty) ...[
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            _WtwLogicActiveRow(runs: logicRuns),
           ],
           if (showSetMinutes || showRemaining) ...[
             SizedBox(height: DeviceControlBar.sectionSpacing(context)),
@@ -4408,7 +4420,7 @@ class _WtwSetMinutesRow extends StatelessWidget {
             _WtwHoldStepButton(icon: Icons.remove, onStep: onDecrease),
             const SizedBox(width: gap),
           ],
-          _WtwValueBox(text: '$minutes min'),
+          _WtwValueBox(text: _wtwFormatMinutes(minutes)),
           if (onIncrease != null) ...[
             const SizedBox(width: gap),
             _WtwHoldStepButton(icon: Icons.add, onStep: onIncrease),
@@ -4432,6 +4444,23 @@ class _WtwRemainingRow extends StatelessWidget {
     return _WtwMetricRow(
       label: 'Resterend',
       trailing: _WtwValueBox(text: text, pulse: counting, active: counting),
+    );
+  }
+}
+
+class _WtwLogicActiveRow extends StatelessWidget {
+  const _WtwLogicActiveRow({required this.runs});
+  final List<WtwLogicActive> runs;
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final text = runs.length == 1
+        ? runs.first.statusText(now)
+        : '${runs.length} actief · ${runs.map((r) => r.statusText(now)).join(' · ')}';
+    return _WtwMetricRow(
+      label: 'Regeling',
+      trailing: _WtwValueBox(text: text, pulse: true, active: true),
     );
   }
 }
@@ -4641,13 +4670,23 @@ class _WtwStatusSquare extends StatelessWidget {
   }
 }
 
+String _wtwFormatMinutes(int minutes) {
+  if (minutes <= 59) return '$minutes min';
+  final h = minutes ~/ 60;
+  final m = minutes % 60;
+  if (m == 0) return '$h u';
+  return '$h u ${m.toString().padLeft(2, '0')} min';
+}
+
 String _wtwFormatClock(Duration d) {
   if (d.isNegative) d = Duration.zero;
-  final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-  if (d.inHours > 0) {
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    return '${d.inHours}:$m:$s';
+  if (d.inMinutes >= 60) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60);
+    if (m == 0) return '$h u';
+    return '$h u ${m.toString().padLeft(2, '0')} min';
   }
+  final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
   return '${d.inMinutes}:$s';
 }
 
