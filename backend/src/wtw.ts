@@ -1,7 +1,10 @@
 import type {
   WtwZehnderComfoConnect,
   WtwZehnderLogic,
-  WtwZehnderStandId
+  WtwZehnderStandId,
+  WtwDucoConnectivityBoard,
+  WtwDucoLogic,
+  DucoStandId
 } from "./types";
 import type { KnxBus } from "./knxBus";
 
@@ -169,6 +172,78 @@ export function collectZehnderSubscriptions(z: WtwZehnderComfoConnect): Array<{
   add(z.filterGa, "bit");
   add(z.filterDaysGa, "uint16");
   for (const logic of zehnderLogics(z)) {
+    add(logic.triggerGa, "bit");
+    add(logic.orGa, "bit");
+    add(logic.untilGa, "bit");
+    for (const c of logic.when ?? []) add(c.ga, "bit");
+    for (const c of logic.untilWhen ?? []) add(c.ga, "bit");
+    if (logic.triggerMode === "tempRise" && logic.tempRise) {
+      add(logic.tempRise.ga, "temperature");
+    }
+  }
+  return out;
+}
+
+/* ===================================================================== */
+/*  Duco Connectivity Board (Modbus TCP via KNX)                         */
+/* ===================================================================== */
+
+/** Byte-waarde per stand. */
+export const DUCO_STAND_BYTE: Record<DucoStandId, number> = {
+  auto: 0,
+  away: 7,
+  stand1: 8,
+  stand2: 9,
+  stand3: 10
+};
+
+/** Omgekeerde lookup: byte → stand. */
+const DUCO_BYTE_STAND = new Map<number, DucoStandId>(
+  Object.entries(DUCO_STAND_BYTE).map(([id, byte]) => [byte, id as DucoStandId])
+);
+
+/** Lees de actieve stand van het status-GA (byte). */
+export function readDucoActiveStand(bus: KnxBus, d: WtwDucoConnectivityBoard): DucoStandId {
+  const ga = asGa(d.statusGa);
+  if (!ga) return "auto";
+  const raw = bus.getState(ga)?.value;
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n)) return "auto";
+  return DUCO_BYTE_STAND.get(Math.round(n)) ?? "auto";
+}
+
+/** Schrijf stand naar het command-GA. */
+export async function pressDucoStand(
+  d: WtwDucoConnectivityBoard,
+  bus: KnxBus,
+  cmd: { buttonId: string; on?: boolean }
+): Promise<void> {
+  const ga = asGa(d.commandGa);
+  if (!ga) throw new Error("Duco command-GA ontbreekt");
+  const standId = cmd.buttonId as DucoStandId;
+  const byte = DUCO_STAND_BYTE[standId];
+  if (byte === undefined) throw new Error(`Onbekende Duco-stand: ${cmd.buttonId}`);
+  await bus.write(ga, "byte", byte);
+}
+
+export function ducoLogics(d: WtwDucoConnectivityBoard): WtwDucoLogic[] {
+  return Array.isArray(d.logics) ? d.logics : [];
+}
+
+export function collectDucoSubscriptions(d: WtwDucoConnectivityBoard): Array<{
+  ga: string;
+  role: string;
+}> {
+  const out: Array<{ ga: string; role: string }> = [];
+  const add = (raw: unknown, role: string) => {
+    const ga = asGa(raw);
+    if (ga) out.push({ ga, role });
+  };
+  add(d.commandGa, "byte");
+  add(d.statusGa, "byte");
+  add(d.filterGa, "bit");
+  add(d.filterDaysGa, "uint16");
+  for (const logic of ducoLogics(d)) {
     add(logic.triggerGa, "bit");
     add(logic.orGa, "bit");
     add(logic.untilGa, "bit");

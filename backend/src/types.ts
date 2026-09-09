@@ -840,7 +840,7 @@ export type WtwDpt =
   | "hex";    // Allen voor status: waarde als hex-string weergeven
 
 /** Welk WTW-model; bepaalt welke GAs en functies de installer toont. */
-export type WtwModel = "zehnder_comfoConnect";
+export type WtwModel = "zehnder_comfoConnect" | "duco_connectivity_board";
 
 export type WtwZehnderStandId =
   | "away"
@@ -961,9 +961,66 @@ export interface WtwZehnderComfoConnect {
   logics?: WtwZehnderLogic[];
 }
 
+/* ---------- Duco stand-byte mapping ---------------------------------- */
+
+export type DucoStandId = "auto" | "away" | "stand1" | "stand2" | "stand3";
+
+export type DucoLogicStandId = Exclude<DucoStandId, "auto">;
+
+export type DucoLogicAfter =
+  | "previous"
+  | "auto"
+  | "stand1"
+  | "stand2"
+  | "stand3"
+  | "away";
+
+/** Duco logic: identical structure to Zehnder but without boost. */
+export interface WtwDucoLogic {
+  id: string;
+  enabled?: boolean;
+  label?: string;
+  triggerMode?: "status" | "tempRise";
+  tempRise?: WtwTempRiseTrigger;
+  triggerGa?: string;
+  triggerValue?: string | number;
+  triggerEquals?: boolean;
+  triggerMinutes?: number;
+  orGa?: string;
+  orValue?: string | number;
+  orEquals?: boolean;
+  orMinutes?: number;
+  when?: WtwLogicClause[];
+  whenJoin?: WtwLogicJoin;
+  standId: DucoLogicStandId;
+  end?: "duration" | "untilStatus";
+  minutes: number;
+  untilGa?: string;
+  untilValue?: string | number;
+  untilEquals?: boolean;
+  untilMinutes?: number;
+  untilWhen?: WtwLogicClause[];
+  untilJoin?: WtwLogicJoin;
+  after?: DucoLogicAfter;
+}
+
+/**
+ * Duco Connectivity Board (Modbus TCP via KNX).
+ * Eén command-GA (byte 0-255) en één status-GA (byte).
+ * Stand-mapping: 0=auto, 7=afwezig, 8=stand1, 9=stand2, 10=stand3.
+ */
+export interface WtwDucoConnectivityBoard {
+  commandGa?: string;
+  statusGa?: string;
+  filterGa?: string;
+  filterDaysGa?: string;
+  logics?: WtwDucoLogic[];
+}
+
 export interface WtwConfig {
   model?: WtwModel;
   zehnder?: WtwZehnderComfoConnect;
+  duco?: WtwDucoConnectivityBoard;
 }
 
 export interface WtwDevice extends DeviceBase {

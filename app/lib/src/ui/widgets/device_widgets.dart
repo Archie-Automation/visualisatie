@@ -3993,6 +3993,13 @@ class _WtwTileState extends ConsumerState<WtwTile> {
     return z is Map<String, dynamic> ? z : null;
   }
 
+  Map<String, dynamic>? get _duco {
+    final wtw = device.raw['wtw'] as Map<String, dynamic>?;
+    if (wtw == null || wtw['model'] != 'duco_connectivity_board') return null;
+    final d = wtw['duco'];
+    return d is Map<String, dynamic> ? d : null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -4139,27 +4146,30 @@ class _WtwTileState extends ConsumerState<WtwTile> {
       );
     }
     final z = _zehnder;
-    if (z == null) {
+    final duc = _duco;
+    if (z == null && duc == null) {
       return _Placeholder(name: device.name, hint: 'WTW-config ontbreekt');
     }
+    if (duc != null) return _buildDuco(context, duc);
+    final zz = z!;
 
     final bus = ref.watch(busProvider);
     final logicRuns = ref.watch(wtwLogicProvider).forDevice(device.id);
     ref.listen<List<WtwLogicActive>>(wtwLogicProvider, (prev, next) {
       setState(() => _applyLogicBoostTimer(next));
     });
-    final minutes = _setMinutes(z, bus);
+    final minutes = _setMinutes(zz, bus);
     ref.listen<BusState>(busProvider, (prev, next) {
       if (prev == null) return;
-      final on = _bitOn(next, z['boostStatusGa'] as String?);
-      final was = _bitOn(prev, z['boostStatusGa'] as String?);
+      final on = _bitOn(next, zz['boostStatusGa'] as String?);
+      final was = _bitOn(prev, zz['boostStatusGa'] as String?);
       if (on && !was) {
         setState(() {
           final logicUntil = ref.read(wtwLogicProvider).boostUntilFor(device.id);
           if (logicUntil != null) {
             _boostEndsAt = logicUntil;
           } else {
-            _armBoost(_busBoostMinutes(z, next));
+            _armBoost(_busBoostMinutes(zz, next));
           }
         });
       } else if (!on && was) {
@@ -4169,13 +4179,13 @@ class _WtwTileState extends ConsumerState<WtwTile> {
     final remaining = _localRemaining();
     final remainingLive = remaining != null && remaining > Duration.zero;
     final boostOn = remainingLive;
-    final timeWrite = _hasGa(z, 'boostTimeGa');
-    final timeStatus = _hasGa(z, 'boostTimeStatusGa');
-    final hasBoost = _hasGa(z, 'boostGa') || _hasGa(z, 'boostStatusGa');
+    final timeWrite = _hasGa(zz, 'boostTimeGa');
+    final timeStatus = _hasGa(zz, 'boostTimeStatusGa');
+    final hasBoost = _hasGa(zz, 'boostGa') || _hasGa(zz, 'boostStatusGa');
     final showSetMinutes = timeWrite || timeStatus;
     final showRemaining = hasBoost && remainingLive;
 
-    final autoOn = _bitOn(bus, z['autoStatusGa'] as String?);
+    final autoOn = _bitOn(bus, zz['autoStatusGa'] as String?);
     const stands = <({String id, String label})>[
       (id: 'stand1', label: '1'),
       (id: 'stand2', label: '2'),
@@ -4207,8 +4217,8 @@ class _WtwTileState extends ConsumerState<WtwTile> {
 
     bool configured(String id) {
       final status = statusKey(id);
-      return _hasGa(z, writeKey(id)) ||
-          (status != null && _hasGa(z, status));
+      return _hasGa(zz, writeKey(id)) ||
+          (status != null && _hasGa(zz, status));
     }
 
     final buttonItems = [
@@ -4227,8 +4237,8 @@ class _WtwTileState extends ConsumerState<WtwTile> {
                 : DeviceControlLabelMode.iconOnly,
             active: s.id == 'boost'
                 ? boostOn
-                : _bitOn(bus, z[statusKey(s.id)] as String?),
-            onTap: !_hasGa(z, writeKey(s.id))
+                : _bitOn(bus, zz[statusKey(s.id)] as String?),
+            onTap: !_hasGa(zz, writeKey(s.id))
                 ? null
                 : () {
                     if (s.id == 'auto') {
@@ -4290,7 +4300,128 @@ class _WtwTileState extends ConsumerState<WtwTile> {
                 active: true,
               ),
           ],
-          ..._zehnderStatusRows(z, bus),
+          ..._zehnderStatusRows(zz, bus),
+        ],
+      ),
+    );
+  }
+
+  /* ---- Duco Connectivity Board UI ---- */
+
+  static const _ducoStandByte = <String, int>{
+    'auto': 0,
+    'away': 7,
+    'stand1': 8,
+    'stand2': 9,
+    'stand3': 10,
+  };
+
+  static String _ducoActiveStand(BusState bus, String? statusGa) {
+    final ga = statusGa?.trim() ?? '';
+    if (ga.isEmpty) return 'auto';
+    final raw = bus.values[ga];
+    final n = raw is num ? raw.round() : int.tryParse(raw?.toString() ?? '');
+    if (n == null) return 'auto';
+    for (final e in _ducoStandByte.entries) {
+      if (e.value == n) return e.key;
+    }
+    return 'auto';
+  }
+
+  Widget _buildDuco(BuildContext context, Map<String, dynamic> duc) {
+    final bus = ref.watch(busProvider);
+    final logicRuns = ref.watch(wtwLogicProvider).forDevice(device.id);
+    final statusGa = duc['statusGa'] as String?;
+    final activeStand = _ducoActiveStand(bus, statusGa);
+    final commandGa = (duc['commandGa'] as String?)?.trim() ?? '';
+
+    const stands = <({String id, String label})>[
+      (id: 'stand1', label: '1'),
+      (id: 'stand2', label: '2'),
+      (id: 'stand3', label: '3'),
+      (id: 'auto', label: 'Automatisch'),
+      (id: 'away', label: 'Afwezig'),
+    ];
+
+    final buttonItems = [
+      for (final s in stands)
+        DeviceControlItem(
+          icon: switch (s.id) {
+            'away' => Icons.luggage_outlined,
+            _ => null,
+          },
+          glyph: s.id == 'auto' ? const _WtwAutoGlyph() : null,
+          label: deviceControlNumericLabel(s.label) ?? s.label,
+          labelMode: deviceControlNumericLabel(s.label) != null
+              ? DeviceControlLabelMode.numeric
+              : DeviceControlLabelMode.iconOnly,
+          active: activeStand == s.id,
+          onTap: commandGa.isEmpty
+              ? null
+              : () => _press(s.id),
+        ),
+    ];
+
+    final hasFilter = _hasGa(duc, 'filterGa');
+    final daysGa = _ga(duc, 'filterDaysGa');
+
+    return DeviceTileShell(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DeviceTileLayout.headerRow(
+            context: context,
+            leading: DeviceTileIconBadge(icon: Icons.air_outlined),
+            content: Text(
+              device.name,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+          if (buttonItems.isNotEmpty) ...[
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+            DeviceControlSection(
+              title: 'STAND',
+              child: DeviceControlBar.grid(
+                context,
+                buttonItems,
+                perRow: DeviceControlBar.autoPerRow(context, 5),
+              ),
+            ),
+          ],
+          if (logicRuns.isNotEmpty) ...[
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            const _WtwLogicActiveRow(),
+          ],
+          if (hasFilter || daysGa.isNotEmpty) ...[
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            if (hasFilter)
+              _WtwStatusRow(
+                item: {
+                  'label': 'Filter',
+                  'ga': duc['filterGa'],
+                  'dpt': '1.001',
+                  'icon0': 'check',
+                  'icon1': 'warning',
+                },
+                bus: bus,
+              ),
+            if (daysGa.isNotEmpty)
+              _WtwStatusRow(
+                item: {
+                  'label': 'Filterdagen',
+                  'ga': daysGa,
+                  'dpt': '7.001',
+                },
+                bus: bus,
+              ),
+          ],
         ],
       ),
     );

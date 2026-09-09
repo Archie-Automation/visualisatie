@@ -844,10 +844,11 @@
           "properties": {
             "model": {
               "type": "string",
-              "enum": ["zehnder_comfoConnect"],
+              "enum": ["zehnder_comfoConnect", "duco_connectivity_board"],
               "description": "Merk/type. Nieuwe types komen hier bij."
             },
-            "zehnder": { "$ref": "#/definitions/wtwZehnderComfoConnect" }
+            "zehnder": { "$ref": "#/definitions/wtwZehnderComfoConnect" },
+            "duco": { "$ref": "#/definitions/wtwDucoConnectivityBoard" }
           }
         },
         "melding": {
@@ -1020,6 +1021,79 @@
           "type": "array",
           "description": "KNX-status → WTW-stand. Meerdere regels mogelijk.",
           "items": { "$ref": "#/definitions/wtwZehnderLogic" }
+        }
+      }
+    },
+    "wtwDucoConnectivityBoard": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Duco Connectivity Board (Modbus TCP via KNX). Eén command-GA (byte 0-255) en één status-GA (byte). 0=auto, 7=afwezig, 8=stand1, 9=stand2, 10=stand3.",
+      "properties": {
+        "commandGa": { "$ref": "#/definitions/gaPattern" },
+        "statusGa": { "$ref": "#/definitions/gaPattern" },
+        "filterGa": { "$ref": "#/definitions/gaPattern" },
+        "filterDaysGa": { "$ref": "#/definitions/gaPattern" },
+        "logics": {
+          "type": "array",
+          "description": "KNX-status → Duco-stand. Meerdere regels mogelijk.",
+          "items": { "$ref": "#/definitions/wtwDucoLogic" }
+        }
+      }
+    },
+    "wtwDucoLogic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "standId", "minutes"],
+      "properties": {
+        "id": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "label": { "type": "string" },
+        "triggerMode": {
+          "type": "string",
+          "enum": ["status", "tempRise"]
+        },
+        "tempRise": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ga": { "$ref": "#/definitions/gaPattern" },
+            "deltaDeg": { "type": "number", "minimum": 0.1, "maximum": 50 },
+            "windowSec": { "type": "integer", "minimum": 5, "maximum": 600 }
+          },
+          "required": ["ga", "deltaDeg", "windowSec"]
+        },
+        "triggerGa": { "$ref": "#/definitions/gaPattern" },
+        "triggerValue": { "type": ["string", "number"] },
+        "triggerEquals": { "type": "boolean" },
+        "triggerMinutes": { "type": "integer", "minimum": 0, "maximum": 1440 },
+        "orGa": { "$ref": "#/definitions/gaPattern" },
+        "orValue": { "type": ["string", "number"] },
+        "orEquals": { "type": "boolean" },
+        "orMinutes": { "type": "integer", "minimum": 0, "maximum": 1440 },
+        "when": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/wtwLogicClause" }
+        },
+        "whenJoin": { "type": "string", "enum": ["or", "and"] },
+        "standId": {
+          "type": "string",
+          "enum": ["stand1", "stand2", "stand3", "away"],
+          "description": "Duco heeft geen boost; alleen stand1-3 en afwezig."
+        },
+        "end": { "type": "string", "enum": ["duration", "untilStatus"] },
+        "minutes": { "type": "integer", "minimum": 1, "maximum": 1440 },
+        "untilGa": { "$ref": "#/definitions/gaPattern" },
+        "untilValue": { "type": ["string", "number"] },
+        "untilEquals": { "type": "boolean" },
+        "untilMinutes": { "type": "integer", "minimum": 1, "maximum": 1440 },
+        "untilWhen": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/wtwLogicClause" }
+        },
+        "untilJoin": { "type": "string", "enum": ["or", "and"] },
+        "after": {
+          "type": "string",
+          "enum": ["previous", "auto", "stand1", "stand2", "stand3", "away"]
         }
       }
     },

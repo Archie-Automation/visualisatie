@@ -3,8 +3,11 @@ import type { KnxBus } from "./knxBus";
 import { logger } from "./logger";
 import type {
   Device,
+  DucoStandId,
   GAState,
   WtwDevice,
+  WtwDucoConnectivityBoard,
+  WtwDucoLogic,
   WtwZehnderComfoConnect,
   WtwZehnderLogic,
   WtwZehnderStandId,
@@ -15,8 +18,13 @@ import type {
 import {
   asGa,
   bitOn,
+  collectDucoSubscriptions,
+  ducoLogics,
+  DUCO_STAND_BYTE,
+  pressDucoStand,
   pressZehnderStand,
   readBoostMinutes,
+  readDucoActiveStand,
   readZehnderActiveStand,
   writeBoostMinutes,
   writeZehnderAuto,
@@ -269,8 +277,12 @@ class WtwRuntime {
     const cfg = getConfig();
     walkDevices(cfg, (d) => {
       const w = asWtw(d);
-      if (!w?.wtw.zehnder) return;
-      for (const logic of zehnderLogics(w.wtw.zehnder)) {
+      if (!w) return;
+      const allLogics: Array<WtwZehnderLogic | WtwDucoLogic> = [
+        ...(w.wtw.zehnder ? zehnderLogics(w.wtw.zehnder) : []),
+        ...(w.wtw.duco ? ducoLogics(w.wtw.duco) : [])
+      ];
+      for (const logic of allLogics) {
         if (logic.triggerMode === "tempRise" && logic.tempRise) {
           const ga = asGa(logic.tempRise.ga);
           if (ga) this.tempHistory.register(ga, logic.tempRise.windowSec);
@@ -325,6 +337,17 @@ class WtwRuntime {
   private emit(): void {
     const all = this.getAll();
     for (const fn of this.listeners) fn(all);
+  }
+
+  async pressDuco(
+    device: WtwDevice,
+    bus: KnxBus,
+    cmd: { buttonId: string; on?: boolean }
+  ): Promise<void> {
+    const d = device.wtw.duco;
+    if (!d) throw new Error("Duco-config ontbreekt");
+    this.cancelDeviceLogics(device.id);
+    await pressDucoStand(d, bus, cmd);
   }
 
   async press(
@@ -490,16 +513,46 @@ class WtwRuntime {
     return found;
   }
 
+  private ducoOf(deviceId: string): WtwDucoConnectivityBoard | null {
+    const cfg = getConfig();
+    let found: WtwDucoConnectivityBoard | null = null;
+    walkDevices(cfg, (d) => {
+      const w = asWtw(d);
+      if (w && w.id === deviceId) found = w.wtw.duco ?? null;
+    });
+    return found;
+  }
+
+  private ducoLogicOf(
+    deviceId: string,
+    logicId: string
+  ): { device: WtwDevice; duco: WtwDucoConnectivityBoard; logic: WtwDucoLogic } | null {
+    const cfg = getConfig();
+    let found: { device: WtwDevice; duco: WtwDucoConnectivityBoard; logic: WtwDucoLogic } | null =
+      null;
+    walkDevices(cfg, (d) => {
+      const w = asWtw(d);
+      if (!w || w.id !== deviceId || !w.wtw.duco) return;
+      const logic = ducoLogics(w.wtw.duco).find((l) => l.id === logicId);
+      if (logic) found = { device: w, duco: w.wtw.duco, logic };
+    });
+    return found;
+  }
+
   private onBusState(state: GAState): void {
     const prev = this.prev.get(state.ga);
     this.prev.set(state.ga, state.value);
     const cfg = getConfig();
     walkDevices(cfg, (d) => {
       const w = asWtw(d);
-      if (!w?.wtw.zehnder) return;
-      const z = w.wtw.zehnder;
-      this.onBoostStatus(w.id, z, state, prev);
-      this.onLogicTelegram(w, z, state, prev);
+      if (!w) return;
+      if (w.wtw.zehnder) {
+        this.onBoostStatus(w.id, w.wtw.zehnder, state, prev);
+        this.onLogicTelegram(w, w.wtw.zehnder, state, prev);
+      }
+      if (w.wtw.duco) {
+        this.onDucoLogicTelegram(w, w.wtw.duco, state, prev);
+      }
     });
   }
 
@@ -587,6 +640,264 @@ class WtwRuntime {
       void this.startLogic(live.device, live.z, live.logic);
     }
   }
+
+  /* ===== Duco logic handlers ========================================= */
+
+  private onDucoLogicTelegram(
+    device: WtwDevice,
+    duco: WtwDucoConnectivityBoard,
+    state: GAState,
+    prev: unknown
+  ): void {
+    const bus = this.bus;
+    if (!bus) return;
+    if (typeof state.value === "number") {
+      this.tempHistory.push(state.ga, state.value);
+    }
+    for (const logic of ducoLogics(duco)) {
+      if (!logicEnabled(logic) || !logic.id) continue;
+      if (logic.triggerMode === "tempRise") {
+        this.tickDucoTempRise(device, duco, logic, state);
+      } else {
+        for (const arm of whenArms(logic)) {
+          if (state.ga === arm.ga) {
+            this.tickDucoTrigger(device, duco, logic, arm, state.value, prev);
+          }
+        }
+      }
+      if (logic.end === "untilStatus") {
+        for (const arm of untilArms(logic)) {
+          if (state.ga === arm.ga) {
+            this.tickDucoUntil(device.id, logic, arm, state.value);
+          }
+        }
+      }
+    }
+  }
+
+  private tickDucoTempRise(
+    device: WtwDevice,
+    duco: WtwDucoConnectivityBoard,
+    logic: WtwDucoLogic,
+    state: GAState
+  ): void {
+    const tr = logic.tempRise;
+    if (!tr) return;
+    const ga = asGa(tr.ga);
+    if (!ga || state.ga !== ga) return;
+    const runKey = this.logicKey(device.id, logic.id);
+    if (this.logicRuns.has(runKey)) return;
+    const current = typeof state.value === "number" ? state.value : null;
+    if (current === null) return;
+    const minVal = this.tempHistory.minInWindow(ga, tr.windowSec);
+    if (minVal === null) return;
+    const delta = current - minVal;
+    if (delta >= tr.deltaDeg) {
+      const live = this.ducoLogicOf(device.id, logic.id);
+      if (!live || !logicEnabled(live.logic)) return;
+      logger.info(
+        { deviceId: device.id, logicId: logic.id, delta: Math.round(delta * 10) / 10 },
+        "Duco tempRise trigger"
+      );
+      void this.startDucoLogic(live.device, live.duco, live.logic);
+    }
+  }
+
+  private tickDucoTrigger(
+    device: WtwDevice,
+    duco: WtwDucoConnectivityBoard,
+    logic: WtwDucoLogic,
+    arm: TriggerArm,
+    value: unknown,
+    prev: unknown
+  ): void {
+    const runKey = this.logicKey(device.id, logic.id);
+    if (this.logicRuns.has(runKey)) return;
+    const timerKey = this.clauseKey(device.id, logic.id, arm.suffix);
+    const join = joinOf(logic.whenJoin);
+    if (!valueMatches(value, arm.want)) {
+      this.clearTrigger(timerKey);
+      return;
+    }
+    const fire = (): void => {
+      const live = this.ducoLogicOf(device.id, logic.id);
+      if (!live || !logicEnabled(live.logic)) return;
+      const bus = this.bus;
+      if (!bus) return;
+      const arms = whenArms(live.logic);
+      if (joinOf(live.logic.whenJoin) === "and") {
+        if (this.allArmsReady(bus, device.id, logic.id, arms)) {
+          void this.startDucoLogic(live.device, live.duco, live.logic);
+        }
+        return;
+      }
+      void this.startDucoLogic(live.device, live.duco, live.logic);
+    };
+    if (arm.minutes <= 0) {
+      const rising = prev !== undefined && !valueMatches(prev, arm.want);
+      if (join === "or") {
+        if (rising) fire();
+        return;
+      }
+      if (rising || prev === undefined) fire();
+      return;
+    }
+    if (this.triggerTimers.has(timerKey) || this.triggerHeld.has(timerKey)) return;
+    this.triggerTimers.set(
+      timerKey,
+      setTimeout(() => {
+        this.triggerTimers.delete(timerKey);
+        const bus = this.bus;
+        if (!bus) return;
+        const st = bus.getState(arm.ga);
+        if (!st || !valueMatches(st.value, arm.want)) return;
+        this.triggerHeld.add(timerKey);
+        fire();
+      }, arm.minutes * 60_000)
+    );
+  }
+
+  private tickDucoUntil(
+    deviceId: string,
+    logic: WtwDucoLogic,
+    arm: TriggerArm,
+    value: unknown
+  ): void {
+    const key = this.logicKey(deviceId, logic.id);
+    const run = this.logicRuns.get(key);
+    if (!run) return;
+    const timerKey = this.clauseKey(deviceId, logic.id, arm.suffix);
+    const join = joinOf(logic.untilJoin);
+    if (!valueMatches(value, arm.want)) {
+      this.clearTrigger(timerKey);
+      if (run.untilTimer && join === "and") {
+        clearTimeout(run.untilTimer);
+        run.untilTimer = undefined;
+        run.untilMs = null;
+        this.emit();
+      }
+      return;
+    }
+    const maybeEnd = (): void => {
+      const live = this.ducoLogicOf(deviceId, logic.id);
+      if (!live) return;
+      const bus = this.bus;
+      if (!bus) return;
+      const arms = untilArms(live.logic);
+      if (joinOf(live.logic.untilJoin) === "and") {
+        if (!this.allArmsReady(bus, deviceId, logic.id, arms)) return;
+      }
+      void this.endDucoLogic(deviceId, logic.id, "until");
+    };
+    if (arm.minutes <= 0) {
+      maybeEnd();
+      return;
+    }
+    if (this.triggerTimers.has(timerKey) || this.triggerHeld.has(timerKey)) return;
+    const untilMs = Date.now() + arm.minutes * 60_000;
+    if (join === "or" || run.untilMs == null || untilMs < run.untilMs) {
+      run.untilMs = untilMs;
+    }
+    this.triggerTimers.set(
+      timerKey,
+      setTimeout(() => {
+        this.triggerTimers.delete(timerKey);
+        const bus = this.bus;
+        if (!bus) return;
+        const st = bus.getState(arm.ga);
+        if (!st || !valueMatches(st.value, arm.want)) return;
+        this.triggerHeld.add(timerKey);
+        maybeEnd();
+      }, arm.minutes * 60_000)
+    );
+    this.emit();
+  }
+
+  private async startDucoLogic(
+    device: WtwDevice,
+    duco: WtwDucoConnectivityBoard,
+    logic: WtwDucoLogic
+  ): Promise<void> {
+    const bus = this.bus;
+    if (!bus) return;
+    const stand = logic.standId;
+    if (!stand) return;
+    const key = this.logicKey(device.id, logic.id);
+    if (this.logicRuns.has(key)) return;
+    this.clearLogicTriggers(device.id, logic.id);
+
+    const restoreStand = readDucoActiveStand(bus, duco) as string;
+    const minutes = clampInt(logic.minutes, 15, 1, 1440);
+    const end = logic.end === "untilStatus" ? "untilStatus" : "duration";
+
+    try {
+      await pressDucoStand(duco, bus, { buttonId: stand });
+    } catch (err) {
+      logger.warn({ err, deviceId: device.id, logicId: logic.id }, "Duco-logica stand mislukt");
+      return;
+    }
+
+    const run: LogicRun = {
+      deviceId: device.id,
+      logicId: logic.id,
+      label: (logic.label ?? "").trim(),
+      standId: stand,
+      end,
+      restoreStand: restoreStand as WtwZehnderStandId,
+      after: logic.after ?? "previous",
+      restoreBoostMinutes: null,
+      untilMs: null,
+      boostUntilMs: null
+    };
+    this.logicRuns.set(key, run);
+    if (end !== "untilStatus") {
+      run.untilMs = Date.now() + minutes * 60_000;
+      run.durationTimer = setTimeout(() => {
+        void this.endDucoLogic(device.id, logic.id, "duration");
+      }, minutes * 60_000);
+    } else {
+      for (const arm of untilArms(logic)) {
+        const st = bus.getState(arm.ga);
+        if (st) this.tickDucoUntil(device.id, logic, arm, st.value);
+      }
+    }
+    this.emit();
+    logger.info(
+      { deviceId: device.id, logicId: logic.id, stand, end, restoreStand, minutes },
+      "Duco-logica gestart"
+    );
+  }
+
+  private async endDucoLogic(
+    deviceId: string,
+    logicId: string,
+    reason: "duration" | "until"
+  ): Promise<void> {
+    const key = this.logicKey(deviceId, logicId);
+    const run = this.logicRuns.get(key);
+    if (!run) return;
+    this.logicRuns.delete(key);
+    this.clearRunTimers(run);
+    this.clearLogicTriggers(deviceId, logicId);
+    this.emit();
+    const others = [...this.logicRuns.values()].some((r) => r.deviceId === deviceId);
+    if (others) {
+      logger.info({ deviceId, logicId, reason }, "Duco-logica klaar; andere logica nog actief");
+      return;
+    }
+    const bus = this.bus;
+    const duco = this.ducoOf(deviceId);
+    if (!bus || !duco) return;
+    const target = run.after === "previous" || !run.after ? run.restoreStand : run.after;
+    try {
+      await pressDucoStand(duco, bus, { buttonId: target });
+      logger.info({ deviceId, logicId, reason, target }, "Duco-logica klaar — terug naar stand");
+    } catch (err) {
+      logger.warn({ err, deviceId, logicId, target }, "Duco-logica terugzetten mislukt");
+    }
+  }
+
+  /* ===== Zehnder logic handlers ====================================== */
 
   private tickTrigger(
     device: WtwDevice,
