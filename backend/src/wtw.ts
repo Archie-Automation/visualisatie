@@ -7,7 +7,10 @@ import type {
   DucoStandId,
   WtwMvConfig,
   WtwMvLogic,
-  WtwModel
+  WtwModel,
+  WtwModbusConfig,
+  WtwModbusStand,
+  ModbusDpt
 } from "./types";
 import type { KnxBus } from "./knxBus";
 
@@ -359,6 +362,89 @@ export function collectMvSubscriptions(
   add(mv.filterGa, "bit");
   add(mv.filterDaysGa, "uint16");
   for (const logic of mvLogics(mv)) {
+    add(logic.triggerGa, "bit");
+    add(logic.orGa, "bit");
+    add(logic.untilGa, "bit");
+    for (const c of logic.when ?? []) add(c.ga, "bit");
+    for (const c of logic.untilWhen ?? []) add(c.ga, "bit");
+    if (logic.triggerMode === "tempRise" && logic.tempRise) {
+      add(logic.tempRise.ga, "temperature");
+    }
+  }
+  return out;
+}
+
+/* ===================================================================== */
+/*  Modbus Universal                                                     */
+/* ===================================================================== */
+
+export function modbusLogics(mb: WtwModbusConfig): import("./types").WtwMvLogic[] {
+  return Array.isArray(mb.logics) ? mb.logics : [];
+}
+
+function dptToRole(dpt: ModbusDpt | undefined): string {
+  switch (dpt) {
+    case "bit": return "bit";
+    case "byte": return "byte";
+    case "uint16": return "uint16";
+    case "temperature": return "temperature";
+    default: return "byte";
+  }
+}
+
+export function readModbusActiveStand(bus: KnxBus, mb: WtwModbusConfig): string {
+  const ga = asGa(mb.statusGa);
+  if (!ga || !mb.stands?.length) return "";
+  const raw = bus.getState(ga)?.value;
+  const n = typeof raw === "number" ? raw : Number(raw);
+  if (!Number.isFinite(n)) return mb.stands[0]?.id ?? "";
+  if (mb.statusDpt === "bit") {
+    const on = bitOn(raw);
+    return mb.stands.find((s) => (s.value === 1) === on)?.id ?? mb.stands[0]?.id ?? "";
+  }
+  const v = Math.round(n);
+  const exact = mb.stands.find((s) => s.value === v);
+  if (exact) return exact.id;
+  let best = mb.stands[0];
+  let bestDist = Math.abs(v - (best?.value ?? 0));
+  for (const s of mb.stands) {
+    const d = Math.abs(v - s.value);
+    if (d < bestDist) { best = s; bestDist = d; }
+  }
+  return best?.id ?? "";
+}
+
+export async function pressModbusStand(
+  mb: WtwModbusConfig,
+  bus: KnxBus,
+  standId: string
+): Promise<void> {
+  const stand = (mb.stands ?? []).find((s) => s.id === standId);
+  if (!stand) throw new Error(`Modbus stand '${standId}' niet gevonden`);
+  const ga = asGa(stand.ga) ?? asGa(mb.commandGa);
+  if (!ga) throw new Error("Modbus commandGa ontbreekt");
+  const role = dptToRole(stand.dpt ?? mb.commandDpt);
+  await bus.write(ga, role, stand.value);
+}
+
+export function collectModbusSubscriptions(
+  mb: WtwModbusConfig
+): Array<{ ga: string; role: string }> {
+  const out: Array<{ ga: string; role: string }> = [];
+  const add = (raw: unknown, role: string) => {
+    const ga = asGa(raw);
+    if (ga) out.push({ ga, role });
+  };
+  add(mb.commandGa, dptToRole(mb.commandDpt));
+  add(mb.statusGa, dptToRole(mb.statusDpt));
+  for (const s of mb.stands ?? []) {
+    if (s.ga) add(s.ga, dptToRole(s.dpt ?? mb.commandDpt));
+  }
+  for (const d of mb.diagnostics ?? []) {
+    add(d.ga, dptToRole(d.dpt));
+    if (d.resetGa) add(d.resetGa, dptToRole(d.resetDpt));
+  }
+  for (const logic of modbusLogics(mb)) {
     add(logic.triggerGa, "bit");
     add(logic.orGa, "bit");
     add(logic.untilGa, "bit");

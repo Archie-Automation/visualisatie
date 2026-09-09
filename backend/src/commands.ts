@@ -718,6 +718,10 @@ export async function dispatch(
         await wtwRuntime.pressMv(device, bus, cmd);
         return;
       }
+      if (device.wtw.model === "modbus_universal" && device.wtw.modbus) {
+        await wtwRuntime.pressModbus(device, bus, cmd);
+        return;
+      }
       if (device.wtw.model !== "zehnder_comfoConnect" || !device.wtw.zehnder) {
         throw new Error("WTW-type is niet ingesteld");
       }

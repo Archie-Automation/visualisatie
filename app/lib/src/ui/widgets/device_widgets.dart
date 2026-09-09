@@ -4013,6 +4013,13 @@ class _WtwTileState extends ConsumerState<WtwTile> {
     return mv is Map<String, dynamic> ? mv : null;
   }
 
+  Map<String, dynamic>? get _modbus {
+    final wtw = device.raw['wtw'] as Map<String, dynamic>?;
+    if (wtw == null || wtw['model'] != 'modbus_universal') return null;
+    final mb = wtw['modbus'];
+    return mb is Map<String, dynamic> ? mb : null;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -4162,11 +4169,13 @@ class _WtwTileState extends ConsumerState<WtwTile> {
     final duc = _duco;
     final mvCfg = _mv;
     final mvMdl = _mvModel;
-    if (z == null && duc == null && mvCfg == null) {
+    final mbCfg = _modbus;
+    if (z == null && duc == null && mvCfg == null && mbCfg == null) {
       return _Placeholder(name: device.name, hint: 'WTW-config ontbreekt');
     }
     if (duc != null) return _buildDuco(context, duc);
     if (mvCfg != null && mvMdl != null) return _buildMv(context, mvMdl, mvCfg);
+    if (mbCfg != null) return _buildModbus(context, mbCfg);
     final zz = z!;
 
     final bus = ref.watch(busProvider);
@@ -4635,6 +4644,130 @@ class _WtwTileState extends ConsumerState<WtwTile> {
                 },
                 bus: bus,
               ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /* ---- Modbus Universal UI ---- */
+
+  Widget _buildModbus(BuildContext context, Map<String, dynamic> mb) {
+    final bus = ref.watch(busProvider);
+    final logicRuns = ref.watch(wtwLogicProvider).forDevice(device.id);
+
+    final stands = mb['stands'] as List? ?? [];
+    final statusGa = (mb['statusGa'] as String? ?? '').trim();
+    final statusDpt = mb['statusDpt'] as String? ?? 'byte';
+
+    String activeStand = '';
+    if (statusGa.isNotEmpty && stands.isNotEmpty) {
+      final raw = bus.values[statusGa];
+      if (raw != null) {
+        final n = raw is num ? raw : num.tryParse(raw.toString() ?? '');
+        if (n != null) {
+          if (statusDpt == 'bit') {
+            final on = (raw == true || raw == 1);
+            for (final s in stands) {
+              if (s is Map && ((s['value'] == 1) == on)) {
+                activeStand = s['id']?.toString() ?? '';
+                break;
+              }
+            }
+          } else {
+            final v = n.round();
+            int bestDist = 99999;
+            for (final s in stands) {
+              if (s is Map) {
+                final sv = (s['value'] as num?)?.round() ?? 0;
+                if ((v - sv).abs() < bestDist) {
+                  bestDist = (v - sv).abs();
+                  activeStand = s['id']?.toString() ?? '';
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    final standButtons = <({String id, String label})>[
+      for (final s in stands)
+        if (s is Map)
+          (
+            id: s['id']?.toString() ?? '',
+            label: s['label']?.toString() ?? s['id']?.toString() ?? '',
+          ),
+    ];
+
+    List<DeviceControlItem> modbusButtons(
+        List<({String id, String label})> items) {
+      return [
+        for (final s in items)
+          DeviceControlItem(
+            label: s.label,
+            active: activeStand == s.id ||
+                logicRuns.any((r) => r.standId == s.id),
+            onTap: () => _press(s.id),
+          ),
+      ];
+    }
+
+    final diagnostics = mb['diagnostics'] as List? ?? [];
+
+    return DeviceTileShell(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DeviceTileLayout.headerRow(
+            context: context,
+            leading: DeviceTileIconBadge(icon: Icons.air_outlined),
+            content: Text(
+              device.name,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+          if (logicRuns.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6, top: 4),
+              child: Text(
+                'Actief',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: LuxeColors.brass,
+                    ),
+              ),
+            ),
+          ],
+          SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+          if (standButtons.isNotEmpty)
+            DeviceControlSection(
+              title: 'STAND',
+              child: DeviceControlBar.grid(
+                context,
+                modbusButtons(standButtons),
+                perRow: standButtons.length <= 4 ? standButtons.length : 3,
+              ),
+            ),
+          if (diagnostics.isNotEmpty) ...[
+            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            for (final d in diagnostics)
+              if (d is Map && (d['ga'] as String? ?? '').trim().isNotEmpty)
+                _ModbusDiagRow(item: d, bus: bus, onReset: (resetGa, resetDpt, resetValue) {
+                  final payload = <String, dynamic>{
+                    'kind': 'wtw.press',
+                    'deviceId': device.id,
+                    'buttonId': '__reset__',
+                    'resetGa': resetGa,
+                    'resetDpt': resetDpt,
+                    'resetValue': resetValue,
+                  };
+                  ref.read(busProvider.notifier).send(payload);
+                }),
           ],
         ],
       ),
@@ -5115,6 +5248,90 @@ class _WtwStatusRow extends StatelessWidget {
   }
 }
 
+
+/* ---------- Modbus diagnostic row for user panel ---------------------- */
+
+class _ModbusDiagRow extends StatelessWidget {
+  const _ModbusDiagRow({
+    required this.item,
+    required this.bus,
+    this.onReset,
+  });
+  final Map item;
+  final BusState bus;
+  final void Function(String ga, String dpt, dynamic value)? onReset;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = item['label']?.toString() ?? '';
+    final ga = (item['ga'] as String? ?? '').trim();
+    final dpt = item['dpt'] as String? ?? 'bit';
+    final rawValue = ga.isNotEmpty ? bus.values[ga] : null;
+
+    String display;
+    bool isAlert = false;
+    if (rawValue == null) {
+      display = '—';
+    } else if (dpt == 'bit') {
+      final active = rawValue == true || rawValue == 1 || rawValue.toString() == '1';
+      display = active ? 'Actief' : 'OK';
+      isAlert = active;
+    } else if (dpt == 'uint16' || dpt == 'byte') {
+      final n = num.tryParse(rawValue.toString());
+      display = '${n?.toInt() ?? rawValue}';
+      if (dpt == 'byte' && n != null && n > 0) isAlert = true;
+    } else if (dpt == 'temperature') {
+      final n = num.tryParse(rawValue.toString());
+      display = n != null ? '${n.toStringAsFixed(1)} °C' : '$rawValue';
+    } else {
+      display = '$rawValue';
+    }
+
+    final resetGa = (item['resetGa'] as String? ?? '').trim();
+    final hasReset = resetGa.isNotEmpty && onReset != null;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: isAlert ? LuxeColors.danger : null,
+                  ),
+            ),
+          ),
+          Text(
+            display,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: isAlert ? LuxeColors.danger : null,
+                ),
+          ),
+          if (hasReset) ...[
+            const SizedBox(width: 4),
+            SizedBox(
+              height: 28,
+              width: 28,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                iconSize: 16,
+                icon: const Icon(Icons.refresh, size: 16),
+                tooltip: 'Reset',
+                onPressed: () => onReset!(
+                  resetGa,
+                  item['resetDpt'] as String? ?? 'bit',
+                  item['resetValue'] ?? true,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
 
 /* ══════════════════════════════════════════════════════════════════════════
    Meldingen tile – KNX alarm/notification monitor

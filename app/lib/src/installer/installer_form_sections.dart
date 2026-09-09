@@ -2229,6 +2229,7 @@ class _WtwInstallerSectionState extends State<WtwInstallerSection> {
       _wtw.remove('zehnder');
       _wtw.remove('duco');
       _wtw.remove('mv');
+      _wtw.remove('modbus');
     } else {
       _wtw['model'] = raw;
       if (raw == 'zehnder_comfoConnect') {
@@ -2240,6 +2241,9 @@ class _WtwInstallerSectionState extends State<WtwInstallerSection> {
       }
       if (raw.startsWith('mv_')) {
         _ensureMap(_wtw, 'mv');
+      }
+      if (raw == 'modbus_universal') {
+        _ensureMap(_wtw, 'modbus');
       }
     }
     _notify();
@@ -2263,6 +2267,7 @@ class _WtwInstallerSectionState extends State<WtwInstallerSection> {
             'mv_1contact',
             'mv_scene',
             'mv_0_10v',
+            'modbus_universal',
           ],
           optionLabels: const {
             _wtwModelNone: 'Kies type…',
@@ -2271,6 +2276,7 @@ class _WtwInstallerSectionState extends State<WtwInstallerSection> {
             'mv_1contact': 'MV — 1 contact (aan/uit)',
             'mv_scene': 'MV — Scene (2 contacten)',
             'mv_0_10v': 'MV — 0–10V (percentage)',
+            'modbus_universal': 'Universeel (Modbus / vrij)',
           },
           onChanged: _setModel,
         ),
@@ -2289,6 +2295,11 @@ class _WtwInstallerSectionState extends State<WtwInstallerSection> {
           _WtwMvInstaller(
             model: model,
             mv: _ensureMap(_wtw, 'mv'),
+            onChanged: _notify,
+          )
+        else if (model == 'modbus_universal')
+          _WtwModbusInstaller(
+            modbus: _ensureMap(_wtw, 'modbus'),
             onChanged: _notify,
           )
         else
@@ -2732,6 +2743,403 @@ class _WtwMvInstallerState extends State<_WtwMvInstaller> {
           afterOptions: _afterOptions,
           afterLabelsOverride: _afterLabels,
         ),
+      ],
+    );
+  }
+}
+
+/* ---------- Modbus Universal installer -------------------------------- */
+
+const _dptOptions = ['bit', 'byte', 'uint16', 'temperature'];
+const _dptLabels = <String, String>{
+  'bit': 'Bit (DPT 1.001)',
+  'byte': 'Byte (DPT 5.010)',
+  'uint16': 'Unsigned 16-bit (DPT 7.001)',
+  'temperature': 'Temperatuur (DPT 9.001)',
+};
+
+class _WtwModbusInstaller extends StatefulWidget {
+  const _WtwModbusInstaller({
+    required this.modbus,
+    required this.onChanged,
+  });
+  final Map<String, dynamic> modbus;
+  final VoidCallback onChanged;
+
+  @override
+  State<_WtwModbusInstaller> createState() => _WtwModbusInstallerState();
+}
+
+class _WtwModbusInstallerState extends State<_WtwModbusInstaller> {
+  Map<String, dynamic> get mb => widget.modbus;
+
+  List<String> get _standOptions {
+    final stands = mb['stands'] as List? ?? [];
+    return [
+      for (final s in stands)
+        if (s is Map) s['id']?.toString() ?? '',
+    ];
+  }
+
+  Map<String, String> get _standLabels {
+    final stands = mb['stands'] as List? ?? [];
+    final map = <String, String>{};
+    for (final s in stands) {
+      if (s is Map) {
+        final id = s['id']?.toString() ?? '';
+        final label = s['label']?.toString() ?? id;
+        final val = s['value']?.toString() ?? '?';
+        map[id] = '$label ($val)';
+      }
+    }
+    return map;
+  }
+
+  List<String> get _afterOptions => ['previous', ..._standOptions];
+  Map<String, String> get _afterLabels => {'previous': 'Vorige stand', ..._standLabels};
+
+  Widget _gaEditor(String key, String label, {String? dpt}) {
+    return _InstallerStrField(
+      label: label,
+      value: mb[key] as String? ?? '',
+      gaSearch: true,
+      gaDptHint: dpt,
+      onChanged: (v) {
+        if (v.trim().isEmpty) {
+          mb.remove(key);
+        } else {
+          mb[key] = v.trim();
+        }
+        widget.onChanged();
+      },
+    );
+  }
+
+  Widget _dptDropdown(String key, String label) {
+    final val = mb[key] as String? ?? 'byte';
+    return _InstallerDropdown(
+      label: label,
+      value: _dptOptions.contains(val) ? val : 'byte',
+      options: _dptOptions,
+      optionLabels: _dptLabels,
+      onChanged: (v) {
+        mb[key] = v;
+        widget.onChanged();
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _InstallerInfoTitle(
+          title: 'Commando & status',
+          body:
+              'Universele Modbus/KNX WTW of ventilatie. '
+              'Kies het DPT voor commando en status, '
+              'en maak standen aan met de gewenste waarde.',
+        ),
+        _gaEditor('commandGa', 'Command GA'),
+        _dptDropdown('commandDpt', 'Command DPT'),
+        _gaEditor('statusGa', 'Status GA'),
+        _dptDropdown('statusDpt', 'Status DPT'),
+        const SizedBox(height: 12),
+        _ModbusStandsEditor(
+          modbus: mb,
+          onChanged: () {
+            widget.onChanged();
+            setState(() {});
+          },
+        ),
+        const SizedBox(height: 12),
+        _ModbusDiagEditor(
+          modbus: mb,
+          onChanged: () {
+            widget.onChanged();
+            setState(() {});
+          },
+        ),
+        const SizedBox(height: 12),
+        _WtwLogicListEditor(
+          zehnder: mb,
+          onChanged: widget.onChanged,
+          hasBoost: false,
+          defaultStandId: _standOptions.isNotEmpty ? _standOptions.first : '',
+          standOptions: _standOptions,
+          standLabelsOverride: _standLabels,
+          afterOptions: _afterOptions,
+          afterLabelsOverride: _afterLabels,
+        ),
+      ],
+    );
+  }
+}
+
+/* ---------- Modbus stands editor ------------------------------------- */
+
+class _ModbusStandsEditor extends StatelessWidget {
+  const _ModbusStandsEditor({required this.modbus, required this.onChanged});
+  final Map<String, dynamic> modbus;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final stands = _ensureList(modbus, 'stands');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Text('Standen', style: Theme.of(context).textTheme.titleSmall),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: () {
+                stands.add(<String, dynamic>{
+                  'id': 'stand${stands.length + 1}',
+                  'label': 'Stand ${stands.length + 1}',
+                  'value': stands.length,
+                });
+                onChanged();
+              },
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('Stand'),
+            ),
+          ],
+        ),
+        if (stands.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Nog geen standen. Tik + om een stand aan te maken.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        for (var i = 0; i < stands.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Material(
+              color: LuxeColors.surface.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: _InstallerStrField(
+                            label: 'Label',
+                            value: stands[i]['label']?.toString() ?? '',
+                            onChanged: (v) {
+                              stands[i]['label'] = v.trim();
+                              final id = v.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
+                              stands[i]['id'] = id.isEmpty ? 'stand${i + 1}' : id;
+                              onChanged();
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _InstallerStrField(
+                            label: 'Waarde',
+                            value: stands[i]['value']?.toString() ?? '0',
+                            onChanged: (v) {
+                              final n = num.tryParse(v.trim());
+                              if (n != null) {
+                                stands[i]['value'] = n;
+                                onChanged();
+                              }
+                            },
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 20),
+                          onPressed: () {
+                            stands.removeAt(i);
+                            onChanged();
+                          },
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _InstallerStrField(
+                            label: 'GA (optioneel)',
+                            value: stands[i]['ga']?.toString() ?? '',
+                            gaSearch: true,
+                            onChanged: (v) {
+                              if (v.trim().isEmpty) {
+                                stands[i].remove('ga');
+                              } else {
+                                stands[i]['ga'] = v.trim();
+                              }
+                              onChanged();
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _InstallerDropdown(
+                            label: 'DPT (optioneel)',
+                            value: (stands[i]['dpt'] as String?) ?? '',
+                            options: const ['', ..._dptOptions],
+                            optionLabels: const {
+                              '': 'Standaard',
+                              ..._dptLabels,
+                            },
+                            onChanged: (v) {
+                              if (v.isEmpty) {
+                                stands[i].remove('dpt');
+                              } else {
+                                stands[i]['dpt'] = v;
+                              }
+                              onChanged();
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 36),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/* ---------- Modbus diagnostics editor -------------------------------- */
+
+class _ModbusDiagEditor extends StatelessWidget {
+  const _ModbusDiagEditor({required this.modbus, required this.onChanged});
+  final Map<String, dynamic> modbus;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final diags = _ensureList(modbus, 'diagnostics');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _InstallerInfoTitle(
+          title: 'Diagnostiek',
+          body:
+              'Storing, foutcode, filter, onderhoud — kies per item een DPT.\n'
+              'Bit: aan/uit status. Byte: foutcode (0–255). Uint16: teller/dagen.\n'
+              'Optioneel: reset-GA om een teller te resetten (bijv. filter-reset bit).',
+          trailing: TextButton.icon(
+            onPressed: () {
+              diags.add(<String, dynamic>{
+                'id': 'diag-${_uuid.v4().substring(0, 8)}',
+                'label': '',
+                'dpt': 'bit',
+              });
+              onChanged();
+            },
+            icon: const Icon(Icons.add, size: 18),
+            label: const Text('Item'),
+          ),
+        ),
+        if (diags.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Text(
+              'Nog geen diagnostiek. Tik + om een item toe te voegen.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        for (var i = 0; i < diags.length; i++)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Material(
+              color: LuxeColors.surface.withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(12),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 2,
+                          child: _InstallerStrField(
+                            label: 'Label',
+                            value: diags[i]['label']?.toString() ?? '',
+                            onChanged: (v) {
+                              diags[i]['label'] = v.trim();
+                              onChanged();
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _InstallerDropdown(
+                            label: 'DPT',
+                            value: (diags[i]['dpt'] as String?) ?? 'bit',
+                            options: _dptOptions,
+                            optionLabels: _dptLabels,
+                            onChanged: (v) {
+                              diags[i]['dpt'] = v;
+                              onChanged();
+                            },
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline, size: 20),
+                          onPressed: () {
+                            diags.removeAt(i);
+                            onChanged();
+                          },
+                        ),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _InstallerStrField(
+                            label: 'GA',
+                            value: diags[i]['ga']?.toString() ?? '',
+                            gaSearch: true,
+                            onChanged: (v) {
+                              if (v.trim().isEmpty) {
+                                diags[i].remove('ga');
+                              } else {
+                                diags[i]['ga'] = v.trim();
+                              }
+                              onChanged();
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _InstallerStrField(
+                            label: 'Reset GA (optioneel)',
+                            value: diags[i]['resetGa']?.toString() ?? '',
+                            gaSearch: true,
+                            onChanged: (v) {
+                              if (v.trim().isEmpty) {
+                                diags[i].remove('resetGa');
+                              } else {
+                                diags[i]['resetGa'] = v.trim();
+                              }
+                              onChanged();
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 36),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }

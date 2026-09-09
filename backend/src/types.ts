@@ -845,7 +845,8 @@ export type WtwModel =
   | "duco_connectivity_board"
   | "mv_1contact"
   | "mv_scene"
-  | "mv_0_10v";
+  | "mv_0_10v"
+  | "modbus_universal";
 
 export type WtwZehnderStandId =
   | "away"
@@ -1094,11 +1095,53 @@ export interface WtwMvConfig {
   logics?: WtwMvLogic[];
 }
 
+/* ---------- Modbus Universal ----------------------------------------- */
+
+export type ModbusDpt = "bit" | "byte" | "uint16" | "temperature";
+
+/** Één instelbare stand voor de universele Modbus-variant. */
+export interface WtwModbusStand {
+  id: string;
+  label: string;
+  /** Waarde die naar commandGa geschreven wordt (0/1 voor bit, 0-255 voor byte). */
+  value: number;
+  /** Optioneel: eigen GA voor deze stand (override van gedeelde commandGa). */
+  ga?: string;
+  /** Optioneel: eigen DPT voor deze stand (override van gedeelde commandDpt). */
+  dpt?: ModbusDpt;
+}
+
+/**
+ * Diagnose-/statusregel: storing, filter, foutcode, etc.
+ * Elk item is een leesbaar GA met een DPT-keuze.
+ */
+export interface WtwModbusDiag {
+  id: string;
+  label: string;
+  ga?: string;
+  dpt?: ModbusDpt;
+  /** Optioneel: GA om te schrijven (bijv. filter-reset bit). */
+  resetGa?: string;
+  resetDpt?: ModbusDpt;
+  resetValue?: number | boolean;
+}
+
+export interface WtwModbusConfig {
+  commandGa?: string;
+  commandDpt?: ModbusDpt;
+  statusGa?: string;
+  statusDpt?: ModbusDpt;
+  stands?: WtwModbusStand[];
+  diagnostics?: WtwModbusDiag[];
+  logics?: WtwMvLogic[];
+}
+
 export interface WtwConfig {
   model?: WtwModel;
   zehnder?: WtwZehnderComfoConnect;
   duco?: WtwDucoConnectivityBoard;
   mv?: WtwMvConfig;
+  modbus?: WtwModbusConfig;
 }
 
 export interface WtwDevice extends DeviceBase {

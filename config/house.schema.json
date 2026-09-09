@@ -844,12 +844,13 @@
           "properties": {
             "model": {
               "type": "string",
-              "enum": ["zehnder_comfoConnect", "duco_connectivity_board", "mv_1contact", "mv_scene", "mv_0_10v"],
-              "description": "Merk/type. WTW of MV."
+              "enum": ["zehnder_comfoConnect", "duco_connectivity_board", "mv_1contact", "mv_scene", "mv_0_10v", "modbus_universal"],
+              "description": "Merk/type. WTW, MV of Modbus universeel."
             },
             "zehnder": { "$ref": "#/definitions/wtwZehnderComfoConnect" },
             "duco": { "$ref": "#/definitions/wtwDucoConnectivityBoard" },
-            "mv": { "$ref": "#/definitions/wtwMvConfig" }
+            "mv": { "$ref": "#/definitions/wtwMvConfig" },
+            "modbus": { "$ref": "#/definitions/wtwModbusConfig" }
           }
         },
         "melding": {
@@ -1191,6 +1192,68 @@
         "after": {
           "type": "string",
           "description": "'previous' of een stand-id."
+        }
+      }
+    },
+    "modbusDpt": {
+      "type": "string",
+      "enum": ["bit", "byte", "uint16", "temperature"],
+      "description": "KNX-datatype: bit (DPT 1.001), byte (DPT 5.010), uint16 (DPT 7.001), temperature (DPT 9.001)."
+    },
+    "wtwModbusConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Universele Modbus WTW/ventilatie. Vrij instelbare standen met byte- of bitwaarde, en configureerbare diagnostiek.",
+      "properties": {
+        "commandGa": { "$ref": "#/definitions/gaPattern", "description": "Standaard GA om standen naar te schrijven." },
+        "commandDpt": { "$ref": "#/definitions/modbusDpt", "description": "DPT van het command-GA." },
+        "statusGa": { "$ref": "#/definitions/gaPattern", "description": "GA om actieve stand te lezen." },
+        "statusDpt": { "$ref": "#/definitions/modbusDpt", "description": "DPT van het status-GA." },
+        "stands": {
+          "type": "array",
+          "description": "Instelbare standen. Elke stand schrijft een waarde naar het command-GA (of een eigen GA).",
+          "items": { "$ref": "#/definitions/wtwModbusStand" },
+          "maxItems": 16
+        },
+        "diagnostics": {
+          "type": "array",
+          "description": "Diagnose- en statusregels (storing, foutcode, filter, etc.).",
+          "items": { "$ref": "#/definitions/wtwModbusDiag" },
+          "maxItems": 16
+        },
+        "logics": {
+          "type": "array",
+          "description": "KNX-status → stand. Meerdere regels mogelijk.",
+          "items": { "$ref": "#/definitions/wtwMvLogic" }
+        }
+      }
+    },
+    "wtwModbusStand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "value"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string" },
+        "value": { "type": "number", "description": "Waarde die naar het GA geschreven wordt (0/1 voor bit, 0-255 voor byte)." },
+        "ga": { "$ref": "#/definitions/gaPattern", "description": "Optioneel: eigen GA voor deze stand (override)." },
+        "dpt": { "$ref": "#/definitions/modbusDpt", "description": "Optioneel: eigen DPT (override)." }
+      }
+    },
+    "wtwModbusDiag": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label"],
+      "properties": {
+        "id": { "type": "string" },
+        "label": { "type": "string", "description": "Weergavenaam, bijv. 'Storing', 'Foutcode', 'Filter vervangen'." },
+        "ga": { "$ref": "#/definitions/gaPattern" },
+        "dpt": { "$ref": "#/definitions/modbusDpt" },
+        "resetGa": { "$ref": "#/definitions/gaPattern", "description": "Optioneel: GA om waarde te resetten (bijv. filter-reset)." },
+        "resetDpt": { "$ref": "#/definitions/modbusDpt" },
+        "resetValue": {
+          "oneOf": [{ "type": "number" }, { "type": "boolean" }],
+          "description": "Waarde die naar resetGa geschreven wordt bij reset."
         }
       }
     },
