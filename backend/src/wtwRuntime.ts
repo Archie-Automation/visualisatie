@@ -9,7 +9,8 @@ import type {
   WtwZehnderLogic,
   WtwZehnderStandId,
   WtwLogicClause,
-  WtwLogicJoin
+  WtwLogicJoin,
+  WtwTempRiseTrigger
 } from "./types";
 import {
   asGa,
@@ -195,6 +196,55 @@ function clampInt(n: unknown, fallback: number, min: number, max: number): numbe
   return Math.min(max, Math.max(min, Math.round(v)));
 }
 
+/* ---------- temperature rate-of-change buffer ------------------------- */
+
+type TempSample = { value: number; ts: number };
+
+/** Ring buffer per GA; keeps samples within the largest configured window. */
+class TempHistory {
+  private samples = new Map<string, TempSample[]>();
+  private maxWindow = new Map<string, number>();
+
+  register(ga: string, windowSec: number): void {
+    const cur = this.maxWindow.get(ga) ?? 0;
+    if (windowSec > cur) this.maxWindow.set(ga, windowSec);
+  }
+
+  push(ga: string, value: number): void {
+    if (!this.maxWindow.has(ga)) return;
+    const now = Date.now();
+    const list = this.samples.get(ga) ?? [];
+    list.push({ value, ts: now });
+    const cutoff = now - (this.maxWindow.get(ga)! + 2) * 1000;
+    while (list.length > 0 && list[0].ts < cutoff) list.shift();
+    this.samples.set(ga, list);
+  }
+
+  /** Returns the minimum value seen in the last `windowSec` seconds. */
+  minInWindow(ga: string, windowSec: number): number | null {
+    const list = this.samples.get(ga);
+    if (!list || list.length === 0) return null;
+    const cutoff = Date.now() - windowSec * 1000;
+    let min: number | null = null;
+    for (const s of list) {
+      if (s.ts >= cutoff && (min === null || s.value < min)) min = s.value;
+    }
+    return min;
+  }
+
+  /** Latest sample value. */
+  latest(ga: string): number | null {
+    const list = this.samples.get(ga);
+    if (!list || list.length === 0) return null;
+    return list[list.length - 1].value;
+  }
+
+  clear(): void {
+    this.samples.clear();
+    this.maxWindow.clear();
+  }
+}
+
 class WtwRuntime {
   private bus: KnxBus | null = null;
   private unsub: (() => void) | null = null;
@@ -204,13 +254,29 @@ class WtwRuntime {
   private triggerTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private triggerHeld = new Set<string>();
   private listeners = new Set<LogicListener>();
+  private tempHistory = new TempHistory();
 
   attach(bus: KnxBus): void {
     this.detach();
     this.bus = bus;
+    this.registerTempRiseGAs();
     const onState = (state: GAState) => this.onBusState(state);
     bus.on("stateChanged", onState);
     this.unsub = () => bus.off("stateChanged", onState);
+  }
+
+  private registerTempRiseGAs(): void {
+    const cfg = getConfig();
+    walkDevices(cfg, (d) => {
+      const w = asWtw(d);
+      if (!w?.wtw.zehnder) return;
+      for (const logic of zehnderLogics(w.wtw.zehnder)) {
+        if (logic.triggerMode === "tempRise" && logic.tempRise) {
+          const ga = asGa(logic.tempRise.ga);
+          if (ga) this.tempHistory.register(ga, logic.tempRise.windowSec);
+        }
+      }
+    });
   }
 
   detach(): void {
@@ -225,6 +291,7 @@ class WtwRuntime {
     this.triggerTimers.clear();
     this.triggerHeld.clear();
     this.prev.clear();
+    this.tempHistory.clear();
     this.emit();
   }
 
@@ -459,11 +526,19 @@ class WtwRuntime {
   ): void {
     const bus = this.bus;
     if (!bus) return;
+    // Feed temperature history for any GA that has a tempRise config.
+    if (typeof state.value === "number") {
+      this.tempHistory.push(state.ga, state.value);
+    }
     for (const logic of zehnderLogics(z)) {
       if (!logicEnabled(logic) || !logic.id) continue;
-      for (const arm of whenArms(logic)) {
-        if (state.ga === arm.ga) {
-          this.tickTrigger(device, z, logic, arm, state.value, prev);
+      if (logic.triggerMode === "tempRise") {
+        this.tickTempRise(device, z, logic, state);
+      } else {
+        for (const arm of whenArms(logic)) {
+          if (state.ga === arm.ga) {
+            this.tickTrigger(device, z, logic, arm, state.value, prev);
+          }
         }
       }
       if (logic.end === "untilStatus") {
@@ -473,6 +548,43 @@ class WtwRuntime {
           }
         }
       }
+    }
+  }
+
+  private tickTempRise(
+    device: WtwDevice,
+    z: WtwZehnderComfoConnect,
+    logic: WtwZehnderLogic,
+    state: GAState
+  ): void {
+    const tr = logic.tempRise;
+    if (!tr) return;
+    const ga = asGa(tr.ga);
+    if (!ga || state.ga !== ga) return;
+    const runKey = this.logicKey(device.id, logic.id);
+    if (this.logicRuns.has(runKey)) return;
+    const current = typeof state.value === "number" ? state.value : null;
+    if (current === null) return;
+    const minVal = this.tempHistory.minInWindow(ga, tr.windowSec);
+    if (minVal === null) return;
+    const delta = current - minVal;
+    if (delta >= tr.deltaDeg) {
+      const live = this.logicOf(device.id, logic.id);
+      if (!live || !logicEnabled(live.logic)) return;
+      logger.info(
+        {
+          deviceId: device.id,
+          logicId: logic.id,
+          ga,
+          delta: Math.round(delta * 10) / 10,
+          deltaDeg: tr.deltaDeg,
+          windowSec: tr.windowSec,
+          current,
+          minVal
+        },
+        "WTW tempRise trigger"
+      );
+      void this.startLogic(live.device, live.z, live.logic);
     }
   }
 

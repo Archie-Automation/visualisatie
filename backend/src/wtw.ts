@@ -174,6 +174,9 @@ export function collectZehnderSubscriptions(z: WtwZehnderComfoConnect): Array<{
     add(logic.untilGa, "bit");
     for (const c of logic.when ?? []) add(c.ga, "bit");
     for (const c of logic.untilWhen ?? []) add(c.ga, "bit");
+    if (logic.triggerMode === "tempRise" && logic.tempRise) {
+      add(logic.tempRise.ga, "temperature");
+    }
   }
   return out;
 }
