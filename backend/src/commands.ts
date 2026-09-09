@@ -8,7 +8,7 @@ import { walkDevices } from "./config";
 import { hvacSwitchLock } from "./hvacSwitchLock";
 import { fireplaceVirtual } from "./fireplaceVirtual";
 import { pulseKnxGa } from "./fireplacePulse";
-import { zehnderWriteGa } from "./wtw";
+import { pressZehnderStand } from "./wtw";
 
 type PositionControllableDevice = ShadingDevice | PositionActuatorDevice;
 
@@ -713,18 +713,7 @@ export async function dispatch(
       if (device.wtw.model !== "zehnder_comfoConnect" || !device.wtw.zehnder) {
         throw new Error("WTW-type is niet ingesteld");
       }
-      const z = device.wtw.zehnder;
-      const ga = zehnderWriteGa(z, cmd.buttonId);
-      if (!ga) throw new Error("onbekende of lege WTW-stand");
-      if (cmd.buttonId === "boost" && cmd.on !== false && z.boostTimeGa) {
-        const minutes = cmd.minutes ?? z.minutes ?? 30;
-        await bus.write(
-          z.boostTimeGa,
-          "uint16",
-          Math.min(65535, Math.max(1, minutes * 60))
-        );
-      }
-      await bus.write(ga, "bit", cmd.on === false ? false : true);
+      await pressZehnderStand(device.wtw.zehnder, bus, cmd);
       return;
     }
 

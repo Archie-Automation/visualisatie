@@ -2264,14 +2264,9 @@ class _WtwZehnderInstaller extends StatelessWidget {
         _InstallerInfoTitle(
           title: 'Standen',
           body:
-              'Elke stand stuurt bit 1. Eigen status-GA bepaalt welke knop actief is.',
-        ),
-        _WtwBitGaPair(
-          label: 'Away',
-          writeKey: 'awayGa',
-          statusKey: 'awayStatusGa',
-          map: zehnder,
-          onChanged: onChanged,
+              'Elke stand stuurt bit 1. Eigen status-GA bepaalt welke knop actief is. '
+              'Stand 1–3, afwezig en boost werken alleen als automatisch uit is; '
+              'de app zet Auto uit bij die keuze. Auto zelf is aan/uit.',
         ),
         _WtwBitGaPair(
           label: 'Stand 1',
@@ -2295,9 +2290,16 @@ class _WtwZehnderInstaller extends StatelessWidget {
           onChanged: onChanged,
         ),
         _WtwBitGaPair(
-          label: 'Auto',
+          label: 'Automatisch',
           writeKey: 'autoGa',
           statusKey: 'autoStatusGa',
+          map: zehnder,
+          onChanged: onChanged,
+        ),
+        _WtwBitGaPair(
+          label: 'Afwezig',
+          writeKey: 'awayGa',
+          statusKey: 'awayStatusGa',
           map: zehnder,
           onChanged: onChanged,
         ),
