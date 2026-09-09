@@ -6,9 +6,12 @@ on:
     branches: [main]
   pull_request:
 
+# PRs: cancel superseded runs. Main: never cancel — otherwise android-apk
+# (10–15 min) is killed by the next version bump and tablets hang forever on
+# "wacht tot het installatiebestand klaarstaat" while the server is already newer.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   flutter-web:

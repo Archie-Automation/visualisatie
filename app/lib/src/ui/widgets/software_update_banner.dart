@@ -219,7 +219,9 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
     if (apkWaiting && !apkReady) {
       return _Banner(
         message: _error ??
-            'Server is nieuwer. De tablet-app volgt automatisch zodra het installatiebestand klaarstaat.',
+            'Server is nieuwer. Wachten op tablet-APK van GitHub Actions '
+            '(duurt vaak 10–15 min na een push). Blijft dit hangen: '
+            'check of de android-apk job op GitHub klaar is.',
       );
     }
 
