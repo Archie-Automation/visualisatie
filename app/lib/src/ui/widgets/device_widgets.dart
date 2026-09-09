@@ -4138,12 +4138,13 @@ class _WtwTileState extends ConsumerState<WtwTile> {
     final showSetMinutes = timeWrite || timeStatus;
     final showRemaining = hasBoost && remainingLive;
 
+    final autoOn = _bitOn(bus, z['autoStatusGa'] as String?);
     const stands = <({String id, String label})>[
-      (id: 'away', label: 'Away'),
       (id: 'stand1', label: '1'),
       (id: 'stand2', label: '2'),
       (id: 'stand3', label: '3'),
-      (id: 'auto', label: 'Auto'),
+      (id: 'auto', label: 'Automatisch'),
+      (id: 'away', label: 'Afwezig'),
       (id: 'boost', label: 'Boost'),
     ];
 
@@ -4193,7 +4194,9 @@ class _WtwTileState extends ConsumerState<WtwTile> {
             onTap: !_hasGa(z, writeKey(s.id))
                 ? null
                 : () {
-                    if (s.id == 'boost') {
+                    if (s.id == 'auto') {
+                      _press('auto', on: !autoOn);
+                    } else if (s.id == 'boost') {
                       _press('boost', minutes: minutes, on: true);
                     } else {
                       _press(s.id);
@@ -4221,7 +4224,11 @@ class _WtwTileState extends ConsumerState<WtwTile> {
             SizedBox(height: DeviceControlBar.sectionSpacing(context)),
             DeviceControlSection(
               title: 'STAND',
-              child: DeviceControlBar.gridAuto(context, buttonItems),
+              child: DeviceControlBar.grid(
+                context,
+                buttonItems,
+                perRow: DeviceControlBar.autoPerRow(context, 6),
+              ),
             ),
           ],
           if (showSetMinutes || showRemaining) ...[

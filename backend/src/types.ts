@@ -852,8 +852,10 @@ export type WtwZehnderStandId =
 
 /**
  * Zehnder ComfoConnect KNX: elke stand is 1-bit schrijven (waarde 1) met
- * een eigen status-bit. Boost-tijd: set-GA schrijven, status-set-GA lezen
- * (DPT 7.001, app in minuten, bus in seconden). Aftellen gebeurt in de app.
+ * een eigen status-bit. Auto is aan/uit; handmatige standen (1–3, afwezig,
+ * boost) vereisen Auto uit — de backend zet Auto uit vóór die write.
+ * Boost-tijd: set-GA schrijven, status-set-GA lezen (DPT 7.001, app in
+ * minuten, bus in seconden). Aftellen gebeurt in de app.
  */
 export interface WtwZehnderComfoConnect {
   awayGa?: string;
