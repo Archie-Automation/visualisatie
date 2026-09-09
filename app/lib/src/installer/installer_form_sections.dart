@@ -2431,11 +2431,11 @@ class _WtwLogicListEditor extends StatelessWidget {
         _InstallerInfoTitle(
           title: 'Logica',
           body:
-              'Wanneer een status-GA x minuten aan of uit is, gaat de WTW naar een stand. '
-              'Die stand duurt x minuten, of tot een (andere) status x minuten aanhoudt. '
-              'Daarna: vorige stand of een vaste stand. Automatisch: altijd eerst uit '
-              'vóór een handmatige stand; terug naar Auto schrijft Auto weer aan. '
-              'In de app: Regeling actief.',
+              'Wanneer groepsadres = waarde voor x min → dan stand voor x min, '
+              'of tot groepsadres = waarde voor x min. Daarna vorige of een vaste stand. '
+              'Boost voor x min schrijft die duur op het toestel (boost-tijd-GA); '
+              'de boost-tijd van de tegel blijft en gaat na afloop terug. '
+              '0 min bij wanneer = direct op flank. In de app: Regeling actief.',
           trailing: TextButton.icon(
             onPressed: () {
               logics.add({
@@ -2514,13 +2514,62 @@ class _WtwLogicCard extends StatelessWidget {
     'away': 'Afwezig',
   };
 
+  static const _valueLabels = {
+    'true': 'Aan (1)',
+    'false': 'Uit (0)',
+  };
+
+  Widget _gaField(String key) {
+    return _WtwLogicBox(
+      width: 196,
+      child: _InstallerStrField(
+        label: 'groepsadres',
+        value: logic[key] as String? ?? '',
+        compact: true,
+        gaSearch: true,
+        gaDptHint: 'DPT1.001',
+        onChanged: (v) => _set(key, v.trim()),
+      ),
+    );
+  }
+
+  Widget _valueSelect(String key, {required bool defaultTrue}) {
+    final raw = logic[key];
+    final on = defaultTrue ? raw != false : raw == true;
+    return _WtwLogicBox(
+      width: 128,
+      child: _WtwLogicSelect(
+        value: on ? 'true' : 'false',
+        options: const ['true', 'false'],
+        labels: _valueLabels,
+        onChanged: (v) => _set(key, v == 'true'),
+      ),
+    );
+  }
+
+  Widget _minField(String key, {required int fallback, int min = 0}) {
+    return _WtwLogicBox(
+      width: 64,
+      child: _InstallerStrField(
+        label: 'min',
+        value: '${(logic[key] as num?)?.round() ?? fallback}',
+        compact: true,
+        number: true,
+        onChanged: (v) {
+          final n = int.tryParse(v);
+          if (n == null) return;
+          _set(key, n.clamp(min, 1440));
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final enabled = logic['enabled'] != false;
     final end = logic['end'] as String? ?? 'duration';
     final standId = logic['standId'] as String? ?? 'stand3';
     final after = logic['after'] as String? ?? 'previous';
-    final word = Theme.of(context).textTheme.bodyMedium;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: LuxeInsetCard(
@@ -2529,10 +2578,6 @@ class _WtwLogicCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: Text('Naam', style: word),
-                ),
                 Expanded(
                   child: _InstallerStrField(
                     label: 'Naam',
@@ -2552,102 +2597,88 @@ class _WtwLogicCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 10),
-            _WtwLogicPhrase(children: [
-              Text('Wanneer', style: word),
-              _WtwLogicGaField(
-                value: logic['triggerGa'] as String? ?? '',
-                onChanged: (v) => _set('triggerGa', v.trim()),
-              ),
-              Text('=', style: word),
-              _WtwLogicSelect(
-                width: 88,
-                value: logic['triggerEquals'] == false ? 'false' : 'true',
-                options: const ['true', 'false'],
-                labels: const {'true': 'Aan', 'false': 'Uit'},
-                onChanged: (v) => _set('triggerEquals', v == 'true'),
-              ),
-              Text('voor', style: word),
-              _WtwLogicMinField(
-                value: '${(logic['triggerMinutes'] as num?)?.round() ?? 0}',
-                onChanged: (v) {
-                  final n = int.tryParse(v);
-                  if (n == null) return;
-                  _set('triggerMinutes', n.clamp(0, 1440));
-                },
-              ),
-              Text('min', style: word),
+            const SizedBox(height: 12),
+            _WtwLogicLine(children: [
+              const _WtwLogicWord('wanneer'),
+              _gaField('triggerGa'),
+              const _WtwLogicWord('='),
+              _valueSelect('triggerEquals', defaultTrue: true),
+              const _WtwLogicWord('voor'),
+              _minField('triggerMinutes', fallback: 0),
+              const _WtwLogicWord('min'),
             ]),
-            _WtwLogicPhrase(children: [
-              Text('dan', style: word),
-              _WtwLogicSelect(
-                width: 120,
-                value: standId,
-                options: const ['stand1', 'stand2', 'stand3', 'away', 'boost'],
-                labels: _standLabels,
-                onChanged: (v) => _set('standId', v),
+            _WtwLogicLine(children: [
+              const _WtwLogicWord('dan'),
+              _WtwLogicBox(
+                width: 140,
+                child: _WtwLogicSelect(
+                  value: standId,
+                  options: const [
+                    'stand1',
+                    'stand2',
+                    'stand3',
+                    'away',
+                    'boost',
+                  ],
+                  labels: _standLabels,
+                  onChanged: (v) => _set('standId', v),
+                ),
               ),
-              _WtwLogicSelect(
-                width: 72,
-                value: end == 'untilStatus' ? 'untilStatus' : 'duration',
-                options: const ['duration', 'untilStatus'],
-                labels: const {
-                  'duration': 'voor',
-                  'untilStatus': 'tot',
-                },
-                onChanged: (v) => _set('end', v),
+              _WtwLogicBox(
+                width: 88,
+                child: _WtwLogicSelect(
+                  value: end == 'untilStatus' ? 'untilStatus' : 'duration',
+                  options: const ['duration', 'untilStatus'],
+                  labels: const {
+                    'duration': 'voor',
+                    'untilStatus': 'tot',
+                  },
+                  onChanged: (v) => _set('end', v),
+                ),
               ),
               if (end != 'untilStatus') ...[
-                _WtwLogicMinField(
-                  value: '${(logic['minutes'] as num?)?.round() ?? 15}',
-                  onChanged: (v) {
-                    final n = int.tryParse(v);
-                    if (n == null) return;
-                    _set('minutes', n.clamp(1, 1440));
-                  },
-                ),
-                Text('min', style: word),
+                _minField('minutes', fallback: 15, min: 1),
+                const _WtwLogicWord('min'),
               ] else ...[
-                _WtwLogicGaField(
-                  value: logic['untilGa'] as String? ?? '',
-                  onChanged: (v) => _set('untilGa', v.trim()),
+                _gaField('untilGa'),
+                const _WtwLogicWord('='),
+                _valueSelect('untilEquals', defaultTrue: false),
+                const _WtwLogicWord('voor'),
+                _minField(
+                  'untilMinutes',
+                  fallback: (logic['minutes'] as num?)?.round() ?? 5,
+                  min: 1,
                 ),
-                Text('=', style: word),
-                _WtwLogicSelect(
-                  width: 88,
-                  value: logic['untilEquals'] == true ? 'true' : 'false',
-                  options: const ['false', 'true'],
-                  labels: const {'false': 'Uit', 'true': 'Aan'},
-                  onChanged: (v) => _set('untilEquals', v == 'true'),
-                ),
-                Text('voor', style: word),
-                _WtwLogicMinField(
-                  value:
-                      '${(logic['untilMinutes'] as num?)?.round() ?? (logic['minutes'] as num?)?.round() ?? 5}',
-                  onChanged: (v) {
-                    final n = int.tryParse(v);
-                    if (n == null) return;
-                    _set('untilMinutes', n.clamp(1, 1440));
-                  },
-                ),
-                Text('min', style: word),
+                const _WtwLogicWord('min'),
               ],
             ]),
-            _WtwLogicPhrase(children: [
-              Text('daarna terug naar', style: word),
-              _WtwLogicSelect(
-                width: 150,
-                value: _afterLabels.containsKey(after) ? after : 'previous',
-                options: const [
-                  'previous',
-                  'auto',
-                  'stand1',
-                  'stand2',
-                  'stand3',
-                  'away',
-                ],
-                labels: _afterLabels,
-                onChanged: (v) => _set('after', v),
+            if (standId == 'boost')
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  end == 'untilStatus'
+                      ? 'Boost schrijft boost-tijd op het toestel (180 min) tot de eindstatus; daarna de tegel-tijd terug.'
+                      : 'Boost schrijft deze x min als boost-tijd op het toestel. De tegel-tijd blijft en gaat na afloop terug.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
+            _WtwLogicLine(children: [
+              const _WtwLogicWord('daarna terug naar'),
+              _WtwLogicBox(
+                width: 180,
+                child: _WtwLogicSelect(
+                  value: _afterLabels.containsKey(after) ? after : 'previous',
+                  options: const [
+                    'previous',
+                    'auto',
+                    'stand1',
+                    'stand2',
+                    'stand3',
+                    'away',
+                  ],
+                  labels: _afterLabels,
+                  onChanged: (v) => _set('after', v),
+                ),
               ),
             ]),
           ],
@@ -2657,8 +2688,8 @@ class _WtwLogicCard extends StatelessWidget {
   }
 }
 
-class _WtwLogicPhrase extends StatelessWidget {
-  const _WtwLogicPhrase({required this.children});
+class _WtwLogicLine extends StatelessWidget {
+  const _WtwLogicLine({required this.children});
   final List<Widget> children;
 
   @override
@@ -2675,56 +2706,34 @@ class _WtwLogicPhrase extends StatelessWidget {
   }
 }
 
-class _WtwLogicGaField extends StatelessWidget {
-  const _WtwLogicGaField({required this.value, required this.onChanged});
-  final String value;
-  final ValueChanged<String> onChanged;
+class _WtwLogicWord extends StatelessWidget {
+  const _WtwLogicWord(this.text);
+  final String text;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 168,
-      child: _InstallerStrField(
-        label: 'GA',
-        value: value,
-        compact: true,
-        gaSearch: true,
-        gaDptHint: 'DPT1.001',
-        onChanged: onChanged,
-      ),
-    );
+    return Text(text, style: Theme.of(context).textTheme.bodyMedium);
   }
 }
 
-class _WtwLogicMinField extends StatelessWidget {
-  const _WtwLogicMinField({required this.value, required this.onChanged});
-  final String value;
-  final ValueChanged<String> onChanged;
+class _WtwLogicBox extends StatelessWidget {
+  const _WtwLogicBox({required this.width, required this.child});
+  final double width;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: 56,
-      child: _InstallerStrField(
-        label: 'min',
-        value: value,
-        compact: true,
-        number: true,
-        onChanged: onChanged,
-      ),
-    );
+    return SizedBox(width: width, child: child);
   }
 }
 
 class _WtwLogicSelect extends StatelessWidget {
   const _WtwLogicSelect({
-    required this.width,
     required this.value,
     required this.options,
     required this.labels,
     required this.onChanged,
   });
-  final double width;
   final String value;
   final List<String> options;
   final Map<String, String> labels;
@@ -2733,24 +2742,31 @@ class _WtwLogicSelect extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final v = options.contains(value) ? value : options.first;
-    return SizedBox(
-      width: width,
-      child: DropdownButtonFormField<String>(
-        key: ValueKey('$v-${labels[v]}'),
-        initialValue: v,
-        isDense: true,
-        isExpanded: true,
-        decoration: luxeFilledDecoration().copyWith(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        ),
-        items: [
-          for (final o in options)
-            DropdownMenuItem(value: o, child: Text(labels[o] ?? o)),
-        ],
-        onChanged: (x) {
-          if (x != null) onChanged(x);
-        },
+    return DropdownButtonFormField<String>(
+      key: ValueKey('$v-${labels[v]}'),
+      initialValue: v,
+      isDense: true,
+      isExpanded: true,
+      decoration: luxeFilledDecoration().copyWith(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       ),
+      items: [
+        for (final o in options)
+          DropdownMenuItem(
+            value: o,
+            child: Text(labels[o] ?? o),
+          ),
+      ],
+      selectedItemBuilder: (context) => [
+        for (final o in options)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Text(labels[o] ?? o, maxLines: 1, softWrap: false),
+          ),
+      ],
+      onChanged: (x) {
+        if (x != null) onChanged(x);
+      },
     );
   }
 }
