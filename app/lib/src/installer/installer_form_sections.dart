@@ -2534,6 +2534,12 @@ class _WtwLogicSummaryCard extends StatelessWidget {
   };
 
   String _whenSummary() {
+    final mode = logic['triggerMode'] as String? ?? 'status';
+    if (mode == 'tempRise') {
+      final tr = logic['tempRise'] as Map? ?? {};
+      final delta = (tr['deltaDeg'] as num?)?.toStringAsFixed(1) ?? '?';
+      return 'Temp +${delta}°C';
+    }
     _migrateWhen(logic);
     final clauses = logic['when'] as List? ?? [];
     if (clauses.isEmpty) return 'Geen trigger';
@@ -2742,6 +2748,14 @@ class _WtwLogicEditorSheetState extends State<_WtwLogicEditorSheet> {
         final n = (_draft['label'] as String? ?? '').trim();
         return n.isEmpty ? 'Vul een naam in.' : null;
       case _WtwLogicPane.when:
+        final mode = _draft['triggerMode'] as String? ?? 'status';
+        if (mode == 'tempRise') {
+          final tr = _draft['tempRise'] as Map<String, dynamic>?;
+          if (tr == null || ((tr['ga'] as String?) ?? '').trim().isEmpty) {
+            return 'Vul het temperatuur-groepsadres in.';
+          }
+          return null;
+        }
         final clauses = _draft['when'] as List? ?? [];
         if (clauses.isEmpty) return 'Voeg minstens één trigger toe.';
         for (final c in clauses) {
@@ -2805,6 +2819,15 @@ class _WtwLogicEditorSheetState extends State<_WtwLogicEditorSheet> {
   }
 
   String _whenSummary() {
+    final mode = _draft['triggerMode'] as String? ?? 'status';
+    if (mode == 'tempRise') {
+      final tr = _draft['tempRise'] as Map<String, dynamic>? ?? {};
+      final ga = (tr['ga'] as String? ?? '').trim();
+      final delta = (tr['deltaDeg'] as num?)?.toStringAsFixed(1) ?? '?';
+      final window = (tr['windowSec'] as num?)?.round() ?? '?';
+      if (ga.isEmpty) return 'Temp. stijging (geen GA)';
+      return '$ga  +${delta}°C  in ${window}s';
+    }
     final clauses = _draft['when'] as List? ?? [];
     if (clauses.isEmpty) return 'Geen trigger';
     final join = _draft['whenJoin'] == 'and' ? ' EN ' : ' OF ';
@@ -3045,14 +3068,47 @@ class _WtwLogicEditorSheetState extends State<_WtwLogicEditorSheet> {
   /* ---- when pane ---- */
 
   Widget _whenPane(ScrollController ctl) {
+    final mode = _draft['triggerMode'] as String? ?? 'status';
+    return ListView(
+      controller: ctl,
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: SegmentedButton<String>(
+            showSelectedIcon: false,
+            expandedInsets: EdgeInsets.zero,
+            segments: const [
+              ButtonSegment(
+                value: 'status',
+                icon: Icon(Icons.sensors_rounded, size: 16),
+                label: Text('Status'),
+              ),
+              ButtonSegment(
+                value: 'tempRise',
+                icon: Icon(Icons.thermostat_rounded, size: 16),
+                label: Text('Temp. stijging'),
+              ),
+            ],
+            selected: {mode},
+            onSelectionChanged: (s) =>
+                setState(() => _draft['triggerMode'] = s.first),
+          ),
+        ),
+        const SizedBox(height: 16),
+        if (mode == 'tempRise') _tempRiseEditor() else _statusClausesEditor(),
+      ],
+    );
+  }
+
+  Widget _statusClausesEditor() {
     final clauses = _ensureList(_draft, 'when');
     if (clauses.isEmpty) {
       clauses.add({'ga': '', 'value': '1', 'minutes': 0});
     }
     final join = _draft['whenJoin'] == 'and' ? 'and' : 'or';
-    return ListView(
-      controller: ctl,
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _WtwLogicSelect(
           value: join,
@@ -3113,6 +3169,70 @@ class _WtwLogicEditorSheetState extends State<_WtwLogicEditorSheet> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _tempRiseEditor() {
+    final tr = _draft.putIfAbsent(
+      'tempRise',
+      () => <String, dynamic>{
+        'ga': '',
+        'deltaDeg': 3.0,
+        'windowSec': 20,
+      },
+    ) as Map<String, dynamic>;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: LuxeColors.surface.withValues(alpha: 0.9),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: LuxeColors.lineSoft),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Trigger wanneer de temperatuur met minstens X °C stijgt '
+            'binnen Y seconden. Geschikt voor een sensor op een '
+            'waterleiding (douche, warm water, …).',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 14),
+          _InstallerStrField(
+            label: 'Temperatuur-GA (DPT 9.001)',
+            value: tr['ga'] as String? ?? '',
+            gaSearch: true,
+            onChanged: (v) {
+              tr['ga'] = v.trim();
+              setState(() {});
+            },
+          ),
+          _InstallerStrField(
+            label: 'Stijging (°C)',
+            hint: 'bijv. 3 — trigger bij +3 °C',
+            value: '${(tr['deltaDeg'] as num?) ?? 3.0}',
+            number: true,
+            onChanged: (v) {
+              final n = double.tryParse(v.replaceAll(',', '.'));
+              if (n == null) return;
+              tr['deltaDeg'] = double.parse(n.clamp(0.5, 50).toStringAsFixed(1));
+              setState(() {});
+            },
+          ),
+          _InstallerStrField(
+            label: 'Binnen (seconden)',
+            hint: 'bijv. 20 — temperatuur moet binnen 20s stijgen',
+            value: '${(tr['windowSec'] as num?)?.round() ?? 20}',
+            number: true,
+            onChanged: (v) {
+              final n = int.tryParse(v);
+              if (n == null) return;
+              tr['windowSec'] = n.clamp(5, 600);
+              setState(() {});
+            },
+          ),
+        ],
+      ),
     );
   }
 

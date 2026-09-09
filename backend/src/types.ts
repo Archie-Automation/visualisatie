@@ -870,14 +870,35 @@ export interface WtwLogicClause {
 }
 
 /**
+ * Temperatuurstijging-trigger: als een KNX-temperatuur (DPT 9.001)
+ * met minstens `deltaDeg` °C stijgt binnen `windowSec` seconden → trigger.
+ * Gebruik: temperatuursensor op een waterleiding (douche, CV-retour, …).
+ */
+export interface WtwTempRiseTrigger {
+  ga: string;
+  /** Minimale stijging in °C om te triggeren. */
+  deltaDeg: number;
+  /** Tijdvenster in seconden waarbinnen de stijging moet plaatsvinden. */
+  windowSec: number;
+}
+
+/**
  * Wanneer status-GA = waarde voor N min → stand.
  * Meerdere statussen: whenJoin en/of. Einde: duur, of tot untilWhen (en/of).
  * Daarna: vorige stand (incl. Auto) of een gekozen stand.
+ *
+ * `triggerMode`:
+ *  - `"status"` (default): wanneer GA = waarde (bestaand gedrag).
+ *  - `"tempRise"`: wanneer temperatuur met x °C stijgt binnen y seconden.
  */
 export interface WtwZehnderLogic {
   id: string;
   enabled?: boolean;
   label?: string;
+  /** `"status"` (default) of `"tempRise"`. */
+  triggerMode?: "status" | "tempRise";
+  /** Temperatuurstijging-trigger. Alleen gebruikt als triggerMode = tempRise. */
+  tempRise?: WtwTempRiseTrigger;
   triggerGa?: string;
   /** Vergelijkingswaarde (DPT van het groepsadres). Oud: triggerEquals. */
   triggerValue?: string | number;
