@@ -1031,6 +1031,7 @@
       "properties": {
         "commandGa": { "$ref": "#/definitions/gaPattern" },
         "statusGa": { "$ref": "#/definitions/gaPattern" },
+        "faultGa": { "$ref": "#/definitions/gaPattern" },
         "filterGa": { "$ref": "#/definitions/gaPattern" },
         "filterDaysGa": { "$ref": "#/definitions/gaPattern" },
         "logics": {

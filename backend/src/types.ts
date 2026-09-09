@@ -1012,6 +1012,7 @@ export interface WtwDucoLogic {
 export interface WtwDucoConnectivityBoard {
   commandGa?: string;
   statusGa?: string;
+  faultGa?: string;
   filterGa?: string;
   filterDaysGa?: string;
   logics?: WtwDucoLogic[];
