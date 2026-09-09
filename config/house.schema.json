@@ -1033,6 +1033,12 @@
         "label": { "type": "string" },
         "triggerGa": { "$ref": "#/definitions/gaPattern" },
         "triggerEquals": { "type": "boolean" },
+        "triggerMinutes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1440,
+          "description": "Status moet zolang aanhouden voordat de stand start. 0 = meteen."
+        },
         "standId": {
           "type": "string",
           "enum": ["stand1", "stand2", "stand3", "away", "boost"]
@@ -1040,7 +1046,12 @@
         "end": { "type": "string", "enum": ["duration", "untilStatus"] },
         "minutes": { "type": "integer", "minimum": 1, "maximum": 1440 },
         "untilGa": { "$ref": "#/definitions/gaPattern" },
-        "untilEquals": { "type": "boolean" }
+        "untilEquals": { "type": "boolean" },
+        "untilMinutes": { "type": "integer", "minimum": 1, "maximum": 1440 },
+        "after": {
+          "type": "string",
+          "enum": ["previous", "auto", "stand1", "stand2", "stand3", "away"]
+        }
       }
     },
     "meldingItem": {

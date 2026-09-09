@@ -852,24 +852,37 @@ export type WtwZehnderStandId =
 
 export type WtwZehnderLogicStandId = Exclude<WtwZehnderStandId, "auto">;
 
+export type WtwZehnderLogicAfter =
+  | "previous"
+  | "auto"
+  | "stand1"
+  | "stand2"
+  | "stand3"
+  | "away";
+
 /**
- * KNX-status → WTW-stand. `duration`: stand voor N minuten.
- * `untilStatus`: stand blijft tot `untilGa` (default trigger) waarde
- * `untilEquals` aanhoudt voor N minuten.
+ * Wanneer status-GA = waarde voor N min → stand.
+ * Einde: voor N min, of tot (andere) status-GA = waarde voor N min.
+ * Daarna: vorige stand (incl. Auto) of een gekozen stand.
  */
 export interface WtwZehnderLogic {
   id: string;
   enabled?: boolean;
   label?: string;
   triggerGa: string;
-  /** Default true (stijgende 1). */
+  /** Default true (aan). */
   triggerEquals?: boolean;
+  /** 0 = meteen bij status. */
+  triggerMinutes?: number;
   standId: WtwZehnderLogicStandId;
   end?: "duration" | "untilStatus";
+  /** Duur van de stand als end = duration. */
   minutes: number;
   untilGa?: string;
-  /** Default false (tot de status uit is). */
   untilEquals?: boolean;
+  untilMinutes?: number;
+  /** Default previous. */
+  after?: WtwZehnderLogicAfter;
 }
 
 /**
