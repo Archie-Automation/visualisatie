@@ -1,6 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 
 import '../../api.dart';
 import '../../full_app_restart.dart';
@@ -22,6 +25,7 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
   bool _busy = false;
   String? _progress;
   String? _error;
+  bool _togglingAutoUpdate = false;
 
   Future<void> _confirmAndUpdate() async {
     final ok = await showDialog<bool>(
@@ -90,6 +94,36 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
     }
   }
 
+  Future<void> _toggleAutoUpdate(bool enabled) async {
+    final token = ref.read(authProvider).token;
+    if (token == null) return;
+    setState(() => _togglingAutoUpdate = true);
+    try {
+      final res = await http
+          .put(
+            Uri.parse('$apiBase/api/admin/auto-update'),
+            headers: {
+              'authorization': 'Bearer $token',
+              'content-type': 'application/json',
+            },
+            body: jsonEncode({'enabled': enabled}),
+          )
+          .timeout(const Duration(seconds: 8));
+      if (res.statusCode != 200) {
+        throw StateError('Instelling opslaan mislukt (${res.statusCode})');
+      }
+      ref.invalidate(softwareVersionStatusProvider);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString().replaceFirst('Bad state: ', '');
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _togglingAutoUpdate = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = ref.watch(softwareVersionStatusProvider).asData?.value;
@@ -98,6 +132,7 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
     final newer = status?.updateAvailable == true;
     final latest = status?.latest?.tag ?? status?.latest?.version;
     final running = status?.running.version;
+    final autoUpdate = status?.autoUpdateEnabled ?? true;
 
     String body;
     if (_error != null) {
@@ -126,7 +161,7 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
             children: [
               Icon(Icons.cloud_download_outlined,
                   color: LuxeColors.brassDeep, size: 22),
-              SizedBox(width: 10),
+              const SizedBox(width: 10),
               Text(
                 'SERVER BIJWERKEN',
                 style: Theme.of(context).textTheme.labelLarge,
@@ -179,6 +214,43 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
               ),
               onPressed: _busy || !agentReady ? null : _confirmAndUpdate,
             ),
+          ),
+          const SizedBox(height: 18),
+          const Divider(height: 1),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'AUTOMATISCHE UPDATES',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      autoUpdate
+                          ? 'De app toont een melding wanneer er een nieuwe versie is.'
+                          : 'Automatische updatemelding is uitgeschakeld.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              _togglingAutoUpdate
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Switch(
+                      value: autoUpdate,
+                      activeThumbColor: LuxeColors.brassDeep,
+                      onChanged: (v) => _toggleAutoUpdate(v),
+                    ),
+            ],
           ),
         ],
       ),

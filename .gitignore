@@ -48,3 +48,7 @@ tools/go2rtc.exe
 tools/go2rtc_win64.zip
 tools/ffmpeg.exe
 tools/ffmpeg-release-essentials.zip
+archie-os.apk
+
+
+app/android/build/
