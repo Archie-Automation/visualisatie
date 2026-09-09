@@ -1044,6 +1044,21 @@
         "id": { "type": "string" },
         "enabled": { "type": "boolean" },
         "label": { "type": "string" },
+        "triggerMode": {
+          "type": "string",
+          "enum": ["status", "tempRise"],
+          "description": "status = GA-waarde trigger (default), tempRise = temperatuurstijging."
+        },
+        "tempRise": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ga": { "$ref": "#/definitions/gaPattern" },
+            "deltaDeg": { "type": "number", "minimum": 0.1, "maximum": 50 },
+            "windowSec": { "type": "integer", "minimum": 5, "maximum": 600 }
+          },
+          "required": ["ga", "deltaDeg", "windowSec"]
+        },
         "triggerGa": { "$ref": "#/definitions/gaPattern" },
         "triggerValue": { "type": ["string", "number"] },
         "triggerEquals": { "type": "boolean" },
