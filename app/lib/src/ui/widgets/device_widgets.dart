@@ -1642,26 +1642,10 @@ class _ShadingTileState extends ConsumerState<ShadingTile> {
           header,
           if (hasMoveBar || hasTiltBar) ...[
             SizedBox(height: controlGap),
-            DeviceCardBody(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (hasMoveBar && hasTiltBar)
-                    DeviceControlBar.moveAndTiltBlock(
-                      moveItems: moveItems,
-                      tiltItems: tiltItems,
-                      rowGap: controlGap,
-                    )
-                  else ...[
-                    if (hasMoveBar)
-                      DeviceControlBar.singleRow(context, moveItems),
-                    if (hasMoveBar && hasTiltBar)
-                      SizedBox(height: controlGap),
-                    if (hasTiltBar)
-                      DeviceControlBar.tiltRow(context, tiltItems),
-                  ],
-                ],
-              ),
+            DeviceControlBar.moveAndTiltBlock(
+              moveItems: hasMoveBar ? moveItems : const [],
+              tiltItems: hasTiltBar ? tiltItems : const [],
+              rowGap: controlGap,
             ),
           ],
         ],
