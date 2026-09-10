@@ -12,6 +12,7 @@ import '../../fireplace_step_ranges.dart';
 import '../../fireplace_virtual.dart';
 import '../../hvac_switch_lock.dart';
 import '../../melding_active.dart';
+import '../../melding_alert_sound.dart';
 import '../../models.dart';
 import '../../wtw_logic.dart';
 import '../../shading_subtype_glyph.dart';
@@ -5437,6 +5438,7 @@ class MeldingTile extends ConsumerWidget {
             SizedBox(height: DeviceControlBar.sectionSpacing(context)),
             for (final item in rawItems)
               _MeldingAlertRow(
+                deviceId: device.id,
                 item: item,
                 active: isItemActive(
                   item,
@@ -5634,16 +5636,22 @@ class _MeldingChip extends StatelessWidget {
   }
 }
 
-class _MeldingAlertRow extends StatelessWidget {
-  const _MeldingAlertRow({required this.item, this.active = true});
+class _MeldingAlertRow extends ConsumerWidget {
+  const _MeldingAlertRow({
+    required this.deviceId,
+    required this.item,
+    this.active = true,
+  });
+  final String deviceId;
   final Map<String, dynamic> item;
   final bool active;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final urgency = item['urgency'] as String? ?? 'minder_belangrijk';
     final activeColor = MeldingTile._urgencyColor(urgency);
-    final inactiveInk = LuxeColors.ink.withValues(alpha: 0.72);
+    final quietInk = LuxeColors.inkSoft.withValues(alpha: 0.38);
+    final quietMeta = LuxeColors.inkSoft.withValues(alpha: 0.26);
     final iconKey = item['icon'] as String?;
     final label = active
         ? (item['activeLabel'] as String? ??
@@ -5655,6 +5663,10 @@ class _MeldingAlertRow extends StatelessWidget {
             MeldingTile._urgencyIcon(urgency);
     final btn = DeviceControlBar.buttonSizeFor(context);
     final glyph = DeviceControlBar.glyphSizeFor(context);
+    final soundKey = meldingItemSoundKey(deviceId, item);
+    final isUrgent = urgency == 'urgent';
+    final silenced = isUrgent &&
+        ref.watch(meldingAlertSilenceProvider).contains(soundKey);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: DeviceControlBar.gap),
@@ -5669,7 +5681,7 @@ class _MeldingAlertRow extends StatelessWidget {
                   boxShadow: DeviceControlBar.buttonShadows(active: true),
                 ),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   decoration: BoxDecoration(
                     borderRadius:
                         BorderRadius.circular(DeviceControlBar.buttonRadius),
@@ -5680,6 +5692,7 @@ class _MeldingAlertRow extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
+                      const SizedBox(width: 4),
                       Icon(iconData, size: glyph, color: activeColor),
                       const SizedBox(width: 10),
                       Expanded(
@@ -5705,32 +5718,79 @@ class _MeldingAlertRow extends StatelessWidget {
                           color: activeColor,
                         ),
                       ),
+                      if (isUrgent)
+                        IconButton(
+                          tooltip: silenced
+                              ? 'Geluid aanzetten'
+                              : 'Geluid uitzetten',
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: BoxConstraints.tightFor(
+                            width: glyph + 18,
+                            height: glyph + 18,
+                          ),
+                          onPressed: () => ref
+                              .read(meldingAlertSilenceProvider.notifier)
+                              .toggle(soundKey),
+                          icon: Icon(
+                            silenced
+                                ? Icons.volume_off_rounded
+                                : Icons.volume_up_rounded,
+                            size: glyph,
+                            color: activeColor,
+                          ),
+                        ),
                     ],
                   ),
                 ),
               )
-            : DeviceControlButtonSurface(
-                width: double.infinity,
-                height: btn,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  children: [
-                    Icon(iconData, size: glyph, color: inactiveInk),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontSize: 14,
-                              color: inactiveInk,
-                              fontWeight: FontWeight.w500,
-                              height: 1.2,
-                            ),
+            : DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius:
+                      BorderRadius.circular(DeviceControlBar.buttonRadius),
+                  color: LuxeColors.ink.withValues(alpha: 0.04),
+                  border: Border.all(
+                    color: LuxeColors.ink.withValues(alpha: 0.07),
+                  ),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(
+                    children: [
+                      const SizedBox(width: 4),
+                      Icon(iconData, size: glyph, color: quietInk),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context)
+                              .textTheme
+                              .titleMedium
+                              ?.copyWith(
+                                fontSize: 14,
+                                color: quietInk,
+                                fontWeight: FontWeight.w400,
+                                height: 1.2,
+                                letterSpacing: 0.15,
+                              ),
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 8),
+                      Text(
+                        MeldingTile._urgencyLabel(urgency),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.6,
+                          color: quietMeta,
+                        ),
+                      ),
+                      if (isUrgent)
+                        SizedBox(width: glyph + 18),
+                    ],
+                  ),
                 ),
               ),
       ),

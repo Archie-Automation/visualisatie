@@ -40,6 +40,7 @@ class MainActivity : FlutterActivity(), SensorEventListener {
     private var wakeLock: PowerManager.WakeLock? = null
     private var apkInstaller: ApkInstaller? = null
     private var doorbellRinger: DoorbellRinger? = null
+    private var meldingAlertRinger: MeldingAlertRinger? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -86,6 +87,24 @@ class MainActivity : FlutterActivity(), SensorEventListener {
                 }
                 "stop" -> {
                     doorbellRinger?.stop()
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        meldingAlertRinger = MeldingAlertRinger(this)
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "archie_os/melding_alert",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "start" -> {
+                    meldingAlertRinger?.start()
+                    result.success(null)
+                }
+                "stop" -> {
+                    meldingAlertRinger?.stop()
                     result.success(null)
                 }
                 else -> result.notImplemented()
@@ -268,6 +287,8 @@ class MainActivity : FlutterActivity(), SensorEventListener {
         stopSensors()
         doorbellRinger?.stop()
         doorbellRinger = null
+        meldingAlertRinger?.stop()
+        meldingAlertRinger = null
         apkInstaller?.dispose()
         apkInstaller = null
         try {
