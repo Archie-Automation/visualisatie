@@ -5071,6 +5071,9 @@ class _AcFanOptionEditor extends StatelessWidget {
    Meldingen installer section
    ══════════════════════════════════════════════════════════════════════════ */
 
+/// Groepsadres en urgentie — kort, zelfde kolombreedte.
+const double _kMeldingNarrowCol = 140;
+
 class MeldingInstallerSection extends StatefulWidget {
   const MeldingInstallerSection({
     super.key,
@@ -5164,10 +5167,10 @@ class _MeldingInstallerSectionState extends State<MeldingInstallerSection> {
           )
         else ...[
           const _OverviewColHeader([
-            (label: 'Onderwerp', flex: 2, width: null),
-            (label: 'Groepsadres', flex: 2, width: null),
+            (label: 'Onderwerp', flex: 3, width: null),
+            (label: 'Groepsadres', flex: 0, width: _kMeldingNarrowCol),
             (label: 'DPT', flex: 2, width: null),
-            (label: 'Urgentie', flex: 2, width: null),
+            (label: 'Urgentie', flex: 0, width: _kMeldingNarrowCol),
             (label: 'Actief bij', flex: 1, width: null),
             (label: 'Tekst aan', flex: 1, width: null),
             (label: 'Tekst uit', flex: 1, width: null),
@@ -5219,7 +5222,7 @@ class _MeldingItemEditor extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            flex: 2,
+            flex: 3,
             child: _StrField(
               label: 'Onderwerp',
               value: item['label'] as String? ?? '',
@@ -5228,8 +5231,8 @@ class _MeldingItemEditor extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          Expanded(
-            flex: 2,
+          SizedBox(
+            width: _kMeldingNarrowCol,
             child: _StrField(
               label: 'Groepsadres',
               value: item['ga'] as String? ?? '',
@@ -5258,8 +5261,8 @@ class _MeldingItemEditor extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 10),
-          Expanded(
-            flex: 2,
+          SizedBox(
+            width: _kMeldingNarrowCol,
             child: DropdownButtonFormField<String>(
               initialValue: urgency,
               isExpanded: true,
