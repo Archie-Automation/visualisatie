@@ -641,9 +641,14 @@ export interface FireplaceConfig {
    * `analog` = schakel + slider (percent of 0–10 V / 0–3 V weergave op de bus als DPT5).
    * `discrete` = pulscommando’s op aparte GA’s voor start/stop/omhoog/omlaag.
    * Optional `statusBits` adds Error/Fuel/Working/Ready feedback (4 extra GAs).
+   * `protocol: "planika"` = alleen 1 schrijven (puls in KNX); geen onOff-GA; status via statusBits.
+   * `protocol: "mertik_gv60"` = app-puls 1→0 op start/stop/omhoog/omlaag.
+   * `protocol: "analog_interface"` = aan/uit-bit + analoge vlam 0–10 V / 0–3 V (bus 0–100 %).
    */
   controlMode?: "analog" | "discrete";
-  onOff: { ga: GA; statusGa?: GA };
+  protocol?: "planika" | "mertik_gv60" | "analog_interface";
+  /** Ontbreekt bij Planika: geen aan/uit-GA, status komt uit `statusBits`. */
+  onOff?: { ga: GA; statusGa?: GA };
   flame?: {
     ga: GA;
     statusGa?: GA;
@@ -658,6 +663,11 @@ export interface FireplaceConfig {
      * `steps` should equal `stepRanges.length` (enforced in validation).
      */
     stepRanges?: { min: number; max: number; write?: number }[];
+    /**
+     * DPT5.001 (0–100 %) dat na `fireplace.on` true naar `flame.ga` gaat
+     * (ontstekings-/startniveau). Alleen analoge interface.
+     */
+    onPercent?: number;
   };
   discreteLevel?: FireplaceDiscreteLevel;
   /** Four status contact GAs (bit). Combinations: error+fuel=Refuelling, working+ready=Wait/Cooling. */

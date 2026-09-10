@@ -4174,6 +4174,7 @@ class _BoundStrFieldState extends State<_BoundStrField> {
             } else if (widget.keyName == 'order' ||
                 widget.keyName == 'port' ||
                 widget.keyName == 'pulseMs' ||
+                widget.keyName == 'onPercent' ||
                 widget.keyName == 'lutronIntegrationId' ||
                 widget.keyName == 'lutronSlatIntegrationId') {
               widget.map[widget.keyName] =
@@ -4649,48 +4650,26 @@ class _FireplaceStepRangesSection extends StatelessWidget {
       onChanged();
     }
 
-    final parsed = parseFireplaceStepRanges(flame);
-    final enabled = parsed != null && parsed.isNotEmpty;
-    final rows = enabled ? _mutableRanges() : <Map<String, dynamic>>[];
-    final err = enabled ? validateFireplaceStepRanges(rows) : null;
+    final rows = _mutableRanges();
+    final err = rows.length >= 2 ? validateFireplaceStepRanges(rows) : 'Vul minstens 2 vlamstanden in.';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 8),
         Text(
-          'Vlamstanden (percent)',
+          'Vlamstanden (verplicht)',
           style: Theme.of(context).textTheme.labelLarge,
         ),
         const SizedBox(height: 4),
         Text(
-          'Per stand: min?max % op de bus (terugmelding). Geen overlap: het '
-          'maximum van stap n moet strikt kleiner zijn dan het minimum van stap n+1.',
+          'Per stand: min–max % op de bus (terugmelding) en optioneel het '
+          'schrijf-% dat de knop stuurt. Geen overlap: het maximum van stap n '
+          'moet strikt kleiner zijn dan het minimum van stap n+1.',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11),
         ),
         const SizedBox(height: 8),
-        LuxeSwitchRow(
-          title: 'Vaste percent-banden per stand',
-          subtitle: '2?10 stappen; uit = ??n doorlopende schuifregelaar.',
-          value: enabled,
-          onChanged: (v) {
-            if (v) {
-              flame['stepRanges'] = [
-                <String, dynamic>{'min': 1, 'max': 33},
-                <String, dynamic>{'min': 34, 'max': 66},
-                <String, dynamic>{'min': 67, 'max': 100},
-              ];
-              flame['steps'] = 3;
-            } else {
-              flame.remove('stepRanges');
-              flame.remove('steps');
-            }
-            onChanged();
-          },
-        ),
-        if (enabled) ...[
-          const SizedBox(height: 8),
-          Row(
+        Row(
             children: [
               Text('Aantal stappen',
                   style: Theme.of(context).textTheme.bodyMedium),
@@ -4774,7 +4753,6 @@ class _FireplaceStepRangesSection extends StatelessWidget {
                 ),
               ),
             ),
-        ],
       ],
     );
   }
@@ -4785,24 +4763,52 @@ enum _FireplaceOpMode {
   analogFlame,
   analogSwitchOnly,
   discretePulses,
-  discretePulsesStatus,
+  planika,
+}
+
+List<Map<String, dynamic>> _defaultAnalogStepRanges() => [
+      <String, dynamic>{'min': 1, 'max': 33},
+      <String, dynamic>{'min': 34, 'max': 66},
+      <String, dynamic>{'min': 67, 'max': 100},
+    ];
+
+void _ensureAnalogStands(Map<String, dynamic> flame) {
+  if (parseFireplaceStepRanges(flame) != null) return;
+  flame['stepRanges'] = _defaultAnalogStepRanges();
+  flame['steps'] = 3;
 }
 
 _FireplaceOpMode _fireplaceReadMode(Map<String, dynamic> fp) {
+  if (fp['protocol'] == 'planika' ||
+      (fp['controlMode'] == 'discrete' && fp['statusBits'] is Map)) {
+    return _FireplaceOpMode.planika;
+  }
   if (fp['controlMode'] == 'discrete') {
-    if (fp['statusBits'] is Map) return _FireplaceOpMode.discretePulsesStatus;
     return _FireplaceOpMode.discretePulses;
   }
-  if (fp['flame'] is Map) return _FireplaceOpMode.analogFlame;
+  if (fp['protocol'] == 'analog_interface' || fp['flame'] is Map) {
+    return _FireplaceOpMode.analogFlame;
+  }
   return _FireplaceOpMode.analogSwitchOnly;
+}
+
+void _fireplaceStripPulseMs(Map<String, dynamic> fp) {
+  final dl = fp['discreteLevel'];
+  if (dl is! Map) return;
+  for (final k in const ['on', 'off', 'up', 'down']) {
+    final ch = dl[k];
+    if (ch is Map) ch.remove('pulseMs');
+  }
 }
 
 void _fireplaceApplyMode(Map<String, dynamic> fp, _FireplaceOpMode mode) {
   switch (mode) {
     case _FireplaceOpMode.analogFlame:
       fp['controlMode'] = 'analog';
+      fp['protocol'] = 'analog_interface';
       fp.remove('discreteLevel');
       fp.remove('statusBits');
+      _ensureOnOff(fp);
       final old = fp['flame'];
       final oldM = <String, dynamic>{};
       if (old is Map) {
@@ -4827,25 +4833,44 @@ void _fireplaceApplyMode(Map<String, dynamic> fp, _FireplaceOpMode mode) {
       } else if (steps is num && steps >= 2 && steps <= 10) {
         flame['steps'] = steps.round();
       }
+      final sr = oldM['stepRanges'];
+      if (sr is List) flame['stepRanges'] = sr;
+      if (oldM['hideStepPercent'] == true) {
+        flame['hideStepPercent'] = true;
+      }
+      final onP = oldM['onPercent'];
+      if (onP is num) {
+        flame['onPercent'] = onP.round().clamp(0, 100);
+      } else {
+        flame['onPercent'] = 20;
+      }
+      _ensureAnalogStands(flame);
       fp['flame'] = flame;
       break;
     case _FireplaceOpMode.analogSwitchOnly:
       fp['controlMode'] = 'analog';
       fp.remove('discreteLevel');
       fp.remove('statusBits');
+      fp.remove('protocol');
       fp.remove('flame');
+      _ensureOnOff(fp);
       break;
     case _FireplaceOpMode.discretePulses:
       fp['controlMode'] = 'discrete';
+      fp['protocol'] = 'mertik_gv60';
       fp.remove('flame');
       fp.remove('statusBits');
       fp['discreteLevel'] ??= <String, dynamic>{};
+      _ensureOnOff(fp);
       break;
-    case _FireplaceOpMode.discretePulsesStatus:
+    case _FireplaceOpMode.planika:
       fp['controlMode'] = 'discrete';
+      fp['protocol'] = 'planika';
       fp.remove('flame');
+      fp.remove('onOff');
       fp['discreteLevel'] ??= <String, dynamic>{};
       fp['statusBits'] ??= <String, dynamic>{};
+      _fireplaceStripPulseMs(fp);
       break;
   }
 }
@@ -4970,7 +4995,7 @@ class _FireplaceInstallerSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final fp = _ensureFireplaceMap(device);
     final mode = _fireplaceReadMode(fp);
-    final onOff = _ensureOnOff(fp);
+    final planika = mode == _FireplaceOpMode.planika;
     final theme = Theme.of(context);
 
     return Column(
@@ -4984,7 +5009,7 @@ class _FireplaceInstallerSection extends StatelessWidget {
             items: const [
               DropdownMenuItem(
                 value: _FireplaceOpMode.analogFlame,
-                child: Text('Bit + byte (aan/uit + vlam)'),
+                child: Text('Analoge interface 0–10 V / 0–3 V'),
               ),
               DropdownMenuItem(
                 value: _FireplaceOpMode.analogSwitchOnly,
@@ -4992,11 +5017,11 @@ class _FireplaceInstallerSection extends StatelessWidget {
               ),
               DropdownMenuItem(
                 value: _FireplaceOpMode.discretePulses,
-                child: Text('4× puls (start/stop/omhoog/omlaag)'),
+                child: Text('Mertik GV60 (4× puls start/stop/omhoog/omlaag)'),
               ),
               DropdownMenuItem(
-                value: _FireplaceOpMode.discretePulsesStatus,
-                child: Text('4× puls + status (8 GA’s)'),
+                value: _FireplaceOpMode.planika,
+                child: Text('Planika (start/stop + 4 status)'),
               ),
             ],
             onChanged: (_FireplaceOpMode? next) {
@@ -5005,56 +5030,87 @@ class _FireplaceInstallerSection extends StatelessWidget {
               onChanged();
             },
           ),
-          if (mode == _FireplaceOpMode.discretePulsesStatus) ...[
+          if (mode == _FireplaceOpMode.analogFlame) ...[
             const SizedBox(height: 8),
             Text(
-              'Acht bit-GA’s: 4× pulscommando (waarde 1) + 4× statuscontact. '
-              'Combinaties: Error+Fuel = Bijvullen, Working+Ready = Wachten/Koelen.',
+              'Analoge interface: aan/uit-bit plus vlam als DPT5 (0–100 % op de bus = '
+              '0–10 V of 0–3 V). Vul de standen in en het percentage dat bij '
+              'aanzetten naar het vlamadres gaat.',
               style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
             ),
           ],
+          if (planika) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Planika: 4 commando-GA’s (Start/Stop/Omhoog/Omlaag) — de app '
+              'schrijft alleen 1; de puls maakt KNX. Status alleen via de 4 '
+              'contacten; geen aan/uit-adres. Working = aan. Combinaties: '
+              'Error+Fuel = Bijvullen, Working+Ready = Wachten/Koelen.',
+              style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
+            ),
+          ],
+          if (mode == _FireplaceOpMode.discretePulses) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Mertik GV60: 4 pulscontacten. De app stuurt 1 en daarna 0 '
+              '(standaard 250 ms). Optioneel een aan/uit-statusadres voor de app.',
+              style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
+            ),
+          ],
+          if (!planika) ...[
           const SizedBox(height: 20),
           Text('Aan / uit', style: theme.textTheme.labelLarge),
           const SizedBox(height: 4),
           Text(
-            mode == _FireplaceOpMode.discretePulsesStatus
-                ? 'Schema-veld (bit). Bij deze modus komt de app-status uit de '
-                    '4 statuscontacten hieronder; Working = aan.'
-                : 'Schrijf-Groepadres (bit). Optioneel status voor terugmelding in de app.',
+            'Schrijf-Groepadres (bit). Optioneel status voor terugmelding in de app.',
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 8),
-          _BoundStrField(
-            'ga',
-            onOff,
-            onChanged,
-            labelOverride: 'Groepsadres schrijven (bit)',
-            hintText: 'bijv. 6/1/1',
-            key: ValueKey('fp-on-${device['id']}-ga'),
+          Builder(
+            builder: (context) {
+              final onOff = _ensureOnOff(fp);
+              return Column(
+                children: [
+                  _BoundStrField(
+                    'ga',
+                    onOff,
+                    onChanged,
+                    labelOverride: 'Groepsadres schrijven (bit)',
+                    hintText: 'bijv. 6/1/1',
+                    key: ValueKey('fp-on-${device['id']}-ga'),
+                  ),
+                  _BoundStrField(
+                    'statusGa',
+                    onOff,
+                    onChanged,
+                    labelOverride: 'Groepsadres status (bit, optioneel)',
+                    hintText: 'leeg = zelfde als schrijven',
+                    emptyMeansRemove: true,
+                    key: ValueKey('fp-on-${device['id']}-st'),
+                  ),
+                ],
+              );
+            },
           ),
-          _BoundStrField(
-            'statusGa',
-            onOff,
-            onChanged,
-            labelOverride: 'Groepsadres status (bit, optioneel)',
-            hintText: 'leeg = zelfde als schrijven',
-            emptyMeansRemove: true,
-            key: ValueKey('fp-on-${device['id']}-st'),
-          ),
+          ],
           if (mode == _FireplaceOpMode.analogFlame) ...[
             const SizedBox(height: 20),
-            Text('Vlamsterkte (byte 0?100 % op de bus)',
+            Text('Vlamsterkte (DPT5, 0–100 % op de bus)',
                 style: theme.textTheme.labelLarge),
             const SizedBox(height: 4),
             Text(
-              'DPT5 op het schrijfadres; in de app kunt u kiezen of de schaal '
-              'als procent of geschat als 0?10 V / 0?3 V getoond wordt.',
+              'Schrijf-GA voor het analoge niveau. 100 % = 10 V of 3 V, afhankelijk '
+              'van de actor. De app toont de gekozen schaal; de bus blijft 0–100 %.',
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
             Builder(
               builder: (context) {
                 final flame = _ensureFlame(fp);
+                _ensureAnalogStands(flame);
+                if (flame['onPercent'] is! num) {
+                  flame['onPercent'] = 20;
+                }
                 final ld = (flame['levelDisplay'] as String?) ?? 'percent';
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -5063,7 +5119,7 @@ class _FireplaceInstallerSection extends StatelessWidget {
                       'ga',
                       flame,
                       onChanged,
-                      labelOverride: 'Groepsadres schrijven (byte 0?100 %)',
+                      labelOverride: 'Groepsadres schrijven (byte 0–100 %)',
                       hintText: 'bijv. 6/2/1',
                       key: ValueKey('fp-fl-${device['id']}-ga'),
                     ),
@@ -5075,6 +5131,24 @@ class _FireplaceInstallerSection extends StatelessWidget {
                       hintText: 'bijv. 6/2/2',
                       emptyMeansRemove: true,
                       key: ValueKey('fp-fl-${device['id']}-st'),
+                    ),
+                    _BoundStrField(
+                      'onPercent',
+                      flame,
+                      onChanged,
+                      number: true,
+                      labelOverride: 'Percentage bij aanzetten (0–100)',
+                      hintText: 'bijv. 20',
+                      key: ValueKey('fp-fl-${device['id']}-onpct'),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Text(
+                        'Na het aan-bit schrijft de app dit percentage naar het '
+                        'vlamadres (ontsteking). Daarna kiest de gebruiker een stand.',
+                        style:
+                            theme.textTheme.bodySmall?.copyWith(fontSize: 11),
+                      ),
                     ),
                     Builder(
                       builder: (context) {
@@ -5093,66 +5167,47 @@ class _FireplaceInstallerSection extends StatelessWidget {
                           items: const [
                             DropdownMenuItem(
                               value: 'percent',
-                              child: Text('Percent (0?100 %)'),
+                              child: Text('Percent (0–100 %)'),
                             ),
                             DropdownMenuItem(
                               value: 'volt_10',
-                              child: Text(
-                                  'Labels 0?10 V (bus blijft 0?100 %)'),
+                              child: Text('0–10 V (bus blijft 0–100 %)'),
                             ),
                             DropdownMenuItem(
                               value: 'volt_3',
-                              child: Text(
-                                  'Labels 0?3 V (bus blijft 0?100 %)'),
+                              child: Text('0–3 V (bus blijft 0–100 %)'),
                             ),
                           ],
                           onChanged: (v) {
                             if (v == null) return;
                             flame['levelDisplay'] = v;
-                            if (v != 'percent') {
-                              flame.remove('stepRanges');
-                              flame.remove('steps');
-                            }
                             onChanged();
                           },
                         );
                       },
                     ),
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Text(
-                        'Op de KNX-bus blijft de vlam altijd 0?100 % (DPT5.001), '
-                        'tenzij u elders stappen gebruikt. Alleen de teksten in de '
-                        'klant-app volgen de gekozen weergave.',
-                        style:
-                            theme.textTheme.bodySmall?.copyWith(fontSize: 11),
-                      ),
+                    _FireplaceStepRangesSection(
+                      flame: flame,
+                      onChanged: onChanged,
                     ),
-                    if (ld == 'percent')
-                      _FireplaceStepRangesSection(
-                        flame: flame,
-                        onChanged: onChanged,
-                      ),
                   ],
                 );
               },
             ),
           ],
           if (mode == _FireplaceOpMode.discretePulses ||
-              mode == _FireplaceOpMode.discretePulsesStatus) ...[
+              mode == _FireplaceOpMode.planika) ...[
             const SizedBox(height: 16),
             Text(
-              mode == _FireplaceOpMode.discretePulsesStatus
-                  ? 'Commando’s — per functie één bit-GA; de app stuurt kort waarde 1, daarna 0. Pulsduur standaard 250 ms.'
-                  : 'Pulscontacten — per functie één bit-GA; de app stuurt alleen kort aan (1), daarna 0. Pulsduur standaard 250 ms.',
+              planika
+                  ? 'Commando’s — per functie één bit-GA. De app schrijft alleen 1; de puls maakt KNX.'
+                  : 'Mertik GV60 — per functie één bit-GA. De app stuurt 1 en daarna 0. Pulsduur standaard 250 ms.',
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 12),
             Builder(
               builder: (context) {
                 final dl = _ensureDiscreteLevel(fp);
-                final withStatus =
-                    mode == _FireplaceOpMode.discretePulsesStatus;
                 Widget row(String key, String title) {
                   final ch = _ensurePulseChannel(dl, key);
                   return Padding(
@@ -5165,18 +5220,21 @@ class _FireplaceInstallerSection extends StatelessWidget {
                           'ga',
                           ch,
                           onChanged,
-                          labelOverride: 'Groepsadres (puls 1)',
+                          labelOverride: planika
+                              ? 'Groepsadres (schrijf 1)'
+                              : 'Groepsadres (puls 1→0)',
                           key: ValueKey('fp-dl-${device['id']}-$key-ga'),
                         ),
-                        _BoundStrField(
-                          'pulseMs',
-                          ch,
-                          onChanged,
-                          number: true,
-                          labelOverride: 'Pulsduur (ms, optioneel)',
-                          emptyMeansRemove: true,
-                          key: ValueKey('fp-dl-${device['id']}-$key-ms'),
-                        ),
+                        if (!planika)
+                          _BoundStrField(
+                            'pulseMs',
+                            ch,
+                            onChanged,
+                            number: true,
+                            labelOverride: 'Pulsduur (ms, optioneel)',
+                            emptyMeansRemove: true,
+                            key: ValueKey('fp-dl-${device['id']}-$key-ms'),
+                          ),
                       ],
                     ),
                   );
@@ -5185,21 +5243,21 @@ class _FireplaceInstallerSection extends StatelessWidget {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    row('on', withStatus ? '1 · Start' : 'Aanzetten'),
-                    row('off', withStatus ? '2 · Stop' : 'Uitzetten'),
-                    row('up', withStatus ? '3 · Omhoog' : 'Vlam hoger'),
-                    row('down', withStatus ? '4 · Omlaag' : 'Vlam lager'),
+                    row('on', 'Start'),
+                    row('off', 'Stop'),
+                    row('up', 'Omhoog'),
+                    row('down', 'Omlaag'),
                   ],
                 );
               },
             ),
           ],
-          if (mode == _FireplaceOpMode.discretePulsesStatus) ...[
+          if (planika) ...[
             const SizedBox(height: 8),
             Text('Statuscontacten (bit)', style: theme.textTheme.labelLarge),
             const SizedBox(height: 4),
             Text(
-              'Vier status-GA’s. Combinaties: Error+Fuel = Bijvullen, '
+              'Planika-status. Combinaties: Error+Fuel = Bijvullen, '
               'Working+Ready = Wachten / Koelen.',
               style: theme.textTheme.bodySmall,
             ),

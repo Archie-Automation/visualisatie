@@ -1,4 +1,11 @@
 /// Status-bits en labels voor openhaarden met discrete puls + feedback.
+///
+/// Planika: start/stop/omhoog/omlaag schrijven alleen 1; puls zit in KNX.
+bool fireplaceIsPlanika(Map<String, dynamic> cfg) {
+  if (cfg['protocol'] == 'planika') return true;
+  return cfg['controlMode'] == 'discrete' && cfg['statusBits'] is Map;
+}
+
 bool fireplaceBusBit(Map<String, dynamic> busValues, String? ga) {
   if (ga == null || ga.trim().isEmpty) return false;
   final v = busValues[ga.trim()];

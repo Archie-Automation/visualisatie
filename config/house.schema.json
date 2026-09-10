@@ -661,12 +661,16 @@
         },
         "fireplace": {
           "type": "object",
-          "required": ["onOff"],
           "properties": {
             "controlMode": {
               "type": "string",
               "enum": ["analog", "discrete"],
               "description": "analog = schakel + slider (DPT5 % of stappen); discrete = puls-DPT1 op aparte GA’s voor aan/uit/hoger/lager."
+            },
+            "protocol": {
+              "type": "string",
+              "enum": ["planika", "mertik_gv60", "analog_interface"],
+              "description": "planika = schrijf 1, puls in KNX. mertik_gv60 = app-puls 1→0. analog_interface = aan/uit-bit + DPT5 0–10 V / 0–3 V met standen en onPercent."
             },
             "onOff": { "$ref": "#/definitions/gaWithStatus" },
             "flame": {
@@ -680,6 +684,12 @@
                   "type": "string",
                   "enum": ["percent", "volt_10", "volt_3"],
                   "description": "Alleen UI: bus blijft 0..100 (DPT5.001) tenzij steps is gezet; schaal naar V voor label."
+                },
+                "onPercent": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100,
+                  "description": "DPT5.001 % dat bij aanzetten naar flame.ga gaat (na het aan/uit-bit)."
                 },
                 "hideStepPercent": {
                   "type": "boolean",
@@ -705,7 +715,7 @@
             },
             "discreteLevel": {
               "type": "object",
-              "description": "Voor controlMode discrete: pulscontacten (true, wacht pulseMs, false) — start/stop/omhoog/omlaag.",
+              "description": "Discrete commando’s. Standaard: app-puls (1, wacht, 0). Planika: alleen 1; puls in KNX.",
               "properties": {
                 "on": { "$ref": "#/definitions/knxPulseChannel" },
                 "off": { "$ref": "#/definitions/knxPulseChannel" },

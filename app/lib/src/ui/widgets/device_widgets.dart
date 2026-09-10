@@ -2939,12 +2939,18 @@ class _FireplaceTileState extends ConsumerState<FireplaceTile> {
     final bus = ref.watch(busProvider);
     final fireplaceVirtual = ref.watch(fireplaceVirtualProvider);
 
-    final onOff = (cfg['onOff'] as Map).cast<String, dynamic>();
+    final onOffRaw = cfg['onOff'];
+    final onOff = onOffRaw is Map
+        ? onOffRaw.cast<String, dynamic>()
+        : <String, dynamic>{};
     final discreteMode = _fireplaceIsDiscrete(cfg);
+    final planika = fireplaceIsPlanika(cfg);
     final statusBits = fireplaceStatusBitsMap(cfg);
     final hasStatusBits = fireplaceHasStatusBits(cfg);
-    final onStatusGa = onOff['statusGa'] as String? ?? onOff['ga'] as String;
-    final busOn = bus.values[onStatusGa] == true || bus.values[onStatusGa] == 1;
+    final onStatusGa = onOff['statusGa'] as String? ?? onOff['ga'] as String?;
+    final busOn = onStatusGa != null &&
+        onStatusGa.isNotEmpty &&
+        (bus.values[onStatusGa] == true || bus.values[onStatusGa] == 1);
     final workingOn = fireplaceWorkingOn(cfg, bus.values);
     final on = workingOn ??
         FireplaceVirtualStore.resolveOn(
@@ -2989,7 +2995,14 @@ class _FireplaceTileState extends ConsumerState<FireplaceTile> {
         final ok = await maybeConfirm(context, device.confirm?.off);
         if (!ok) return;
       }
-      ref.read(busProvider.notifier).send({
+      final notifier = ref.read(busProvider.notifier);
+      if (v) {
+        final onPct = (flame?['onPercent'] as num?)?.round();
+        if (onPct != null && flameStatusGa != null) {
+          notifier.patchDimPercent(flameStatusGa, onPct.clamp(0, 100));
+        }
+      }
+      await notifier.send({
         'kind': 'fireplace.on',
         'deviceId': device.id,
         'on': v,
@@ -3073,11 +3086,17 @@ class _FireplaceTileState extends ConsumerState<FireplaceTile> {
                 ),
               ],
             ),
-            trailing: DeviceTileLayout.trailingSwitch(
-              context: context,
-              value: on,
-              onChanged: toggleOn,
-            ),
+            trailing: planika
+                ? DeviceTileLayout.trailingStartStop(
+                    running: on,
+                    onStart: () => sendDiscrete('on'),
+                    onStop: () => sendDiscrete('off'),
+                  )
+                : DeviceTileLayout.trailingSwitch(
+                    context: context,
+                    value: on,
+                    onChanged: toggleOn,
+                  ),
           ),
           if (discreteMode && discreteLevel != null) ...[
             SizedBox(height: DeviceControlBar.sectionSpacing(context)),

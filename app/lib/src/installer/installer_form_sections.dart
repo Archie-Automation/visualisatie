@@ -2185,16 +2185,32 @@ class _InstallerDropdown extends StatelessWidget {
 // WTW / HRV ventilatie installer section
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Human-readable label per DPT code (meldingen-installer).
+/// Human-readable label per DPT code (meldingen- en WTW-installer).
 const _wtwDptLabels = <String, String>{
-  '1.001': 'Bit 0/1 (DPT 1.001)',
+  '1.001': 'Aan/uit (DPT 1.001)',
+  '1.002': 'True/false (DPT 1.002)',
+  '1.008': 'Op/neer (DPT 1.008)',
+  '1.009': 'Open/dicht (DPT 1.009)',
+  '1.011': 'Actief/inactief (DPT 1.011)',
   '5.001': 'Procent 0–100 (DPT 5.001)',
   '5.010': 'Byte 0–255 (DPT 5.010)',
-  '7.001': '2 byte teller (DPT 7.001)',
+  '6.001': 'Getal −128…127 (DPT 6.001)',
+  '7.001': 'Teller 0–65535 (DPT 7.001)',
+  '8.001': 'Getal −32768…32767 (DPT 8.001)',
   '9.001': 'Temperatuur °C (DPT 9.001)',
-  '9.007': 'Relatieve vochtigheid %RH (DPT 9.007)',
+  '9.002': 'Temperatuurverschil K (DPT 9.002)',
+  '9.004': 'Verlichting lux (DPT 9.004)',
+  '9.005': 'Windsnelheid m/s (DPT 9.005)',
+  '9.006': 'Luchtdruk Pa (DPT 9.006)',
+  '9.007': 'Vochtigheid %RH (DPT 9.007)',
   '9.008': 'CO₂ ppm (DPT 9.008)',
   '9.009': 'Volumestroom m³/h (DPT 9.009)',
+  '9.020': 'Spanning mV (DPT 9.020)',
+  '9.021': 'Stroom mA (DPT 9.021)',
+  '12.001': 'Teller 32-bit (DPT 12.001)',
+  '13.001': 'Getal 32-bit (DPT 13.001)',
+  '14.019': 'Vermogen W (DPT 14.019)',
+  '14.068': 'Windsnelheid m/s (DPT 14.068)',
   'hex': 'Hex-weergave (alleen status)',
 };
 

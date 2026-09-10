@@ -7,7 +7,7 @@ import { resolveLutronLoadOutput } from "./lutron/resolve";
 import { walkDevices, wtwDptToRoleConfig } from "./config";
 import { hvacSwitchLock } from "./hvacSwitchLock";
 import { fireplaceVirtual } from "./fireplaceVirtual";
-import { pulseKnxGa } from "./fireplacePulse";
+import { fireplaceIsPlanika, pulseKnxGa } from "./fireplacePulse";
 import { wtwRuntime } from "./wtwRuntime";
 
 type PositionControllableDevice = ShadingDevice | PositionActuatorDevice;
@@ -510,8 +510,21 @@ export async function dispatch(
           fireplaceVirtual.set(device.id, false);
           return;
         }
+        if (fireplaceIsPlanika(fp)) {
+          throw new Error("Planika start/stop-GA ontbreekt");
+        }
       }
-      await bus.write(fp.onOff.ga, "switch", cmd.on);
+      const onGa = fp.onOff?.ga;
+      if (!onGa) throw new Error("no onOff GA");
+      await bus.write(onGa, "switch", cmd.on);
+      if (cmd.on && fp.flame?.ga && fp.flame.onPercent != null) {
+        const pct = Math.max(0, Math.min(100, Math.round(Number(fp.flame.onPercent))));
+        await new Promise<void>((r) => setTimeout(r, 200));
+        await bus.write(fp.flame.ga, "percent", pct);
+        if (fp.flame.statusGa && fp.flame.statusGa !== fp.flame.ga) {
+          bus.reflectLocal(fp.flame.statusGa, pct, "percent");
+        }
+      }
       return;
     }
     case "fireplace.flame": {

@@ -6,6 +6,7 @@
 // only understands group-address telegrams.
 
 import 'api.dart';
+import 'fireplace_status.dart';
 import 'media_api.dart';
 import 'models.dart';
 import 'fireplace_step_ranges.dart';
@@ -447,11 +448,12 @@ class FireplaceEntry extends SceneEntry {
       final key = on ? 'on' : 'off';
       final ga = _discretePulseGa(key);
       if (ga != null) {
+        final planika = fireplaceIsPlanika(_cfg);
         out.add(SceneAction(
           ga: ga,
-          role: SceneRole.pulse,
+          role: planika ? SceneRole.switch_ : SceneRole.pulse,
           value: true,
-          pulseMs: _discretePulseMs(key),
+          pulseMs: planika ? null : _discretePulseMs(key),
         ));
       }
       return applyEntryDelay(out, delayMs);
@@ -489,8 +491,16 @@ class FireplaceEntry extends SceneEntry {
 
   @override
   FireplaceEntry snapshot(BusState bus) {
-    final onGa = ((_cfg['onOff'] as Map)['statusGa'] as String?) ??
-        ((_cfg['onOff'] as Map)['ga'] as String?);
+    if (fireplaceIsPlanika(_cfg)) {
+      return FireplaceEntry(
+        device: device,
+        on: fireplaceWorkingOn(_cfg, bus.values) ?? false,
+        flame: flame,
+        delayMs: delayMs,
+      );
+    }
+    final onOff = (_cfg['onOff'] as Map?) ?? const {};
+    final onGa = (onOff['statusGa'] as String?) ?? (onOff['ga'] as String?);
     final flameGa = ((_cfg['flame'] as Map?)?['statusGa'] as String?) ??
         ((_cfg['flame'] as Map?)?['ga'] as String?);
     final onV = onGa == null ? null : bus.values[onGa];
@@ -511,7 +521,9 @@ class FireplaceEntry extends SceneEntry {
   @override
   String summary() {
     String base;
-    if (!on) {
+    if (fireplaceIsPlanika(_cfg)) {
+      base = on ? 'Start' : 'Stop';
+    } else if (!on) {
       base = 'Uit';
     } else {
       final sr = _stepRanges;
