@@ -140,20 +140,32 @@ class _AlarmBodyState extends ConsumerState<_AlarmBody> {
     if (result.ok) HapticFeedback.lightImpact();
   }
 
-  Future<void> _toggleBypass(SatelZone zone) async {
-    if (_busy) return;
+  Future<void> _toggleBypass(SatelZone zone) =>
+      _bypassZones([zone], bypass: !zone.bypassed);
+
+  Future<void> _bypassZones(
+    List<SatelZone> zones, {
+    required bool bypass,
+  }) async {
+    if (_busy || zones.isEmpty) return;
     final token = ref.read(authProvider).token;
-    setState(() { _busy = true; _feedback = null; });
+    setState(() {
+      _busy = true;
+      _feedback = null;
+    });
     final result = await satelBypass(
-      [zone.zoneNumber],
-      bypass: !zone.bypassed,
+      zones.map((z) => z.zoneNumber).toList(),
+      bypass: bypass,
       pin: _pin.isNotEmpty ? _pin : null,
       token: token,
     );
     if (!mounted) return;
     setState(() {
       _busy = false;
-      _feedback = result.ok ? null : (result.error ?? 'Overbruggen mislukt.');
+      _feedback = result.ok
+          ? null
+          : (result.error ??
+              (bypass ? 'Overbruggen mislukt.' : 'Herstellen mislukt.'));
     });
     if (result.ok) HapticFeedback.selectionClick();
   }
@@ -199,59 +211,56 @@ class _AlarmBodyState extends ConsumerState<_AlarmBody> {
         Expanded(
           child: SafeArea(
             top: false,
+            bottom: false,
             child: SingleChildScrollView(
-            padding: EdgeInsets.symmetric(horizontal: hp),
-            child: Column(
-              children: [
-                const SizedBox(height: 20),
-
-                // Partition tabs
-                if (partitions.length > 1) ...[
-                  _PartitionTabBar(
-                    partitions: partitions,
-                    selectedIdx: _selectedPartitionIdx,
-                    onSelect: (i) => setState(() {
-                      _selectedPartitionIdx = i;
-                      _feedback = null;
-                      _pin = '';
-                    }),
+              padding: EdgeInsets.symmetric(horizontal: hp),
+              child: Column(
+                children: [
+                  const SizedBox(height: 20),
+                  if (partitions.length > 1) ...[
+                    _PartitionTabBar(
+                      partitions: partitions,
+                      selectedIdx: _selectedPartitionIdx,
+                      onSelect: (i) => setState(() {
+                        _selectedPartitionIdx = i;
+                        _feedback = null;
+                        _pin = '';
+                      }),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                  _PartitionCard(
+                    partition: partition ??
+                        const SatelPartitionInfo(
+                          number: 1,
+                          name: '—',
+                          state: SatelPartitionState.disarmed,
+                        ),
+                  ),
+                  const SizedBox(height: 28),
+                  _PinSection(
+                    pin: _pin,
+                    busy: _busy,
+                    feedback: _feedback,
+                    canConfirm: _pin.length >= _minPinLen,
+                    partition: partition,
+                    onDigit: _digit,
+                    onBackspace: _backspace,
+                    onConfirm: partition != null
+                        ? () => _toggleArm(partition)
+                        : null,
                   ),
                   const SizedBox(height: 16),
                 ],
-
-                // Status card
-                _PartitionCard(
-                  partition: partition ??
-                      const SatelPartitionInfo(
-                        number: 1,
-                        name: '—',
-                        state: SatelPartitionState.disarmed,
-                      ),
-                ),
-                const SizedBox(height: 28),
-
-                // PIN pad — enter code, then arm/disarm via the real Satel API.
-                _PinSection(
-                  pin: _pin,
-                  busy: _busy,
-                  feedback: _feedback,
-                  canConfirm: _pin.length >= _minPinLen,
-                  partition: partition,
-                  onDigit: _digit,
-                  onBackspace: _backspace,
-                  onConfirm: partition != null
-                      ? () => _toggleArm(partition)
-                      : null,
-                ),
-                const SizedBox(height: 36),
-
-                // Zone master list
-                _ZoneList(status: status, onToggleBypass: _toggleBypass),
-                const SizedBox(height: 40),
-              ],
+              ),
             ),
           ),
-          ),
+        ),
+        _ZoneDock(
+          status: status,
+          busy: _busy,
+          onToggleBypass: _toggleBypass,
+          onBypassAll: (zones) => _bypassZones(zones, bypass: true),
         ),
       ],
     );
@@ -690,123 +699,297 @@ _StateCfg _stateConfig(SatelPartitionState s, {required bool dark}) =>
     };
 
 // ---------------------------------------------------------------------------
-// Zone master list
+// Zone dock — always at the bottom of the alarm panel
 // ---------------------------------------------------------------------------
 
-class _ZoneList extends StatefulWidget {
-  const _ZoneList({required this.status, this.onToggleBypass});
+class _ZoneDock extends StatefulWidget {
+  const _ZoneDock({
+    required this.status,
+    required this.busy,
+    required this.onToggleBypass,
+    required this.onBypassAll,
+  });
+
   final SatelStatus status;
-  final void Function(SatelZone zone)? onToggleBypass;
+  final bool busy;
+  final void Function(SatelZone zone) onToggleBypass;
+  final void Function(List<SatelZone> zones) onBypassAll;
 
   @override
-  State<_ZoneList> createState() => _ZoneListState();
+  State<_ZoneDock> createState() => _ZoneDockState();
 }
 
-class _ZoneListState extends State<_ZoneList> {
-  bool _expanded = false;
+class _ZoneDockState extends State<_ZoneDock> {
+  bool _showAll = false;
+
+  static const _alert = Color(0xFFD64545);
+  static const _amber = Color(0xFFB8860B);
 
   @override
   Widget build(BuildContext context) {
-    final zones   = widget.status.allZones;
-    if (zones.isEmpty) return const SizedBox.shrink();
-    final violated = zones.where((z) => z.violated).toList();
-    final shown    = _expanded ? zones : violated;
+    final zones = widget.status.allZones;
+    final violated = zones.where((z) => z.violated && !z.bypassed).toList();
+    final bypassed = zones.where((z) => z.bypassed).toList();
+    final phone = context.isPhone;
+    final maxH = MediaQuery.sizeOf(context).height * (phone ? 0.34 : 0.38);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        GestureDetector(
-          onTap: () => setState(() => _expanded = !_expanded),
-          child: Row(
+    return Material(
+      color: LuxeColors.surface.withValues(alpha: 0.94),
+      child: SafeArea(
+        top: false,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxH),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                'ZONES',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 2.0,
-                  color: LuxeColors.inkSoft,
+              Divider(height: 1, color: LuxeColors.line),
+              Padding(
+                padding: EdgeInsets.fromLTRB(
+                  context.hPad, 12, context.hPad, 10,
                 ),
+                child: _header(violated, bypassed, zones),
               ),
-              SizedBox(width: 8),
-              if (violated.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFD64545).withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(20),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  padding: EdgeInsets.fromLTRB(
+                    context.hPad, 0, context.hPad, 12,
                   ),
-                  child: Text(
-                    '${violated.length}',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: Color(0xFFD64545),
-                    ),
-                  ),
+                  children: [
+                    if (violated.isEmpty && bypassed.isEmpty && !_showAll)
+                      _EmptyZones(
+                        label: zones.isEmpty
+                            ? 'Geen zones gekoppeld'
+                            : 'Geen zones in overtreding',
+                      )
+                    else ...[
+                      if (violated.length > 1)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _BypassAllButton(
+                            enabled: !widget.busy,
+                            onTap: () => widget.onBypassAll(violated),
+                          ),
+                        ),
+                      if (violated.isNotEmpty) ...[
+                        _SectionLabel(
+                          'In overtreding',
+                          count: violated.length,
+                          color: _alert,
+                        ),
+                        const SizedBox(height: 6),
+                        for (final z in violated) ...[
+                          _ZoneRow(
+                            zone: z,
+                            busy: widget.busy,
+                            onToggleBypass: widget.onToggleBypass,
+                          ),
+                          const SizedBox(height: 6),
+                        ],
+                      ],
+                      if (bypassed.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        _SectionLabel(
+                          'Overbrugd',
+                          count: bypassed.length,
+                          color: _amber,
+                        ),
+                        const SizedBox(height: 6),
+                        for (final z in bypassed) ...[
+                          _ZoneRow(
+                            zone: z,
+                            busy: widget.busy,
+                            onToggleBypass: widget.onToggleBypass,
+                          ),
+                          const SizedBox(height: 6),
+                        ],
+                      ],
+                      if (_showAll) ...[
+                        const SizedBox(height: 8),
+                        ..._buildGrouped(
+                          zones
+                              .where((z) => !z.violated && !z.bypassed)
+                              .toList(),
+                        ),
+                      ],
+                    ],
+                  ],
                 ),
-              const Spacer(),
-              Text(
-                _expanded ? 'Verbergen' : 'Alles tonen (${zones.length})',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: LuxeColors.brass,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              SizedBox(width: 4),
-              Icon(
-                _expanded
-                    ? Icons.keyboard_arrow_up_rounded
-                    : Icons.keyboard_arrow_down_rounded,
-                size: 18,
-                color: LuxeColors.brass,
               ),
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        if (!_expanded && shown.isEmpty)
-          _EmptyZones()
-        else
-          ...(_buildGrouped(shown)),
+      ),
+    );
+  }
+
+  Widget _header(
+    List<SatelZone> violated,
+    List<SatelZone> bypassed,
+    List<SatelZone> zones,
+  ) {
+    final n = violated.length;
+    final title = n > 0
+        ? (n == 1 ? '1 zone in overtreding' : '$n zones in overtreding')
+        : bypassed.isNotEmpty
+            ? 'Zones overbrugd'
+            : 'Zones';
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            title.toUpperCase(),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.6,
+              color: n > 0 ? _alert : LuxeColors.inkSoft,
+            ),
+          ),
+        ),
+        if (zones.isNotEmpty)
+          GestureDetector(
+            onTap: () => setState(() => _showAll = !_showAll),
+            child: Row(
+              children: [
+                Text(
+                  _showAll ? 'Minder' : 'Alle zones (${zones.length})',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: LuxeColors.brass,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Icon(
+                  _showAll
+                      ? Icons.keyboard_arrow_down_rounded
+                      : Icons.keyboard_arrow_up_rounded,
+                  size: 18,
+                  color: LuxeColors.brass,
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }
 
   List<Widget> _buildGrouped(List<SatelZone> zones) {
+    if (zones.isEmpty) return const [];
     final byRoom = <String, List<SatelZone>>{};
     for (final z in zones) {
-      (byRoom[z.room] ??= []).add(z);
+      (byRoom[z.room.isEmpty ? 'Overig' : z.room] ??= []).add(z);
     }
     return [
+      _SectionLabel('Overige zones', count: zones.length),
+      const SizedBox(height: 6),
       for (final entry in byRoom.entries) ...[
         _RoomGroupHeader(room: entry.key),
         const SizedBox(height: 6),
         for (final z in entry.value) ...[
-          _ZoneRow(zone: z, onToggleBypass: widget.onToggleBypass),
+          _ZoneRow(
+            zone: z,
+            busy: widget.busy,
+            onToggleBypass: widget.onToggleBypass,
+          ),
           const SizedBox(height: 6),
         ],
-        const SizedBox(height: 6),
       ],
     ];
   }
 }
 
-class _EmptyZones extends StatelessWidget {
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.label, {this.count, this.color});
+  final String label;
+  final int? count;
+  final Color? color;
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(vertical: 20),
-      alignment: Alignment.center,
+    final c = color ?? LuxeColors.inkFaint;
+    return Row(
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1.6,
+            color: c,
+          ),
+        ),
+        if (count != null) ...[
+          const SizedBox(width: 8),
+          Text(
+            '$count',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              color: c,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _BypassAllButton extends StatelessWidget {
+  const _BypassAllButton({required this.enabled, required this.onTap});
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    const color = Color(0xFFB8860B);
+    return SizedBox(
+      width: double.infinity,
+      height: 48,
+      child: Material(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(14),
+          onTap: enabled ? onTap : null,
+          child: Container(
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: color.withValues(alpha: 0.35)),
+            ),
+            child: Text(
+              'Alles overbruggen',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: enabled ? color : color.withValues(alpha: 0.4),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyZones extends StatelessWidget {
+  const _EmptyZones({required this.label});
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.check_circle_outline_rounded,
               size: 16, color: LuxeColors.inkFaint),
-          SizedBox(width: 8),
+          const SizedBox(width: 8),
           Text(
-            'Alle zones gesloten',
+            label,
             style: TextStyle(color: LuxeColors.inkFaint, fontSize: 13),
           ),
         ],
@@ -822,7 +1005,7 @@ class _RoomGroupHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: 2),
+      padding: const EdgeInsets.only(bottom: 2, top: 4),
       child: Text(
         room.toUpperCase(),
         style: TextStyle(
@@ -837,115 +1020,114 @@ class _RoomGroupHeader extends StatelessWidget {
 }
 
 class _ZoneRow extends StatelessWidget {
-  const _ZoneRow({required this.zone, this.onToggleBypass});
+  const _ZoneRow({
+    required this.zone,
+    required this.onToggleBypass,
+    this.busy = false,
+  });
   final SatelZone zone;
-  final void Function(SatelZone zone)? onToggleBypass;
+  final void Function(SatelZone zone) onToggleBypass;
+  final bool busy;
 
   static const _amber = Color(0xFFB8860B);
 
   @override
   Widget build(BuildContext context) {
     final cfg = satelDeviceConfig(zone.deviceType, zone.violated);
-    final dim = zone.bypassed;
+    final actionLabel = zone.bypassed ? 'Herstel' : 'Overbrug';
+    final actionColor = zone.bypassed ? _amber : cfg.color;
+    final room = zone.room.trim();
 
-    return Opacity(
-      opacity: dim ? 0.6 : 1.0,
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: zone.violated
-              ? cfg.color.withValues(alpha: 0.07)
-              : LuxeColors.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: zone.violated
-                ? cfg.color.withValues(alpha: 0.25)
-                : LuxeColors.line,
-            width: 0.5,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              decoration: BoxDecoration(
-                color: cfg.color.withValues(alpha: zone.violated ? 0.15 : 0.07),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(cfg.icon, size: 18, color: cfg.color),
-            ),
-            SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    zone.name,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                      color: LuxeColors.ink,
-                    ),
-                  ),
-                  Text(
-                    zone.bypassed ? '${cfg.label} · overbrugd' : cfg.label,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: LuxeColors.inkSoft,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (zone.bypassed)
-              _Pill(text: 'Overbrugd', color: _amber)
-            else if (zone.violated)
-              _Pill(text: cfg.alertLabel, color: cfg.color)
-            else
-              Icon(Icons.check_rounded,
-                  size: 16,
-                  color: LuxeColors.inkFaint.withValues(alpha: 0.50)),
-            if (onToggleBypass != null) ...[
-              SizedBox(width: 4),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                tooltip: zone.bypassed ? 'Activeren' : 'Overbruggen',
-                icon: Icon(
-                  zone.bypassed
-                      ? Icons.block_rounded
-                      : Icons.block_outlined,
-                  size: 18,
-                  color: zone.bypassed ? _amber : LuxeColors.inkFaint,
-                ),
-                onPressed: () => onToggleBypass!(zone),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Pill extends StatelessWidget {
-  const _Pill({required this.text, required this.color});
-  final String text;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withValues(alpha: 0.30), width: 0.5),
+        color: zone.bypassed
+            ? _amber.withValues(alpha: 0.07)
+            : zone.violated
+                ? cfg.color.withValues(alpha: 0.07)
+                : LuxeColors.surfaceDim,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: zone.bypassed
+              ? _amber.withValues(alpha: 0.28)
+              : zone.violated
+                  ? cfg.color.withValues(alpha: 0.28)
+                  : LuxeColors.line,
+        ),
       ),
-      child: Text(
-        text,
-        style: TextStyle(
-            fontSize: 11, fontWeight: FontWeight.w600, color: color),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: cfg.color.withValues(alpha: zone.violated ? 0.15 : 0.07),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(cfg.icon, size: 18, color: cfg.color),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  zone.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: LuxeColors.ink,
+                  ),
+                ),
+                Text(
+                  [
+                    if (room.isNotEmpty) room,
+                    zone.bypassed
+                        ? 'overbrugd'
+                        : zone.violated
+                            ? cfg.alertLabel
+                            : cfg.label,
+                  ].join(' · '),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: LuxeColors.inkSoft,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Material(
+            color: actionColor.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(12),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: busy ? null : () => onToggleBypass(zone),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 96, minHeight: 40),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Center(
+                    child: Text(
+                      actionLabel,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: busy
+                            ? actionColor.withValues(alpha: 0.4)
+                            : actionColor,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
