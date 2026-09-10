@@ -124,8 +124,8 @@ export function collectAllGAs(cfg: HouseConfig): GA[] {
     if (ga) for (const v of Object.values(ga)) add(v);
 
     if (d.type === "fireplace") {
-      add(d.fireplace.onOff.ga);
-      add(d.fireplace.onOff.statusGa);
+      add(d.fireplace.onOff?.ga);
+      add(d.fireplace.onOff?.statusGa);
       add(d.fireplace.flame?.ga);
       add(d.fireplace.flame?.statusGa);
       add(d.fireplace.safetyLockout?.ga);
@@ -266,8 +266,8 @@ export function buildGAIndex(cfg: HouseConfig): Map<GA, GARole[]> {
 
     if (d.type === "fireplace") {
       const fp = d.fireplace;
-      pushGA(index, fp.onOff.ga, "switch", d.id, d.type);
-      pushGA(index, fp.onOff.statusGa, "switch_status", d.id, d.type);
+      pushGA(index, fp.onOff?.ga, "switch", d.id, d.type);
+      pushGA(index, fp.onOff?.statusGa, "switch_status", d.id, d.type);
       if (fp.flame) {
         const ranges = fp.flame.stepRanges;
         const usePctBands = ranges && ranges.length > 0;

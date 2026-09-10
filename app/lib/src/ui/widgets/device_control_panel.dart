@@ -745,6 +745,46 @@ abstract final class DeviceTileLayout {
         ),
       );
 
+  /// Planika: Start/Stop i.p.v. aan/uit (commando is 1 op een eigen GA).
+  static Widget trailingStartStop({
+    required bool running,
+    required VoidCallback onStart,
+    required VoidCallback onStop,
+  }) {
+    return SegmentedButton<bool>(
+      showSelectedIcon: false,
+      segments: const [
+        ButtonSegment(value: true, label: Text('Start')),
+        ButtonSegment(value: false, label: Text('Stop')),
+      ],
+      selected: {running},
+      onSelectionChanged: (sel) {
+        if (sel.first) {
+          onStart();
+        } else {
+          onStop();
+        }
+      },
+      style: ButtonStyle(
+        visualDensity: VisualDensity.compact,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        side: WidgetStateProperty.all(
+          BorderSide(color: LuxeColors.line),
+        ),
+        foregroundColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected)
+              ? LuxeColors.onInk
+              : LuxeColors.ink,
+        ),
+        backgroundColor: WidgetStateProperty.resolveWith(
+          (s) => s.contains(WidgetState.selected)
+              ? LuxeColors.ink
+              : LuxeColors.surface,
+        ),
+      ),
+    );
+  }
+
   static Switch adaptiveOnOffSwitch({
     required bool value,
     required ValueChanged<bool> onChanged,

@@ -68,11 +68,20 @@ function statusGaFor(device: Device, writeGa: string): string {
     if (write && write === writeGa && status) return status;
   }
   if (device.type === "fireplace") {
-    if (device.fireplace.onOff.ga === writeGa) {
-      return device.fireplace.onOff.statusGa ?? writeGa;
+    const fp = device.fireplace;
+    if (fp.onOff?.ga === writeGa) {
+      return fp.onOff.statusGa ?? writeGa;
     }
-    if (device.fireplace.flame?.ga === writeGa) {
-      return device.fireplace.flame.statusGa ?? writeGa;
+    if (fp.flame?.ga === writeGa) {
+      return fp.flame.statusGa ?? writeGa;
+    }
+    const working = fp.statusBits?.working?.ga;
+    if (
+      working &&
+      (fp.discreteLevel?.on?.ga === writeGa ||
+        fp.discreteLevel?.off?.ga === writeGa)
+    ) {
+      return working;
     }
   }
   if (device.type === "ac") {
