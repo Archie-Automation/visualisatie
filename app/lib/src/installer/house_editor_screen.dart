@@ -5494,7 +5494,7 @@ class _DeviceForm extends StatelessWidget {
                     body:
                         'Eén regel per KNX-punt. Urgentie kleurt de app. '
                         'Zoek groepadressen in de catalogus. Extra velden: '
-                        'drempel, teksten aan/uit, icoon.',
+                        'actief bij (gelijk, hoger of lager dan), teksten aan/uit, icoon.',
                   ),
                   _ => null,
                 },

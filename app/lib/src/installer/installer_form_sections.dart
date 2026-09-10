@@ -5149,7 +5149,7 @@ class _MeldingInstallerSectionState extends State<MeldingInstallerSection> {
           title: 'Meldingen',
           body:
               'Elke regel is één KNX-punt. Urgentie bepaalt de kleur in de app. '
-              'Bij 1-bit is actief = 1. Bij andere DPT’s kun je de drempelwaarde zetten. '
+              'Bij 1-bit is actief = 1. Bij andere DPT’s: gelijk, hoger dan of lager dan een waarde. '
               'Optionele teksten en icoon voor actief/inactief.',
           trailing: TextButton.icon(
             onPressed: _items.length < 24 ? _addItem : null,
@@ -5171,7 +5171,7 @@ class _MeldingInstallerSectionState extends State<MeldingInstallerSection> {
             (label: 'Groepsadres', flex: 0, width: _kMeldingNarrowCol),
             (label: 'DPT', flex: 2, width: null),
             (label: 'Urgentie', flex: 0, width: _kMeldingNarrowCol),
-            (label: 'Actief bij', flex: 1, width: null),
+            (label: 'Actief bij', flex: 2, width: null),
             (label: 'Tekst aan', flex: 1, width: null),
             (label: 'Tekst uit', flex: 1, width: null),
             (label: 'Icoon', flex: 1, width: null),
@@ -5289,17 +5289,50 @@ class _MeldingItemEditor extends StatelessWidget {
           ),
           const SizedBox(width: 10),
           Expanded(
-            flex: 1,
+            flex: 2,
             child: is1bit
                 ? const SizedBox.shrink()
-                : _StrField(
-                    label: 'Actief bij',
-                    value: item['activeValue']?.toString() ?? '',
-                    compact: true,
-                    onChanged: (v) {
-                      final n = double.tryParse(v);
-                      _set('activeValue', n);
-                    },
+                : Row(
+                    children: [
+                      SizedBox(
+                        width: 64,
+                        child: DropdownButtonFormField<String>(
+                          initialValue: const {'eq', 'gt', 'lt', 'gte', 'lte'}
+                                  .contains(item['activeCompare'])
+                              ? item['activeCompare'] as String
+                              : 'eq',
+                          isExpanded: true,
+                          decoration: luxeFilledDecoration().copyWith(
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 10),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'eq', child: Text('=')),
+                            DropdownMenuItem(value: 'gt', child: Text('>')),
+                            DropdownMenuItem(value: 'lt', child: Text('<')),
+                            DropdownMenuItem(value: 'gte', child: Text('≥')),
+                            DropdownMenuItem(value: 'lte', child: Text('≤')),
+                          ],
+                          onChanged: (v) => _set(
+                            'activeCompare',
+                            v == null || v == 'eq' ? null : v,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: _StrField(
+                          label: 'Actief bij',
+                          value: item['activeValue']?.toString() ?? '',
+                          compact: true,
+                          onChanged: (v) {
+                            final n =
+                                double.tryParse(v.replaceAll(',', '.'));
+                            _set('activeValue', n);
+                          },
+                        ),
+                      ),
+                    ],
                   ),
           ),
           const SizedBox(width: 10),
