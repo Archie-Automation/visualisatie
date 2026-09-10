@@ -11,6 +11,7 @@ import '../../fireplace_status.dart';
 import '../../fireplace_step_ranges.dart';
 import '../../fireplace_virtual.dart';
 import '../../hvac_switch_lock.dart';
+import '../../melding_active.dart';
 import '../../models.dart';
 import '../../wtw_logic.dart';
 import '../../shading_subtype_glyph.dart';
@@ -5314,11 +5315,7 @@ class MeldingTile extends ConsumerWidget {
     Map<String, dynamic> item,
     dynamic busVal,
   ) =>
-      _isActive(
-        item['dpt'] as String? ?? '1.001',
-        busVal,
-        item,
-      );
+      meldingItemIsActive(item, busVal);
 
   static List<Map<String, dynamic>> configuredItems(Device device) {
     final cfg = device.raw['melding'] as Map<String, dynamic>? ?? {};
@@ -5334,27 +5331,6 @@ class MeldingTile extends ConsumerWidget {
     return n;
   }
 
-  /// Returns true if the KNX bus value means the alert is active.
-  static bool _isActive(String dpt, dynamic busVal, Map<String, dynamic> item) {
-    if (busVal == null) return false;
-    final activeVal = item['activeValue'];
-    if (dpt.startsWith('1.')) {
-      // 1-bit: active when true/1
-      final target = activeVal ?? 1;
-      if (busVal is bool) return busVal == (target == 1 || target == true);
-      final n = num.tryParse(busVal.toString());
-      return n != null && n == (activeVal != null ? num.tryParse(activeVal.toString()) : 1);
-    }
-    if (activeVal != null) {
-      final n = num.tryParse(busVal.toString());
-      final t = num.tryParse(activeVal.toString());
-      return n != null && t != null && n == t;
-    }
-    // Default: active when value != 0
-    final n = num.tryParse(busVal.toString());
-    return n != null && n != 0;
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final bus = ref.watch(busProvider);
@@ -5367,10 +5343,9 @@ class MeldingTile extends ConsumerWidget {
 
     for (final item in rawItems) {
       final ga = item['ga'] as String? ?? '';
-      final dpt = item['dpt'] as String? ?? '1.001';
       final urgency = item['urgency'] as String? ?? 'minder_belangrijk';
       final busVal = bus.values[ga];
-      if (_isActive(dpt, busVal, item)) {
+      if (meldingItemIsActive(item, busVal)) {
         switch (urgency) {
           case 'urgent':
             urgent.add(item);

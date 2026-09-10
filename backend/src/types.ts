@@ -1169,6 +1169,11 @@ export interface MeldingItem {
    * Default: 1 / true voor 1-bit DPTs, elke waarde ≠ 0 voor de rest.
    */
   activeValue?: number | boolean;
+  /**
+   * Vergelijking t.o.v. [activeValue] (niet 1-bit).
+   * Default `"eq"`. `gt`/`lt`/`gte`/`lte` = hoger/lager dan.
+   */
+  activeCompare?: "eq" | "gt" | "lt" | "gte" | "lte";
   /** Optioneel icoon uit de icon-library. */
   icon?: string;
   /** Optioneel: custom tekst als de melding actief is. */

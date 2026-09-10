@@ -11,6 +11,7 @@ import '../fireplace_virtual.dart';
 import '../idle_reset.dart';
 import '../log_api.dart';
 import '../media_api.dart';
+import '../melding_active.dart';
 import '../models.dart';
 import '../room_control_category.dart';
 import '../satel_api.dart';
@@ -1579,9 +1580,8 @@ class _SystemChipState extends ConsumerState<_SystemChip>
           .cast<Map<String, dynamic>>();
       for (final item in items) {
         final ga = item['ga'] as String? ?? '';
-        final dpt = item['dpt'] as String? ?? '1.001';
         final busVal = bus.values[ga];
-        if (!_meldingIsActive(dpt, busVal, item)) continue;
+        if (!meldingItemIsActive(item, busVal)) continue;
         switch (item['urgency'] as String? ?? 'minder_belangrijk') {
           case 'urgent':
             urgent++;
@@ -1600,26 +1600,6 @@ class _SystemChipState extends ConsumerState<_SystemChip>
             ? 'belangrijk'
             : 'minder_belangrijk';
     return (total, worst);
-  }
-
-  static bool _meldingIsActive(
-      String dpt, dynamic busVal, Map<String, dynamic> item) {
-    if (busVal == null) return false;
-    final activeVal = item['activeValue'];
-    if (dpt.startsWith('1.')) {
-      final target = activeVal ?? 1;
-      if (busVal is bool) return busVal == (target == 1 || target == true);
-      final n = num.tryParse(busVal.toString());
-      return n != null &&
-          n == (activeVal != null ? num.tryParse(activeVal.toString()) : 1);
-    }
-    if (activeVal != null) {
-      final n = num.tryParse(busVal.toString());
-      final t = num.tryParse(activeVal.toString());
-      return n != null && t != null && n == t;
-    }
-    final n = num.tryParse(busVal.toString());
-    return n != null && n != 0;
   }
 
   @override
