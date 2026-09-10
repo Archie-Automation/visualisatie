@@ -84,7 +84,7 @@ class DeviceCardBody extends StatelessWidget {
     final content = maxW == null
         ? child
         : Align(
-            alignment: Alignment.centerLeft,
+            alignment: Alignment.center,
             child: ConstrainedBox(
               constraints: BoxConstraints(maxWidth: maxW),
               child: child,

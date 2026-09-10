@@ -293,19 +293,20 @@ class _MoveAndTiltBlock extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        _SquareControlRow(
-          items: moveItems,
-          columnCount: moveItems.length,
-          layoutContext: context,
-        ),
-        if (tiltItems.isNotEmpty) ...[
+        if (moveItems.isNotEmpty)
+          _SquareControlRow(
+            items: moveItems,
+            columnCount: moveItems.length,
+            layoutContext: context,
+          ),
+        if (moveItems.isNotEmpty && tiltItems.isNotEmpty)
           SizedBox(height: gap),
+        if (tiltItems.isNotEmpty)
           _SquareControlRow(
             items: tiltItems,
             columnCount: tiltItems.length,
             layoutContext: context,
           ),
-        ],
       ],
     );
   }
@@ -965,13 +966,17 @@ class DeviceControlBar {
     BuildContext context,
     List<DeviceControlItem> items,
   ) =>
-      build(context, rows: [items]);
+      build(
+        context,
+        rows: [items],
+        columnsPerRow: autoPerRow(context, items.length),
+      );
 
   static Widget tiltRow(
     BuildContext context,
     List<DeviceControlItem> items,
   ) =>
-      build(context, rows: [items]);
+      singleRow(context, items);
 
   static Widget moveAndTiltBlock({
     required List<DeviceControlItem> moveItems,

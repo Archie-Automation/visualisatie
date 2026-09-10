@@ -1797,9 +1797,7 @@ class _AppearanceSection extends ConsumerWidget {
             padding: const EdgeInsets.fromLTRB(22, 4, 22, 9),
             child: Column(
               children: [
-                for (final s in themeRows) ...[
-                  if (s != themeRows.first)
-                    Divider(height: 1, color: LuxeColors.lineSoft),
+                for (final s in themeRows)
                   _ScheduleRow(
                     schedule: s,
                     config: config,
@@ -1815,7 +1813,6 @@ class _AppearanceSection extends ConsumerWidget {
                           .save(next);
                     },
                   ),
-                ],
               ],
             ),
           ),
