@@ -13,8 +13,8 @@ List<Map<String, dynamic>>? parseFireplaceStepRanges(Map<String, dynamic>? flame
 
 /// `null` = ok, anders fouttekst voor de configurateur.
 String? validateFireplaceStepRanges(List<Map<String, dynamic>> ranges) {
-  if (ranges.length < 2 || ranges.length > 10) {
-    return 'Kies tussen 2 en 10 stappen.';
+  if (ranges.length < 3 || ranges.length > 4) {
+    return 'Kies 3 of 4 standen.';
   }
   final mins = <int>[];
   final maxs = <int>[];

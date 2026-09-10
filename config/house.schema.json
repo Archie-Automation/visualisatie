@@ -679,7 +679,7 @@
               "properties": {
                 "ga": { "$ref": "#/definitions/gaPattern" },
                 "statusGa": { "$ref": "#/definitions/gaPattern" },
-                "steps": { "type": "integer", "minimum": 2, "maximum": 10 },
+                "steps": { "type": "integer", "minimum": 3, "maximum": 4 },
                 "levelDisplay": {
                   "type": "string",
                   "enum": ["percent", "volt_10", "volt_3"],
@@ -697,9 +697,9 @@
                 },
                 "stepRanges": {
                   "type": "array",
-                  "minItems": 2,
-                  "maxItems": 10,
-                  "description": "Vaste percent-banden per vlamstand (stap 1..N). Bus blijft DPT5.001 %; geen overlap tussen banden.",
+                  "minItems": 3,
+                  "maxItems": 4,
+                  "description": "Vaste percent-banden per vlamstand (3 of 4 knoppen). Bus blijft DPT5.001 %; geen overlap tussen banden.",
                   "items": {
                     "type": "object",
                     "required": ["min", "max"],
