@@ -5667,6 +5667,7 @@ class _MeldingAlertRow extends ConsumerWidget {
     final isUrgent = urgency == 'urgent';
     final silenced = isUrgent &&
         ref.watch(meldingAlertSilenceProvider).contains(soundKey);
+    final canReset = active && meldingItemCanReset(item);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: DeviceControlBar.gap),
@@ -5738,6 +5739,34 @@ class _MeldingAlertRow extends ConsumerWidget {
                                 : Icons.volume_up_rounded,
                             size: glyph,
                             color: activeColor,
+                          ),
+                        ),
+                      if (canReset)
+                        TextButton(
+                          onPressed: () {
+                            final itemId = meldingItemId(item);
+                            if (itemId.isEmpty) return;
+                            ref.read(busProvider.notifier).send({
+                              'kind': 'melding.reset',
+                              'deviceId': deviceId,
+                              'itemId': itemId,
+                            });
+                          },
+                          style: TextButton.styleFrom(
+                            foregroundColor: activeColor,
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            minimumSize: Size(0, glyph + 8),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            visualDensity: VisualDensity.compact,
+                          ),
+                          child: Text(
+                            'Reset',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.4,
+                              color: activeColor,
+                            ),
                           ),
                         ),
                     ],

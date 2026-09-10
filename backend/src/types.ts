@@ -1180,6 +1180,15 @@ export interface MeldingItem {
   activeLabel?: string;
   /** Optioneel: custom tekst als de melding inactief is. */
   inactiveLabel?: string;
+  /**
+   * Reset vanuit de app.
+   * `same_ga`: schrijf 0 op [ga]. `reset_ga`: schrijf 1 op [resetGa].
+   * Ontbreekt = geen resetknop. Zet in ETS cyclisch zenden op [ga],
+   * anders blijft de storing na reset weg zolang de oorzaak bestaat.
+   */
+  resetMode?: "same_ga" | "reset_ga";
+  /** Eigen groepsadres voor reset (alleen bij `resetMode: "reset_ga"`). */
+  resetGa?: string;
 }
 
 export interface MeldingConfig {
