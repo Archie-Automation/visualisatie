@@ -216,14 +216,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final infoTitle = title;
     final infoBody = switch (topic) {
       _SettingsTopic.appearance =>
-        'Kies licht, donker of automatisch.\n\n${showThemeSchedules ? 'Auto volgt het licht/donker-schema onder Tijdschema\'s.' : 'Licht of donker blijft vast tot je Auto kiest.'}',
+        'Kies licht, donker of automatisch.\n\n${showThemeSchedules ? 'Auto wisselt volgens de licht- en donkertijden hieronder.' : 'Licht of donker blijft vast tot je Auto kiest.'}',
       _SettingsTopic.doorbell =>
         'Stilzetten geldt voor dit account, op elk scherm waarop je bent ingelogd.\n\n'
             'Volume geldt alleen voor dit paneel. Op een ander scherm zet je het daar apart.',
       _SettingsTopic.schedules => [
           'Laat scenes of apparaten automatisch lopen op een tijdstip, of bij zonsopkomst en zonsondergang.',
-          if (showThemeSchedules)
-            'In Auto staan hier ook de licht- en donkerweergave.',
           if (!canEditSchedules)
             'Met dit account mag u geen tijdschema\'s wijzigen. Vraag een beheerder.',
         ].join('\n\n'),
@@ -271,7 +269,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             children: [
               switch (topic) {
                 _SettingsTopic.appearance =>
-                  const _AppearanceSection(showTitle: false),
+                  _AppearanceSection(showTitle: false, config: cfg),
                 _SettingsTopic.doorbell =>
                   const _DoorbellMuteSection(showTitle: false),
                 _SettingsTopic.schedules => _schedulesSection(
@@ -385,12 +383,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     required bool canEditSchedules,
     bool showTitle = true,
   }) {
-    final themeMode = ref.watch(themeModeProvider);
-    final showThemeSchedules = showThemeAutoSchedules(themeMode);
-    final themeSched = ref.watch(themeAutoScheduleProvider);
-    final themeRows =
-        showThemeSchedules ? themeSched.asSchedules() : const <Schedule>[];
-
     return _SettingsCard(
       child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -402,8 +394,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 infoTitle: 'Tijdschema\'s',
                 infoBody: [
                   'Laat scenes of apparaten automatisch lopen op een tijdstip, of bij zonsopkomst en zonsondergang.',
-                  if (showThemeSchedules)
-                    'In Auto staan hier ook de licht- en donkerweergave.',
                   if (!canEditSchedules)
                     'Met dit account mag u geen tijdschema\'s wijzigen. Vraag een beheerder.',
                 ].join('\n\n'),
@@ -424,7 +414,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 child: Text('Kon tijdschema\'s niet laden: $e'),
               ),
               data: (list) {
-                final display = [...themeRows, ...list];
                 final addRow = canEditSchedules
                     ? _AddScheduleRow(
                         onTap: () => _openEditor(
@@ -436,7 +425,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         ),
                       )
                     : null;
-                if (display.isEmpty && addRow == null) {
+                if (list.isEmpty && addRow == null) {
                   return Padding(
                     padding: const EdgeInsets.fromLTRB(6, 4, 6, 8),
                     child: Text(
@@ -447,37 +436,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 }
                 return Column(
                   children: [
-                    for (final s in display) ...[
-                      if (s != display.first)
+                    for (final s in list) ...[
+                      if (s != list.first)
                         Divider(height: 1, color: LuxeColors.lineSoft),
                       _ScheduleRow(
                         schedule: s,
                         config: cfg,
-                        canEdit: isThemeScheduleId(s.id)
-                            ? true
-                            : canEditSchedules,
-                        locked: isThemeScheduleId(s.id),
+                        canEdit: canEditSchedules,
                         onEdit: () {
-                          if (isThemeScheduleId(s.id)) {
-                            _openEditor(ctx, ref, cfg,
-                                initial: s,
-                                canEditHouse: canEditSchedules);
-                            return;
-                          }
                           if (!canEditSchedules) return;
                           _openEditor(ctx, ref, cfg,
                               initial: s, canEditHouse: true);
                         },
                         onToggle: (enabled) async {
-                          if (isThemeScheduleId(s.id)) {
-                            final next = themeSched.mergeFromSchedules([
-                              s.copyWith(enabled: enabled),
-                            ]);
-                            await ref
-                                .read(themeAutoScheduleProvider.notifier)
-                                .save(next);
-                            return;
-                          }
                           if (!canEditSchedules) return;
                           final next = [
                             for (final x in list)
@@ -502,39 +473,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             );
                           }
                         },
-                        onRun: isThemeScheduleId(s.id)
-                            ? null
-                            : () async {
-                                if (!canEditSchedules) return;
-                                try {
-                                  await ref
-                                      .read(scheduleApiProvider)
-                                      .runNow(s.id);
-                                  if (!ctx.mounted) return;
-                                  ScaffoldMessenger.of(ctx).showSnackBar(
-                                    SnackBar(
-                                      behavior: SnackBarBehavior.floating,
-                                      backgroundColor: LuxeColors.ink,
-                                      shape: const StadiumBorder(),
-                                      content: Text('${s.name} gestart'),
-                                    ),
-                                  );
-                                } catch (err) {
-                                  if (!ctx.mounted) return;
-                                  ScaffoldMessenger.of(ctx).showSnackBar(
-                                    SnackBar(
-                                      behavior: SnackBarBehavior.floating,
-                                      backgroundColor: LuxeColors.danger,
-                                      shape: const StadiumBorder(),
-                                      content: Text('Mislukt: $err'),
-                                    ),
-                                  );
-                                }
-                              },
+                        onRun: () async {
+                          if (!canEditSchedules) return;
+                          try {
+                            await ref.read(scheduleApiProvider).runNow(s.id);
+                            if (!ctx.mounted) return;
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(
+                                behavior: SnackBarBehavior.floating,
+                                backgroundColor: LuxeColors.ink,
+                                shape: const StadiumBorder(),
+                                content: Text('${s.name} gestart'),
+                              ),
+                            );
+                          } catch (err) {
+                            if (!ctx.mounted) return;
+                            ScaffoldMessenger.of(ctx).showSnackBar(
+                              SnackBar(
+                                behavior: SnackBarBehavior.floating,
+                                backgroundColor: LuxeColors.danger,
+                                shape: const StadiumBorder(),
+                                content: Text('Mislukt: $err'),
+                              ),
+                            );
+                          }
+                        },
                       ),
                     ],
                     if (addRow != null) ...[
-                      if (display.isNotEmpty)
+                      if (list.isNotEmpty)
                         Divider(height: 1, color: LuxeColors.lineSoft),
                       addRow,
                     ],
@@ -557,26 +524,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }) async {
     final existing =
         canEditHouse ? (ref.read(schedulesProvider).value ?? []) : <Schedule>[];
-    final themeMode = ref.read(themeModeProvider);
-    final includeTheme = showThemeAutoSchedules(themeMode);
-    final themeOnes = includeTheme
-        ? ref.read(themeAutoScheduleProvider).asSchedules()
-        : const <Schedule>[];
-    final lockedIds = {
-      for (final s in themeOnes) s.id,
-    };
-    final merged = [...themeOnes, ...existing];
     final saved = await showModalBottomSheet<List<Schedule>>(
       context: ctx,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (_) => ScheduleEditorSheet(
-        schedules: merged,
+        schedules: existing,
         config: cfg,
         initiallySelectedId: initial?.id,
         createNew: createNew,
-        lockedIds: lockedIds,
         persistHouseSchedules: canEditHouse,
       ),
     );
@@ -1675,90 +1632,194 @@ String _sceneName(HouseConfig cfg, String id) {
   return '(verwijderd)';
 }
 
-Widget _fitSegmentLabel(String text) {
-  return FittedBox(
-    fit: BoxFit.scaleDown,
-    child: Text(text, maxLines: 1, softWrap: false),
-  );
+class _ThemeModeButton extends StatelessWidget {
+  const _ThemeModeButton({
+    required this.selected,
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final bool selected;
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final showIcon = !context.isPhone;
+    final radius = BorderRadius.circular(14);
+    final ink = selected ? LuxeColors.ink : LuxeColors.inkSoft;
+    return Material(
+      color: LuxeChipChrome.fill(context, pressed: selected),
+      borderRadius: radius,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: radius,
+        child: Container(
+          height: 48,
+          alignment: Alignment.center,
+          padding: EdgeInsets.symmetric(
+            horizontal: context.isPhone ? 4 : 10,
+          ),
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            border: Border.all(
+              color: LuxeChipChrome.border(
+                context,
+                pressed: selected,
+                accent: LuxeColors.brass,
+              ),
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (showIcon) ...[
+                Icon(icon, size: 18, color: ink),
+                const SizedBox(width: 6),
+              ],
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                          letterSpacing: 0.15,
+                          fontSize: context.isPhone ? 13 : 14,
+                          color: ink,
+                        ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _AppearanceSection extends ConsumerWidget {
-  const _AppearanceSection({this.showTitle = true});
+  const _AppearanceSection({required this.config, this.showTitle = true});
 
+  final HouseConfig config;
   final bool showTitle;
+
+  Future<void> _openThemeEditor(
+    BuildContext context,
+    WidgetRef ref,
+    Schedule initial,
+  ) async {
+    final themeOnes = ref.read(themeAutoScheduleProvider).asSchedules();
+    await showModalBottomSheet<List<Schedule>>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => ScheduleEditorSheet(
+        schedules: themeOnes,
+        config: config,
+        initiallySelectedId: initial.id,
+        lockedIds: {for (final s in themeOnes) s.id},
+        persistHouseSchedules: false,
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final mode = ref.watch(themeModeProvider);
-    final autoHint = showThemeAutoSchedules(mode)
-        ? 'Auto volgt het licht/donker-schema onder Tijdschema\'s.'
+    final showAuto = showThemeAutoSchedules(mode);
+    final autoHint = showAuto
+        ? 'Auto wisselt volgens de licht- en donkertijden hieronder.'
         : 'Licht of donker blijft vast tot je Auto kiest.';
-    return _SettingsCard(
-      child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (showTitle) ...[
-              _SettingsSectionTitle(
-                icon: Icons.palette_outlined,
-                title: 'WEERGAVE',
-                infoTitle: 'Weergave',
-                infoBody: 'Kies licht, donker of automatisch.\n\n$autoHint',
-              ),
-              const SizedBox(height: 10),
-            ],
-            SizedBox(
-              width: double.infinity,
-              child: SegmentedButton<ThemeMode>(
-                showSelectedIcon: false,
-                expandedInsets: EdgeInsets.zero,
-                style: ButtonStyle(
-                  visualDensity: const VisualDensity(vertical: 1.5),
-                  padding: WidgetStatePropertyAll(
-                    EdgeInsets.symmetric(
-                      horizontal: context.isPhone ? 4 : 10,
-                      vertical: 14,
-                    ),
-                  ),
-                  minimumSize: const WidgetStatePropertyAll(Size(0, 48)),
-                  tapTargetSize: MaterialTapTargetSize.padded,
-                  textStyle: WidgetStatePropertyAll(
-                    Theme.of(context).textTheme.labelLarge?.copyWith(
-                          letterSpacing: 0.15,
-                          fontSize: context.isPhone ? 13 : 14,
-                        ),
-                  ),
+    final themeSched = ref.watch(themeAutoScheduleProvider);
+    final themeRows = showAuto ? themeSched.asSchedules() : const <Schedule>[];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (showTitle) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(22, 5, 22, 0),
+            child: _SettingsSectionTitle(
+              icon: Icons.palette_outlined,
+              title: 'WEERGAVE',
+              infoTitle: 'Weergave',
+              infoBody: 'Kies licht, donker of automatisch.\n\n$autoHint',
+            ),
+          ),
+          const SizedBox(height: 10),
+        ],
+        Padding(
+          padding: const EdgeInsets.fromLTRB(22, 5, 22, 9),
+          child: Row(
+            children: [
+              Expanded(
+                child: _ThemeModeButton(
+                  selected: mode == ThemeMode.light,
+                  label: 'Licht',
+                  icon: Icons.light_mode_outlined,
+                  onTap: () => ref
+                      .read(themeModeProvider.notifier)
+                      .setMode(ThemeMode.light),
                 ),
-                segments: [
-                  ButtonSegment(
-                    value: ThemeMode.light,
-                    label: _fitSegmentLabel('Licht'),
-                    icon: context.isPhone
-                        ? null
-                        : const Icon(Icons.light_mode_outlined, size: 18),
-                  ),
-                  ButtonSegment(
-                    value: ThemeMode.dark,
-                    label: _fitSegmentLabel('Donker'),
-                    icon: context.isPhone
-                        ? null
-                        : const Icon(Icons.dark_mode_outlined, size: 18),
-                  ),
-                  ButtonSegment(
-                    value: ThemeMode.system,
-                    label: _fitSegmentLabel('Auto'),
-                    icon: context.isPhone
-                        ? null
-                        : const Icon(Icons.brightness_auto_outlined, size: 18),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ThemeModeButton(
+                  selected: mode == ThemeMode.dark,
+                  label: 'Donker',
+                  icon: Icons.dark_mode_outlined,
+                  onTap: () => ref
+                      .read(themeModeProvider.notifier)
+                      .setMode(ThemeMode.dark),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ThemeModeButton(
+                  selected: mode == ThemeMode.system,
+                  label: 'Auto',
+                  icon: Icons.brightness_auto_outlined,
+                  onTap: () => ref
+                      .read(themeModeProvider.notifier)
+                      .setMode(ThemeMode.system),
+                ),
+              ),
+            ],
+          ),
+        ),
+        if (showAuto)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(22, 4, 22, 9),
+            child: Column(
+              children: [
+                for (final s in themeRows) ...[
+                  if (s != themeRows.first)
+                    Divider(height: 1, color: LuxeColors.lineSoft),
+                  _ScheduleRow(
+                    schedule: s,
+                    config: config,
+                    canEdit: true,
+                    locked: true,
+                    onEdit: () => _openThemeEditor(context, ref, s),
+                    onToggle: (enabled) async {
+                      final next = themeSched.mergeFromSchedules([
+                        s.copyWith(enabled: enabled),
+                      ]);
+                      await ref
+                          .read(themeAutoScheduleProvider.notifier)
+                          .save(next);
+                    },
                   ),
                 ],
-                selected: {mode},
-                onSelectionChanged: (set) {
-                  ref.read(themeModeProvider.notifier).setMode(set.first);
-                },
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+      ],
     );
   }
 }

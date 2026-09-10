@@ -8,7 +8,7 @@ import 'theme_auto_schedule.dart';
 
 const _kThemeMode = 'luxe_theme_mode';
 
-/// Auto weergave toont (en volgt) de licht/donker-rijen onder Tijdschema's.
+/// Auto weergave toont (en volgt) de licht/donker-tijden onder Weergave.
 bool showThemeAutoSchedules(ThemeMode preferred) =>
     preferred == ThemeMode.system;
 

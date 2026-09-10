@@ -24,7 +24,7 @@ String themeScheduleDisplayName(String name) =>
     name.replaceAll(' · ', ' ').replaceAll(' • ', ' ');
 
 /// Non-deletable day/night window for Auto theme.
-/// Shown as two rows in TIJDSCHEMA'S when Auto is selected.
+/// Shown as two rows under Weergave when Auto is selected.
 class ThemeAutoSchedule {
   const ThemeAutoSchedule({
     this.lightOnName = 'Weergave licht',
