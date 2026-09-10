@@ -1,4 +1,4 @@
-// schema-reload: melding device type added
+// schema-reload: melding reset same_ga / reset_ga
 import fs from "node:fs";
 import path from "node:path";
 import { normalizeHouseCameras } from "./houseCameras";
@@ -187,6 +187,7 @@ export function collectAllGAs(cfg: HouseConfig): GA[] {
     if (d.type === "melding") {
       for (const item of d.melding?.items ?? []) {
         add(item.ga);
+        add(item.resetGa);
       }
     }
     if (d.type === "media_sonos" || d.type === "media_bluesound") {
@@ -362,6 +363,7 @@ export function buildGAIndex(cfg: HouseConfig): Map<GA, GARole[]> {
       for (const item of d.melding?.items ?? []) {
         const role = wtwDptToRoleConfig(item.dpt === "hex" ? "5.010" : item.dpt);
         pushGA(index, item.ga, role, d.id, d.type);
+        pushGA(index, item.resetGa, "bit", d.id, d.type);
       }
     }
 
@@ -430,7 +432,7 @@ export function findScene(
 }
 
 /** Maps a WTW DPT string to a KnxBus role string (mirrors commands.ts helper). */
-function wtwDptToRoleConfig(dpt: string): string {
+export function wtwDptToRoleConfig(dpt: string): string {
   if (dpt.startsWith("1.")) return "bit";
   if (dpt.startsWith("9.")) return "temperature"; // all DPT9.x share same 2-byte float encoding
   if (dpt.startsWith("14.")) return "float4byte";

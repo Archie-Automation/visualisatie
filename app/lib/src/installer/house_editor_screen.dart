@@ -5493,6 +5493,8 @@ class _DeviceForm extends StatelessWidget {
                     title: 'Meldingen',
                     body:
                         'Eén regel per KNX-punt. Urgentie kleurt de app. '
+                        'Reset: 0 op hetzelfde groepsadres of 1 op een eigen adres. '
+                        'Zet in ETS cyclisch zenden op het meldingsadres. '
                         'Zoek groepadressen in de catalogus. Extra velden: '
                         'actief bij (gelijk, hoger of lager dan), teksten aan/uit, icoon.',
                   ),

@@ -5150,6 +5150,8 @@ class _MeldingInstallerSectionState extends State<MeldingInstallerSection> {
           body:
               'Elke regel is één KNX-punt. Urgentie bepaalt de kleur in de app. '
               'Bij 1-bit is actief = 1. Bij andere DPT’s: gelijk, hoger dan of lager dan een waarde. '
+              'Reset (optioneel): 0 op hetzelfde groepsadres, of 1 op een eigen reset-adres. '
+              'Zet in ETS cyclisch zenden op het meldingsadres, anders blijft een cruciale storing na reset weg zolang de oorzaak bestaat. '
               'Optionele teksten en icoon voor actief/inactief.',
           trailing: TextButton.icon(
             onPressed: _items.length < 24 ? _addItem : null,
@@ -5211,15 +5213,32 @@ class _MeldingItemEditor extends StatelessWidget {
     onChanged(updated);
   }
 
+  void _setAll(Map<String, dynamic> patch) {
+    final updated = Map<String, dynamic>.from(item);
+    for (final e in patch.entries) {
+      if (e.value == null) {
+        updated.remove(e.key);
+      } else {
+        updated[e.key] = e.value;
+      }
+    }
+    onChanged(updated);
+  }
+
   @override
   Widget build(BuildContext context) {
     final urgency = item['urgency'] as String? ?? 'minder_belangrijk';
     final dpt = item['dpt'] as String? ?? '1.001';
     final is1bit = dpt.startsWith('1.');
+    final resetMode = const {'same_ga', 'reset_ga'}.contains(item['resetMode'])
+        ? item['resetMode'] as String
+        : 'none';
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
+      child: Column(
+        children: [
+          Row(
         children: [
           Expanded(
             flex: 3,
@@ -5373,6 +5392,61 @@ class _MeldingItemEditor extends StatelessWidget {
               tooltip: 'Verwijder melding',
               onPressed: onDelete,
             ),
+          ),
+        ],
+      ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              SizedBox(
+                width: 220,
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey('reset-$resetMode'),
+                  initialValue: resetMode,
+                  isExpanded: true,
+                  decoration: luxeFilledDecoration().copyWith(
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'none', child: Text('Geen reset')),
+                    DropdownMenuItem(
+                      value: 'same_ga',
+                      child: Text('Reset: 0 op zelfde GA'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'reset_ga',
+                      child: Text('Reset: 1 op eigen GA'),
+                    ),
+                  ],
+                  onChanged: (v) {
+                    switch (v) {
+                      case 'same_ga':
+                        _setAll({'resetMode': 'same_ga', 'resetGa': null});
+                      case 'reset_ga':
+                        _set('resetMode', 'reset_ga');
+                      default:
+                        _setAll({'resetMode': null, 'resetGa': null});
+                    }
+                  },
+                ),
+              ),
+              if (resetMode == 'reset_ga') ...[
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: _kMeldingNarrowCol,
+                  child: _StrField(
+                    label: 'Reset-GA',
+                    value: item['resetGa'] as String? ?? '',
+                    compact: true,
+                    gaSearch: true,
+                    gaDptHint: 'DPT1.001',
+                    onChanged: (v) =>
+                        _set('resetGa', v.trim().isEmpty ? null : v.trim()),
+                  ),
+                ),
+              ],
+            ],
           ),
         ],
       ),

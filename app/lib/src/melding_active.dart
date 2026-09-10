@@ -29,3 +29,21 @@ bool meldingItemIsActive(Map<String, dynamic> item, dynamic busVal) {
     _ => n == t,
   };
 }
+
+/// Resetknop tonen: 0 op het meldingsadres, of 1 op een eigen reset-adres.
+bool meldingItemCanReset(Map<String, dynamic> item) {
+  final mode = item['resetMode'] as String? ?? '';
+  if (mode == 'same_ga') {
+    return (item['ga'] as String? ?? '').trim().isNotEmpty;
+  }
+  if (mode == 'reset_ga') {
+    return (item['resetGa'] as String? ?? '').trim().isNotEmpty;
+  }
+  return false;
+}
+
+String meldingItemId(Map<String, dynamic> item) {
+  final id = (item['id'] as String?)?.trim() ?? '';
+  if (id.isNotEmpty) return id;
+  return (item['ga'] as String? ?? '').trim();
+}

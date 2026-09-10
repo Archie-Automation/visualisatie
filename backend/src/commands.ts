@@ -4,7 +4,7 @@ import type { KnxBus } from "./knxBus";
 import type { MediaManager } from "./media/manager";
 import type { LutronIntegrationManager } from "./lutron/manager";
 import { resolveLutronLoadOutput } from "./lutron/resolve";
-import { walkDevices } from "./config";
+import { walkDevices, wtwDptToRoleConfig } from "./config";
 import { hvacSwitchLock } from "./hvacSwitchLock";
 import { fireplaceVirtual } from "./fireplaceVirtual";
 import { pulseKnxGa } from "./fireplacePulse";
@@ -272,6 +272,12 @@ export const CommandSchema = z.discriminatedUnion("kind", [
     kind: z.literal("lutron.fireMapping"),
     deviceId: z.string(),
     mappingId: z.string().min(1)
+  }),
+
+  z.object({
+    kind: z.literal("melding.reset"),
+    deviceId: z.string(),
+    itemId: z.string().min(1)
   })
 ]);
 
@@ -748,6 +754,31 @@ export async function dispatch(
       if (device.type !== "lutron_homeworks") throw new Error("not a Lutron device");
       await lutron.fireMapping(cmd.deviceId, cmd.mappingId);
       return;
+    }
+
+    case "melding.reset": {
+      if (device.type !== "melding") throw new Error("geen meldingen-apparaat");
+      const items = device.melding?.items ?? [];
+      const item =
+        items.find((i) => i.id === cmd.itemId) ??
+        items.find((i) => i.ga === cmd.itemId);
+      if (!item) throw new Error("onbekende melding");
+      const mode = item.resetMode;
+      if (mode === "same_ga") {
+        const ga = item.ga?.trim();
+        if (!ga) throw new Error("geen groepsadres");
+        const dpt = item.dpt ?? "1.001";
+        const role = wtwDptToRoleConfig(dpt === "hex" ? "5.010" : dpt);
+        await bus.write(ga, role, dpt.startsWith("1.") ? false : 0);
+        return;
+      }
+      if (mode === "reset_ga") {
+        const ga = item.resetGa?.trim();
+        if (!ga) throw new Error("geen reset-adres");
+        await bus.write(ga, "bit", true);
+        return;
+      }
+      throw new Error("reset niet ingesteld");
     }
   }
 }
