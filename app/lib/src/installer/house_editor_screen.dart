@@ -4622,13 +4622,25 @@ class _FireplaceStepRangesSection extends StatelessWidget {
   }
 
   void _setBandCount(int n) {
+    if (n != 3 && n != 4) return;
     var list = flame['stepRanges'];
-    if (list is! List) {
-      flame['stepRanges'] = <dynamic>[];
-      list = flame['stepRanges'] as List;
+    if (list is! List || list.isEmpty) {
+      flame['stepRanges'] = _defaultAnalogStepRanges(count: n);
+      flame['steps'] = n;
+      return;
     }
     while (list.length < n) {
-      list.add(<String, dynamic>{'min': 0, 'max': 100});
+      final prev = list.last;
+      var prevMax = 0;
+      if (prev is Map) {
+        prevMax = (prev['max'] as num?)?.round() ?? 0;
+      }
+      final min = prevMax >= 100 ? 100 : prevMax + 1;
+      list.add(<String, dynamic>{
+        'min': min,
+        'max': 100,
+        'write': 100,
+      });
     }
     while (list.length > n) {
       list.removeLast();
@@ -4651,34 +4663,36 @@ class _FireplaceStepRangesSection extends StatelessWidget {
     }
 
     final rows = _mutableRanges();
-    final err = rows.length >= 2 ? validateFireplaceStepRanges(rows) : 'Vul minstens 2 vlamstanden in.';
+    final err = rows.length >= 3
+        ? validateFireplaceStepRanges(rows)
+        : 'Kies 3 of 4 standen.';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 8),
         Text(
-          'Vlamstanden (verplicht)',
+          'Vlamstanden — knoppen in de app',
           style: Theme.of(context).textTheme.labelLarge,
         ),
         const SizedBox(height: 4),
         Text(
-          'Per stand: min–max % op de bus (terugmelding) en optioneel het '
-          'schrijf-% dat de knop stuurt. Geen overlap: het maximum van stap n '
-          'moet strikt kleiner zijn dan het minimum van stap n+1.',
+          'Kies 3 of 4 standen. Per stand: min–max % op de bus (terugmelding) '
+          'en optioneel het schrijf-% dat de knop stuurt. Geen overlap: het '
+          'maximum van stap n moet strikt kleiner zijn dan het minimum van stap n+1.',
           style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11),
         ),
         const SizedBox(height: 8),
         Row(
             children: [
-              Text('Aantal stappen',
+              Text('Aantal standen',
                   style: Theme.of(context).textTheme.bodyMedium),
               const SizedBox(width: 12),
               DropdownButton<int>(
-                value: rows.length.clamp(2, 10),
-                items: [
-                  for (var n = 2; n <= 10; n++)
-                    DropdownMenuItem(value: n, child: Text('$n')),
+                value: rows.length == 4 ? 4 : 3,
+                items: const [
+                  DropdownMenuItem(value: 3, child: Text('3 knoppen')),
+                  DropdownMenuItem(value: 4, child: Text('4 knoppen')),
                 ],
                 onChanged: (n) {
                   if (n == null) return;
@@ -4766,14 +4780,25 @@ enum _FireplaceOpMode {
   planika,
 }
 
-List<Map<String, dynamic>> _defaultAnalogStepRanges() => [
-      <String, dynamic>{'min': 1, 'max': 33},
-      <String, dynamic>{'min': 34, 'max': 66},
-      <String, dynamic>{'min': 67, 'max': 100},
+List<Map<String, dynamic>> _defaultAnalogStepRanges({int count = 3}) {
+  if (count == 4) {
+    return [
+      <String, dynamic>{'min': 1, 'max': 25, 'write': 20},
+      <String, dynamic>{'min': 26, 'max': 50, 'write': 40},
+      <String, dynamic>{'min': 51, 'max': 75, 'write': 60},
+      <String, dynamic>{'min': 76, 'max': 100, 'write': 90},
     ];
+  }
+  return [
+    <String, dynamic>{'min': 1, 'max': 33, 'write': 20},
+    <String, dynamic>{'min': 34, 'max': 66, 'write': 50},
+    <String, dynamic>{'min': 67, 'max': 100, 'write': 80},
+  ];
+}
 
 void _ensureAnalogStands(Map<String, dynamic> flame) {
-  if (parseFireplaceStepRanges(flame) != null) return;
+  final parsed = parseFireplaceStepRanges(flame);
+  if (parsed != null && parsed.length >= 3 && parsed.length <= 4) return;
   flame['stepRanges'] = _defaultAnalogStepRanges();
   flame['steps'] = 3;
 }
@@ -5034,8 +5059,8 @@ class _FireplaceInstallerSection extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               'Analoge interface: aan/uit-bit plus vlam als DPT5 (0–100 % op de bus = '
-              '0–10 V of 0–3 V). Vul de standen in en het percentage dat bij '
-              'aanzetten naar het vlamadres gaat.',
+              '0–10 V of 0–3 V). De gebruiker krijgt 3 of 4 standknoppen. Vul per '
+              'stand de percentages in, plus het percentage bij aanzetten.',
               style: theme.textTheme.bodySmall?.copyWith(fontSize: 12),
             ),
           ],

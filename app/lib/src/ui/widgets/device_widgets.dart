@@ -2676,17 +2676,17 @@ class _FireplaceFlameBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final List<DeviceControlItem> items;
-
     if (stepRanges != null && stepRanges!.length >= 2) {
+      String stepBtnLabel(int i) {
+        final raw = stepRanges![i]['label'];
+        final custom = raw is String ? raw.trim() : '';
+        return custom.isNotEmpty ? custom : '${i + 1}';
+      }
+
       items = [
         for (var i = 0; i < stepRanges!.length; i++)
           DeviceControlItem(
-            icon: Icons.local_fire_department_outlined,
-            label: fireplaceStepLabel(
-              ranges: stepRanges,
-              step1Based: i + 1,
-            ),
-            labelMode: DeviceControlLabelMode.iconOnly,
+            label: stepBtnLabel(i),
             active: activeStep == i + 1,
             onTap: enabled ? () => onStep(i + 1) : null,
           ),
@@ -2713,36 +2713,9 @@ class _FireplaceFlameBar extends StatelessWidget {
       ];
     }
 
-    final headerValue = (levelDisplay == 'volt_10' || levelDisplay == 'volt_3')
-        ? _fireplaceFlameValueLabel(currentPct, levelDisplay)
-        : fireplaceStepLabel(ranges: stepRanges, step1Based: activeStep);
-
-    void bumpStep(int delta) {
-      if (!enabled || items.isEmpty) return;
-      var idx = items.indexWhere((e) => e.active);
-      if (idx < 0) idx = 0;
-      final next = idx + delta;
-      if (next < 0 || next >= items.length) return;
-      items[next].onTap?.call();
-    }
-
-    final stepControls = DeviceControlBar.singleRow(
-      context,
-      [
-        DeviceControlItem(
-          icon: Icons.remove,
-          label: 'Lager',
-          labelMode: DeviceControlLabelMode.iconOnly,
-          onTap: enabled ? () => bumpStep(-1) : null,
-        ),
-        DeviceControlItem(
-          icon: Icons.add,
-          label: 'Hoger',
-          labelMode: DeviceControlLabelMode.iconOnly,
-          onTap: enabled ? () => bumpStep(1) : null,
-        ),
-      ],
-    );
+    final headerValue = (stepRanges != null && stepRanges!.length >= 2)
+        ? fireplaceStepLabel(ranges: stepRanges, step1Based: activeStep)
+        : _fireplaceFlameValueLabel(currentPct, levelDisplay);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2762,11 +2735,7 @@ class _FireplaceFlameBar extends StatelessWidget {
           ],
         ),
         SizedBox(height: DeviceControlBar.sectionTitleGap),
-        stepControls,
-        if (!context.isPhone) ...[
-          SizedBox(height: DeviceControlBar.sectionSpacing(context)),
-          DeviceControlBar.gridAuto(context, items),
-        ],
+        DeviceControlBar.singleRow(context, items),
       ],
     );
   }

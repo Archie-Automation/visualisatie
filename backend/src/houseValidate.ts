@@ -133,9 +133,9 @@ export function validateFireplaceSemantics(cfg: HouseConfig): string[] {
     const flame = d.fireplace.flame;
     const sr = flame?.stepRanges;
     if (!sr || sr.length === 0) return;
-    if (sr.length < 2 || sr.length > 10) {
+    if (sr.length < 3 || sr.length > 4) {
       issues.push(
-        `Apparaat "${d.name}" (${d.id}): flame.stepRanges moet 2–10 items hebben.`
+        `Apparaat "${d.name}" (${d.id}): flame.stepRanges moet 3 of 4 standen hebben.`
       );
       return;
     }
