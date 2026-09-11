@@ -75,7 +75,12 @@
     "devices": {
       "type": "array",
       "items": { "$ref": "#/definitions/device" },
-      "description": "KNX/Lutron devices NOT placed in a specific room. Appear in Systemen chips and can be favourited."
+      "description": "Apparaten die niet in een kamer staan (sectie Algemeen). Zichtbaar op een systeemtegel."
+    },
+    "houseSystems": {
+      "type": "array",
+      "description": "Extra systeemtegels op het startscherm (naam + icoon). Vaste tegels zoals Verlichting blijven bestaan.",
+      "items": { "$ref": "#/definitions/houseSystemTile" }
     },
     "cameras": {
       "type": "array",
@@ -267,6 +272,20 @@
         }
       }
     },
+    "houseSystemTile": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "icon": { "type": "string" },
+        "deviceIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Apparaten die extra op deze tegel staan (ook universeel / uit een kamer)."
+        }
+      }
+    },
     "device": {
       "type": "object",
       "required": ["id", "type", "name"],
@@ -296,6 +315,10 @@
         },
         "name": { "type": "string" },
         "favorite": { "type": "boolean" },
+        "systemId": {
+          "type": "string",
+          "description": "Systeemtegel op het startscherm (slug van een vaste tegel of houseSystems.id)."
+        },
         "subtype": {
           "type": "string",
           "description": "Visual variant for shading devices.",

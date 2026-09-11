@@ -48,7 +48,7 @@ class SystemScreen extends ConsumerWidget {
             if (slug == kGrafiekenSlug) {
               return _GrafiekenBody(onBack: () => appBack(context));
             }
-            final system = houseSystemBySlug(slug);
+            final system = houseSystemBySlug(slug, cfg);
             if (system == null) {
               return _InvalidBody(onBack: () => appBack(context));
             }
