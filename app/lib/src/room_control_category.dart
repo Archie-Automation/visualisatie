@@ -223,7 +223,8 @@ const kUniversalMaxButtons = 4;
 /// Ontbreekt `layout`: 0–1 knop → switch, anders buttons (bestaande panels).
 String universalPanelLayout(Map<String, dynamic>? cfg) {
   final raw = (cfg?['layout'] as String?)?.trim();
-  if (raw == 'switch' || raw == 'buttons') return raw;
+  if (raw == 'switch') return 'switch';
+  if (raw == 'buttons') return 'buttons';
   final n = (cfg?['buttons'] as List?)?.length ?? 0;
   return n <= 1 ? 'switch' : 'buttons';
 }
