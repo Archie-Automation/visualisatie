@@ -177,6 +177,28 @@ class LuxeNavRow extends StatelessWidget {
     final radius = rounded
         ? const BorderRadius.all(LuxeRadius.sm)
         : BorderRadius.zero;
+    final titleBlock = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
+          const SizedBox(height: 1),
+          Text(
+            subtitle!,
+            style: Theme.of(context).textTheme.bodySmall,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ],
+    );
     return Padding(
       padding: rounded
           ? const EdgeInsets.symmetric(horizontal: 6, vertical: 2)
@@ -185,50 +207,34 @@ class LuxeNavRow extends StatelessWidget {
         color: selected ? selectedFill : Colors.transparent,
         borderRadius: radius,
         clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: radius,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 11, 10, 11),
-            child: Row(
-              children: [
-                Icon(icon, color: LuxeColors.ink, size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+        child: Row(
+          children: [
+            Expanded(
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: radius,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 11, 4, 11),
+                  child: Row(
                     children: [
-                      Text(
-                        title,
-                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              fontWeight: selected
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                            ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
-                        const SizedBox(height: 1),
-                        Text(
-                          subtitle!,
-                          style: Theme.of(context).textTheme.bodySmall,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+                      Icon(icon, color: LuxeColors.ink, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(child: titleBlock),
                     ],
                   ),
                 ),
-                trailing ??
-                    Icon(
-                      Icons.chevron_right_rounded,
-                      size: 20,
-                      color: LuxeColors.inkSoft,
-                    ),
-              ],
+              ),
             ),
-          ),
+            trailing ??
+                Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    size: 20,
+                    color: LuxeColors.inkSoft,
+                  ),
+                ),
+          ],
         ),
       ),
     );
