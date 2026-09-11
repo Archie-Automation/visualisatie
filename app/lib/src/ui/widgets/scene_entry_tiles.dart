@@ -1477,15 +1477,7 @@ List<SceneEntryRoomGroup> groupSceneEntriesByRoom(
     if (!used.contains(i)) remaining.add(i);
   }
   if (remaining.isNotEmpty) {
-    final byLabel = <String, List<int>>{};
-    for (final i in remaining) {
-      final label =
-          config.locationLabelForDevice(entries[i].device.id) ?? 'Overig';
-      byLabel.putIfAbsent(label, () => []).add(i);
-    }
-    for (final e in byLabel.entries) {
-      groups.add(SceneEntryRoomGroup(title: e.key, indices: e.value));
-    }
+    groups.add(SceneEntryRoomGroup(title: '', indices: remaining));
   }
   return groups;
 }
@@ -1524,23 +1516,24 @@ class SceneDeviceRoomSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: EdgeInsets.only(
-              left: 4,
-              bottom: phone ? 6 : 4,
-              top: phone ? 12 : 8,
-            ),
-            child: Text(
-              title.toUpperCase(),
-              style: TextStyle(
-                color: LuxeColors.inkSoft,
-                fontSize: phone ? 11.5 : 10.5,
-                letterSpacing: phone ? 1.6 : 2.0,
-                fontWeight: FontWeight.w700,
-                height: 1.3,
+          if (title.trim().isNotEmpty)
+            Padding(
+              padding: EdgeInsets.only(
+                left: 4,
+                bottom: phone ? 6 : 4,
+                top: phone ? 12 : 8,
+              ),
+              child: Text(
+                title.toUpperCase(),
+                style: TextStyle(
+                  color: LuxeColors.inkSoft,
+                  fontSize: phone ? 11.5 : 10.5,
+                  letterSpacing: phone ? 1.6 : 2.0,
+                  fontWeight: FontWeight.w700,
+                  height: 1.3,
+                ),
               ),
             ),
-          ),
           if (separateCards)
             for (int i = 0; i < children.length; i++) ...[
               if (i > 0) const SizedBox(height: _cardGap),

@@ -833,16 +833,13 @@ class HouseConfig {
     return null;
   }
 
-  /// Human-readable placement, e.g. "Begane grond · Woonkamer", or "Algemeen".
+  /// Placement for lists, e.g. "Begane grond · Woonkamer". Null if not in a room.
   String? locationLabelForDevice(String deviceId) {
     final room = roomForDevice(deviceId);
-    if (room != null) {
-      final floor = floorForDevice(deviceId);
-      if (floor != null) return '${floor.name} · ${room.name}';
-      return room.name;
-    }
-    if (globalDevices.any((d) => d.id == deviceId)) return 'Algemeen';
-    return null;
+    if (room == null) return null;
+    final floor = floorForDevice(deviceId);
+    if (floor != null) return '${floor.name} · ${room.name}';
+    return room.name;
   }
 }
 
