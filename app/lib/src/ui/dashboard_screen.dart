@@ -1192,7 +1192,7 @@ class _Systemen extends ConsumerWidget {
         allOrderedChips.where((c) => !sysHidden.contains(c.name)).toList();
 
     const double vPad = 10;
-    const double chipH = 124;
+    const double chipH = 118;
 
     return Padding(
       // Bottom gap (chip vPad + this) matches the gap between the scene
@@ -1721,13 +1721,13 @@ class _SystemChipState extends ConsumerState<_SystemChip>
                 : (_pressed || hasAlert ? 1.3 : 1.0);
             return LuxeRimBox(
               width: 118,
-              height: 124,
+              height: 118,
               radius: 22,
               rimWidth: blinkWidth,
               rimColor: blinkBorder,
               fillColor: fillColor,
               shadows: LuxeShadows.chip(context),
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
               child: child!,
             );
           },
@@ -1776,20 +1776,24 @@ class _SystemChipState extends ConsumerState<_SystemChip>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      widget.data.name.toUpperCase(),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: (hasAlert || (isAlarm && alarmIsActive))
-                            ? accent
-                            : LuxeColors.ink,
-                        fontSize: 11,
-                        height: 1.35,
-                        letterSpacing: 0.7,
-                        fontWeight: (hasAlert || (isAlarm && alarmIsActive))
-                            ? FontWeight.w700
-                            : FontWeight.w600,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        widget.data.name.toUpperCase(),
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(
+                          color: (hasAlert || (isAlarm && alarmIsActive))
+                              ? accent
+                              : LuxeColors.ink,
+                          fontSize: 11,
+                          height: 1.2,
+                          letterSpacing: 0.5,
+                          fontWeight: (hasAlert || (isAlarm && alarmIsActive))
+                              ? FontWeight.w700
+                              : FontWeight.w600,
+                        ),
                       ),
                     ),
                     if (isAlarm && alarmLabel != null)
