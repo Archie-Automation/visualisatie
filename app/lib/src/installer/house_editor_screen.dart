@@ -2576,8 +2576,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               flex: 5,
               child: _millerRow(context),
             ),
-            VerticalDivider(
-                width: 1, thickness: 1, color: LuxeColors.lineSoft),
             Expanded(
               flex: 4,
               child: _buildingInspector(context),
