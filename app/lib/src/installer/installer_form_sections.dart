@@ -421,45 +421,53 @@ class _UniversalPanelInstallerSectionState
     final uni = _ensureMap(widget.device, 'universal');
     final buttons = _ensureList(uni, 'buttons');
     final currentIcon = uni['icon'] as String? ?? 'grid';
-    const maxButtons = 8;
+    final layout = universalPanelLayout(uni);
+    final canAdd = buttons.length < kUniversalMaxButtons;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Icoon voor de groepsknop',
-            style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 8),
-        _UniversalIconPicker(
+        _IconPickerField(
+          label: 'Icoon',
           value: currentIcon,
           onChanged: (v) {
-            uni['icon'] = v;
+            uni['icon'] = v ?? 'grid';
             _notify();
           },
         ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Knoppen (${buttons.length}/$maxButtons)',
-                style: Theme.of(context).textTheme.titleSmall,
+        _InstallerDropdown(
+          label: 'Weergave',
+          value: layout,
+          options: const ['switch', 'buttons'],
+          optionLabels: const {
+            'switch': 'Schakelaar (aan/uit, zoals een lamp)',
+            'buttons': 'Knoppenrij (max. 4, zoals zonwering/haard)',
+          },
+          onChanged: (v) {
+            uni['layout'] = v;
+            _notify();
+          },
+        ),
+        const SizedBox(height: 8),
+        Text(
+          layout == 'switch'
+              ? 'Eén knop rechtsboven als aan/uit. Extra knoppen worden genegeerd tot je knoppenrij kiest.'
+              : 'Tot vier vierkante knoppen naast elkaar op dezelfde tegel.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: LuxeColors.inkSoft,
               ),
-            ),
-            FilledButton.tonalIcon(
-              onPressed: buttons.length < maxButtons
-                  ? () => _addButton(buttons)
-                  : null,
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Toevoegen'),
-            ),
-          ],
+        ),
+        const SizedBox(height: 16),
+        Text(
+          'Knoppen (${buttons.length}/$kUniversalMaxButtons)',
+          style: Theme.of(context).textTheme.titleSmall,
         ),
         const SizedBox(height: 4),
         if (buttons.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(
-              'Nog geen knoppen. Tik op "Toevoegen".',
+              'Nog geen knoppen.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
@@ -475,57 +483,10 @@ class _UniversalPanelInstallerSectionState
               _notify();
             },
           ),
-      ],
-    );
-  }
-}
-
-/// Grid of selectable icons for a universal panel.
-class _UniversalIconPicker extends StatelessWidget {
-  const _UniversalIconPicker({required this.value, required this.onChanged});
-  final String value;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = Theme.of(context).colorScheme.primary;
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final entry in kUniversalIconMap.entries)
-          Tooltip(
-            message: entry.key,
-            child: GestureDetector(
-              onTap: () => onChanged(entry.key),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 120),
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  color: value == entry.key
-                      ? accent.withValues(alpha: 0.15)
-                      : Colors.transparent,
-                  border: Border.all(
-                    color: value == entry.key
-                        ? accent
-                        : Theme.of(context).dividerColor,
-                    width: value == entry.key ? 1.5 : 1,
-                  ),
-                ),
-                child: Icon(
-                  entry.value,
-                  size: 22,
-                  color: value == entry.key
-                      ? accent
-                      : Theme.of(context)
-                          .iconTheme
-                          .color
-                          ?.withValues(alpha: 0.6),
-                ),
-              ),
-            ),
+        if (canAdd)
+          LuxeAddRow(
+            label: 'Knop toevoegen',
+            onTap: () => _addButton(buttons),
           ),
       ],
     );

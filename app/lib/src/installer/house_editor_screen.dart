@@ -2036,6 +2036,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           'type': 'universal',
           'universal': {
             'icon': 'grid',
+            'layout': 'buttons',
             'buttons': <Map<String, dynamic>>[],
           },
         };

@@ -216,6 +216,18 @@ const Map<String, IconData> kUniversalIconMap = {
 IconData universalIconData(String? name) =>
     kUniversalIconMap[name] ?? Icons.grid_view_rounded;
 
+/// Max knoppen op één universele tegel (één rij, zoals zonwering/haard).
+const kUniversalMaxButtons = 4;
+
+/// `switch` = lamp-achtige aan/uit; `buttons` = vierkante knoppenrij.
+/// Ontbreekt `layout`: 0–1 knop → switch, anders buttons (bestaande panels).
+String universalPanelLayout(Map<String, dynamic>? cfg) {
+  final raw = (cfg?['layout'] as String?)?.trim();
+  if (raw == 'switch' || raw == 'buttons') return raw;
+  final n = (cfg?['buttons'] as List?)?.length ?? 0;
+  return n <= 1 ? 'switch' : 'buttons';
+}
+
 /// Icon for a device control button — config key, then label heuristics.
 IconData deviceControlOptionIcon({
   String? iconKey,
