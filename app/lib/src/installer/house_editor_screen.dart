@@ -445,6 +445,7 @@ enum _FocusKind {
   floor,
   room,
   device,
+  houseSystems,
   globalDevices,
   /// A device that is NOT placed in any room.
   globalDevice,
@@ -519,6 +520,12 @@ class _Focus {
         ci = null;
   const _Focus.floors()
       : kind = _FocusKind.floors,
+        fi = -1,
+        ri = -1,
+        di = -1,
+        ci = null;
+  const _Focus.houseSystems()
+      : kind = _FocusKind.houseSystems,
         fi = -1,
         ri = -1,
         di = -1,
@@ -2212,7 +2219,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   String _focusTitle(_Focus sel) => switch (sel.kind) {
         _FocusKind.project => 'Project',
         _FocusKind.knx => 'KNX-gateway',
-        _FocusKind.lutron => 'Lutron',
+        _FocusKind.lutron => 'Lutron QSX/QS',
         _FocusKind.cameras => "Camera's",
         _FocusKind.cameraDetail => 'Camera',
         _FocusKind.audio => 'Audio',
@@ -2220,13 +2227,14 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         _FocusKind.intercomDetail => 'Intercom',
         _FocusKind.users => 'Gebruikers',
         _FocusKind.user => 'Gebruiker',
-        _FocusKind.logs => 'Logs',
+        _FocusKind.logs => 'Logs / grafieken',
         _FocusKind.satel => 'Satel alarm',
-        _FocusKind.floors => 'Kamers',
+        _FocusKind.floors => 'Kamergebonden devices',
         _FocusKind.floor => 'Verdieping',
         _FocusKind.room => 'Kamer',
         _FocusKind.device => 'Apparaat',
-        _FocusKind.globalDevices => 'Algemeen',
+        _FocusKind.houseSystems => 'Custom systeemtegels',
+        _FocusKind.globalDevices => 'Algemene devices',
         _FocusKind.globalDevice => 'Apparaat',
       };
 
@@ -2397,106 +2405,142 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
 
   Widget _buildTree(BuildContext context) => _mainNavTree(context);
 
+  Widget _navChapter(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 12, 6),
+      child: Text(
+        title.toUpperCase(),
+        style: Theme.of(context).textTheme.labelLarge,
+      ),
+    );
+  }
+
+  Widget _navChapterCard({
+    String? chapter,
+    required List<Widget> rows,
+  }) {
+    return LuxeListCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (chapter != null) _navChapter(chapter),
+          for (var i = 0; i < rows.length; i++) ...[
+            if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+            rows[i],
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _mainNavTree(BuildContext context) {
-    Widget div() => Divider(height: 1, color: LuxeColors.lineSoft);
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
       children: [
-        LuxeListCard(
-          padding: EdgeInsets.zero,
-          child: Column(
-            children: [
-              LuxeNavRow(
-                icon: Icons.home_work_outlined,
-                title: 'Project',
-                selected: _sel.kind == _FocusKind.project,
-                onTap: () => _selectFocus(const _Focus.project()),
-              ),
-              div(),
-              LuxeNavRow(
-                icon: Icons.hub_outlined,
-                title: 'KNX-gateway',
-                selected: _sel.kind == _FocusKind.knx,
-                trailing: _IntegrationBadge(
-                    enabled: (_house?['knx']?['enabled'] as bool?) != false &&
-                        _house?['knx'] != null),
-                onTap: () => _selectFocus(const _Focus.knx()),
-              ),
-              div(),
-              LuxeNavRow(
-                icon: Icons.tune_outlined,
-                title: 'Lutron QSX/QS',
-                selected: _sel.kind == _FocusKind.lutron,
-                trailing: _IntegrationBadge(
-                    enabled:
-                        (_house?['lutron']?['telnet']?['enabled'] as bool?) ==
-                            true),
-                onTap: () => _selectFocus(const _Focus.lutron()),
-              ),
-              div(),
-              LuxeNavRow(
-                icon: Icons.videocam_outlined,
-                title: 'Camera\'s',
-                selected: _sel.kind == _FocusKind.cameras ||
-                    _sel.kind == _FocusKind.cameraDetail,
-                onTap: () => _selectFocus(const _Focus.cameras()),
-              ),
-              div(),
-              LuxeNavRow(
-                icon: Icons.speaker_group_outlined,
-                title: 'Audio',
-                selected: _sel.kind == _FocusKind.audio,
-                onTap: () => _selectFocus(const _Focus.audio()),
-              ),
-              div(),
-              LuxeNavRow(
-                icon: Icons.doorbell_outlined,
-                title: 'Intercom',
-                selected: _sel.kind == _FocusKind.intercoms ||
-                    _sel.kind == _FocusKind.intercomDetail,
-                trailing: _IntegrationBadge(
-                    enabled: (_house?['voip']?['enabled'] as bool?) == true),
-                onTap: () => _selectFocus(const _Focus.intercoms()),
-              ),
-              div(),
-              LuxeNavRow(
-                icon: Icons.people_outline,
-                title: 'Gebruikers',
-                selected: _sel.kind == _FocusKind.users ||
-                    _sel.kind == _FocusKind.user,
-                onTap: () => _selectFocus(const _Focus.users()),
-              ),
-              div(),
-              LuxeNavRow(
-                icon: Icons.show_chart_outlined,
-                title: 'Logs / grafieken',
-                selected: _sel.kind == _FocusKind.logs,
-                onTap: () => _selectFocus(const _Focus.logs()),
-              ),
-              div(),
-              LuxeNavRow(
-                icon: Icons.security_outlined,
-                title: 'Satel alarm',
-                selected: _sel.kind == _FocusKind.satel,
-                onTap: () => _selectFocus(const _Focus.satel()),
-              ),
-              div(),
-              LuxeNavRow(
-                icon: Icons.devices_other_outlined,
-                title: 'Algemeen',
-                selected: _sel.kind == _FocusKind.globalDevices ||
-                    _sel.kind == _FocusKind.globalDevice,
-                onTap: () => _selectFocus(const _Focus.globalDevices()),
-              ),
-              div(),
-              LuxeNavRow(
-                icon: Icons.layers_outlined,
-                title: 'Kamers',
-                selected: _isBuildingFocus,
-                onTap: () => _selectFocus(const _Focus.floors()),
-              ),
-            ],
-          ),
+        _navChapterCard(
+          rows: [
+            LuxeNavRow(
+              icon: Icons.home_work_outlined,
+              title: 'Project',
+              selected: _sel.kind == _FocusKind.project,
+              onTap: () => _selectFocus(const _Focus.project()),
+            ),
+            LuxeNavRow(
+              icon: Icons.people_outline,
+              title: 'Gebruikers',
+              selected: _sel.kind == _FocusKind.users ||
+                  _sel.kind == _FocusKind.user,
+              onTap: () => _selectFocus(const _Focus.users()),
+            ),
+          ],
+        ),
+        _navChapterCard(
+          chapter: 'IP',
+          rows: [
+            LuxeNavRow(
+              icon: Icons.hub_outlined,
+              title: 'KNX-gateway',
+              selected: _sel.kind == _FocusKind.knx,
+              trailing: _IntegrationBadge(
+                  enabled: (_house?['knx']?['enabled'] as bool?) != false &&
+                      _house?['knx'] != null),
+              onTap: () => _selectFocus(const _Focus.knx()),
+            ),
+            LuxeNavRow(
+              icon: Icons.tune_outlined,
+              title: 'Lutron QSX/QS',
+              selected: _sel.kind == _FocusKind.lutron,
+              trailing: _IntegrationBadge(
+                  enabled:
+                      (_house?['lutron']?['telnet']?['enabled'] as bool?) ==
+                          true),
+              onTap: () => _selectFocus(const _Focus.lutron()),
+            ),
+            LuxeNavRow(
+              icon: Icons.videocam_outlined,
+              title: "Camera's",
+              selected: _sel.kind == _FocusKind.cameras ||
+                  _sel.kind == _FocusKind.cameraDetail,
+              onTap: () => _selectFocus(const _Focus.cameras()),
+            ),
+            LuxeNavRow(
+              icon: Icons.speaker_group_outlined,
+              title: 'Audio',
+              selected: _sel.kind == _FocusKind.audio,
+              onTap: () => _selectFocus(const _Focus.audio()),
+            ),
+            LuxeNavRow(
+              icon: Icons.doorbell_outlined,
+              title: 'Intercom',
+              selected: _sel.kind == _FocusKind.intercoms ||
+                  _sel.kind == _FocusKind.intercomDetail,
+              trailing: _IntegrationBadge(
+                  enabled: (_house?['voip']?['enabled'] as bool?) == true),
+              onTap: () => _selectFocus(const _Focus.intercoms()),
+            ),
+            LuxeNavRow(
+              icon: Icons.security_outlined,
+              title: 'Satel alarm',
+              selected: _sel.kind == _FocusKind.satel,
+              onTap: () => _selectFocus(const _Focus.satel()),
+            ),
+          ],
+        ),
+        _navChapterCard(
+          chapter: 'Visualisatie',
+          rows: [
+            LuxeNavRow(
+              icon: Icons.dashboard_outlined,
+              title: 'Custom systeemtegels',
+              selected: _sel.kind == _FocusKind.houseSystems,
+              onTap: () => _selectFocus(const _Focus.houseSystems()),
+            ),
+            LuxeNavRow(
+              icon: Icons.devices_other_outlined,
+              title: 'Algemene devices',
+              selected: _sel.kind == _FocusKind.globalDevices ||
+                  _sel.kind == _FocusKind.globalDevice,
+              onTap: () => _selectFocus(const _Focus.globalDevices()),
+            ),
+            LuxeNavRow(
+              icon: Icons.layers_outlined,
+              title: 'Kamergebonden devices',
+              selected: _isBuildingFocus,
+              onTap: () => _selectFocus(const _Focus.floors()),
+            ),
+          ],
+        ),
+        _navChapterCard(
+          chapter: 'Diagnose',
+          rows: [
+            LuxeNavRow(
+              icon: Icons.show_chart_outlined,
+              title: 'Logs / grafieken',
+              selected: _sel.kind == _FocusKind.logs,
+              onTap: () => _selectFocus(const _Focus.logs()),
+            ),
+          ],
         ),
       ],
     );
@@ -2879,9 +2923,9 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                 padding: EdgeInsets.fromLTRB(16, 12, 8, 4),
                 child: LuxeSectionTitle(
                   icon: Icons.layers_outlined,
-                  title: 'Kamers',
+                  title: 'Kamergebonden devices',
                   trailing: LuxeInfoIconButton(
-                    title: 'Kamers',
+                    title: 'Kamergebonden devices',
                     body:
                         'Apparaten die bij een kamer horen: eerst een verdieping, '
                         'daarna kamers, daarna de apparaten in die kamer. '
@@ -2932,9 +2976,9 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             padding: EdgeInsets.fromLTRB(16, 12, 8, 4),
             child: LuxeSectionTitle(
               icon: Icons.dashboard_outlined,
-              title: 'Systeemtegels',
+              title: 'Custom systeemtegels',
               trailing: LuxeInfoIconButton(
-                title: 'Systeemtegels',
+                title: 'Custom systeemtegels',
                 body:
                     'Deze tegels komen onder Systemen op het startscherm. '
                     'Voeg met + elk apparaat toe (ook universeel, ook uit een kamer). '
@@ -3057,12 +3101,20 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     );
   }
 
+  Widget _houseSystemsInstallerPanel(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 36),
+      children: [
+        _houseSystemsEditorCard(context),
+      ],
+    );
+  }
+
   Widget _globalDevicesInstallerPanel(BuildContext context) {
     final list = _globalDeviceList();
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
       children: [
-        _houseSystemsEditorCard(context),
         LuxeListCard(
           padding: EdgeInsets.zero,
           child: Column(
@@ -3071,9 +3123,9 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                 padding: EdgeInsets.fromLTRB(16, 12, 8, 4),
                 child: LuxeSectionTitle(
                   icon: Icons.devices_other_outlined,
-                  title: 'Algemeen',
+                  title: 'Algemene devices',
                   trailing: LuxeInfoIconButton(
-                    title: 'Algemeen',
+                    title: 'Algemene devices',
                     body:
                         'Apparaten die bij het hele huis horen, niet bij één kamer. '
                         'Kies per apparaat op welke systeemtegel het komt.',
@@ -3433,6 +3485,8 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         return const _SatelInstallerPanel();
       case _FocusKind.floors:
         return _floorsInstallerPanel(context);
+      case _FocusKind.houseSystems:
+        return _houseSystemsInstallerPanel(context);
       case _FocusKind.globalDevices:
         return _globalDevicesInstallerPanel(context);
       case _FocusKind.floor:
