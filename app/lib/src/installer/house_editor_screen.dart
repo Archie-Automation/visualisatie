@@ -2589,8 +2589,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   }
 
   Widget _millerRow(BuildContext context) {
-    Widget divider() =>
-        VerticalDivider(width: 1, thickness: 1, color: LuxeColors.lineSoft);
     return LayoutBuilder(
       builder: (ctx, c) {
         const minCol = 176.0;
@@ -2602,9 +2600,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Expanded(child: floors),
-              divider(),
               Expanded(child: rooms),
-              divider(),
               Expanded(child: devices),
             ],
           );
@@ -2615,9 +2611,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               SizedBox(width: 200, child: floors),
-              divider(),
               SizedBox(width: 200, child: rooms),
-              divider(),
               SizedBox(width: 200, child: devices),
             ],
           ),
@@ -2648,7 +2642,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         ),
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.fromLTRB(2, 4, 2, 8),
             children: [
               if (children.isEmpty && emptyText != null)
                 Padding(
@@ -2660,10 +2654,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                         ),
                   ),
                 ),
-              for (var i = 0; i < children.length; i++) ...[
-                if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
-                children[i],
-              ],
+              ...children,
             ],
           ),
         ),
@@ -2693,6 +2684,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                     _sel.kind == _FocusKind.room ||
                     _sel.kind == _FocusKind.device),
             trailing: const SizedBox.shrink(),
+            rounded: true,
             onTap: () => _selectFocus(_Focus.floor(i)),
           ),
       ],
@@ -2735,6 +2727,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                 (_sel.kind == _FocusKind.room ||
                     _sel.kind == _FocusKind.device),
             trailing: const SizedBox.shrink(),
+            rounded: true,
             onTap: () => _selectFocus(_Focus.room(fi, ri)),
           ),
       ],
@@ -2782,6 +2775,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             selected:
                 _sel.kind == _FocusKind.device && _sel.di == di,
             trailing: const SizedBox.shrink(),
+            rounded: true,
             onTap: () => _selectFocus(_Focus.device(fi, ri, di)),
           ),
       ],

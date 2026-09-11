@@ -158,6 +158,7 @@ class LuxeNavRow extends StatelessWidget {
     this.subtitle,
     this.trailing,
     this.selected = false,
+    this.rounded = false,
   });
 
   final IconData icon;
@@ -165,6 +166,7 @@ class LuxeNavRow extends StatelessWidget {
   final String? subtitle;
   final Widget? trailing;
   final bool selected;
+  final bool rounded;
   final VoidCallback onTap;
 
   @override
@@ -172,48 +174,60 @@ class LuxeNavRow extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final selectedFill =
         isDark ? LuxeColors.surfaceDarkElev : LuxeColors.surfaceDim;
-    return InkWell(
-      onTap: onTap,
-      child: ColoredBox(
+    final radius = rounded
+        ? const BorderRadius.all(LuxeRadius.sm)
+        : BorderRadius.zero;
+    return Padding(
+      padding: rounded
+          ? const EdgeInsets.symmetric(horizontal: 6, vertical: 2)
+          : EdgeInsets.zero,
+      child: Material(
         color: selected ? selectedFill : Colors.transparent,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 11, 10, 11),
-          child: Row(
-            children: [
-              Icon(icon, color: LuxeColors.ink, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            fontWeight:
-                                selected ? FontWeight.w700 : FontWeight.w500,
-                          ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
-                      const SizedBox(height: 1),
+        borderRadius: radius,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: radius,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 11, 10, 11),
+            child: Row(
+              children: [
+                Icon(icon, color: LuxeColors.ink, size: 20),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        subtitle!,
-                        style: Theme.of(context).textTheme.bodySmall,
+                        title,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                              fontWeight: selected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
+                        const SizedBox(height: 1),
+                        Text(
+                          subtitle!,
+                          style: Theme.of(context).textTheme.bodySmall,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ],
-                  ],
-                ),
-              ),
-              trailing ??
-                  Icon(
-                    Icons.chevron_right_rounded,
-                    size: 20,
-                    color: LuxeColors.inkSoft,
                   ),
-            ],
+                ),
+                trailing ??
+                    Icon(
+                      Icons.chevron_right_rounded,
+                      size: 20,
+                      color: LuxeColors.inkSoft,
+                    ),
+              ],
+            ),
           ),
         ),
       ),
