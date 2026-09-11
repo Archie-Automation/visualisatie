@@ -169,17 +169,24 @@ class LuxeNavRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final ink = LuxeColors.ink;
+    final accent = LuxeColors.brass;
     return InkWell(
       onTap: onTap,
-      child: ColoredBox(
-        color: selected
-            ? LuxeColors.brass.withValues(alpha: 0.12)
-            : Colors.transparent,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: selected
+              ? accent.withValues(alpha: 0.28)
+              : Colors.transparent,
+          border: selected
+              ? Border(left: BorderSide(color: accent, width: 3))
+              : const Border(left: BorderSide(color: Colors.transparent, width: 3)),
+        ),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 11, 10, 11),
+          padding: const EdgeInsets.fromLTRB(11, 11, 10, 11),
           child: Row(
             children: [
-              Icon(icon, color: LuxeColors.ink, size: 20),
+              Icon(icon, color: selected ? accent : ink, size: 20),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -187,7 +194,11 @@ class LuxeNavRow extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: Theme.of(context).textTheme.bodyLarge,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            fontWeight:
+                                selected ? FontWeight.w700 : FontWeight.w500,
+                            color: selected ? LuxeColors.brassDeep : ink,
+                          ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -195,7 +206,11 @@ class LuxeNavRow extends StatelessWidget {
                       const SizedBox(height: 1),
                       Text(
                         subtitle!,
-                        style: Theme.of(context).textTheme.bodySmall,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: selected
+                                  ? LuxeColors.brassDeep.withValues(alpha: 0.75)
+                                  : null,
+                            ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -207,7 +222,7 @@ class LuxeNavRow extends StatelessWidget {
                   Icon(
                     Icons.chevron_right_rounded,
                     size: 20,
-                    color: LuxeColors.inkSoft,
+                    color: selected ? accent : LuxeColors.inkSoft,
                   ),
             ],
           ),
