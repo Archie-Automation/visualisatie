@@ -2570,8 +2570,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(width: navW, child: tree),
-            VerticalDivider(
-                width: 1, thickness: 1, color: LuxeColors.lineSoft),
             Expanded(
               flex: 5,
               child: _millerRow(context),
@@ -2656,10 +2654,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             ],
           ),
         ),
-        if (footer != null) ...[
-          Divider(height: 1, color: LuxeColors.lineSoft),
-          footer,
-        ],
+        if (footer != null) footer,
       ],
     );
   }
