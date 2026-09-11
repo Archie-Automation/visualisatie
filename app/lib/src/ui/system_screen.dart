@@ -256,7 +256,7 @@ class _SystemDevicesBody extends ConsumerWidget {
                         ],
                       ],
                       if (unplaced.isNotEmpty) ...[
-                        const _SectionLabel(label: 'OVERIGE'),
+                        if (floorGroups.isNotEmpty) const SizedBox(height: 8),
                         for (var i = 0; i < unplaced.length; i++) ...[
                           if (i > 0) const SizedBox(height: 18),
                           FavoriteDeviceWrap(
