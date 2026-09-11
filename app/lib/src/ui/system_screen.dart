@@ -48,6 +48,17 @@ class SystemScreen extends ConsumerWidget {
             if (slug == kGrafiekenSlug) {
               return _GrafiekenBody(onBack: () => appBack(context));
             }
+            if (slug == kHeatersActivitySlug) {
+              return _SystemDevicesBody(
+                cfg: cfg,
+                slug: slug,
+                title: 'Heater',
+                icon: Icons.wb_incandescent_outlined,
+                devices: heaterDevicesOf(cfg.allDevices),
+                activeOnly: activeOnly,
+                onBack: () => appBack(context),
+              );
+            }
             final system = houseSystemBySlug(slug, cfg);
             if (system == null) {
               return _InvalidBody(onBack: () => appBack(context));

@@ -45,6 +45,10 @@ void main() {
     expect(houseSystemBySlug('diverse'), isNull);
   });
 
+  test('heaters activity is not a dashboard system tile', () {
+    expect(houseSystemBySlug(kHeatersActivitySlug), isNull);
+  });
+
   test('custom house system is addressable by slug', () {
     final cfg = HouseConfig(
       projectId: 'p',

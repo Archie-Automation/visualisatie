@@ -1300,6 +1300,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       for (final s in kHouseSystems) s.slug,
       kFavorietenSlug,
       kGrafiekenSlug,
+      kHeatersActivitySlug,
       'alarm',
       'diverse',
       for (final e in list) (e['id'] as String? ?? ''),
