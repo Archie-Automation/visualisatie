@@ -1931,20 +1931,10 @@ class _HouseActivityHeaderButtons extends ConsumerWidget {
       if (heaterOn)
         _GlassStatusButton(
           tooltip: 'Heater aan',
-          onTap: () {
-            Device? heater;
-            for (final d in cfg.allDevices) {
-              if (deviceHeaterIsActive(d, bus.values)) {
-                heater = d;
-                break;
-              }
-            }
-            final slug = heater == null
-                ? null
-                : systemSlugForDevice(heater, cfg);
-            if (slug == null) return;
-            appOpen(context, '/system/$slug?active=1');
-          },
+          onTap: () => appOpen(
+            context,
+            '/system/$kHeatersActivitySlug?active=1',
+          ),
           child: _HeaterBadge(size: _glyph, color: LuxeColors.ink),
         ),
       if (fireplaceOn)

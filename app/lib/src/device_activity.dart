@@ -22,11 +22,22 @@ bool deviceLightIsOn(Device d, Map<String, dynamic> busValues) {
   }
 }
 
-bool deviceHeaterIsActive(Device d, Map<String, dynamic> busValues) {
+bool deviceIsHeater(Device d) {
   if (d.type != DeviceType.universal) return false;
-  final cfg = d.raw['universal'] as Map<String, dynamic>?;
-  if (cfg == null) return false;
-  if ((cfg['icon'] as String?) != 'heater') return false;
+  final cfg = d.raw['universal'];
+  if (cfg is! Map) return false;
+  return cfg['icon'] == 'heater';
+}
+
+List<Device> heaterDevicesOf(Iterable<Device> devices) => [
+      for (final d in devices)
+        if (deviceIsHeater(d)) d,
+    ];
+
+bool deviceHeaterIsActive(Device d, Map<String, dynamic> busValues) {
+  if (!deviceIsHeater(d)) return false;
+  final cfg = d.raw['universal'];
+  if (cfg is! Map) return false;
   final buttons =
       (cfg['buttons'] as List?)?.cast<Map<String, dynamic>>() ?? [];
   for (final b in buttons) {
@@ -107,8 +118,10 @@ bool isHouseActivityDeviceOn({
       return deviceMediaIsPlaying(device, mediaStates);
     case 'klimaat':
       return deviceAcIsOn(device, busValues);
+    case kHeatersActivitySlug:
+      return deviceHeaterIsActive(device, busValues);
     default:
-      // Extra tegels: heater/universeel telt als aan (header-status).
+      // Extra tegels: heater telt als aan (header-status).
       if (kHouseSystems.any((s) => s.slug == systemSlug)) return false;
       return deviceHeaterIsActive(device, busValues);
   }

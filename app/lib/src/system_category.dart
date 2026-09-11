@@ -98,6 +98,8 @@ const kHouseSystems = <HouseSystem>[
 
 const kFavorietenSlug = 'favorieten';
 const kGrafiekenSlug = 'grafieken';
+/// Header-status: actieve heaters, geen dashboardtegel.
+const kHeatersActivitySlug = 'heaters';
 
 HouseSystem? houseSystemBySlug(String slug, [HouseConfig? cfg]) {
   for (final s in kHouseSystems) {
