@@ -154,8 +154,11 @@ export function collectAllGAs(cfg: HouseConfig): GA[] {
       add(d.ac.fanSpeed?.statusGa);
     }
     if (d.type === "fan") {
-      add(d.fan.onOff.ga);
-      add(d.fan.onOff.statusGa);
+      if (d.fan.model?.startsWith("mv_") && d.fan.mv) {
+        for (const { ga } of collectMvSubscriptions(d.fan.model, d.fan.mv)) add(ga);
+      }
+      add(d.fan.onOff?.ga);
+      add(d.fan.onOff?.statusGa);
       add(d.fan.speed?.ga);
       add(d.fan.speed?.statusGa);
       add(d.fan.oscillate?.ga);
@@ -311,8 +314,13 @@ export function buildGAIndex(cfg: HouseConfig): Map<GA, GARole[]> {
 
     if (d.type === "fan") {
       const fan = d.fan;
-      pushGA(index, fan.onOff.ga, "switch", d.id, d.type);
-      pushGA(index, fan.onOff.statusGa, "switch_status", d.id, d.type);
+      if (fan.model?.startsWith("mv_") && fan.mv) {
+        for (const { ga, role } of collectMvSubscriptions(fan.model, fan.mv)) {
+          pushGA(index, ga, role, d.id, d.type);
+        }
+      }
+      pushGA(index, fan.onOff?.ga, "switch", d.id, d.type);
+      pushGA(index, fan.onOff?.statusGa, "switch_status", d.id, d.type);
       if (fan.speed) {
         const role = fan.speed.steps ? "byte" : "percent";
         pushGA(index, fan.speed.ga, role, d.id, d.type);

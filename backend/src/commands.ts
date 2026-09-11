@@ -9,6 +9,7 @@ import { hvacSwitchLock } from "./hvacSwitchLock";
 import { fireplaceVirtual } from "./fireplaceVirtual";
 import { fireplaceIsPlanika, pulseKnxGa } from "./fireplacePulse";
 import { wtwRuntime } from "./wtwRuntime";
+import { pressMvStand } from "./wtw";
 
 type PositionControllableDevice = ShadingDevice | PositionActuatorDevice;
 
@@ -191,6 +192,11 @@ export const CommandSchema = z.discriminatedUnion("kind", [
     kind: z.literal("fan.direction"),
     deviceId: z.string(),
     reverse: z.boolean()
+  }),
+  z.object({
+    kind: z.literal("fan.press"),
+    deviceId: z.string(),
+    standId: z.string()
   }),
 
   /* ------------------------- Universal ---------------------------- */
@@ -613,6 +619,7 @@ export async function dispatch(
     /* --------------------------- Fan -------------------------------- */
     case "fan.on": {
       if (device.type !== "fan") throw new Error("not a fan");
+      if (!device.fan.onOff) throw new Error("no on/off");
       await bus.write(device.fan.onOff.ga, "switch", cmd.on);
       return;
     }
@@ -648,6 +655,14 @@ export async function dispatch(
       if (device.type !== "fan") throw new Error("not a fan");
       if (!device.fan.direction) throw new Error("no direction control");
       await bus.write(device.fan.direction.ga, "switch", cmd.reverse);
+      return;
+    }
+    case "fan.press": {
+      if (device.type !== "fan") throw new Error("not a fan");
+      const model = device.fan.model;
+      const mv = device.fan.mv;
+      if (!model || !mv) throw new Error("fan heeft geen MV-config");
+      await pressMvStand(model, mv, bus, cmd.standId);
       return;
     }
 

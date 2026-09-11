@@ -91,7 +91,13 @@ function statusGaFor(device: Device, writeGa: string): string {
     }
   }
   if (device.type === "fan") {
-    if (device.fan.onOff.ga === writeGa) return device.fan.onOff.statusGa ?? writeGa;
+    if (device.fan.model?.startsWith("mv_") && device.fan.mv) {
+      const mv = device.fan.mv;
+      if (mv.switchGa === writeGa) return mv.switchStatusGa ?? writeGa;
+      if (mv.commandGa === writeGa) return mv.statusGa ?? writeGa;
+      if (mv.sceneGa === writeGa) return writeGa;
+    }
+    if (device.fan.onOff?.ga === writeGa) return device.fan.onOff.statusGa ?? writeGa;
     if (device.fan.speed?.ga === writeGa) {
       return device.fan.speed.statusGa ?? writeGa;
     }

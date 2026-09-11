@@ -802,8 +802,13 @@
         },
         "fan": {
           "type": "object",
-          "required": ["onOff"],
           "properties": {
+            "model": {
+              "type": "string",
+              "enum": ["mv_1contact", "mv_scene", "mv_0_10v"],
+              "description": "Zelfde stand-types als mechanische ventilatie (zonder logische functies)."
+            },
+            "mv": { "$ref": "#/definitions/wtwMvConfig" },
             "onOff": { "$ref": "#/definitions/gaWithStatus" },
             "speed": {
               "type": "object",

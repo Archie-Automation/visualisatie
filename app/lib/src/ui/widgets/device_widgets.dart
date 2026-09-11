@@ -588,16 +588,22 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
             ),
             trailing: hasOnGa ? _lightOnOffSwitch(context, d, on) : null,
           ),
-          DeviceCardHero(
-            child: _HsvWheelPicker(
-              hue: _hue,
-              saturation: _sat,
-              diameter: DeviceCardScale.colorWheelSize(context),
-              onChanged: (h, s) => setState(() {
-                _hue = h;
-                _sat = s;
-              }),
-              onChangeEnd: (_, __) => _sendRgbChannels(d),
+          Opacity(
+            opacity: on ? 1.0 : 0.35,
+            child: IgnorePointer(
+              ignoring: !on,
+              child: DeviceCardHero(
+                child: _HsvWheelPicker(
+                  hue: _hue,
+                  saturation: _sat,
+                  diameter: DeviceCardScale.colorWheelSize(context),
+                  onChanged: (h, s) => setState(() {
+                    _hue = h;
+                    _sat = s;
+                  }),
+                  onChangeEnd: (_, __) => _sendRgbChannels(d),
+                ),
+              ),
             ),
           ),
           DeviceCardBody(
@@ -3350,245 +3356,281 @@ class _AcTileState extends ConsumerState<AcTile> {
 }
 
 /* --------------------------------------------------------------------- */
-/*  Fan                                                                  */
+/*  Fan / MV standen                                                     */
 /* --------------------------------------------------------------------- */
 
-class FanTile extends ConsumerWidget {
-  const FanTile({super.key, required this.device});
-  final Device device;
+typedef _StandItem = ({String id, String label});
+
+String _mvActiveStand(
+    String model, Map<String, dynamic> mv, Map<String, dynamic> values) {
+  if (model == 'mv_1contact') {
+    final ga = (mv['switchStatusGa'] as String? ?? '').trim();
+    if (ga.isEmpty) return 'low';
+    final raw = values[ga];
+    return (raw == true || raw == 1) ? 'high' : 'low';
+  }
+  if (model == 'mv_0_10v') {
+    final ga = (mv['statusGa'] as String? ?? '').trim();
+    if (ga.isEmpty) return '';
+    final raw = values[ga];
+    final n = raw is num ? raw : num.tryParse(raw?.toString() ?? '');
+    if (n == null) return '';
+    final pct = (n / 255 * 100).round();
+    final stands = mv['stands'] as List? ?? [];
+    var bestDist = 999;
+    var active = '';
+    for (final s in stands) {
+      if (s is Map) {
+        final sp = (s['percent'] as num?)?.round() ?? 0;
+        if ((pct - sp).abs() < bestDist) {
+          bestDist = (pct - sp).abs();
+          active = s['id']?.toString() ?? '';
+        }
+      }
+    }
+    return active;
+  }
+  return '';
+}
+
+List<_StandItem> _mvStandButtons(String model, Map<String, dynamic> mv) {
+  if (model == 'mv_1contact') {
+    return const [
+      (id: 'low', label: 'Laag'),
+      (id: 'high', label: 'Hoog'),
+    ];
+  }
+  if (model == 'mv_scene') {
+    return const [
+      (id: 'low', label: 'Laag'),
+      (id: 'mid', label: 'Midden'),
+      (id: 'high', label: 'Hoog'),
+    ];
+  }
+  final stands = mv['stands'] as List? ?? [];
+  return [
+    for (final s in stands)
+      if (s is Map)
+        (
+          id: s['id']?.toString() ?? '',
+          label: s['label']?.toString() ?? s['id']?.toString() ?? '',
+        ),
+  ];
+}
+
+/// Zelfde kaart als mechanische ventilatie: naam + STAND-knoppen.
+class _VentStandCard extends StatelessWidget {
+  const _VentStandCard({
+    required this.name,
+    required this.stands,
+    required this.activeStand,
+    required this.onPress,
+    this.extraActiveIds = const [],
+    this.headerNote,
+  });
+
+  final String name;
+  final List<_StandItem> stands;
+  final String activeStand;
+  final ValueChanged<String> onPress;
+  final List<String> extraActiveIds;
+  final String? headerNote;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final d   = device;
-    final cfg = d.raw['fan'] as Map<String, dynamic>?;
-    if (cfg == null) {
-      return _Placeholder(name: d.name, hint: 'Fan-config ontbreekt');
-    }
-
-    final bus       = ref.watch(busProvider);
-    final onOff     = (cfg['onOff'] as Map).cast<String, dynamic>();
-    final statusGa  = onOff['statusGa'] as String? ?? onOff['ga'] as String;
-    final on        = bus.values[statusGa] == true || bus.values[statusGa] == 1;
-
-    final speedCfg      = cfg['speed'] as Map?;
-    final speedMode     = speedCfg?['speedMode'] as String? ??
-        ((speedCfg?['steps'] != null) ? 'steps' : 'percent');
-    final steps         = (speedCfg?['steps'] as num?)?.toInt() ?? 3;
-    final stepLabels    = (speedCfg?['stepLabels'] as List?)
-        ?.map((e) => e?.toString() ?? '')
-        .toList();
-    final speedStatusGa = speedCfg?['statusGa'] as String? ?? speedCfg?['ga'] as String?;
-    final busLevel      = speedStatusGa == null
-        ? 0.0
-        : (bus.values[speedStatusGa] is num
-            ? (bus.values[speedStatusGa] as num).toDouble()
-            : 0.0);
-    final maxSpeed      = speedMode == 'steps' ? steps.toDouble()
-                        : speedMode == 'byte'  ? 255.0
-                        :                        100.0;
-    final level         = busLevel.clamp(0.0, maxSpeed);
-
-    void sendOn(bool v) {
-      ref.read(busProvider.notifier).send({
-        'kind': 'fan.on',
-        'deviceId': d.id,
-        'on': v,
-      });
-    }
-
-    void sendSpeed(double v) {
-      ref.read(busProvider.notifier).send({
-        'kind': 'fan.speed',
-        'deviceId': d.id,
-        'value': v.round(),
-      });
-    }
-
+  Widget build(BuildContext context) {
+    final items = [
+      for (final s in stands)
+        DeviceControlItem(
+          label: s.label,
+          active: activeStand == s.id || extraActiveIds.contains(s.id),
+          onTap: () => onPress(s.id),
+        ),
+    ];
     return DeviceTileShell(
-      glow: on,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           DeviceTileLayout.headerRow(
             context: context,
-            leading: DeviceTileIconBadge(
-              icon: Icons.air,
-              active: on,
-              onTap: () => sendOn(!on),
-            ),
-            content: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(d.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-                const SizedBox(height: DeviceTileLayout.titleStatusGap),
-                Text(
-                  on ? 'Aan' : 'Uit',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ],
-            ),
-            trailing: DeviceTileLayout.trailingSwitch(
-              context: context,
-              value: on,
-              onChanged: sendOn,
+            leading: const DeviceTileIconBadge(icon: Icons.air_outlined),
+            content: Text(
+              name,
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.w700),
             ),
           ),
-
-          if (speedCfg != null) ...[
-            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
-            DeviceControlSection(
-              title: 'SNELHEID',
-              enabled: on,
-              child: speedMode == 'steps'
-                  ? _FanStepBar(
-                      steps: steps,
-                      labels: stepLabels,
-                      active: level.round(),
-                      onSelect: sendSpeed,
-                    )
-                  : _FanPercentBar(
-                      active: level.round(),
-                      max: maxSpeed.round(),
-                      byteMode: speedMode == 'byte',
-                      onSelect: sendSpeed,
+          if (headerNote != null && headerNote!.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6, top: 4),
+              child: Text(
+                headerNote!,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: LuxeColors.brass,
                     ),
-            ),
-          ],
-
-          if (cfg['oscillate'] != null || cfg['direction'] != null) ...[
-            SizedBox(height: DeviceControlBar.sectionSpacing(context)),
-            DeviceControlSection(
-              title: 'OPTIES',
-              enabled: on,
-              child: Builder(
-                builder: (context) {
-                  final items = <DeviceControlItem>[];
-                  if (cfg['oscillate'] != null) {
-                    final ga = (cfg['oscillate'] as Map)['statusGa'] as String? ??
-                        (cfg['oscillate'] as Map)['ga'] as String;
-                    final v = bus.values[ga];
-                    final oscOn = v == true || v == 1;
-                    items.add(
-                      DeviceControlItem(
-                        label: 'Oscilleren',
-                        icon: Icons.swap_horiz,
-                        labelMode: DeviceControlLabelMode.iconOnly,
-                        active: oscOn,
-                        onTap: () => ref.read(busProvider.notifier).send({
-                          'kind': 'fan.oscillate',
-                          'deviceId': d.id,
-                          'on': !oscOn,
-                        }),
-                      ),
-                    );
-                  }
-                  if (cfg['direction'] != null) {
-                    final ga = (cfg['direction'] as Map)['statusGa'] as String? ??
-                        (cfg['direction'] as Map)['ga'] as String;
-                    final v = bus.values[ga];
-                    final revOn = v == true || v == 1;
-                    items.add(
-                      DeviceControlItem(
-                        label: 'Omgekeerd',
-                        icon: Icons.loop,
-                        labelMode: DeviceControlLabelMode.iconOnly,
-                        active: revOn,
-                        onTap: () => ref.read(busProvider.notifier).send({
-                          'kind': 'fan.direction',
-                          'deviceId': d.id,
-                          'reverse': !revOn,
-                        }),
-                      ),
-                    );
-                  }
-                  return DeviceControlBar.singleRow(context, items);
-                },
               ),
             ),
-          ],
+          SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+          if (stands.isNotEmpty)
+            DeviceControlSection(
+              title: 'STAND',
+              child: DeviceControlBar.grid(
+                context,
+                items,
+                perRow: stands.length <= 3 ? stands.length : 3,
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
-/// Fan speed step bar — zelfde witte [DeviceControlBar] als haard/zonwering.
-class _FanStepBar extends StatelessWidget {
-  const _FanStepBar({
-    required this.steps,
-    required this.active,
-    required this.onSelect,
-    this.labels,
-  });
+class FanTile extends ConsumerWidget {
+  const FanTile({super.key, required this.device});
+  final Device device;
 
-  final int steps;
-  final int active;
-  final ValueChanged<double> onSelect;
-  final List<String>? labels;
-
-  @override
-  Widget build(BuildContext context) {
-    final items = <DeviceControlItem>[
-      DeviceControlItem(
-        icon: Icons.power_off_outlined,
-        label: 'Uit',
-        labelMode: DeviceControlLabelMode.iconOnly,
-        onTap: () => onSelect(0),
-      ),
-      for (int i = 1; i <= steps; i++)
-        () {
-          final stepLabel = (labels != null &&
-                  i - 1 < labels!.length &&
-                  labels![i - 1].isNotEmpty)
-              ? labels![i - 1]
-              : '$i';
-          final numeric = deviceControlNumericLabel(stepLabel) ?? '$i';
-          return DeviceControlItem(
-            label: numeric,
-            labelMode: DeviceControlLabelMode.numeric,
-            active: active == i,
-            onTap: () => onSelect(i.toDouble()),
-          );
-        }(),
-    ];
-
-    return DeviceControlBar.gridAuto(context, items);
+  bool _isMv(Map<String, dynamic> cfg) {
+    final model = cfg['model'] as String?;
+    return model != null && model.startsWith('mv_') && cfg['mv'] is Map;
   }
-}
-
-/// Percentage / byte snelheid als wit knoppenpaneel (i.p.v. slider).
-class _FanPercentBar extends StatelessWidget {
-  const _FanPercentBar({
-    required this.active,
-    required this.max,
-    required this.byteMode,
-    required this.onSelect,
-  });
-
-  final int active;
-  final int max;
-  final bool byteMode;
-  final ValueChanged<double> onSelect;
-
-  static const _percentLevels = [0, 25, 50, 75, 100];
-  static const _byteLevels = [0, 64, 128, 192, 255];
 
   @override
-  Widget build(BuildContext context) {
-    final levels = byteMode ? _byteLevels : _percentLevels;
-    final nearest = levels.reduce(
-      (a, b) => (active - a).abs() <= (active - b).abs() ? a : b,
+  Widget build(BuildContext context, WidgetRef ref) {
+    final d = device;
+    final cfg = d.raw['fan'] as Map<String, dynamic>?;
+    if (cfg == null) {
+      return _Placeholder(name: d.name, hint: 'Fan-config ontbreekt');
+    }
+
+    if (_isMv(cfg)) {
+      final model = cfg['model'] as String;
+      final mv = (cfg['mv'] as Map).cast<String, dynamic>();
+      final bus = ref.watch(busProvider);
+      return _VentStandCard(
+        name: d.name,
+        stands: _mvStandButtons(model, mv),
+        activeStand: _mvActiveStand(model, mv, bus.values),
+        onPress: (id) => ref.read(busProvider.notifier).send({
+          'kind': 'fan.press',
+          'deviceId': d.id,
+          'standId': id,
+        }),
+      );
+    }
+
+    if (cfg['onOff'] == null && cfg['speed'] == null) {
+      return _Placeholder(
+        name: d.name,
+        hint: 'Kies het ventilatortype in de installer',
+      );
+    }
+
+    return _legacyFanCard(context, ref, d, cfg);
+  }
+
+  Widget _legacyFanCard(
+    BuildContext context,
+    WidgetRef ref,
+    Device d,
+    Map<String, dynamic> cfg,
+  ) {
+    final bus = ref.watch(busProvider);
+    final onOff = (cfg['onOff'] as Map?)?.cast<String, dynamic>();
+    final statusGa = onOff == null
+        ? null
+        : onOff['statusGa'] as String? ?? onOff['ga'] as String?;
+    final on = statusGa != null &&
+        (bus.values[statusGa] == true || bus.values[statusGa] == 1);
+
+    final speedCfg = cfg['speed'] as Map?;
+    final speedMode = speedCfg?['speedMode'] as String? ??
+        ((speedCfg?['steps'] != null) ? 'steps' : 'percent');
+    final steps = (speedCfg?['steps'] as num?)?.toInt() ?? 3;
+    final stepLabels = (speedCfg?['stepLabels'] as List?)
+        ?.map((e) => e?.toString() ?? '')
+        .toList();
+    final speedStatusGa =
+        speedCfg?['statusGa'] as String? ?? speedCfg?['ga'] as String?;
+    final busLevel = speedStatusGa == null
+        ? 0.0
+        : (bus.values[speedStatusGa] is num
+            ? (bus.values[speedStatusGa] as num).toDouble()
+            : 0.0);
+
+    late final List<_StandItem> stands;
+    late final String activeStand;
+    if (speedCfg != null && speedMode == 'steps') {
+      stands = [
+        for (int i = 1; i <= steps; i++)
+          (
+            id: '$i',
+            label: (stepLabels != null &&
+                    i - 1 < stepLabels.length &&
+                    stepLabels[i - 1].isNotEmpty)
+                ? stepLabels[i - 1]
+                : 'Stand $i',
+          ),
+      ];
+      activeStand = '${busLevel.round().clamp(0, steps)}';
+    } else if (speedCfg != null && speedMode == 'byte') {
+      const levels = [0, 64, 128, 192, 255];
+      stands = [for (final v in levels) (id: '$v', label: '$v')];
+      final nearest = levels.reduce(
+        (a, b) => (busLevel.round() - a).abs() <= (busLevel.round() - b).abs()
+            ? a
+            : b,
+      );
+      activeStand = '$nearest';
+    } else if (speedCfg != null) {
+      const levels = [0, 25, 50, 75, 100];
+      stands = [for (final v in levels) (id: '$v', label: '$v%')];
+      final nearest = levels.reduce(
+        (a, b) => (busLevel.round() - a).abs() <= (busLevel.round() - b).abs()
+            ? a
+            : b,
+      );
+      activeStand = '$nearest';
+    } else {
+      stands = const [
+        (id: 'off', label: 'Laag'),
+        (id: 'on', label: 'Hoog'),
+      ];
+      activeStand = on ? 'on' : 'off';
+    }
+
+    void press(String id) {
+      if (id == 'on' || id == 'off') {
+        ref.read(busProvider.notifier).send({
+          'kind': 'fan.on',
+          'deviceId': d.id,
+          'on': id == 'on',
+        });
+        return;
+      }
+      final value = int.tryParse(id);
+      if (value == null) return;
+      if (onOff != null) {
+        ref.read(busProvider.notifier).send({
+          'kind': 'fan.on',
+          'deviceId': d.id,
+          'on': true,
+        });
+      }
+      ref.read(busProvider.notifier).send({
+        'kind': 'fan.speed',
+        'deviceId': d.id,
+        'value': value,
+      });
+    }
+
+    return _VentStandCard(
+      name: d.name,
+      stands: stands,
+      activeStand: activeStand,
+      onPress: press,
     );
-    final items = [
-      for (final lvl in levels)
-        DeviceControlItem(
-          label: byteMode ? '$lvl' : '$lvl%',
-          labelMode: DeviceControlLabelMode.numeric,
-          active: lvl == nearest,
-          onTap: () => onSelect(lvl.toDouble()),
-        ),
-    ];
-    return DeviceControlBar.gridAuto(context, items);
   }
 }
 
@@ -4474,113 +4516,13 @@ class _WtwTileState extends ConsumerState<WtwTile> {
   Widget _buildMv(BuildContext context, String model, Map<String, dynamic> mv) {
     final bus = ref.watch(busProvider);
     final logicRuns = ref.watch(wtwLogicProvider).forDevice(device.id);
-
-    String activeStand = '';
-    if (model == 'mv_1contact') {
-      final ga = (mv['switchStatusGa'] as String? ?? '').trim();
-      if (ga.isNotEmpty) {
-        final raw = bus.values[ga];
-        activeStand = (raw == true || raw == 1) ? 'high' : 'low';
-      } else {
-        activeStand = 'low';
-      }
-    } else if (model == 'mv_0_10v') {
-      final ga = (mv['statusGa'] as String? ?? '').trim();
-      if (ga.isNotEmpty) {
-        final raw = bus.values[ga];
-        final n = raw is num ? raw : num.tryParse(raw?.toString() ?? '');
-        if (n != null) {
-          final pct = (n / 255 * 100).round();
-          final stands = mv['stands'] as List? ?? [];
-          int bestDist = 999;
-          for (final s in stands) {
-            if (s is Map) {
-              final sp = (s['percent'] as num?)?.round() ?? 0;
-              if ((pct - sp).abs() < bestDist) {
-                bestDist = (pct - sp).abs();
-                activeStand = s['id']?.toString() ?? '';
-              }
-            }
-          }
-        }
-      }
-    }
-
-    List<({String id, String label})> standButtons;
-    if (model == 'mv_1contact') {
-      standButtons = [
-        (id: 'low', label: 'Laag'),
-        (id: 'high', label: 'Hoog'),
-      ];
-    } else if (model == 'mv_scene') {
-      standButtons = [
-        (id: 'low', label: 'Laag'),
-        (id: 'mid', label: 'Midden'),
-        (id: 'high', label: 'Hoog'),
-      ];
-    } else {
-      final stands = mv['stands'] as List? ?? [];
-      standButtons = [
-        for (final s in stands)
-          if (s is Map)
-            (
-              id: s['id']?.toString() ?? '',
-              label: s['label']?.toString() ?? s['id']?.toString() ?? '',
-            ),
-      ];
-    }
-
-    List<DeviceControlItem> mvButtons(
-        List<({String id, String label})> items) {
-      return [
-        for (final s in items)
-          DeviceControlItem(
-            label: s.label,
-            active: activeStand == s.id ||
-                logicRuns.any((r) => r.standId == s.id),
-            onTap: () => _press(s.id),
-          ),
-      ];
-    }
-
-    return DeviceTileShell(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          DeviceTileLayout.headerRow(
-            context: context,
-            leading: DeviceTileIconBadge(icon: Icons.air_outlined),
-            content: Text(
-              device.name,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleMedium
-                  ?.copyWith(fontWeight: FontWeight.w700),
-            ),
-          ),
-          if (logicRuns.isNotEmpty) ...[
-            Padding(
-              padding: const EdgeInsets.only(bottom: 6, top: 4),
-              child: Text(
-                'Actief',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: LuxeColors.brass,
-                    ),
-              ),
-            ),
-          ],
-          SizedBox(height: DeviceControlBar.sectionSpacing(context)),
-          if (standButtons.isNotEmpty)
-            DeviceControlSection(
-              title: 'STAND',
-              child: DeviceControlBar.grid(
-                context,
-                mvButtons(standButtons),
-                perRow: standButtons.length <= 3 ? standButtons.length : 3,
-              ),
-            ),
-        ],
-      ),
+    return _VentStandCard(
+      name: device.name,
+      stands: _mvStandButtons(model, mv),
+      activeStand: _mvActiveStand(model, mv, bus.values),
+      extraActiveIds: [for (final r in logicRuns) r.standId],
+      headerNote: logicRuns.isNotEmpty ? 'Actief' : null,
+      onPress: (id) => _press(id),
     );
   }
 
