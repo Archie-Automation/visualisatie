@@ -1833,9 +1833,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           'id': id,
           'name': 'Ventilator',
           'type': 'fan',
-          'fan': {
-            'onOff': {'ga': '1/1/1'},
-          },
+          'fan': <String, dynamic>{},
         };
       case 'wtw':
         return {

@@ -665,7 +665,7 @@ class FanEntry extends SceneEntry {
   @override
   List<SceneAction> toActions() {
     final out = <SceneAction>[];
-    final onGa = (_cfg['onOff'] as Map)['ga'] as String?;
+    final onGa = (_cfg['onOff'] as Map?)?['ga'] as String?;
     if (onGa != null) {
       out.add(SceneAction(ga: onGa, role: SceneRole.switch_, value: on));
     }
@@ -689,8 +689,8 @@ class FanEntry extends SceneEntry {
 
   @override
   FanEntry snapshot(BusState bus) {
-    final onGa = (_cfg['onOff'] as Map)['statusGa'] as String? ??
-        (_cfg['onOff'] as Map)['ga'] as String?;
+    final onGa = (_cfg['onOff'] as Map?)?['statusGa'] as String? ??
+        (_cfg['onOff'] as Map?)?['ga'] as String?;
     final spGa = (_cfg['speed'] as Map?)?['statusGa'] as String? ??
         (_cfg['speed'] as Map?)?['ga'] as String?;
     final osGa = (_cfg['oscillate'] as Map?)?['statusGa'] as String? ??

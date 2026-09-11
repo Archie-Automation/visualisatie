@@ -721,11 +721,17 @@ export interface AcDevice extends DeviceBase {
 }
 
 /* --------------------------------------------------------------------- */
-/*  Fan — on/off + speed + optional oscillate/direction                  */
+/*  Fan — MV-standen (zelfde 3 types als mechanische ventilatie)          */
+/*  Legacy: on/off + speed + optional oscillate/direction                 */
 /* --------------------------------------------------------------------- */
 
+export type FanMvModel = "mv_1contact" | "mv_scene" | "mv_0_10v";
+
 export interface FanConfig {
-  onOff: { ga: GA; statusGa?: GA };
+  /** Zelfde stand-modellen als WTW mechanische ventilatie. */
+  model?: FanMvModel;
+  mv?: WtwMvConfig;
+  onOff?: { ga: GA; statusGa?: GA };
   speed?: {
     ga: GA;
     statusGa?: GA;

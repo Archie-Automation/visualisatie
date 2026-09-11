@@ -1590,210 +1590,67 @@ class FanInstallerSection extends StatefulWidget {
 }
 
 class _FanInstallerSectionState extends State<FanInstallerSection> {
+  Map<String, dynamic> get _fan => _ensureMap(widget.device, 'fan');
+
   void _notify() {
     widget.onChanged();
     setState(() {});
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final fan       = _ensureMap(widget.device, 'fan');
-    final onOff     = _ensureMap(fan, 'onOff');
-    final hasSpeed  = fan.containsKey('speed');
-    final hasOsc    = fan.containsKey('oscillate');
-    final hasDir    = fan.containsKey('direction');
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Text('Aan / Uit', style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 6),
-        _InstallerStrField(
-          key: ValueKey('fan-${widget.device['id']}-onoff-ga'),
-          label: 'GA aan/uit (DPT 1.001)',
-          value: onOff['ga'] as String? ?? '',
-          onChanged: (v) { onOff['ga'] = v; _notify(); },
-        ),
-        _InstallerStrField(
-          key: ValueKey('fan-${widget.device['id']}-onoff-st'),
-          label: 'Status GA (optioneel)',
-          value: onOff['statusGa'] as String? ?? '',
-          onChanged: (v) {
-            if (v.trim().isEmpty) onOff.remove('statusGa'); else onOff['statusGa'] = v;
-            _notify();
-          },
-        ),
-        const SizedBox(height: 12),
-
-        // ── Snelheid ───────────────────────────────────────────────────
-        _SectionToggle(
-          label: 'Snelheidsbesturing toevoegen',
-          value: hasSpeed,
-          onChanged: (v) {
-            if (v) {
-              fan['speed'] = {'ga': '1/1/2', 'speedMode': 'steps', 'steps': 3};
-            } else {
-              fan.remove('speed');
-            }
-            _notify();
-          },
-        ),
-        if (hasSpeed) _FanSpeedSection(
-          speed: _ensureMap(fan, 'speed'),
-          deviceId: widget.device['id'] as String,
-          onChanged: _notify,
-        ),
-
-        // ── Oscillatie ─────────────────────────────────────────────────
-        _SectionToggle(
-          label: 'Oscillatie toevoegen',
-          value: hasOsc,
-          onChanged: (v) {
-            if (v) fan['oscillate'] = {'ga': '1/1/3'}; else fan.remove('oscillate');
-            _notify();
-          },
-        ),
-        if (hasOsc) ...[
-          _InstallerStrField(
-            key: ValueKey('fan-${widget.device['id']}-osc-ga'),
-            label: 'GA oscillatie (DPT 1.001)',
-            value: (_ensureMap(fan, 'oscillate'))['ga'] as String? ?? '',
-            onChanged: (v) { _ensureMap(fan, 'oscillate')['ga'] = v; _notify(); },
-          ),
-          _InstallerStrField(
-            key: ValueKey('fan-${widget.device['id']}-osc-st'),
-            label: 'Status GA oscillatie (optioneel)',
-            value: (_ensureMap(fan, 'oscillate'))['statusGa'] as String? ?? '',
-            onChanged: (v) {
-              final m = _ensureMap(fan, 'oscillate');
-              if (v.trim().isEmpty) m.remove('statusGa'); else m['statusGa'] = v;
-              _notify();
-            },
-          ),
-        ],
-
-        // ── Richting ───────────────────────────────────────────────────
-        _SectionToggle(
-          label: 'Richtingomkering toevoegen',
-          value: hasDir,
-          onChanged: (v) {
-            if (v) fan['direction'] = {'ga': '1/1/4'}; else fan.remove('direction');
-            _notify();
-          },
-        ),
-        if (hasDir) ...[
-          _InstallerStrField(
-            key: ValueKey('fan-${widget.device['id']}-dir-ga'),
-            label: 'GA richting (DPT 1.001)',
-            value: (_ensureMap(fan, 'direction'))['ga'] as String? ?? '',
-            onChanged: (v) { _ensureMap(fan, 'direction')['ga'] = v; _notify(); },
-          ),
-          _InstallerStrField(
-            key: ValueKey('fan-${widget.device['id']}-dir-st'),
-            label: 'Status GA richting (optioneel)',
-            value: (_ensureMap(fan, 'direction'))['statusGa'] as String? ?? '',
-            onChanged: (v) {
-              final m = _ensureMap(fan, 'direction');
-              if (v.trim().isEmpty) m.remove('statusGa'); else m['statusGa'] = v;
-              _notify();
-            },
-          ),
-        ],
-      ],
-    );
+  void _setModel(String raw) {
+    _fan.remove('onOff');
+    _fan.remove('speed');
+    _fan.remove('oscillate');
+    _fan.remove('direction');
+    if (raw == _wtwModelNone) {
+      _fan.remove('model');
+      _fan.remove('mv');
+    } else {
+      _fan['model'] = raw;
+      final mv = _ensureMap(_fan, 'mv');
+      mv.remove('logics');
+    }
+    _notify();
   }
-}
-
-class _FanSpeedSection extends StatelessWidget {
-  const _FanSpeedSection({
-    required this.speed,
-    required this.deviceId,
-    required this.onChanged,
-  });
-
-  final Map<String, dynamic> speed;
-  final String deviceId;
-  final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
-    final speedMode = speed['speedMode'] as String? ?? 'steps';
-    final steps     = (speed['steps'] as num?)?.toInt() ?? 3;
-    final labels    = (speed['stepLabels'] as List?)
-        ?.map((e) => e?.toString() ?? '')
-        .toList() ?? [];
-
+    final model = _fan['model'] as String? ?? '';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _InstallerStrField(
-          key: ValueKey('fan-$deviceId-spd-ga'),
-          label: 'GA snelheid',
-          value: speed['ga'] as String? ?? '',
-          onChanged: (v) { speed['ga'] = v; onChanged(); },
-        ),
-        _InstallerStrField(
-          key: ValueKey('fan-$deviceId-spd-st'),
-          label: 'Status GA snelheid (optioneel)',
-          value: speed['statusGa'] as String? ?? '',
-          onChanged: (v) {
-            if (v.trim().isEmpty) speed.remove('statusGa'); else speed['statusGa'] = v;
-            onChanged();
-          },
-        ),
-        _InstallerDropdown(
-          label: 'Bediening',
-          value: speedMode,
-          options: const ['steps', 'byte', 'percent'],
-          optionLabels: const {
-            'steps':   'Discrete standen (knoppen)',
-            'byte':    'Continue byte-schuif (0–255, DPT 5.010)',
-            'percent': 'Continue procent-schuif (0–100, DPT 5.001)',
-          },
-          onChanged: (v) {
-            speed['speedMode'] = v;
-            if (v != 'steps') speed.remove('steps');
-            onChanged();
-          },
-        ),
-        if (speedMode == 'steps') ...[
-          _InstallerDropdown(
-            label: 'Aantal standen',
-            value: '$steps',
-            options: const ['2', '3', '4', '5', '6', '7', '8', '9', '10'],
-            onChanged: (v) {
-              final n = int.tryParse(v) ?? 3;
-              speed['steps'] = n;
-              // Trim or grow labels list to match
-              final cur = (speed['stepLabels'] as List?)
-                  ?.map((e) => e?.toString() ?? '')
-                  .toList() ?? [];
-              while (cur.length < n) cur.add('');
-              speed['stepLabels'] = cur.sublist(0, n);
-              onChanged();
+        KeyedSubtree(
+          key: ValueKey(model.isEmpty ? _wtwModelNone : model),
+          child: _InstallerDropdown(
+            label: 'Type ventilator',
+            value: model.isEmpty ? _wtwModelNone : model,
+            options: const [
+              _wtwModelNone,
+              'mv_1contact',
+              'mv_scene',
+              'mv_0_10v',
+            ],
+            optionLabels: const {
+              _wtwModelNone: 'Kies type…',
+              'mv_1contact': '2 standen, 1 contact (aan/uit)',
+              'mv_scene': '3 standen, 2 contacten (scene sturing)',
+              'mv_0_10v': '4 standen, 0–10V (percentage)',
             },
+            onChanged: _setModel,
           ),
-          const SizedBox(height: 4),
-          Text('Labels per stand (laat leeg voor "Stand 1", "Stand 2", …)',
-              style: Theme.of(context).textTheme.labelSmall),
-          const SizedBox(height: 6),
-          for (int i = 0; i < steps; i++)
-            _InstallerStrField(
-              key: ValueKey('fan-$deviceId-lbl-$i'),
-              label: 'Stand ${i + 1}',
-              value: i < labels.length ? labels[i] : '',
-              onChanged: (v) {
-                final cur = (speed['stepLabels'] as List?)
-                    ?.map((e) => e?.toString() ?? '')
-                    .toList() ?? List.filled(steps, '');
-                while (cur.length <= i) cur.add('');
-                cur[i] = v;
-                speed['stepLabels'] = cur;
-                onChanged();
-              },
-            ),
-        ],
-        const SizedBox(height: 8),
+        ),
+        if (model.startsWith('mv_'))
+          _WtwMvInstaller(
+            model: model,
+            mv: _ensureMap(_fan, 'mv'),
+            onChanged: _notify,
+            showLogic: false,
+          )
+        else
+          Text(
+            'Kies eerst het type. Velden hangen daarvan af.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
       ],
     );
   }
@@ -2607,10 +2464,12 @@ class _WtwMvInstaller extends StatefulWidget {
     required this.model,
     required this.mv,
     required this.onChanged,
+    this.showLogic = true,
   });
   final String model;
   final Map<String, dynamic> mv;
   final VoidCallback onChanged;
+  final bool showLogic;
 
   @override
   State<_WtwMvInstaller> createState() => _WtwMvInstallerState();
@@ -2743,17 +2602,19 @@ class _WtwMvInstallerState extends State<_WtwMvInstaller> {
             },
           ),
         ],
-        const SizedBox(height: 12),
-        _WtwLogicListEditor(
-          zehnder: widget.mv,
-          onChanged: widget.onChanged,
-          hasBoost: false,
-          defaultStandId: _is1Contact ? 'high' : 'high',
-          standOptions: _standOptions,
-          standLabelsOverride: _standLabels,
-          afterOptions: _afterOptions,
-          afterLabelsOverride: _afterLabels,
-        ),
+        if (widget.showLogic) ...[
+          const SizedBox(height: 12),
+          _WtwLogicListEditor(
+            zehnder: widget.mv,
+            onChanged: widget.onChanged,
+            hasBoost: false,
+            defaultStandId: _is1Contact ? 'high' : 'high',
+            standOptions: _standOptions,
+            standLabelsOverride: _standLabels,
+            afterOptions: _afterOptions,
+            afterLabelsOverride: _afterLabels,
+          ),
+        ],
       ],
     );
   }
