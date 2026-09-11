@@ -867,6 +867,11 @@
           "required": ["buttons"],
           "properties": {
             "icon": { "type": "string", "description": "Icoon-naam voor de groepchip en de tile-header (bijv. bolt, home, settings)." },
+            "layout": {
+              "type": "string",
+              "enum": ["switch", "buttons"],
+              "description": "switch = aan/uit zoals een lamp; buttons = tot 4 vierkante knoppen in één rij (zonwering/haard)."
+            },
             "columns": { "type": "integer", "minimum": 1, "maximum": 4 },
             "buttons": {
               "type": "array",

@@ -3660,6 +3660,7 @@ class UniversalTile extends ConsumerWidget {
           color: LuxeColors.ink,
         );
     final bus = ref.watch(busProvider);
+    final layout = universalPanelLayout(cfg);
 
     Future<void> press(Map<String, dynamic> b, {bool? on}) async {
       final id = b['id'] as String;
@@ -3675,10 +3676,33 @@ class UniversalTile extends ConsumerWidget {
       });
     }
 
-    // Single button → behave like a switchable lamp: tile-wide header with an
-    // on/off switch on the right. The leading badge uses the button's icon
-    // (falling back to the device icon).
-    if (allButtons.length == 1) {
+    DeviceControlItem controlItem(Map<String, dynamic> b) {
+      final btnIcon = b['icon'] as String?;
+      final glyph = universalIconGlyph(
+            btnIcon,
+            size: DeviceControlIcons.size,
+            color: LuxeColors.ink,
+          ) ??
+          iconWidgetForData(
+            btnIcon != null ? universalIconData(btnIcon) : null,
+            size: DeviceControlIcons.size,
+            color: LuxeColors.ink,
+          );
+      return DeviceControlItem(
+        label: b['label'] as String? ?? '',
+        icon: glyph == null
+            ? (btnIcon != null
+                ? universalIconData(btnIcon)
+                : deviceControlOptionIcon(label: b['label'] as String?))
+            : null,
+        glyph: glyph,
+        labelMode: DeviceControlLabelMode.iconOnly,
+        active: _isButtonOn(b, bus),
+        onTap: () => press(b),
+      );
+    }
+
+    if (layout == 'switch' && allButtons.isNotEmpty) {
       final b = allButtons.first;
       final on = _isButtonOn(b, bus);
       final btnIcon = b['icon'] as String?;
@@ -3724,20 +3748,8 @@ class UniversalTile extends ConsumerWidget {
       );
     }
 
-    // Multiple buttons → grid of buttons. A button shows its icon (and hides
-    // the label when it is left empty, so an icon can replace the text).
-    final buttonItems = [
-      for (final b in allButtons)
-        DeviceControlItem(
-          label: b['label'] as String? ?? '',
-          icon: b['icon'] != null
-              ? universalIconData(b['icon'] as String)
-              : deviceControlOptionIcon(label: b['label'] as String?),
-          labelMode: DeviceControlLabelMode.iconOnly,
-          active: _isButtonOn(b, bus),
-          onTap: () => press(b),
-        ),
-    ];
+    final shown = allButtons.take(kUniversalMaxButtons).toList();
+    final buttonItems = [for (final b in shown) controlItem(b)];
 
     return DeviceTileShell(
       child: Column(
@@ -3754,7 +3766,7 @@ class UniversalTile extends ConsumerWidget {
           ),
           if (buttonItems.isNotEmpty) ...[
             SizedBox(height: DeviceControlBar.sectionSpacing(context)),
-            DeviceControlBar.gridAuto(context, buttonItems),
+            DeviceControlBar.singleRow(context, buttonItems),
           ] else
             Padding(
               padding: EdgeInsets.only(top: 12),
@@ -3781,125 +3793,6 @@ class UniversalTile extends ConsumerWidget {
     if (expected is bool) return v == expected || v == (expected ? 1 : 0);
     return v == expected;
   }
-}
-
-class _UniversalButton extends StatelessWidget {
-  const _UniversalButton({
-    required this.label,
-    required this.onTap,
-    required this.active,
-    this.icon,
-    this.style,
-  });
-  final String label;
-  final String? icon;
-  final String? style;
-  final bool active;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = _palette(style);
-    final bg = active ? palette.activeBg : palette.bg;
-    final fg = active ? palette.activeFg : palette.fg;
-    final iconData = _iconOf(icon);
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 160),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: palette.border),
-          boxShadow: active ? LuxeShadows.brassGlow : LuxeShadows.soft,
-        ),
-        child: Row(
-          children: [
-            if (iconData != null) ...[
-              Icon(iconData, size: DeviceControlIcons.size, color: fg),
-              const SizedBox(width: 8),
-            ],
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: fg,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.2,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  static IconData? _iconOf(String? name) => switch (name) {
-        'power' => Icons.power_settings_new,
-        'travel' => Icons.luggage_outlined,
-        'volume' => Icons.volume_up_outlined,
-        'bell' => Icons.notifications_active_outlined,
-        'home' => Icons.home_outlined,
-        'door' => Icons.door_front_door_outlined,
-        'star' => Icons.star_outline,
-        'flame' => Icons.local_fire_department_outlined,
-        'fan' => Icons.air,
-        'snow' => Icons.ac_unit,
-        'lamp' => Icons.lightbulb_outline,
-        null => null,
-        _ => Icons.bolt_rounded,
-      };
-
-  static _BtnPalette _palette(String? style) => switch (style) {
-        'primary' => _BtnPalette(
-            bg: LuxeColors.ink,
-            fg: Colors.white,
-            activeBg: LuxeColors.ink,
-            activeFg: LuxeColors.brassGlow,
-            border: LuxeColors.ink,
-          ),
-        'brass' => _BtnPalette(
-            bg: LuxeColors.surface,
-            fg: LuxeColors.brassDeep,
-            activeBg: LuxeColors.brass,
-            activeFg: Colors.white,
-            border: LuxeColors.brass,
-          ),
-        'danger' => _BtnPalette(
-            bg: LuxeColors.surface,
-            fg: LuxeColors.danger,
-            activeBg: LuxeColors.danger,
-            activeFg: Colors.white,
-            border: LuxeColors.danger,
-          ),
-        _ => _BtnPalette(
-            bg: LuxeColors.surface,
-            fg: LuxeColors.ink,
-            activeBg: LuxeColors.ink,
-            activeFg: Colors.white,
-            border: LuxeColors.line,
-          ),
-      };
-}
-
-class _BtnPalette {
-  const _BtnPalette({
-    required this.bg,
-    required this.fg,
-    required this.activeBg,
-    required this.activeFg,
-    required this.border,
-  });
-  final Color bg;
-  final Color fg;
-  final Color activeBg;
-  final Color activeFg;
-  final Color border;
 }
 
 /* --------------------------------------------------------------------- */
