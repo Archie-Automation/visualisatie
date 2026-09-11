@@ -1146,23 +1146,12 @@ class _Systemen extends ConsumerWidget {
       ));
     }
 
-    // Overige systemen.
-    for (final sys in kHouseSystems) {
-      final devices = allDevices
-          .where((d) => sys.types.contains(d.type))
-          .toList();
-      // Camera's staan los; deurbelcamera's met showInCameras zitten in camerasOverview.
-      if (sys.types.contains(DeviceType.camera)) {
-        devices.addAll(allCameras);
-      }
-      if (sys.types.contains(DeviceType.intercom)) {
-        final seen = {for (final d in devices) d.id};
-        for (final d in cfg.intercoms) {
-          if (seen.add(d.id)) devices.add(d);
-        }
-      }
+    // Overige systemen (vaste tegels + extra tegels uit de configuratie).
+    for (final sys in allHouseSystems(cfg)) {
+      final devices = devicesForHouseSystem(cfg, sys);
       if (devices.isEmpty) continue;
       chips.add(_SystemChipData(
+        slug: sys.slug,
         name: sys.name,
         icon: sys.icon,
         devices: devices,
@@ -1445,6 +1434,7 @@ class _SystemChipData {
     required this.name,
     required this.icon,
     required this.devices,
+    this.slug,
     this.accent,
     this.shortcuts = const [],
     this.alarmState,
@@ -1452,6 +1442,8 @@ class _SystemChipData {
   final String name;
   final IconData icon;
   final List<Device> devices;
+  /// Built-in or custom house system slug. Null for Favorieten / Grafieken / Alarm.
+  final String? slug;
   final Color? accent;
   final List<FavoriteShortcut> shortcuts;
   /// Pre-computed alarm state (only used for the Alarm chip).
@@ -1564,7 +1556,9 @@ class _SystemChipState extends ConsumerState<_SystemChip>
       appOpen(context, '/alarm');
       return;
     }
-    final sys = houseSystemByName(data.name);
+    final slug = data.slug;
+    if (slug == null || slug.isEmpty) return;
+    final sys = houseSystemBySlug(slug, widget.cfg);
     if (sys == null) return;
     appOpen(context, houseSystemOpenPath(sys, data.devices));
   }
@@ -1937,7 +1931,20 @@ class _HouseActivityHeaderButtons extends ConsumerWidget {
       if (heaterOn)
         _GlassStatusButton(
           tooltip: 'Heater aan',
-          onTap: () => _openSystem(context, 'Diverse'),
+          onTap: () {
+            Device? heater;
+            for (final d in cfg.allDevices) {
+              if (deviceHeaterIsActive(d, bus.values)) {
+                heater = d;
+                break;
+              }
+            }
+            final slug = heater == null
+                ? null
+                : systemSlugForDevice(heater, cfg);
+            if (slug == null) return;
+            appOpen(context, '/system/$slug?active=1');
+          },
           child: _HeaterBadge(size: _glyph, color: LuxeColors.ink),
         ),
       if (fireplaceOn)

@@ -278,6 +278,40 @@ class Device {
   }
 }
 
+/// Extra systeemtegel op het dashboard (naam + icoon).
+class CustomHouseSystem {
+  const CustomHouseSystem({
+    required this.id,
+    required this.name,
+    this.icon = 'grid',
+    this.deviceIds = const [],
+  });
+
+  final String id;
+  final String name;
+  final String icon;
+  /// Extra apparaten op deze tegel (naast type/`systemId`), mag overal vandaan.
+  final List<String> deviceIds;
+
+  factory CustomHouseSystem.fromJson(Map<String, dynamic> j) {
+    final icon = (j['icon'] as String? ?? 'grid').trim();
+    final ids = <String>[];
+    final raw = j['deviceIds'];
+    if (raw is List) {
+      for (final e in raw) {
+        final id = e?.toString().trim() ?? '';
+        if (id.isNotEmpty) ids.add(id);
+      }
+    }
+    return CustomHouseSystem(
+      id: (j['id'] as String? ?? '').trim(),
+      name: (j['name'] as String? ?? '').trim(),
+      icon: icon.isEmpty ? 'grid' : icon,
+      deviceIds: ids,
+    );
+  }
+}
+
 /* --------------------------------------------------------------------- */
 /*  Scenes                                                               */
 /* --------------------------------------------------------------------- */
@@ -674,6 +708,8 @@ class HouseConfig {
   /// KNX/Lutron devices NOT placed in any room. Visible in Systemen and
   /// favourites, but not in the room navigator.
   final List<Device> globalDevices;
+  /// Extra systeemtegels (naam + icoon), naast de vaste tegels per apparaattype.
+  final List<CustomHouseSystem> customHouseSystems;
   final List<Device> cameras;
   final List<Device> intercoms;
   final List<Scene> scenes;
@@ -691,6 +727,7 @@ class HouseConfig {
     this.locationLon,
     required this.floors,
     this.globalDevices = const [],
+    this.customHouseSystems = const [],
     required this.cameras,
     required this.intercoms,
     required this.scenes,
@@ -718,6 +755,10 @@ class HouseConfig {
         ..sort((a, b) => a.order.compareTo(b.order)),
       globalDevices: ((j['devices'] as List?) ?? const [])
           .map((d) => Device.fromJson(d as Map<String, dynamic>))
+          .toList(),
+      customHouseSystems: ((j['houseSystems'] as List?) ?? const [])
+          .map((s) => CustomHouseSystem.fromJson(s as Map<String, dynamic>))
+          .where((s) => s.id.isNotEmpty && s.name.isNotEmpty)
           .toList(),
       cameras: ((j['cameras'] as List?) ?? const [])
           .map((d) => Device.fromJson(d as Map<String, dynamic>))
@@ -792,7 +833,7 @@ class HouseConfig {
     return null;
   }
 
-  /// Human-readable placement, e.g. "Begane grond · Woonkamer", or "Diverse".
+  /// Human-readable placement, e.g. "Begane grond · Woonkamer", or "Algemeen".
   String? locationLabelForDevice(String deviceId) {
     final room = roomForDevice(deviceId);
     if (room != null) {
@@ -800,7 +841,7 @@ class HouseConfig {
       if (floor != null) return '${floor.name} · ${room.name}';
       return room.name;
     }
-    if (globalDevices.any((d) => d.id == deviceId)) return 'Diverse';
+    if (globalDevices.any((d) => d.id == deviceId)) return 'Algemeen';
     return null;
   }
 }

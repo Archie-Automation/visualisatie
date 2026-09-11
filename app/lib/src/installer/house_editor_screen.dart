@@ -39,6 +39,8 @@ import '../satel_api.dart'
 import '../shading_subtype_glyph.dart';
 import '../theme.dart';
 import '../roles.dart';
+import '../room_control_category.dart';
+import '../system_category.dart';
 import '../user_credentials.dart';
 import '../ui/responsive.dart';
 import '../ui/user_access_editor.dart';
@@ -74,6 +76,9 @@ const _deviceTypesKnx = [
 const _deviceTypesGeneral = [
   'wtw',
   'melding',
+  'universal',
+  'fan',
+  'position_actuator',
 ];
 
 const _deviceTypesAudio = [
@@ -1263,7 +1268,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     return (room['devices'] as List).cast<Map<String, dynamic>>();
   }
 
-  /// Devices at the project root level ? NOT placed in any room.
+  /// Devices at the project root level — NOT placed in any room.
   List<Map<String, dynamic>> _globalDeviceList() {
     final h = _house!;
     final d = h['devices'];
@@ -1271,6 +1276,170 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       h['devices'] = <dynamic>[];
     }
     return (h['devices'] as List).cast<Map<String, dynamic>>();
+  }
+
+  List<Map<String, dynamic>> _houseSystemsList() {
+    final h = _house!;
+    final raw = h['houseSystems'];
+    if (raw is! List) {
+      h['houseSystems'] = <dynamic>[];
+    }
+    return (h['houseSystems'] as List).cast<Map<String, dynamic>>();
+  }
+
+  void _addHouseSystemTile() {
+    final list = _houseSystemsList();
+    final reserved = {
+      for (final s in kHouseSystems) s.slug,
+      kFavorietenSlug,
+      kGrafiekenSlug,
+      'alarm',
+      'diverse',
+      for (final e in list) (e['id'] as String? ?? ''),
+    };
+    var n = 1;
+    var id = 'tegel';
+    while (reserved.contains(id)) {
+      n++;
+      id = 'tegel-$n';
+    }
+    list.add(<String, dynamic>{
+      'id': id,
+      'name': 'Nieuwe tegel',
+      'icon': 'grid',
+      'deviceIds': <dynamic>[],
+    });
+    setState(() {});
+  }
+
+  void _deleteHouseSystemTile(int index) {
+    final list = _houseSystemsList();
+    if (index < 0 || index >= list.length) return;
+    final id = list[index]['id'] as String? ?? '';
+    list.removeAt(index);
+    if (id.isNotEmpty) {
+      for (final d in _globalDeviceList()) {
+        if (d['systemId'] == id) d.remove('systemId');
+      }
+    }
+    setState(() {});
+  }
+
+  List<dynamic> _tileDeviceIds(Map<String, dynamic> tile) {
+    final raw = tile['deviceIds'];
+    if (raw is List) return raw;
+    final list = <dynamic>[];
+    tile['deviceIds'] = list;
+    return list;
+  }
+
+  List<({String id, String name, String type, String where})>
+      _catalogAllDevices() {
+    final out = <({String id, String name, String type, String where})>[];
+    void add(Map<String, dynamic> d, String where) {
+      final id = (d['id'] as String?)?.trim() ?? '';
+      if (id.isEmpty) return;
+      out.add((
+        id: id,
+        name: _namedOr(d, 'Apparaat'),
+        type: d['type'] as String? ?? '',
+        where: where,
+      ));
+    }
+
+    final floors = _floors();
+    for (var fi = 0; fi < floors.length; fi++) {
+      final fn = _namedOr(floors[fi], 'Verdieping');
+      final rooms = _roomList(fi);
+      for (var ri = 0; ri < rooms.length; ri++) {
+        final rn = _namedOr(rooms[ri], 'Kamer');
+        for (final d in _deviceList(fi, ri)) {
+          add(d, '$fn · $rn');
+        }
+      }
+    }
+    for (final d in _globalDeviceList()) {
+      add(d, 'Algemeen');
+    }
+    for (final d in _cameras()) {
+      add(d, "Camera's");
+    }
+    for (final d in _intercoms()) {
+      add(d, 'Intercom');
+    }
+    return out;
+  }
+
+  ({String id, String name, String type, String where})? _catalogDevice(
+      String id) {
+    for (final d in _catalogAllDevices()) {
+      if (d.id == id) return d;
+    }
+    return null;
+  }
+
+  Future<void> _pickDeviceForSystemTile(int tileIndex) async {
+    if (!mounted) return;
+    final tile = _houseSystemsList()[tileIndex];
+    final taken = {
+      for (final e in _tileDeviceIds(tile)) e.toString(),
+    };
+    final choices = [
+      for (final d in _catalogAllDevices())
+        if (!taken.contains(d.id)) d,
+    ];
+    if (choices.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Geen apparaten meer om toe te voegen')),
+      );
+      return;
+    }
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final bottom = MediaQuery.paddingOf(ctx).bottom;
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                child: Text(
+                  'Apparaat op tegel',
+                  style: theme.textTheme.titleMedium,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  'Blijft ook in de kamer of onder Algemeen staan.',
+                  style: theme.textTheme.bodySmall,
+                ),
+              ),
+              for (final d in choices)
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                  title: Text(d.name),
+                  subtitle: Text(
+                    [
+                      _deviceTypeLabels[d.type] ?? d.type,
+                      d.where,
+                    ].where((s) => s.isNotEmpty).join(' · '),
+                  ),
+                  onTap: () => Navigator.pop(ctx, d.id),
+                ),
+              SizedBox(height: 8 + bottom),
+            ],
+          ),
+        );
+      },
+    );
+    if (picked == null || !mounted) return;
+    final ids = _tileDeviceIds(_houseSystemsList()[tileIndex]);
+    if (!ids.contains(picked)) ids.add(picked);
+    setState(() {});
   }
 
   void _addGlobalDevice(DeviceTypePick pick) {
@@ -2053,7 +2222,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         _FocusKind.user => 'Gebruiker',
         _FocusKind.logs => 'Logs',
         _FocusKind.satel => 'Satel alarm',
-        _FocusKind.floors => 'Gebouwstructuur',
+        _FocusKind.floors => 'Kamers',
         _FocusKind.floor => 'Verdieping',
         _FocusKind.room => 'Kamer',
         _FocusKind.device => 'Apparaat',
@@ -2322,7 +2491,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               div(),
               LuxeNavRow(
                 icon: Icons.layers_outlined,
-                title: 'Gebouwstructuur',
+                title: 'Kamers',
                 selected: _isBuildingFocus,
                 onTap: () => _selectFocus(const _Focus.floors()),
               ),
@@ -2639,7 +2808,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   Widget _floorsPathCard() {
     final crumbs = <(String, VoidCallback, bool)>[
       (
-        'Gebouwstructuur',
+        'Kamers',
         () => _selectFocus(const _Focus.floors()),
         _sel.kind == _FocusKind.floors,
       ),
@@ -2710,11 +2879,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                 padding: EdgeInsets.fromLTRB(16, 12, 8, 4),
                 child: LuxeSectionTitle(
                   icon: Icons.layers_outlined,
-                  title: 'Gebouwstructuur',
+                  title: 'Kamers',
                   trailing: LuxeInfoIconButton(
-                    title: 'Gebouwstructuur',
+                    title: 'Kamers',
                     body:
-                        'Eerst een verdieping, daarna kamers, daarna apparaten in de kamer. '
+                        'Apparaten die bij een kamer horen: eerst een verdieping, '
+                        'daarna kamers, daarna de apparaten in die kamer. '
                         'Op de telefoon: tik door en gebruik terug om in één scherm te blijven.',
                   ),
                 ),
@@ -2751,11 +2921,148 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     );
   }
 
+  Widget _houseSystemsEditorCard(BuildContext context) {
+    final tiles = _houseSystemsList();
+    final iconKeys = kUniversalIconMap.keys.toList()..sort();
+    return LuxeListCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 12, 8, 4),
+            child: LuxeSectionTitle(
+              icon: Icons.dashboard_outlined,
+              title: 'Systeemtegels',
+              trailing: LuxeInfoIconButton(
+                title: 'Systeemtegels',
+                body:
+                    'Deze tegels komen onder Systemen op het startscherm. '
+                    'Voeg met + elk apparaat toe (ook universeel, ook uit een kamer). '
+                    'Het apparaat blijft op de oude plek staan.',
+              ),
+            ),
+          ),
+          if (tiles.isEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+              child: Text(
+                'Nog geen extra tegel. Vaste tegels (verlichting, ventilatie, …) '
+                'verschijnen vanzelf als er apparaten van dat type zijn.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+          for (var i = 0; i < tiles.length; i++) ...[
+            if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 4, 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 132,
+                    child: DropdownButtonFormField<String>(
+                      key: ValueKey('sys-icon-${tiles[i]['id']}'),
+                      initialValue: iconKeys.contains(tiles[i]['icon'])
+                          ? tiles[i]['icon'] as String
+                          : 'grid',
+                      isExpanded: true,
+                      decoration: luxeFilledDecoration(),
+                      items: [
+                        for (final key in iconKeys)
+                          DropdownMenuItem(
+                            value: key,
+                            child: Row(
+                              children: [
+                                Icon(universalIconData(key), size: 18),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(key, overflow: TextOverflow.ellipsis),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                      onChanged: (v) {
+                        if (v == null) return;
+                        tiles[i]['icon'] = v;
+                        setState(() {});
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _BoundStrField(
+                      'name',
+                      tiles[i],
+                      () => setState(() {}),
+                      key: ValueKey('sys-name-${tiles[i]['id']}'),
+                      labelOverride: 'Naam',
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Tegel verwijderen',
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => _deleteHouseSystemTile(i),
+                  ),
+                ],
+              ),
+            ),
+            for (final rawId in List<dynamic>.from(_tileDeviceIds(tiles[i])))
+              Builder(
+                builder: (context) {
+                  final id = rawId.toString();
+                  final info = _catalogDevice(id);
+                  final title = info?.name ?? id;
+                  final sub = info == null
+                      ? 'Apparaat ontbreekt'
+                      : [
+                          _deviceTypeLabels[info.type] ?? info.type,
+                          info.where,
+                        ].where((s) => s.isNotEmpty).join(' · ');
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 4, 0),
+                    child: ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.only(left: 8, right: 0),
+                      title: Text(title),
+                      subtitle: Text(sub),
+                      trailing: IconButton(
+                        tooltip: 'Van tegel halen',
+                        icon: const Icon(Icons.close, size: 18),
+                        onPressed: () {
+                          _tileDeviceIds(tiles[i]).remove(rawId);
+                          setState(() {});
+                        },
+                      ),
+                    ),
+                  );
+                },
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+              child: LuxeAddRow(
+                label: 'Apparaat toevoegen',
+                onTap: () => _pickDeviceForSystemTile(i),
+              ),
+            ),
+          ],
+          if (tiles.isNotEmpty)
+            Divider(height: 1, color: LuxeColors.lineSoft),
+          LuxeAddRow(
+            label: 'Tegel toevoegen',
+            onTap: _addHouseSystemTile,
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _globalDevicesInstallerPanel(BuildContext context) {
     final list = _globalDeviceList();
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
       children: [
+        _houseSystemsEditorCard(context),
         LuxeListCard(
           padding: EdgeInsets.zero,
           child: Column(
@@ -2768,9 +3075,8 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   trailing: LuxeInfoIconButton(
                     title: 'Algemeen',
                     body:
-                        'Apparaten die bij het hele huis horen, niet bij één kamer.\n\n'
-                        '• WTW / MV — warmteterugwinning of mechanische ventilatie\n'
-                        '• Meldingen — alarm- en statusmonitor voor KNX-contacten',
+                        'Apparaten die bij het hele huis horen, niet bij één kamer. '
+                        'Kies per apparaat op welke systeemtegel het komt.',
                   ),
                 ),
               ),
@@ -2787,7 +3093,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                 LuxeNavRow(
                   icon: Icons.devices_other_outlined,
                   title: _namedOr(list[i], 'Apparaat'),
-                  subtitle: _deviceRowSubtitle(list[i]),
+                  subtitle: _globalDeviceSubtitle(list[i]),
                   selected:
                       _sel.kind == _FocusKind.globalDevice && _sel.di == i,
                   onTap: () => _selectFocus(_Focus.globalDevice(i)),
@@ -2808,6 +3114,22 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         ),
       ],
     );
+  }
+
+  String _globalDeviceSubtitle(Map<String, dynamic> d) {
+    final type = _deviceRowSubtitle(d);
+    final sid = (d['systemId'] as String?)?.trim();
+    if (sid == null || sid.isEmpty) return type;
+    for (final s in kHouseSystems) {
+      if (s.slug == sid) return '$type · ${s.name}';
+    }
+    for (final t in _houseSystemsList()) {
+      if (t['id'] == sid) {
+        final n = (t['name'] as String?)?.trim();
+        return '$type · ${n == null || n.isEmpty ? sid : n}';
+      }
+    }
+    return type;
   }
 
   Widget _roomDevicesCard(int fi, int ri) {
@@ -3163,6 +3485,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             }
             return ref.read(installerAuthProvider).token;
           },
+          showSystemTile: true,
         );
     }
   }
@@ -5446,6 +5769,77 @@ class _DeviceBusControlSection extends StatelessWidget {
   }
 }
 
+class _DeviceSystemTilePicker extends StatelessWidget {
+  const _DeviceSystemTilePicker({
+    required this.device,
+    required this.house,
+    required this.onChanged,
+  });
+
+  final Map<String, dynamic> device;
+  final Map<String, dynamic> house;
+  final VoidCallback onChanged;
+
+  static const _auto = '__auto__';
+
+  @override
+  Widget build(BuildContext context) {
+    final choices = <(String, String)>[
+      for (final s in kHouseSystems) (s.slug, s.name),
+    ];
+    final custom = house['houseSystems'];
+    if (custom is List) {
+      for (final e in custom) {
+        if (e is! Map) continue;
+        final id = (e['id'] as String?)?.trim() ?? '';
+        if (id.isEmpty) continue;
+        final name = (e['name'] as String?)?.trim();
+        choices.add((id, (name == null || name.isEmpty) ? id : name));
+      }
+    }
+    final current = (device['systemId'] as String?)?.trim() ?? '';
+    final value = current.isEmpty
+        ? _auto
+        : (choices.any((c) => c.$1 == current) ? current : _auto);
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const LuxeFieldLabel('Systeemtegel'),
+          DropdownButtonFormField<String>(
+            key: ValueKey('dev-sys-${device['id']}'),
+            initialValue: value,
+            isExpanded: true,
+            decoration: luxeFilledDecoration(
+              helper:
+                  'Op het startscherm onder Systemen. '
+                  'Universeel en extra tegels: kies hier een tegel.',
+            ),
+            items: [
+              const DropdownMenuItem(
+                value: _auto,
+                child: Text('Automatisch (op type)'),
+              ),
+              for (final c in choices)
+                DropdownMenuItem(value: c.$1, child: Text(c.$2)),
+            ],
+            onChanged: (v) {
+              if (v == null || v == _auto) {
+                device.remove('systemId');
+              } else {
+                device['systemId'] = v;
+              }
+              onChanged();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DeviceForm extends StatelessWidget {
   const _DeviceForm({
     required this.device,
@@ -5456,6 +5850,7 @@ class _DeviceForm extends StatelessWidget {
     this.onPaste,
     this.getInstallerToken,
     this.leading = const [],
+    this.showSystemTile = false,
   });
   final Map<String, dynamic> device;
   final Map<String, dynamic> house;
@@ -5465,6 +5860,7 @@ class _DeviceForm extends StatelessWidget {
   final VoidCallback? onPaste;
   final Future<String?> Function()? getInstallerToken;
   final List<Widget> leading;
+  final bool showSystemTile;
 
   @override
   Widget build(BuildContext context) {
@@ -5540,6 +5936,11 @@ class _DeviceForm extends StatelessWidget {
                   device['favorite'] = v;
                   onChanged();
                 },
+              ),
+              if (showSystemTile) _DeviceSystemTilePicker(
+                device: device,
+                house: house,
+                onChanged: onChanged,
               ),
             ],
           ),

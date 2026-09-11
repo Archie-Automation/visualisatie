@@ -2,6 +2,7 @@ import 'fireplace_status.dart';
 import 'fireplace_virtual.dart';
 import 'media_api.dart';
 import 'models.dart';
+import 'system_category.dart';
 
 bool deviceLightIsOn(Device d, Map<String, dynamic> busValues) {
   switch (d.type) {
@@ -106,9 +107,9 @@ bool isHouseActivityDeviceOn({
       return deviceMediaIsPlaying(device, mediaStates);
     case 'klimaat':
       return deviceAcIsOn(device, busValues);
-    case 'diverse':
-      return deviceHeaterIsActive(device, busValues);
     default:
-      return false;
+      // Extra tegels: heater/universeel telt als aan (header-status).
+      if (kHouseSystems.any((s) => s.slug == systemSlug)) return false;
+      return deviceHeaterIsActive(device, busValues);
   }
 }

@@ -1657,7 +1657,7 @@ Future<List<Device>?> pickDevicesForScene(
                               }),
                             ),
                         _RoomSection(
-                          title: 'Diverse',
+                          title: 'Algemeen',
                           devices: config.globalDevices.where((d) {
                             if (excludeIds.contains(d.id)) return false;
                             return d.defaultSceneEntry() != null;

@@ -122,6 +122,8 @@ export interface DeviceBase {
   id: string;
   name: string;
   favorite?: boolean;
+  /** Vaste of extra systeemtegel op het startscherm. */
+  systemId?: string;
   /** Ask the user to confirm potentially disruptive commands. */
   confirm?: DeviceConfirm;
 }
@@ -1458,6 +1460,14 @@ export interface HouseConfig {
   };
   /** Lutron Homeworks telnet + optionele knop→KNX mappings. */
   lutron?: HouseLutronConfig;
+  /** Extra dashboard-tegels onder Systemen (naam + icoon). */
+  houseSystems?: Array<{
+    id: string;
+    name: string;
+    icon?: string;
+    /** Extra devices on this tile (any type, including room-bound universal). */
+    deviceIds?: string[];
+  }>;
   floors: Floor[];
   /**
    * KNX / Lutron devices that are NOT placed in a specific room.

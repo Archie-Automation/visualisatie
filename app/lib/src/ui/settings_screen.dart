@@ -335,7 +335,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         locked
                             ? 'Alleen voor de installer — tik voor uitleg. '
                                 'Super user beheert gebruikers via Gebruikers hierboven.'
-                            : 'Gebouwstructuur, kamers, KNX, camera’s, IP, streams. '
+                            : 'Kamers, KNX, camera’s, IP, streams. '
                                 'Ook: gereedschap-icoon op het dashboard. '
                                 'Herstart backend/app: open dit scherm en kies links Project.',
                         style: Theme.of(ctx).textTheme.bodyMedium?.copyWith(
