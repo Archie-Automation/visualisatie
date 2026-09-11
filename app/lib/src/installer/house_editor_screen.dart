@@ -51,6 +51,7 @@ import '../ui/widgets/confirm_dialog.dart';
 import '../ui/widgets/function_screen_header.dart';
 import '../ui/widgets/luxe_backdrop.dart';
 import '../ui/widgets/luxe_form.dart';
+import '../ui/widgets/heater_icon.dart';
 import 'installer_api.dart';
 import 'installer_auth.dart';
 import 'installer_form_sections.dart';
@@ -2966,6 +2967,24 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     );
   }
 
+  Widget _systemTileIconRow(String key, {bool expanded = false}) {
+    final icon = universalIconData(key);
+    final glyph = iconWidgetForData(
+          icon,
+          size: 18,
+          color: LuxeColors.ink,
+        ) ??
+        Icon(icon, size: 18, color: LuxeColors.ink);
+    final label = Text(key, overflow: TextOverflow.ellipsis);
+    return Row(
+      children: [
+        glyph,
+        const SizedBox(width: 8),
+        if (expanded) Expanded(child: label) else Flexible(child: label),
+      ],
+    );
+  }
+
   Widget _houseSystemsEditorCard(BuildContext context) {
     final tiles = _houseSystemsList();
     final iconKeys = kUniversalIconMap.keys.toList()..sort();
@@ -2999,12 +3018,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           for (var i = 0; i < tiles.length; i++) ...[
             if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
             Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 4, 4),
+              padding: const EdgeInsets.fromLTRB(12, 8, 8, 0),
               child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    width: 132,
+                  Expanded(
                     child: DropdownButtonFormField<String>(
                       key: ValueKey('sys-icon-${tiles[i]['id']}'),
                       initialValue: iconKeys.contains(tiles[i]['icon'])
@@ -3012,19 +3029,15 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                           : 'grid',
                       isExpanded: true,
                       decoration: luxeFilledDecoration(),
+                      selectedItemBuilder: (context) => [
+                        for (final key in iconKeys)
+                          _systemTileIconRow(key, expanded: true),
+                      ],
                       items: [
                         for (final key in iconKeys)
                           DropdownMenuItem(
                             value: key,
-                            child: Row(
-                              children: [
-                                Icon(universalIconData(key), size: 18),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: Text(key, overflow: TextOverflow.ellipsis),
-                                ),
-                              ],
-                            ),
+                            child: _systemTileIconRow(key),
                           ),
                       ],
                       onChanged: (v) {
@@ -3034,22 +3047,22 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                       },
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _BoundStrField(
-                      'name',
-                      tiles[i],
-                      () => setState(() {}),
-                      key: ValueKey('sys-name-${tiles[i]['id']}'),
-                      labelOverride: 'Naam',
-                    ),
-                  ),
                   IconButton(
                     tooltip: 'Tegel verwijderen',
                     icon: const Icon(Icons.delete_outline),
                     onPressed: () => _deleteHouseSystemTile(i),
                   ),
                 ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 8, 0),
+              child: _BoundStrField(
+                'name',
+                tiles[i],
+                () => setState(() {}),
+                key: ValueKey('sys-name-${tiles[i]['id']}'),
+                labelOverride: 'Naam',
               ),
             ),
             for (final rawId in List<dynamic>.from(_tileDeviceIds(tiles[i])))

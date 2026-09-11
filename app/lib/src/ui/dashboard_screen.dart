@@ -1192,7 +1192,7 @@ class _Systemen extends ConsumerWidget {
         allOrderedChips.where((c) => !sysHidden.contains(c.name)).toList();
 
     const double vPad = 10;
-    const double chipH = 118;
+    const double chipH = 124;
 
     return Padding(
       // Bottom gap (chip vPad + this) matches the gap between the scene
@@ -1373,20 +1373,30 @@ class _SystemManageSheetState extends ConsumerState<_SystemManageSheet> {
                     ),
                     title: Row(
                       children: [
-                        Icon(chip.icon,
-                            size: 18,
-                            color: visible
-                                ? (chip.accent ?? LuxeColors.brass)
-                                : LuxeColors.inkSoft.withValues(alpha: 0.4)),
+                        iconWidgetForData(
+                              chip.icon,
+                              size: 18,
+                              color: visible
+                                  ? (chip.accent ?? LuxeColors.brass)
+                                  : LuxeColors.inkSoft.withValues(alpha: 0.4),
+                            ) ??
+                            Icon(chip.icon,
+                                size: 18,
+                                color: visible
+                                    ? (chip.accent ?? LuxeColors.brass)
+                                    : LuxeColors.inkSoft.withValues(alpha: 0.4)),
                         SizedBox(width: 10),
-                        Text(
-                          chip.name,
-                          style: TextStyle(
-                            fontWeight: FontWeight.w500,
-                            color: visible
-                                ? LuxeColors.ink
-                                : LuxeColors.inkSoft
-                                    .withValues(alpha: 0.45),
+                        Expanded(
+                          child: Text(
+                            chip.name,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w500,
+                              color: visible
+                                  ? LuxeColors.ink
+                                  : LuxeColors.inkSoft
+                                      .withValues(alpha: 0.45),
+                            ),
                           ),
                         ),
                       ],
@@ -1653,7 +1663,12 @@ class _SystemChipState extends ConsumerState<_SystemChip>
     final iconRadius = context.chipIconRadius;
 
     // The icon for the alarm chip needs animated transforms.
-    Widget iconWidget = Icon(widget.data.icon, size: iconSize, color: accent);
+    Widget iconWidget = iconWidgetForData(
+          widget.data.icon,
+          size: iconSize,
+          color: accent,
+        ) ??
+        Icon(widget.data.icon, size: iconSize, color: accent);
     if (isAlarm) {
       if (alarmState == SatelPartitionState.armed) {
         // Slow continuous y-axis flip (simulate rotating on its axis).
@@ -1706,12 +1721,13 @@ class _SystemChipState extends ConsumerState<_SystemChip>
                 : (_pressed || hasAlert ? 1.3 : 1.0);
             return LuxeRimBox(
               width: 118,
+              height: 124,
               radius: 22,
               rimWidth: blinkWidth,
               rimColor: blinkBorder,
               fillColor: fillColor,
               shadows: LuxeShadows.chip(context),
-              padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               child: child!,
             );
           },
@@ -1754,44 +1770,39 @@ class _SystemChipState extends ConsumerState<_SystemChip>
                     ),
                 ],
               ),
-              SizedBox(
-                width: 118 - 24,
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      FittedBox(
-                        fit: BoxFit.scaleDown,
-                        alignment: Alignment.bottomLeft,
-                        child: Text(
-                          widget.data.name.toUpperCase(),
-                          maxLines: 1,
-                          softWrap: false,
-                          style: TextStyle(
-                            color: (hasAlert || (isAlarm && alarmIsActive)) ? accent : LuxeColors.ink,
-                            fontSize: 11,
-                            height: 1.35,
-                            letterSpacing: 0.7,
-                            fontWeight: (hasAlert || (isAlarm && alarmIsActive))
-                                ? FontWeight.w700
-                                : FontWeight.w600,
-                          ),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 2),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      widget.data.name.toUpperCase(),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: (hasAlert || (isAlarm && alarmIsActive))
+                            ? accent
+                            : LuxeColors.ink,
+                        fontSize: 11,
+                        height: 1.35,
+                        letterSpacing: 0.7,
+                        fontWeight: (hasAlert || (isAlarm && alarmIsActive))
+                            ? FontWeight.w700
+                            : FontWeight.w600,
+                      ),
+                    ),
+                    if (isAlarm && alarmLabel != null)
+                      Text(
+                        alarmLabel,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: alarmAccent,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.3,
                         ),
                       ),
-                      if (isAlarm && alarmLabel != null)
-                        Text(
-                          alarmLabel,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: alarmAccent,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.3,
-                          ),
-                        ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
             ],
