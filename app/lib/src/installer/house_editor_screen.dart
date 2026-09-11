@@ -875,6 +875,119 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     _selectFocus(_Focus.room(fi, rooms.length - 1));
   }
 
+  Widget _rowTrash({
+    required String tooltip,
+    required VoidCallback onPressed,
+  }) {
+    return IconButton(
+      tooltip: tooltip,
+      icon: const Icon(Icons.delete_outline),
+      onPressed: onPressed,
+    );
+  }
+
+  void _deleteFloorAt(int fi) {
+    final kind = _sel.kind;
+    final selFi = _sel.fi;
+    final ri = _sel.ri;
+    final di = _sel.di;
+    _floors().removeAt(fi);
+    setState(() {
+      if (selFi == fi &&
+          (kind == _FocusKind.floor ||
+              kind == _FocusKind.room ||
+              kind == _FocusKind.device)) {
+        _sel = const _Focus.floors();
+      } else if (selFi > fi) {
+        final n = selFi - 1;
+        _sel = switch (kind) {
+          _FocusKind.floor => _Focus.floor(n),
+          _FocusKind.room => _Focus.room(n, ri),
+          _FocusKind.device => _Focus.device(n, ri, di),
+          _ => _sel,
+        };
+      }
+    });
+  }
+
+  void _deleteRoomAt(int fi, int ri) {
+    final kind = _sel.kind;
+    final selFi = _sel.fi;
+    final selRi = _sel.ri;
+    final di = _sel.di;
+    _roomList(fi).removeAt(ri);
+    setState(() {
+      if (selFi != fi) return;
+      if (selRi == ri &&
+          (kind == _FocusKind.room || kind == _FocusKind.device)) {
+        _sel = _Focus.floor(fi);
+      } else if (selRi > ri) {
+        final n = selRi - 1;
+        _sel = switch (kind) {
+          _FocusKind.room => _Focus.room(fi, n),
+          _FocusKind.device => _Focus.device(fi, n, di),
+          _ => _sel,
+        };
+      }
+    });
+  }
+
+  void _deleteDeviceAt(int fi, int ri, int di) {
+    final kind = _sel.kind;
+    final selFi = _sel.fi;
+    final selRi = _sel.ri;
+    final selDi = _sel.di;
+    _deviceList(fi, ri).removeAt(di);
+    setState(() {
+      if (kind != _FocusKind.device || selFi != fi || selRi != ri) return;
+      if (selDi == di) {
+        _sel = _Focus.room(fi, ri);
+      } else if (selDi > di) {
+        _sel = _Focus.device(fi, ri, selDi - 1);
+      }
+    });
+  }
+
+  void _deleteCameraAt(int i) {
+    _cameras().removeAt(i);
+    setState(() {
+      if (_sel.kind != _FocusKind.cameraDetail) return;
+      final ci = _sel.ci;
+      if (ci == null) return;
+      if (ci == i) {
+        _sel = const _Focus.cameras();
+      } else if (ci > i) {
+        _sel = _Focus.cameraDetail(ci - 1);
+      }
+    });
+  }
+
+  void _deleteIntercomAt(int i) {
+    _intercoms().removeAt(i);
+    setState(() {
+      if (_sel.kind != _FocusKind.intercomDetail) return;
+      final ci = _sel.ci;
+      if (ci == null) return;
+      if (ci == i) {
+        _sel = const _Focus.intercoms();
+      } else if (ci > i) {
+        _sel = _Focus.intercomDetail(ci - 1);
+      }
+    });
+  }
+
+  void _deleteGlobalDeviceAt(int i) {
+    _globalDeviceList().removeAt(i);
+    setState(() {
+      if (_sel.kind != _FocusKind.globalDevice) return;
+      if (_sel.di == i) {
+        _sel = const _Focus.globalDevices();
+      } else if (_sel.di > i) {
+        _sel = _Focus.globalDevice(_sel.di - 1);
+      }
+    });
+  }
+
   String? _currentToken() {
     if (widget.useCustomerSession) {
       final auth = ref.read(authProvider);
@@ -1565,6 +1678,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                       '',
                   subtitle: _cameraListSubtitle(list[i]),
                   selected: _sel.kind == _FocusKind.cameraDetail && _sel.ci == i,
+                  trailing: _rowTrash(
+                    tooltip: 'Camera verwijderen',
+                    onPressed: () => _deleteCameraAt(i),
+                  ),
                   onTap: () => _selectFocus(_Focus.cameraDetail(i)),
                 ),
               ],
@@ -1702,6 +1819,14 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                       rows[i].dev['id'] as String? ??
                       '',
                   subtitle: rows[i].location,
+                  trailing: _rowTrash(
+                    tooltip: 'Apparaat verwijderen',
+                    onPressed: () => _deleteDeviceAt(
+                      rows[i].fi,
+                      rows[i].ri,
+                      rows[i].di,
+                    ),
+                  ),
                   onTap: () => setState(
                     () => _sel = _Focus.device(rows[i].fi, rows[i].ri, rows[i].di),
                   ),
@@ -1795,6 +1920,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   }(),
                   selected:
                       _sel.kind == _FocusKind.intercomDetail && _sel.ci == i,
+                  trailing: _rowTrash(
+                    tooltip: 'Intercom verwijderen',
+                    onPressed: () => _deleteIntercomAt(i),
+                  ),
                   onTap: () => _selectFocus(_Focus.intercomDetail(i)),
                 ),
               ],
@@ -2676,7 +2805,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                 (_sel.kind == _FocusKind.floor ||
                     _sel.kind == _FocusKind.room ||
                     _sel.kind == _FocusKind.device),
-            trailing: const SizedBox.shrink(),
+            trailing: _rowTrash(
+              tooltip: 'Verdieping verwijderen',
+              onPressed: () => _deleteFloorAt(i),
+            ),
             rounded: true,
             onTap: () => _selectFocus(_Focus.floor(i)),
           ),
@@ -2719,7 +2851,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             selected: _sel.ri == ri &&
                 (_sel.kind == _FocusKind.room ||
                     _sel.kind == _FocusKind.device),
-            trailing: const SizedBox.shrink(),
+            trailing: _rowTrash(
+              tooltip: 'Kamer verwijderen',
+              onPressed: () => _deleteRoomAt(fi, ri),
+            ),
             rounded: true,
             onTap: () => _selectFocus(_Focus.room(fi, ri)),
           ),
@@ -2767,7 +2902,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             subtitle: _deviceRowSubtitle(devices[di]),
             selected:
                 _sel.kind == _FocusKind.device && _sel.di == di,
-            trailing: const SizedBox.shrink(),
+            trailing: _rowTrash(
+              tooltip: 'Apparaat verwijderen',
+              onPressed: () => _deleteDeviceAt(fi, ri, di),
+            ),
             rounded: true,
             onTap: () => _selectFocus(_Focus.device(fi, ri, di)),
           ),
@@ -2790,7 +2928,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           padding: const EdgeInsets.only(bottom: 36),
           children: [
             _floorNameCard(),
-            _floorDeleteButton(),
           ],
         );
       case _FocusKind.room:
@@ -2798,7 +2935,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           padding: const EdgeInsets.only(bottom: 36),
           children: [
             _roomFieldsCard(),
-            _roomDeleteButton(),
           ],
         );
       case _FocusKind.device:
@@ -2812,10 +2948,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             afterIndex: _sel.di,
             onPasted: (i) => _selectFocus(_Focus.device(_sel.fi, _sel.ri, i)),
           ),
-          onDelete: () {
-            _deviceList(_sel.fi, _sel.ri).removeAt(_sel.di);
-            setState(() => _sel = _Focus.room(_sel.fi, _sel.ri));
-          },
           getInstallerToken: () async {
             if (widget.useCustomerSession) {
               return ref.read(authProvider).token;
@@ -2939,6 +3071,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   subtitle:
                       _countLabel(_roomList(i).length, 'kamer', 'kamers'),
                   selected: _sel.kind == _FocusKind.floor && _sel.fi == i,
+                  trailing: _rowTrash(
+                    tooltip: 'Verdieping verwijderen',
+                    onPressed: () => _deleteFloorAt(i),
+                  ),
                   onTap: () => _selectFocus(_Focus.floor(i)),
                 ),
               ],
@@ -3150,6 +3286,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   subtitle: _globalDeviceSubtitle(list[i]),
                   selected:
                       _sel.kind == _FocusKind.globalDevice && _sel.di == i,
+                  trailing: _rowTrash(
+                    tooltip: 'Apparaat verwijderen',
+                    onPressed: () => _deleteGlobalDeviceAt(i),
+                  ),
                   onTap: () => _selectFocus(_Focus.globalDevice(i)),
                 ),
               ],
@@ -3225,6 +3365,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   _sel.fi == fi &&
                   _sel.ri == ri &&
                   _sel.di == di,
+              trailing: _rowTrash(
+                tooltip: 'Apparaat verwijderen',
+                onPressed: () => _deleteDeviceAt(fi, ri, di),
+              ),
               onTap: () => _selectFocus(_Focus.device(fi, ri, di)),
             ),
           ],
@@ -3264,25 +3408,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     );
   }
 
-  Widget _floorDeleteButton() {
-    final fi = _sel.fi;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 8, 22, 0),
-      child: OutlinedButton(
-        onPressed: () {
-          _floors().removeAt(fi);
-          setState(() => _sel = const _Focus.floors());
-        },
-        style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.red,
-          minimumSize: const Size.fromHeight(52),
-          shape: const StadiumBorder(),
-        ),
-        child: const Text('Verdieping verwijderen'),
-      ),
-    );
-  }
-
   Widget _roomFieldsCard() {
     final room = _roomList(_sel.fi)[_sel.ri];
     return LuxeListCard(
@@ -3300,26 +3425,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           _BoundStrField('name', room, () => setState(() {}),
               labelOverride: 'Naam'),
         ],
-      ),
-    );
-  }
-
-  Widget _roomDeleteButton() {
-    final fi = _sel.fi;
-    final ri = _sel.ri;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 8, 22, 0),
-      child: OutlinedButton(
-        onPressed: () {
-          _roomList(fi).removeAt(ri);
-          setState(() => _sel = _Focus.floor(fi));
-        },
-        style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.red,
-          minimumSize: const Size.fromHeight(52),
-          shape: const StadiumBorder(),
-        ),
-        child: const Text('Kamer verwijderen'),
       ),
     );
   }
@@ -3360,6 +3465,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                       _deviceList(fi, ri).length, 'apparaat', 'apparaten'),
                   selected:
                       _sel.kind == _FocusKind.room && _sel.fi == fi && _sel.ri == ri,
+                  trailing: _rowTrash(
+                    tooltip: 'Kamer verwijderen',
+                    onPressed: () => _deleteRoomAt(fi, ri),
+                  ),
                   onTap: () => _selectFocus(_Focus.room(fi, ri)),
                 ),
               ],
@@ -3372,7 +3481,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             ],
           ),
         ),
-        _floorDeleteButton(),
       ],
     );
   }
@@ -3386,7 +3494,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         _floorsPathCard(),
         _roomFieldsCard(),
         _roomDevicesCard(fi, ri),
-        _roomDeleteButton(),
       ],
     );
   }
@@ -3436,10 +3543,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             afterIndex: _sel.ci,
             onPasted: (i) => _selectFocus(_Focus.cameraDetail(i)),
           ),
-          onDelete: () {
-            _cameras().removeAt(_sel.ci!);
-            setState(() => _sel = const _Focus.cameras());
-          },
           getInstallerToken: () async {
             if (widget.useCustomerSession) {
               return ref.read(authProvider).token;
@@ -3462,10 +3565,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             afterIndex: _sel.ci,
             onPasted: (i) => _selectFocus(_Focus.intercomDetail(i)),
           ),
-          onDelete: () {
-            _intercoms().removeAt(_sel.ci!);
-            setState(() => _sel = const _Focus.intercoms());
-          },
           getInstallerToken: () async {
             if (widget.useCustomerSession) {
               return ref.read(authProvider).token;
@@ -3506,10 +3605,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             afterIndex: _sel.di,
             onPasted: (i) => _selectFocus(_Focus.device(_sel.fi, _sel.ri, i)),
           ),
-          onDelete: () {
-            _deviceList(_sel.fi, _sel.ri).removeAt(_sel.di);
-            setState(() => _sel = _Focus.room(_sel.fi, _sel.ri));
-          },
           getInstallerToken: () async {
             if (widget.useCustomerSession) {
               return ref.read(authProvider).token;
@@ -3531,10 +3626,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             afterIndex: _sel.di,
             onPasted: (i) => _selectFocus(_Focus.globalDevice(i)),
           ),
-          onDelete: () {
-            _globalDeviceList().removeAt(_sel.di);
-            setState(() => _sel = const _Focus.globalDevices());
-          },
           getInstallerToken: () async {
             if (widget.useCustomerSession) {
               return ref.read(authProvider).token;
@@ -5901,7 +5992,6 @@ class _DeviceForm extends StatelessWidget {
     required this.device,
     required this.house,
     required this.onChanged,
-    required this.onDelete,
     this.onCopy,
     this.onPaste,
     this.getInstallerToken,
@@ -5911,7 +6001,6 @@ class _DeviceForm extends StatelessWidget {
   final Map<String, dynamic> device;
   final Map<String, dynamic> house;
   final VoidCallback onChanged;
-  final VoidCallback onDelete;
   final VoidCallback? onCopy;
   final VoidCallback? onPaste;
   final Future<String?> Function()? getInstallerToken;
@@ -6194,15 +6283,6 @@ class _DeviceForm extends StatelessWidget {
             ),
           ),
         ],
-        Padding(
-          padding: const EdgeInsets.fromLTRB(22, 12, 22, 0),
-          child: OutlinedButton.icon(
-            onPressed: onDelete,
-            icon: const Icon(Icons.delete_outline),
-            label: const Text('Apparaat verwijderen'),
-            style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-          ),
-        ),
       ],
     );
   }
