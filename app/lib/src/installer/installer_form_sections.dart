@@ -81,6 +81,7 @@ class KnxTelegramEditor extends StatelessWidget {
     required this.onChanged,
     this.showPulseMs = false,
     this.roleLabels,
+    this.compact = false,
   });
 
   final String title;
@@ -90,6 +91,8 @@ class KnxTelegramEditor extends StatelessWidget {
   final bool showPulseMs;
   /// Optioneel: rol → weergavenaam (bijv. DPT-omschrijving).
   final Map<String, String>? roleLabels;
+  /// Eén rij: groepadres · DPT · waarde.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -98,40 +101,50 @@ class KnxTelegramEditor extends StatelessWidget {
       knx['role'] = roles.first;
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 8),
-        _InstallerStrField(
-          label: 'Groepadres (x/y/z)',
-          value: knx['ga'] as String? ?? '',
-          onChanged: (v) {
-            knx['ga'] = v;
-            onChanged();
-          },
-        ),
-        _InstallerDropdown(
-          label: roleLabels != null ? 'Datatype (DPT)' : 'KNX-rol',
-          value: knx['role'] as String? ?? roles.first,
-          options: roles,
-          optionLabels: roleLabels,
-          onChanged: (v) {
-            knx['role'] = v;
-            onChanged();
-          },
-        ),
-        if (_roleIsBool(role))
-          LuxeSwitchRow(
-            title: 'Waarde (aan)',
-            value: knx['value'] == true || knx['value'] == 1,
-            onChanged: (v) {
-              knx['value'] = v;
-              onChanged();
-            },
-          )
-        else
-          _InstallerStrField(
+    final gaField = _InstallerStrField(
+      compact: compact,
+      label: compact ? 'Groepadres' : 'Groepadres (x/y/z)',
+      value: knx['ga'] as String? ?? '',
+      onChanged: (v) {
+        knx['ga'] = v;
+        onChanged();
+      },
+    );
+    final roleField = _InstallerDropdown(
+      compact: compact,
+      label: compact
+          ? ''
+          : (roleLabels != null ? 'Datatype (DPT)' : 'KNX-rol'),
+      value: knx['role'] as String? ?? roles.first,
+      options: roles,
+      optionLabels: roleLabels,
+      onChanged: (v) {
+        knx['role'] = v;
+        onChanged();
+      },
+    );
+    final valueField = _roleIsBool(role)
+        ? (compact
+            ? Align(
+                alignment: Alignment.centerLeft,
+                child: LuxeOnOffSwitch(
+                  value: knx['value'] == true || knx['value'] == 1,
+                  onChanged: (v) {
+                    knx['value'] = v;
+                    onChanged();
+                  },
+                ),
+              )
+            : LuxeSwitchRow(
+                title: 'Waarde (aan)',
+                value: knx['value'] == true || knx['value'] == 1,
+                onChanged: (v) {
+                  knx['value'] = v;
+                  onChanged();
+                },
+              ))
+        : _InstallerStrField(
+            compact: compact,
             label: 'Waarde',
             value: '${knx['value'] ?? 0}',
             number: true,
@@ -140,10 +153,11 @@ class KnxTelegramEditor extends StatelessWidget {
               knx['value'] = n ?? 0;
               onChanged();
             },
-          ),
-        if (showPulseMs && _roleIsBool(role))
-          _InstallerStrField(
-            label: 'Pulsduur (ms, optioneel)',
+          );
+    final pulseField = showPulseMs && _roleIsBool(role)
+        ? _InstallerStrField(
+            compact: compact,
+            label: 'Pulsduur (ms)',
             value: knx['pulseMs'] == null ? '' : '${knx['pulseMs']}',
             number: true,
             onChanged: (v) {
@@ -154,7 +168,47 @@ class KnxTelegramEditor extends StatelessWidget {
               }
               onChanged();
             },
-          ),
+          )
+        : null;
+
+    if (compact) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (title.isNotEmpty) ...[
+              Text(title, style: Theme.of(context).textTheme.labelLarge),
+              const SizedBox(height: 6),
+            ],
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 3, child: gaField),
+                const SizedBox(width: 8),
+                Expanded(flex: 2, child: roleField),
+                const SizedBox(width: 8),
+                Expanded(child: valueField),
+              ],
+            ),
+            if (pulseField != null) ...[
+              const SizedBox(height: 8),
+              pulseField,
+            ],
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 8),
+        gaField,
+        roleField,
+        valueField,
+        if (pulseField != null) pulseField,
       ],
     );
   }
@@ -407,11 +461,18 @@ class _UniversalPanelInstallerSectionState
   }
 
   void _addButton(List<Map<String, dynamic>> buttons) {
+    final layout = universalPanelLayout(_ensureMap(widget.device, 'universal'));
+    final n = buttons.length + 1;
+    final action = {'ga': '1/1/1', 'role': 'bit', 'value': true};
     buttons.add({
       'id': 'btn-${_uuid.v4()}',
-      'label': 'Knop ${buttons.length + 1}',
+      'label': layout == 'switch' ? 'Schakelaar $n' : 'Knop $n',
       'style': 'neutral',
-      'action': {'ga': '1/1/1', 'role': 'bit', 'value': true},
+      'action': action,
+      if (layout == 'switch') ...{
+        'actionOff': {'ga': '1/1/1', 'role': 'bit', 'value': false},
+        'statusGa': '1/1/1',
+      },
     });
     _notify();
   }
@@ -440,26 +501,19 @@ class _UniversalPanelInstallerSectionState
           value: layout,
           options: const ['switch', 'buttons'],
           optionLabels: const {
-            'switch': 'Schakelaar (aan/uit, zoals een lamp)',
-            'buttons': 'Knoppenrij (max. 4, zoals zonwering/haard)',
+            'switch': 'Schakelaar',
+            'buttons': 'Knoppenrij (max. 4)',
           },
           onChanged: (v) {
             uni['layout'] = v;
             _notify();
           },
         ),
-        const SizedBox(height: 8),
-        Text(
-          layout == 'switch'
-              ? 'Eén knop rechtsboven als aan/uit. Extra knoppen worden genegeerd tot je knoppenrij kiest.'
-              : 'Tot vier vierkante knoppen naast elkaar op dezelfde tegel.',
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: LuxeColors.inkSoft,
-              ),
-        ),
         const SizedBox(height: 16),
         Text(
-          'Knoppen (${buttons.length}/$kUniversalMaxButtons)',
+          layout == 'switch'
+              ? 'Schakelaars (${buttons.length}/$kUniversalMaxButtons)'
+              : 'Knoppen (${buttons.length}/$kUniversalMaxButtons)',
           style: Theme.of(context).textTheme.titleSmall,
         ),
         const SizedBox(height: 4),
@@ -467,7 +521,7 @@ class _UniversalPanelInstallerSectionState
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Text(
-              'Nog geen knoppen.',
+              'Nog geen ${layout == 'switch' ? 'schakelaars' : 'knoppen'}.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
@@ -485,7 +539,9 @@ class _UniversalPanelInstallerSectionState
           ),
         if (canAdd)
           LuxeAddRow(
-            label: 'Knop toevoegen',
+            label: layout == 'switch'
+                ? 'Schakelaar toevoegen'
+                : 'Knop toevoegen',
             onTap: () => _addButton(buttons),
           ),
       ],
@@ -541,156 +597,193 @@ class _UniversalButtonCardState extends State<_UniversalButtonCard> {
     final b = widget.button;
     final action = _ensureMap(b, 'action');
     final isToggle = _mode == _UniversalButtonMode.toggle;
+    final captionStyle = Theme.of(context).textTheme.bodySmall;
+
+    Widget captioned(String caption, Widget child) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(caption, style: captionStyle),
+            ),
+            child,
+          ],
+        );
 
     return LuxeInsetCard(
       child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    b['label'] as String? ?? 'Knop',
-                    style: Theme.of(context).textTheme.titleSmall,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 2,
+                child: captioned(
+                  'Label',
+                  _InstallerStrField(
+                    key: ValueKey('ul-${b['id']}-label'),
+                    compact: true,
+                    label: 'Label',
+                    value: b['label'] as String? ?? '',
+                    onChanged: (v) {
+                      b['label'] = v;
+                      widget.onChanged();
+                    },
                   ),
                 ),
-                IconButton(
-                  tooltip: 'Knop verwijderen',
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  onPressed: widget.onDelete,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _IconPickerField(
+                  label: 'Icoon',
+                  compact: true,
+                  value: b['icon'] as String?,
+                  onChanged: (v) {
+                    if (v == null) {
+                      b.remove('icon');
+                    } else {
+                      b['icon'] = v;
+                    }
+                    widget.onChanged();
+                  },
                 ),
-              ],
-            ),
-            _InstallerStrField(
-              key: ValueKey('ul-${b['id']}-label'),
-              label: 'Label in de app',
-              value: b['label'] as String? ?? '',
-              onChanged: (v) {
-                b['label'] = v;
-                widget.onChanged();
-              },
-            ),
-            _IconPickerField(
-              label: 'Icoon (optioneel — vervangt de tekst als het label leeg is)',
-              value: b['icon'] as String?,
-              onChanged: (v) {
-                if (v == null) {
-                  b.remove('icon');
-                } else {
-                  b['icon'] = v;
-                }
-                widget.onChanged();
-              },
-            ),
-            _InstallerDropdown(
-              label: 'Stijl',
-              value: (b['style'] as String?) ?? 'neutral',
-              options: universalStyles,
-              optionLabels: const {
-                'primary': 'Primair (accent)',
-                'neutral': 'Neutraal',
-                'brass': 'Messing',
-                'danger': 'Waarschuwing',
-              },
-              onChanged: (v) {
-                b['style'] = v;
-                widget.onChanged();
-              },
-            ),
-            _InstallerDropdown(
-              label: 'Gedrag',
-              value: isToggle ? 'toggle' : 'single',
-              options: const ['single', 'toggle'],
-              optionLabels: const {
-                'single': 'Enkele actie (elke druk hetzelfde)',
-                'toggle': 'Schakelaar (toggle aan/uit)',
-              },
-              onChanged: (v) {
-                _setMode(
-                  v == 'toggle'
-                      ? _UniversalButtonMode.toggle
-                      : _UniversalButtonMode.single,
-                );
-              },
-            ),
-            const Divider(height: 24),
+              ),
+              IconButton(
+                tooltip: 'Verwijderen',
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                onPressed: widget.onDelete,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _InstallerDropdown(
+                  compact: true,
+                  label: 'Stijl',
+                  value: (b['style'] as String?) ?? 'neutral',
+                  options: universalStyles,
+                  optionLabels: const {
+                    'primary': 'Primair',
+                    'neutral': 'Neutraal',
+                    'brass': 'Messing',
+                    'danger': 'Waarschuwing',
+                  },
+                  onChanged: (v) {
+                    b['style'] = v;
+                    widget.onChanged();
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _InstallerDropdown(
+                  compact: true,
+                  label: 'Gedrag',
+                  value: isToggle ? 'toggle' : 'single',
+                  options: const ['single', 'toggle'],
+                  optionLabels: const {
+                    'single': 'Enkele actie',
+                    'toggle': 'Schakelaar',
+                  },
+                  onChanged: (v) {
+                    _setMode(
+                      v == 'toggle'
+                          ? _UniversalButtonMode.toggle
+                          : _UniversalButtonMode.single,
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          KnxTelegramEditor(
+            compact: true,
+            title: isToggle ? 'Aan' : 'KNX',
+            knx: action,
+            roles: universalKnxRoles,
+            roleLabels: universalRoleDptLabels,
+            onChanged: widget.onChanged,
+          ),
+          if (isToggle) ...[
             KnxTelegramEditor(
-              title: isToggle ? 'Actie — aan' : 'KNX bij drukken',
-              knx: action,
+              compact: true,
+              title: 'Uit',
+              knx: _ensureMap(b, 'actionOff'),
               roles: universalKnxRoles,
               roleLabels: universalRoleDptLabels,
               onChanged: widget.onChanged,
             ),
-            if (isToggle) ...[
-              const Divider(height: 24),
-              KnxTelegramEditor(
-                title: 'Actie — uit',
-                knx: _ensureMap(b, 'actionOff'),
-                roles: universalKnxRoles,
-                roleLabels: universalRoleDptLabels,
-                onChanged: widget.onChanged,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Status (aanbevolen bij toggle)',
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'De app leest dit groepsadres om te weten of de knop “aan” staat. '
-                'Zonder status-GA wisselt elke druk tussen aan- en uit-actie.',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-              const SizedBox(height: 8),
-              _InstallerStrField(
-                key: ValueKey('ul-${b['id']}-stga'),
-                label: 'Status groepsadres',
-                value: b['statusGa'] as String? ?? '',
-                onChanged: (v) {
-                  if (v.trim().isEmpty) {
-                    b.remove('statusGa');
-                  } else {
-                    b['statusGa'] = v;
-                  }
-                  widget.onChanged();
-                },
-              ),
-              if ((b['statusGa'] as String?)?.trim().isNotEmpty == true)
-                if (_roleIsBool(action['role'] as String? ?? 'bit'))
-                  LuxeSwitchRow(
-                    title: 'Status “aan” = bit 1',
-                    value:
-                        b['statusOnValue'] == true || b['statusOnValue'] == 1,
-                    onChanged: (v) {
-                      b['statusOnValue'] = v;
-                      widget.onChanged();
-                    },
-                  )
-                else
-                  _InstallerStrField(
-                    key: ValueKey('ul-${b['id']}-ston'),
-                    label: 'Waarde die “aan” betekent',
-                    value: '${b['statusOnValue'] ?? 1}',
-                    number: true,
-                    onChanged: (v) {
-                      final n = num.tryParse(v);
-                      b['statusOnValue'] = n ?? 1;
-                      widget.onChanged();
-                    },
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: captioned(
+                    'Status-GA',
+                    _InstallerStrField(
+                      key: ValueKey('ul-${b['id']}-stga'),
+                      compact: true,
+                      label: 'Status groepsadres',
+                      value: b['statusGa'] as String? ?? '',
+                      onChanged: (v) {
+                        if (v.trim().isEmpty) {
+                          b.remove('statusGa');
+                        } else {
+                          b['statusGa'] = v;
+                        }
+                        widget.onChanged();
+                      },
+                    ),
                   ),
-            ],
-
-            // -- Bevestigingsoptie --------------------------------------------
-            const Divider(height: 24),
-            _UniversalButtonConfirmSection(
-              button: b,
-              onChanged: () {
-                setState(() {});
-                widget.onChanged();
-              },
+                ),
+                if ((b['statusGa'] as String?)?.trim().isNotEmpty == true) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _roleIsBool(action['role'] as String? ?? 'bit')
+                        ? LuxeSwitchRow(
+                            title: 'Aan = bit 1',
+                            value: b['statusOnValue'] == true ||
+                                b['statusOnValue'] == 1,
+                            onChanged: (v) {
+                              b['statusOnValue'] = v;
+                              widget.onChanged();
+                            },
+                          )
+                        : captioned(
+                            'Aan-waarde',
+                            _InstallerStrField(
+                              key: ValueKey('ul-${b['id']}-ston'),
+                              compact: true,
+                              label: 'Waarde die “aan” betekent',
+                              value: '${b['statusOnValue'] ?? 1}',
+                              number: true,
+                              onChanged: (v) {
+                                final n = num.tryParse(v);
+                                b['statusOnValue'] = n ?? 1;
+                                widget.onChanged();
+                              },
+                            ),
+                          ),
+                  ),
+                ],
+              ],
             ),
+            const SizedBox(height: 8),
           ],
-        ),
+          _UniversalButtonConfirmSection(
+            button: b,
+            onChanged: () {
+              setState(() {});
+              widget.onChanged();
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -755,23 +848,17 @@ class _UniversalButtonConfirmSectionState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Bevestiging', style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 4),
-        Text(
-          'Vraag de gebruiker om te bevestigen voordat de knop het commando verstuurt.',
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        const SizedBox(height: 8),
-        _InstallerDropdown(
-          label: 'Bevestigingstype',
-          value: type ?? 'none',
-          options: const ['none', 'simple', 'pin'],
-          optionLabels: const {
-            'none': 'Geen bevestiging',
-            'simple': 'Bevestigingsvraag (Ja / Nee)',
-            'pin': 'PIN-code (4 cijfers)',
-          },
-          onChanged: (v) => _setConfirmType(v == 'none' ? null : v),
+          _InstallerDropdown(
+            compact: true,
+            label: 'Bevestiging',
+            value: type ?? 'none',
+            options: const ['none', 'simple', 'pin'],
+            optionLabels: const {
+              'none': 'Geen',
+              'simple': 'Ja / Nee',
+              'pin': 'PIN',
+            },
+            onChanged: (v) => _setConfirmType(v == 'none' ? null : v),
         ),
         if (type == 'simple' || type == 'pin') ...[
           _InstallerStrField(
@@ -1960,6 +2047,7 @@ class _InstallerDropdown extends StatelessWidget {
     required this.options,
     required this.onChanged,
     this.optionLabels,
+    this.compact = false,
   });
 
   final String label;
@@ -1968,25 +2056,39 @@ class _InstallerDropdown extends StatelessWidget {
   final ValueChanged<String> onChanged;
   /// Weergavetekst per optie-waarde (bijv. DPT-omschrijving).
   final Map<String, String>? optionLabels;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final v = options.contains(value) ? value : options.first;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      padding: EdgeInsets.only(bottom: compact ? 0 : 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          LuxeFieldLabel(label),
+          if (!compact) LuxeFieldLabel(label),
+          if (compact && label.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+            ),
           DropdownButtonFormField<String>(
             key: ValueKey('$label-$v'),
             initialValue: v,
-            decoration: luxeFilledDecoration(),
+            isExpanded: true,
+            decoration: luxeFilledDecoration().copyWith(
+              contentPadding: compact
+                  ? const EdgeInsets.symmetric(horizontal: 12, vertical: 10)
+                  : null,
+            ),
             items: [
               for (final o in options)
                 DropdownMenuItem(
                   value: o,
-                  child: Text(optionLabels?[o] ?? o),
+                  child: Text(
+                    optionLabels?[o] ?? o,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
             ],
             onChanged: (x) {
@@ -4672,6 +4774,11 @@ class _IconPickerField extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (!compact && label.isNotEmpty) LuxeFieldLabel(label),
+          if (compact && label.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+            ),
           DropdownButtonFormField<String>(
             initialValue: current,
             isExpanded: true,
