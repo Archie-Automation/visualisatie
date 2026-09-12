@@ -79,6 +79,58 @@ Map<String, dynamic> _ensureMap(Map<String, dynamic> parent, String key) {
 
 bool _roleIsBool(String role) => role == 'switch' || role == 'bit';
 
+({num min, num max, bool integer})? _knxValueBounds(String role) {
+  switch (role) {
+    case 'byte':
+    case 'raw_int':
+    case 'scene_number':
+      return (min: 0, max: 255, integer: true);
+    case 'percent':
+    case 'dim_value':
+    case 'position':
+      return (min: 0, max: 100, integer: true);
+    case 'temperature':
+    case 'setpoint':
+      return (min: -273, max: 670760, integer: false);
+    default:
+      return null;
+  }
+}
+
+num _clampKnxNum(num n, ({num min, num max, bool integer}) bounds) {
+  var c = n.clamp(bounds.min, bounds.max);
+  if (bounds.integer) c = c.round();
+  return c;
+}
+
+dynamic _clampKnxRoleValue(String role, dynamic raw) {
+  if (_roleIsBool(role)) {
+    if (raw is bool) return raw;
+    if (raw is num) return raw != 0;
+    final n = num.tryParse('$raw'.replaceAll(',', '.'));
+    return n != null && n != 0;
+  }
+  num n;
+  if (raw is num) {
+    n = raw;
+  } else if (raw is bool) {
+    n = raw ? 1 : 0;
+  } else {
+    n = num.tryParse('$raw'.replaceAll(',', '.')) ?? 0;
+  }
+  final bounds = _knxValueBounds(role);
+  if (bounds == null) return n;
+  return _clampKnxNum(n, bounds);
+}
+
+String _knxValueHint(String role) {
+  final b = _knxValueBounds(role);
+  if (b == null) return '';
+  final lo = b.integer ? '${b.min.toInt()}' : '${b.min}';
+  final hi = b.integer ? '${b.max.toInt()}' : '${b.max}';
+  return '$lo–$hi';
+}
+
 /// Eén KNX-telegram (GA + rol + waarde) — gedeeld door Lutron-keypad en universeel paneel.
 class KnxTelegramEditor extends StatelessWidget {
   const KnxTelegramEditor({
@@ -108,6 +160,9 @@ class KnxTelegramEditor extends StatelessWidget {
     if (!roles.contains(role)) {
       knx['role'] = roles.first;
     }
+    if (!_roleIsBool(role)) {
+      knx['value'] = _clampKnxRoleValue(role, knx['value']);
+    }
 
     final gaField = _InstallerStrField(
       compact: compact,
@@ -128,9 +183,11 @@ class KnxTelegramEditor extends StatelessWidget {
       optionLabels: roleLabels,
       onChanged: (v) {
         knx['role'] = v;
+        knx['value'] = _clampKnxRoleValue(v, knx['value']);
         onChanged();
       },
     );
+    final bounds = _knxValueBounds(role);
     final valueField = _roleIsBool(role)
         ? (compact
             ? _InstallerDropdown(
@@ -156,13 +213,17 @@ class KnxTelegramEditor extends StatelessWidget {
                 },
               ))
         : _InstallerStrField(
+            key: ValueKey('knx-val-$role'),
             compact: compact,
-            label: 'Waarde',
+            label: compact ? 'Waarde' : 'Waarde (${_knxValueHint(role)})',
+            hint: _knxValueHint(role),
             value: '${knx['value'] ?? 0}',
             number: true,
+            min: bounds?.min,
+            max: bounds?.max,
+            integer: bounds?.integer ?? false,
             onChanged: (v) {
-              final n = num.tryParse(v);
-              knx['value'] = n ?? 0;
+              knx['value'] = _clampKnxRoleValue(role, v);
               onChanged();
             },
           );
@@ -643,6 +704,8 @@ class _UniversalButtonCardState extends State<_UniversalButtonCard> {
   Widget build(BuildContext context) {
     final b = widget.button;
     final action = _ensureMap(b, 'action');
+    final actionRole = action['role'] as String? ?? 'bit';
+    final statusBounds = _knxValueBounds(actionRole);
     final isToggle = _mode == _UniversalButtonMode.toggle;
     final captionStyle = Theme.of(context).textTheme.bodySmall;
 
@@ -784,16 +847,20 @@ class _UniversalButtonCardState extends State<_UniversalButtonCard> {
                           },
                         )
                       : captioned(
-                          'Aan-waarde',
+                          'Aan-waarde (${_knxValueHint(actionRole)})',
                           _InstallerStrField(
                             key: ValueKey('ul-${b['id']}-ston'),
                             compact: true,
                             label: 'Waarde die “aan” betekent',
+                            hint: _knxValueHint(actionRole),
                             value: '${b['statusOnValue'] ?? 1}',
                             number: true,
+                            min: statusBounds?.min,
+                            max: statusBounds?.max,
+                            integer: statusBounds?.integer ?? true,
                             onChanged: (v) {
-                              final n = num.tryParse(v);
-                              b['statusOnValue'] = n ?? 1;
+                              b['statusOnValue'] =
+                                  _clampKnxRoleValue(actionRole, v);
                               widget.onChanged();
                             },
                           ),
@@ -1767,6 +1834,9 @@ class _InstallerStrField extends StatefulWidget {
     this.gaSearch = false,
     this.gaDptHint,
     this.compact = false,
+    this.min,
+    this.max,
+    this.integer = false,
   });
 
   final String label;
@@ -1778,6 +1848,10 @@ class _InstallerStrField extends StatefulWidget {
   final String? gaDptHint;
   /// No label above the field — for one-row tables.
   final bool compact;
+  final num? min;
+  final num? max;
+  /// Whole numbers only (byte, percent). Allows a decimal when false.
+  final bool integer;
 
   @override
   State<_InstallerStrField> createState() => _InstallerStrFieldState();
@@ -1840,6 +1914,23 @@ class _InstallerStrFieldState extends State<_InstallerStrField> {
     setState(() {});
   }
 
+  /// Null = leave the typed text. Otherwise replace with a value inside [min]/[max].
+  String? _clampNumericInput(String s) {
+    final min = widget.min;
+    final max = widget.max;
+    if (min == null || max == null) return null;
+    final t = s.trim().replaceAll(',', '.');
+    if (t.isEmpty || t == '-' || t == '.' || t == '-.') return null;
+    final n = num.tryParse(t);
+    if (n == null) return null;
+    final c = widget.integer
+        ? n.round().clamp(min, max)
+        : n.clamp(min, max);
+    if (c == n) return null;
+    if (widget.integer) return '${c.round()}';
+    return '$c';
+  }
+
   @override
   Widget build(BuildContext context) {
     final gaSearch = _gaSearchEnabled;
@@ -1856,7 +1947,7 @@ class _InstallerStrFieldState extends State<_InstallerStrField> {
           TextField(
             controller: _c,
             decoration: luxeFilledDecoration(
-              hint: widget.compact ? null : widget.hint,
+              hint: widget.hint,
               helper: widget.compact ? null : resolvedName,
               error: gaError,
               suffixIcon: gaSearch
@@ -1872,9 +1963,34 @@ class _InstallerStrFieldState extends State<_InstallerStrField> {
                   : null,
             ),
             keyboardType: widget.number
-                ? const TextInputType.numberWithOptions(decimal: true)
+                ? TextInputType.numberWithOptions(
+                    decimal: !widget.integer,
+                    signed: widget.min != null && widget.min! < 0,
+                  )
                 : TextInputType.text,
+            inputFormatters: [
+              if (widget.number && widget.integer)
+                FilteringTextInputFormatter.allow(
+                  widget.min != null && widget.min! < 0
+                      ? RegExp(r'-?\d*')
+                      : RegExp(r'\d*'),
+                )
+              else if (widget.number)
+                FilteringTextInputFormatter.allow(RegExp(r'-?\d*[.,]?\d*')),
+            ],
             onChanged: (s) {
+              if (widget.number) {
+                final clamped = _clampNumericInput(s);
+                if (clamped != null && clamped != s) {
+                  _c.value = TextEditingValue(
+                    text: clamped,
+                    selection:
+                        TextSelection.collapsed(offset: clamped.length),
+                  );
+                  widget.onChanged(clamped);
+                  return;
+                }
+              }
               widget.onChanged(s);
               if (gaSearch) setState(() {});
             },

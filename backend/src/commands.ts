@@ -822,8 +822,17 @@ async function writeUniversalAction(a: UniversalAction, bus: KnxBus) {
   let value: number | boolean = a.value;
   if (role === "bit") {
     value = typeof value === "boolean" ? value : value !== 0;
-  } else if (typeof value === "boolean") {
-    value = value ? 1 : 0;
+  } else {
+    let n = typeof value === "boolean" ? (value ? 1 : 0) : Number(value);
+    if (!Number.isFinite(n)) n = 0;
+    if (role === "byte" || role === "raw_int") {
+      n = Math.min(255, Math.max(0, Math.round(n)));
+    } else if (role === "percent") {
+      n = Math.min(100, Math.max(0, Math.round(n)));
+    } else if (role === "temperature") {
+      n = Math.min(670760, Math.max(-273, n));
+    }
+    value = n;
   }
   await bus.write(a.ga, role, value);
 }
