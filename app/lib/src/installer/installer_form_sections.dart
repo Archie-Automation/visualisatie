@@ -77,10 +77,31 @@ void _syncUniversalSharedKnx(Map<String, dynamic> b) {
 
 bool _universalHasLongPress(Map<String, dynamic> b, {required bool switchLayout}) {
   if (switchLayout) return false;
-  final role = (_ensureMap(b, 'action')['role'] as String?) ?? 'bit';
-  if (_roleIsScene(role)) return true;
+  if (b['sceneStoreOnLong'] == true) return true;
   return b['actionLong'] != null;
 }
+
+const _longPressMsOptions = [
+  '300',
+  '400',
+  '500',
+  '600',
+  '800',
+  '1000',
+  '1500',
+  '2000',
+];
+
+const _longPressMsLabels = {
+  '300': '0,3 s',
+  '400': '0,4 s',
+  '500': '0,5 s',
+  '600': '0,6 s',
+  '800': '0,8 s',
+  '1000': '1,0 s',
+  '1500': '1,5 s',
+  '2000': '2,0 s',
+};
 
 /// Zelfde lijst als in JSON — geen kopie, anders gaan .add() verloren.
 List<Map<String, dynamic>> _ensureList(Map<String, dynamic> parent, String key) {
@@ -779,15 +800,28 @@ class _UniversalButtonCardState extends State<_UniversalButtonCard> {
     final b = widget.button;
     if (enabled) {
       final action = _ensureMap(b, 'action');
-      b['actionLong'] ??= {
-        'ga': action['ga'],
-        'role': action['role'],
-        'value': action['value'],
-      };
+      final role = action['role'] as String? ?? 'bit';
+      b['longPressMs'] ??= 500;
+      if (_roleIsScene(role)) {
+        b.remove('sceneStoreOnLong');
+        b['actionLong'] ??= {
+          'ga': action['ga'],
+          'role': 'scene',
+          'value': action['value'],
+        };
+      } else {
+        b['actionLong'] ??= {
+          'ga': action['ga'],
+          'role': role,
+          'value': action['value'],
+        };
+      }
       _syncUniversalSharedKnx(b);
     } else {
       b.remove('actionLong');
       b.remove('confirmLong');
+      b.remove('sceneStoreOnLong');
+      b.remove('longPressMs');
     }
     _notify();
   }
@@ -923,8 +957,8 @@ class _UniversalButtonCardState extends State<_UniversalButtonCard> {
                     onChanged: (v) {
                       action['role'] = v;
                       action['value'] = _clampKnxRoleValue(v, action['value']);
-                      if (_roleIsScene(v)) {
-                        b.remove('actionLong');
+                      if (!_roleIsScene(v)) {
+                        b.remove('sceneStoreOnLong');
                       }
                       _syncUniversalSharedKnx(b);
                       _notify();
@@ -980,34 +1014,94 @@ class _UniversalButtonCardState extends State<_UniversalButtonCard> {
                 onChanged: widget.onChanged,
               ),
             ),
-          if (isScene && !widget.switchLayout) ...[
-            const SizedBox(height: 6),
-            Text(
-              'Korte druk roept de scene op. Lange druk slaat de huidige stand op.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-          if (!widget.switchLayout && !isScene) ...[
+          if (!widget.switchLayout) ...[
             LuxeSwitchRow(
               title: 'Lange druk',
-              subtitle: 'Zelfde groepsadres en DPT, andere waarde',
-              value: b['actionLong'] != null,
+              subtitle: isScene
+                  ? 'Tweede scene of huidige stand opslaan'
+                  : 'Zelfde groepsadres en DPT, andere waarde',
+              value: hasLongPress,
               onChanged: _setLongPress,
             ),
-            if (b['actionLong'] != null)
+            if (hasLongPress) ...[
               captioned(
-                'Waarde lange druk',
-                _KnxValueField(
-                  knx: _ensureMap(b, 'actionLong'),
-                  role: actionRole,
+                'Vasthouden',
+                _InstallerDropdown(
                   compact: true,
-                  hideLabel: true,
-                  onChanged: () {
-                    _syncUniversalSharedKnx(b);
+                  label: '',
+                  value: _longPressMsOptions.contains(
+                    '${(b['longPressMs'] as num?)?.toInt() ?? 500}',
+                  )
+                      ? '${(b['longPressMs'] as num?)?.toInt() ?? 500}'
+                      : '500',
+                  options: _longPressMsOptions,
+                  optionLabels: _longPressMsLabels,
+                  onChanged: (v) {
+                    b['longPressMs'] = int.parse(v);
                     widget.onChanged();
+                    setState(() {});
                   },
                 ),
               ),
+              if (isScene) ...[
+                captioned(
+                  'Lange druk doet',
+                  _InstallerDropdown(
+                    compact: true,
+                    label: '',
+                    value: b['sceneStoreOnLong'] == true ? 'store' : 'scene',
+                    options: const ['scene', 'store'],
+                    optionLabels: const {
+                      'scene': 'Andere scene oproepen',
+                      'store': 'Huidige stand opslaan in KNX',
+                    },
+                    onChanged: (v) {
+                      if (v == 'store') {
+                        b['sceneStoreOnLong'] = true;
+                        b.remove('actionLong');
+                      } else {
+                        b.remove('sceneStoreOnLong');
+                        final action = _ensureMap(b, 'action');
+                        b['actionLong'] ??= {
+                          'ga': action['ga'],
+                          'role': 'scene',
+                          'value': action['value'],
+                        };
+                        _syncUniversalSharedKnx(b);
+                      }
+                      _notify();
+                    },
+                  ),
+                ),
+                if (b['sceneStoreOnLong'] != true)
+                  captioned(
+                    'Scene bij lange druk',
+                    _KnxValueField(
+                      knx: _ensureMap(b, 'actionLong'),
+                      role: actionRole,
+                      compact: true,
+                      hideLabel: true,
+                      onChanged: () {
+                        _syncUniversalSharedKnx(b);
+                        widget.onChanged();
+                      },
+                    ),
+                  ),
+              ] else
+                captioned(
+                  'Waarde lange druk',
+                  _KnxValueField(
+                    knx: _ensureMap(b, 'actionLong'),
+                    role: actionRole,
+                    compact: true,
+                    hideLabel: true,
+                    onChanged: () {
+                      _syncUniversalSharedKnx(b);
+                      widget.onChanged();
+                    },
+                  ),
+                ),
+            ],
           ],
           if (isToggle) ...[
             const SizedBox(height: 8),

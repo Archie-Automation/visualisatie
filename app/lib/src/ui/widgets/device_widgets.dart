@@ -3680,9 +3680,13 @@ class UniversalTile extends ConsumerWidget {
 
     bool hasLongPress(Map<String, dynamic> b) {
       if (layout == 'switch') return false;
-      final action = b['action'];
-      if (action is Map && action['role'] == 'scene') return true;
+      if (b['sceneStoreOnLong'] == true) return true;
       return b['actionLong'] != null;
+    }
+
+    Duration longPressDurationOf(Map<String, dynamic> b) {
+      final n = (b['longPressMs'] as num?)?.toInt() ?? 500;
+      return Duration(milliseconds: n.clamp(200, 3000));
     }
 
     DeviceControlItem controlItem(Map<String, dynamic> b) {
@@ -3709,6 +3713,7 @@ class UniversalTile extends ConsumerWidget {
         active: _isButtonOn(b, bus),
         onTap: () => press(b),
         onLongPress: hasLongPress(b) ? () => press(b, long: true) : null,
+        longPressDuration: hasLongPress(b) ? longPressDurationOf(b) : null,
       );
     }
 

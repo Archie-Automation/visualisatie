@@ -6,7 +6,6 @@ import '../../api.dart';
 import '../../models.dart';
 import '../../scene_api.dart';
 import '../../theme.dart';
-import '../knx_scene_learn_sheet.dart';
 import '../responsive.dart';
 import '../scene_editor_sheet.dart';
 import 'device_tile_shell.dart';
@@ -21,7 +20,6 @@ class SceneStrip extends ConsumerWidget {
     required this.scenes,
     required this.canEdit,
     required this.onEdited,
-    this.canLearnKnx = false,
     this.roomId,
     this.dark = false,
     this.scrollController,
@@ -32,9 +30,6 @@ class SceneStrip extends ConsumerWidget {
 
   /// True if the active user may create / edit / delete scenes.
   final bool canEdit;
-
-  /// KNX-hardware-scene inlezen (staff + huisvlag).
-  final bool canLearnKnx;
 
   /// Called after the editor sheet has saved a new list. Parent refreshes.
   final ValueChanged<List<Scene>> onEdited;
@@ -78,11 +73,9 @@ class SceneStrip extends ConsumerWidget {
             scene: scene,
             dark: dark,
             onTap: () => _runScene(context, ref, scene),
-            onLongPress: scene.isKnxHardware && canLearnKnx && roomId != null
-                ? () => _openKnxLearn(context, ref, scene)
-                : canEdit
-                    ? () => _openEditor(context, ref, initial: scene)
-                    : null,
+            onLongPress: !scene.isKnxHardware && canEdit
+                ? () => _openEditor(context, ref, initial: scene)
+                : null,
           );
         },
       ),
@@ -140,28 +133,6 @@ class SceneStrip extends ConsumerWidget {
       ),
     );
     if (next != null) onEdited(next);
-  }
-
-  Future<void> _openKnxLearn(
-    BuildContext context,
-    WidgetRef ref,
-    Scene scene,
-  ) async {
-    final cfg = ref.read(configProvider).value;
-    final id = roomId;
-    if (cfg == null || id == null) return;
-    final ok = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => KnxSceneLearnSheet(
-        roomId: id,
-        config: cfg,
-        existing: scene,
-      ),
-    );
-    if (ok == true) onEdited(scenes);
   }
 }
 

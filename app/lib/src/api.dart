@@ -136,9 +136,8 @@ class AuthState {
 bool canEditScenesInApp(AuthState auth, HouseConfig cfg) =>
     auth.isStaff || (cfg.me?.canEditScenes ?? false);
 
-/// KNX-scene inlezen/store: alleen staff én huisvlag.
-bool canLearnKnxScenesInApp(AuthState auth, HouseConfig cfg) =>
-    auth.isStaff && cfg.knxSceneLearnEnabled;
+/// KNX-scene inlezen/store: alleen installer/superuser (Instellingen).
+bool canLearnKnxScenesInApp(AuthState auth) => auth.isStaff;
 
 class KnxSceneHeard {
   const KnxSceneHeard({

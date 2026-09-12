@@ -21,6 +21,7 @@ import '../user_api.dart';
 import 'app_nav.dart';
 import 'responsive.dart';
 import 'schedule_editor_sheet.dart';
+import 'knx_scene_learn_section.dart';
 import 'users_admin_section.dart';
 import 'widgets/confirm_dialog.dart';
 import 'widgets/function_screen_header.dart';
@@ -29,7 +30,15 @@ import 'widgets/luxe_backdrop.dart';
 import 'widgets/luxe_form.dart';
 import 'installer_nav.dart';
 
-enum _SettingsTopic { appearance, doorbell, schedules, tablet, spotify, users }
+enum _SettingsTopic {
+  appearance,
+  doorbell,
+  schedules,
+  tablet,
+  spotify,
+  knxScenes,
+  users,
+}
 
 /// Customer-facing settings: menu first, then one function at a time.
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -83,10 +92,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (e, _) => Center(child: Text('$e')),
             data: (cfg) {
-              final hideSpotify =
-                  _topic == _SettingsTopic.spotify && !auth.isStaff;
+              final hideStaffTopic = !auth.isStaff &&
+                  (_topic == _SettingsTopic.spotify ||
+                      _topic == _SettingsTopic.knxScenes ||
+                      _topic == _SettingsTopic.users);
               final showMenu = _topic == null ||
-                  hideSpotify ||
+                  hideStaffTopic ||
                   (_topic == _SettingsTopic.tablet &&
                       !wallTabletDeviceSettingsApply);
               return Theme(
@@ -159,8 +170,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       onTap: () =>
                           setState(() => _topic = _SettingsTopic.spotify),
                     ),
-                  ],
-                  if (auth.isStaff) ...[
+                    Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
+                    _SettingsMenuTile(
+                      icon: Icons.tune_outlined,
+                      title: 'KNX-scenes inleren',
+                      subtitle: 'Muurknop inlezen en in KNX opslaan',
+                      onTap: () =>
+                          setState(() => _topic = _SettingsTopic.knxScenes),
+                    ),
                     Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
                     _SettingsMenuTile(
                       icon: Icons.people_outline,
@@ -211,6 +228,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _SettingsTopic.schedules => 'Tijdschema\'s',
       _SettingsTopic.tablet => 'Wandtablet',
       _SettingsTopic.spotify => 'Spotify',
+      _SettingsTopic.knxScenes => 'KNX-scenes inleren',
       _SettingsTopic.users => 'Gebruikers',
     };
     final infoTitle = title;
@@ -242,6 +260,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             'Eerste keer toont de browser een certificaatwaarschuwing. '
             'Kies Geavanceerd → Doorgaan tot je “Certificaat OK” ziet, '
             'daarna Verbind Spotify.',
+      _SettingsTopic.knxScenes =>
+        'Alleen installer en superuser. Kies een kamer, lees de fysieke scene-knop in, '
+            'stel lampen en gordijnen live bij, en sla op in KNX.\n\n'
+            'Tijdens inlezen gaan lampen in die kamer even uit en aan. '
+            'Opslaan zet alle kanalen op die scene-knop in ETS op de huidige stand.\n\n'
+            'Universele panelen (korte/lange druk) staan hier los van.',
       _SettingsTopic.users =>
         'Installer ziet alles, inclusief technische configuratie.\n\n'
             'Super user ziet alles in de app en beheert gebruikers, maar niet de KNX-opbouw. '
@@ -292,6 +316,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                 _SettingsTopic.spotify =>
                   const _SpotifySection(showTitle: false),
+                _SettingsTopic.knxScenes => KnxSceneLearnSection(cfg: cfg),
                 _SettingsTopic.users =>
                   UsersAdminSection(cfg: cfg, showTitle: false),
               },

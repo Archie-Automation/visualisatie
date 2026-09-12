@@ -87,9 +87,6 @@ function onBusTelegram(info: KnxTelegram): void {
 }
 
 export function startListen(roomId: string, userId: string): void {
-  if (!getConfig().knxSceneLearn?.enabled) {
-    throw new Error("scene inlezen staat uit");
-  }
   if (!findRoom(getConfig(), roomId)) throw new Error("unknown room");
   stopListen();
   listen = {
@@ -281,7 +278,6 @@ export async function learnKnxScene(opts: {
   const bus = busRef;
   if (!bus) throw new Error("KNX bus niet klaar");
   const cfg = getConfig();
-  if (!cfg.knxSceneLearn?.enabled) throw new Error("scene inlezen staat uit");
   const room = findRoom(cfg, opts.roomId);
   if (!room) throw new Error("unknown room");
   const number = Math.min(64, Math.max(1, Math.round(opts.number)));
