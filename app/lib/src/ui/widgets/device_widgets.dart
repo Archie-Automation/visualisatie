@@ -3702,48 +3702,104 @@ class UniversalTile extends ConsumerWidget {
       );
     }
 
-    if (layout == 'switch' && allButtons.isNotEmpty) {
-      final b = allButtons.first;
-      final on = _isButtonOn(b, bus);
-      final btnIcon = b['icon'] as String?;
-      final leadingIcon =
-          btnIcon != null ? universalIconData(btnIcon) : iconData;
-      final leadingGlyph = universalIconGlyph(
-            btnIcon ?? iconName,
-            size: DeviceCardScale.glyphSize(context),
-            color: on ? LuxeColors.brass : LuxeColors.ink,
-          ) ??
-          iconWidgetForData(
-            leadingIcon,
-            size: DeviceCardScale.glyphSize(context),
-            color: on ? LuxeColors.brass : LuxeColors.ink,
-          );
-      return DeviceTileShell(
-        glow: on,
-        child: DeviceTileLayout.headerRow(
-          context: context,
-          leading: DeviceTileIconBadge(
-            icon: leadingGlyph == null ? leadingIcon : null,
-            glyph: leadingGlyph,
-            active: on,
-            onTap: () => press(b, on: !on),
-          ),
-          content: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(device.name,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
-              const SizedBox(height: DeviceTileLayout.titleStatusGap),
-              Text(on ? 'AAN' : 'UIT',
-                  style: Theme.of(context).textTheme.bodyMedium),
-            ],
-          ),
-          trailing: DeviceTileLayout.trailingSwitch(
+    if (layout == 'switch') {
+      final shown = allButtons.take(kUniversalMaxButtons).toList();
+      if (shown.length == 1) {
+        final b = shown.first;
+        final on = _isButtonOn(b, bus);
+        final btnIcon = b['icon'] as String?;
+        final leadingIcon =
+            btnIcon != null ? universalIconData(btnIcon) : iconData;
+        final leadingGlyph = universalIconGlyph(
+              btnIcon ?? iconName,
+              size: DeviceCardScale.glyphSize(context),
+              color: on ? LuxeColors.brass : LuxeColors.ink,
+            ) ??
+            iconWidgetForData(
+              leadingIcon,
+              size: DeviceCardScale.glyphSize(context),
+              color: on ? LuxeColors.brass : LuxeColors.ink,
+            );
+        return DeviceTileShell(
+          glow: on,
+          child: DeviceTileLayout.headerRow(
             context: context,
-            value: on,
-            onChanged: (want) => press(b, on: want),
+            leading: DeviceTileIconBadge(
+              icon: leadingGlyph == null ? leadingIcon : null,
+              glyph: leadingGlyph,
+              active: on,
+              onTap: () => press(b, on: !on),
+            ),
+            content: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(device.name,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700)),
+                const SizedBox(height: DeviceTileLayout.titleStatusGap),
+                Text(on ? 'AAN' : 'UIT',
+                    style: Theme.of(context).textTheme.bodyMedium),
+              ],
+            ),
+            trailing: DeviceTileLayout.trailingSwitch(
+              context: context,
+              value: on,
+              onChanged: (want) => press(b, on: want),
+            ),
           ),
+        );
+      }
+      return DeviceTileShell(
+        glow: shown.any((b) => _isButtonOn(b, bus)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            DeviceTileLayout.headerRow(
+              context: context,
+              leading: DeviceTileIconBadge(
+                icon: headerGlyph == null ? iconData : null,
+                glyph: headerGlyph,
+              ),
+              content: Text(device.name,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w700)),
+            ),
+            if (shown.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 12),
+                child: Text(
+                  'Geen schakelaars geconfigureerd.',
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: LuxeColors.inkSoft),
+                ),
+              )
+            else
+              for (final b in shown)
+                Padding(
+                  padding: EdgeInsets.only(
+                      top: DeviceControlBar.sectionSpacing(context)),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _switchRowLabel(b),
+                          style: Theme.of(context).textTheme.bodyLarge,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      DeviceTileLayout.trailingSwitch(
+                        context: context,
+                        value: _isButtonOn(b, bus),
+                        onChanged: (want) => press(b, on: want),
+                      ),
+                    ],
+                  ),
+                ),
+          ],
         ),
       );
     }
@@ -3781,6 +3837,11 @@ class UniversalTile extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  String _switchRowLabel(Map<String, dynamic> b) {
+    final raw = (b['label'] as String?)?.trim() ?? '';
+    return raw.isEmpty ? 'Schakelaar' : raw;
   }
 
   bool _isButtonOn(Map<String, dynamic> b, BusState bus) {

@@ -216,10 +216,10 @@ const Map<String, IconData> kUniversalIconMap = {
 IconData universalIconData(String? name) =>
     kUniversalIconMap[name] ?? Icons.grid_view_rounded;
 
-/// Max knoppen op één universele tegel (één rij, zoals zonwering/haard).
+/// Max knoppen of schakelaars op één universele tegel.
 const kUniversalMaxButtons = 4;
 
-/// `switch` = lamp-achtige aan/uit; `buttons` = vierkante knoppenrij.
+/// `switch` = aan/uit-schakelaar(s) onder elkaar; `buttons` = vierkante knoppenrij (max 4).
 /// Ontbreekt `layout`: 0–1 knop → switch, anders buttons (bestaande panels).
 String universalPanelLayout(Map<String, dynamic>? cfg) {
   final raw = (cfg?['layout'] as String?)?.trim();
