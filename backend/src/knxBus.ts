@@ -38,6 +38,8 @@ export const ROLE_DPT: Record<string, string> = {
   percent: "DPT5.001", // 0..100
   temperature: "DPT9.001", // 2-byte float – also used for all DPT9.x
   raw_int: "DPT5.010",
+  /** DPT 18.001 scene control as 1 byte (bit7=store, bits0–5=scene−1). knx.js has no DPT18. */
+  scene: "DPT5.010",
   uint16: "DPT7.001",   // 0..65535 unsigned int (e.g. day counter)
   signed_byte: "DPT6.001",   // −128..127 signed byte
   signed_2byte: "DPT8.001",  // 2-byte signed int
@@ -71,6 +73,16 @@ export interface KnxEvents {
   stateChanged: (state: GAState) => void;
   connected: () => void;
   disconnected: () => void;
+  telegram: (info: KnxTelegram) => void;
+}
+
+export interface KnxTelegram {
+  ga: GA;
+  src?: string;
+  value: unknown;
+  self: boolean;
+  ts: number;
+  evt: string;
 }
 
 export declare interface KnxBus {
@@ -112,6 +124,7 @@ export class KnxBus extends EventEmitter {
   private disabled: boolean;
   private readonly datapoints = new Map<GA, unknown>();
   private busConnected = false;
+  private readonly selfWrites: Array<{ ga: GA; byte?: number; ts: number }> = [];
 
   private host: string;
   private port: number;
@@ -241,6 +254,10 @@ export class KnxBus extends EventEmitter {
           },
           event: (evt: string, src: string, dest: GA, value: unknown) => {
             if (evt !== "GroupValue_Write" && evt !== "GroupValue_Response") return;
+            const byte = extractByte(value);
+            const self = this.isSelfWrite(dest, byte);
+            this.emit("telegram", { ga: dest, src, value, self, ts: Date.now(), evt });
+            if (evt === "GroupValue_Write" && self) return;
             this.onBusTelegram(dest, value);
           }
         }
@@ -522,13 +539,14 @@ export class KnxBus extends EventEmitter {
     const dpt = ROLE_DPT[role] ?? "DPT1.001";
 
     if (this.simulate) {
-      // Simulate a round-trip: the status GA will also echo.
+      this.noteSelfWrite(ga);
       this.updateCache(ga, value, dpt);
       return;
     }
 
     const knx = await loadKnxModule();
     const dp = new knx.Datapoint({ ga, dpt }, this.connection as never);
+    this.noteSelfWrite(ga);
     await new Promise<void>((resolve, reject) => {
       dp.write(value);
       // knx.js does not expose a promise; we optimistically resolve.
@@ -546,6 +564,7 @@ export class KnxBus extends EventEmitter {
     const bits = bitlength ?? data.length * 8;
 
     if (this.simulate) {
+      this.noteSelfWrite(ga, data[0]);
       this.updateCache(ga, data.toString("hex"), "RAW");
       return;
     }
@@ -555,6 +574,7 @@ export class KnxBus extends EventEmitter {
       throw new Error("KNX writeRaw unavailable (not connected?)");
     }
 
+    this.noteSelfWrite(ga, data[0]);
     await new Promise<void>((resolve, reject) => {
       conn.writeRaw!(ga, data, bits, (err: Error | undefined) => {
         if (err) reject(err);
@@ -563,6 +583,45 @@ export class KnxBus extends EventEmitter {
     });
     this.updateCache(ga, data.toString("hex"), "RAW");
   }
+
+  /** GroupValue_Read for a bound datapoint (no-op if unbound / simulate). */
+  requestRead(ga: GA): void {
+    if (this.simulate || this.disabled) return;
+    const dp = this.datapoints.get(ga) as { read?: () => void } | undefined;
+    try {
+      dp?.read?.();
+    } catch (err) {
+      logger.warn({ err, ga }, "KNX group read failed");
+    }
+  }
+
+  private noteSelfWrite(ga: GA, byte?: number): void {
+    const now = Date.now();
+    this.selfWrites.push({ ga, byte, ts: now });
+    const cutoff = now - 2000;
+    while (this.selfWrites.length && this.selfWrites[0].ts < cutoff) {
+      this.selfWrites.shift();
+    }
+  }
+
+  private isSelfWrite(ga: GA, byte?: number): boolean {
+    const now = Date.now();
+    return this.selfWrites.some(
+      (w) =>
+        w.ga === ga &&
+        now - w.ts < 900 &&
+        (byte === undefined || w.byte === undefined || w.byte === byte)
+    );
+  }
+}
+
+function extractByte(value: unknown): number | undefined {
+  if (Buffer.isBuffer(value) && value.length >= 1) return value[0] & 0xff;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    const n = Math.round(value);
+    if (n >= 0 && n <= 255) return n;
+  }
+  return undefined;
 }
 
 /* -------------------- dynamic import of knx ------------------------- */

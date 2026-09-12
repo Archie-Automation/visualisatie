@@ -769,7 +769,8 @@ export type UniversalRole =
   | "byte"
   | "percent"
   | "temperature"
-  | "raw_int";
+  | "raw_int"
+  | "scene";
 
 export interface UniversalAction {
   ga: GA;
@@ -788,6 +789,8 @@ export interface UniversalButton {
    *  again should send a different value. If set, tapping toggles
    *  between `action` and `actionOff` based on `statusGa`. */
   actionOff?: UniversalAction;
+  /** Optional long-press telegram on the same GA/DPT as `action`. */
+  actionLong?: UniversalAction;
   /** If set, the UI reads this GA to decide whether the button is "on". */
   statusGa?: GA;
   /** The value in `statusGa` that means "on". Defaults to `true`/1. */
@@ -801,6 +804,8 @@ export interface UniversalButton {
    * - `{ message: "..." }` → custom text.
    */
   confirm?: ConfirmPrompt;
+  /** Confirmation for long press. Independent from `confirm`. */
+  confirmLong?: ConfirmPrompt;
 }
 
 export interface UniversalConfig {
@@ -1373,6 +1378,10 @@ export interface Scene {
   actions: SceneAction[];
   /** Optional Sonos/Bluesound commands executed after/between KNX actions. */
   mediaActions?: SceneMediaAction[];
+  /** KNX hardware scene (DPT 18.001) bound to a wall button. */
+  knx?: { ga: GA; number: number };
+  /** Device ids learned as members of this KNX scene. */
+  members?: string[];
 }
 
 export interface Room {
@@ -1498,6 +1507,11 @@ export interface HouseConfig {
    * APK-installatie worden aangeboden. `false` = updates onderdrukt.
    */
   autoUpdate?: boolean;
+  /**
+   * Inlezen van KNX-scenes vanaf een muurknop (twee-pass contrast + store).
+   * Standaard uit. Alleen installer/superuser, en alleen als enabled.
+   */
+  knxSceneLearn?: { enabled?: boolean };
   /** Wandtablet idle timeout + screensaver (Android client). */
   displayPanel?: {
     enabled?: boolean;

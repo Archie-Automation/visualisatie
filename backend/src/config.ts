@@ -170,6 +170,7 @@ export function collectAllGAs(cfg: HouseConfig): GA[] {
       for (const b of d.universal.buttons) {
         add(b.action.ga);
         add(b.actionOff?.ga);
+        add(b.actionLong?.ga);
         add(b.statusGa);
       }
     }
@@ -218,11 +219,16 @@ export function collectAllGAs(cfg: HouseConfig): GA[] {
     }
   }
 
-  // Scenes
-  for (const s of cfg.scenes ?? []) for (const a of s.actions) add(a.ga);
+  for (const s of cfg.scenes ?? []) {
+    for (const a of s.actions) add(a.ga);
+    add(s.knx?.ga);
+  }
   for (const f of cfg.floors) {
     for (const r of f.rooms) {
-      for (const s of r.scenes ?? []) for (const a of s.actions) add(a.ga);
+      for (const s of r.scenes ?? []) {
+        for (const a of s.actions) add(a.ga);
+        add(s.knx?.ga);
+      }
     }
   }
 
@@ -340,6 +346,9 @@ export function buildGAIndex(cfg: HouseConfig): Map<GA, GARole[]> {
         if (b.actionOff?.ga) {
           pushGA(index, b.actionOff.ga, b.actionOff.role, d.id, d.type);
         }
+        if (b.actionLong?.ga) {
+          pushGA(index, b.actionLong.ga, b.actionLong.role, d.id, d.type);
+        }
         if (b.statusGa) {
           pushGA(index, b.statusGa, b.action.role, d.id, d.type);
         }
@@ -407,12 +416,16 @@ export function buildGAIndex(cfg: HouseConfig): Map<GA, GARole[]> {
     for (const a of s.actions) {
       pushGA(index, a.ga, a.role, `scene:${s.id}`, "light_switch");
     }
+    if (s.knx?.ga) pushGA(index, s.knx.ga, "scene", `scene:${s.id}`, "light_switch");
   }
   for (const f of cfg.floors) {
     for (const r of f.rooms) {
       for (const s of r.scenes ?? []) {
         for (const a of s.actions) {
           pushGA(index, a.ga, a.role, `scene:${r.id}:${s.id}`, "light_switch");
+        }
+        if (s.knx?.ga) {
+          pushGA(index, s.knx.ga, "scene", `scene:${r.id}:${s.id}`, "light_switch");
         }
       }
     }

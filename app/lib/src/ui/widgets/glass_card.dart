@@ -190,11 +190,13 @@ class PressScale extends StatefulWidget {
     required this.child,
     required this.onTap,
     required this.radius,
+    this.onLongPress,
     this.onPressedChanged,
   });
 
   final Widget child;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
   final double radius;
   final ValueChanged<bool>? onPressedChanged;
 
@@ -233,6 +235,7 @@ class _PressScaleState extends State<PressScale> {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: widget.onTap,
+      onLongPress: widget.onLongPress,
       onTapDown: (_) => _setPressed(true),
       onTapUp: (_) => _setPressed(false),
       onTapCancel: () => _setPressed(false),

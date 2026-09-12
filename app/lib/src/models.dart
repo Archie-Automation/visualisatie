@@ -535,6 +535,9 @@ class Scene {
   final String? color;
   final List<SceneAction> actions;
   final List<SceneMediaAction> mediaActions;
+  final String? knxGa;
+  final int? knxNumber;
+  final List<String> members;
 
   const Scene({
     required this.id,
@@ -543,20 +546,34 @@ class Scene {
     this.icon,
     this.color,
     this.mediaActions = const [],
+    this.knxGa,
+    this.knxNumber,
+    this.members = const [],
   });
 
-  factory Scene.fromJson(Map<String, dynamic> j) => Scene(
-        id: j['id'] as String,
-        name: j['name'] as String,
-        icon: j['icon'] as String?,
-        color: j['color'] as String?,
-        actions: ((j['actions'] as List?) ?? const [])
-            .map((a) => SceneAction.fromJson(a as Map<String, dynamic>))
-            .toList(),
-        mediaActions: ((j['mediaActions'] as List?) ?? const [])
-            .map((a) => SceneMediaAction.fromJson(a as Map<String, dynamic>))
-            .toList(),
-      );
+  bool get isKnxHardware => knxGa != null && knxNumber != null;
+
+  factory Scene.fromJson(Map<String, dynamic> j) {
+    final knx = j['knx'];
+    return Scene(
+      id: j['id'] as String,
+      name: j['name'] as String,
+      icon: j['icon'] as String?,
+      color: j['color'] as String?,
+      actions: ((j['actions'] as List?) ?? const [])
+          .map((a) => SceneAction.fromJson(a as Map<String, dynamic>))
+          .toList(),
+      mediaActions: ((j['mediaActions'] as List?) ?? const [])
+          .map((a) => SceneMediaAction.fromJson(a as Map<String, dynamic>))
+          .toList(),
+      knxGa: knx is Map ? knx['ga'] as String? : null,
+      knxNumber: knx is Map ? (knx['number'] as num?)?.toInt() : null,
+      members: ((j['members'] as List?) ?? const [])
+          .map((e) => '$e')
+          .where((e) => e.isNotEmpty)
+          .toList(),
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -566,6 +583,9 @@ class Scene {
         'actions': actions.map((a) => a.toJson()).toList(),
         if (mediaActions.isNotEmpty)
           'mediaActions': mediaActions.map((a) => a.toJson()).toList(),
+        if (knxGa != null && knxNumber != null)
+          'knx': {'ga': knxGa, 'number': knxNumber},
+        if (members.isNotEmpty) 'members': members,
       };
 
   Scene copyWith({
@@ -574,6 +594,9 @@ class Scene {
     String? color,
     List<SceneAction>? actions,
     List<SceneMediaAction>? mediaActions,
+    String? knxGa,
+    int? knxNumber,
+    List<String>? members,
   }) =>
       Scene(
         id: id,
@@ -582,6 +605,9 @@ class Scene {
         color: color ?? this.color,
         actions: actions ?? this.actions,
         mediaActions: mediaActions ?? this.mediaActions,
+        knxGa: knxGa ?? this.knxGa,
+        knxNumber: knxNumber ?? this.knxNumber,
+        members: members ?? this.members,
       );
 }
 
@@ -718,6 +744,8 @@ class HouseConfig {
   final Map<String, dynamic>? displayPanelJson;
   /// Satel / inbraakalarm aanwezig en aangezet in house.json.
   final bool satelEnabled;
+  /// KNX-scene inlezen vanaf muurknop (installer/superuser).
+  final bool knxSceneLearnEnabled;
 
   const HouseConfig({
     required this.projectId,
@@ -734,6 +762,7 @@ class HouseConfig {
     this.me,
     this.displayPanelJson,
     this.satelEnabled = false,
+    this.knxSceneLearnEnabled = false,
   });
 
   factory HouseConfig.fromJson(Map<String, dynamic> j) {
@@ -772,6 +801,7 @@ class HouseConfig {
       me: me,
       displayPanelJson: j['displayPanel'] as Map<String, dynamic>?,
       satelEnabled: (j['satel'] as Map?)?['enabled'] == true,
+      knxSceneLearnEnabled: (j['knxSceneLearn'] as Map?)?['enabled'] == true,
     );
   }
 

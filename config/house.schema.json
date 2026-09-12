@@ -111,6 +111,13 @@
       "items": { "$ref": "#/definitions/logDef" },
       "description": "Custom logs (graphs) of arbitrary group addresses, recorded server-side."
     },
+    "knxSceneLearn": {
+      "type": "object",
+      "description": "KNX-scene inlezen vanaf een muurknop. Standaard uit. Alleen installer/superuser.",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false }
+      }
+    },
     "displayPanel": {
       "type": "object",
       "description": "Android wandtablet: idle terug naar home + screensaver met klok/temperatuur.",
@@ -1025,7 +1032,9 @@
         },
         "action": { "$ref": "#/definitions/universalAction" },
         "actionOff": { "$ref": "#/definitions/universalAction" },
-        "confirm": { "$ref": "#/definitions/confirmPrompt" }
+        "actionLong": { "$ref": "#/definitions/universalAction" },
+        "confirm": { "$ref": "#/definitions/confirmPrompt" },
+        "confirmLong": { "$ref": "#/definitions/confirmPrompt" }
       }
     },
     "wtwZehnderComfoConnect": {
@@ -1414,7 +1423,7 @@
         "ga": { "$ref": "#/definitions/gaPattern" },
         "role": {
           "type": "string",
-          "enum": ["bit", "byte", "percent", "temperature", "raw_int"]
+          "enum": ["bit", "byte", "percent", "temperature", "raw_int", "scene"]
         },
         "value": {
           "oneOf": [{ "type": "boolean" }, { "type": "number" }]
@@ -1438,6 +1447,19 @@
           "type": "array",
           "items": { "$ref": "#/definitions/sceneMediaAction" },
           "maxItems": 16
+        },
+        "knx": {
+          "type": "object",
+          "required": ["ga", "number"],
+          "properties": {
+            "ga": { "$ref": "#/definitions/gaPattern" },
+            "number": { "type": "integer", "minimum": 1, "maximum": 64 }
+          }
+        },
+        "members": {
+          "type": "array",
+          "items": { "type": "string" },
+          "maxItems": 64
         }
       }
     },

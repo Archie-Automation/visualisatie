@@ -3662,10 +3662,11 @@ class UniversalTile extends ConsumerWidget {
     final bus = ref.watch(busProvider);
     final layout = universalPanelLayout(cfg);
 
-    Future<void> press(Map<String, dynamic> b, {bool? on}) async {
+    Future<void> press(Map<String, dynamic> b, {bool? on, bool long = false}) async {
       final id = b['id'] as String;
+      final promptJson = long ? b['confirmLong'] : b['confirm'];
       final prompt =
-          ConfirmPrompt.fromJson(b['confirm']) ?? device.confirm?.actions[id];
+          ConfirmPrompt.fromJson(promptJson) ?? device.confirm?.actions[id];
       final ok = await maybeConfirm(context, prompt);
       if (!ok) return;
       ref.read(busProvider.notifier).send({
@@ -3673,7 +3674,15 @@ class UniversalTile extends ConsumerWidget {
         'deviceId': device.id,
         'buttonId': id,
         if (on != null) 'on': on,
+        if (long) 'long': true,
       });
+    }
+
+    bool hasLongPress(Map<String, dynamic> b) {
+      if (layout == 'switch') return false;
+      final action = b['action'];
+      if (action is Map && action['role'] == 'scene') return true;
+      return b['actionLong'] != null;
     }
 
     DeviceControlItem controlItem(Map<String, dynamic> b) {
@@ -3699,6 +3708,7 @@ class UniversalTile extends ConsumerWidget {
         labelMode: DeviceControlLabelMode.iconOnly,
         active: _isButtonOn(b, bus),
         onTap: () => press(b),
+        onLongPress: hasLongPress(b) ? () => press(b, long: true) : null,
       );
     }
 

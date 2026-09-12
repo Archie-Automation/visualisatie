@@ -26,7 +26,14 @@ const lutronKnxRoles = [
   'scene_number',
 ];
 
-const universalKnxRoles = ['bit', 'byte', 'percent', 'temperature', 'raw_int'];
+const universalKnxRoles = [
+  'bit',
+  'byte',
+  'percent',
+  'temperature',
+  'raw_int',
+  'scene',
+];
 
 /// Rol → DPT-label voor installateur (backend: ROLE_DPT in knxBus).
 const universalRoleDptLabels = <String, String>{
@@ -35,6 +42,7 @@ const universalRoleDptLabels = <String, String>{
   'percent': 'DPT 5.001 — percentage (0–100)',
   'temperature': 'DPT 9.001 — temperatuur (°C)',
   'raw_int': 'DPT 5.010 — geheel getal',
+  'scene': 'DPT 18.001 — scene (oproepen / opslaan)',
 };
 
 void _ensureUniversalToggle(Map<String, dynamic> b) {
@@ -42,9 +50,36 @@ void _ensureUniversalToggle(Map<String, dynamic> b) {
   b['actionOff'] ??= {
     'ga': action['ga'] ?? '1/1/1',
     'role': action['role'] ?? 'bit',
-    'value': false,
+    'value': _clampKnxRoleValue(
+      action['role'] as String? ?? 'bit',
+      false,
+    ),
   };
   b['statusGa'] ??= action['ga'] ?? '1/1/1';
+  _syncUniversalSharedKnx(b);
+}
+
+void _syncUniversalSharedKnx(Map<String, dynamic> b) {
+  final action = _ensureMap(b, 'action');
+  final ga = action['ga'];
+  final role = (action['role'] as String?) ?? 'bit';
+  void sync(String key) {
+    if (b[key] == null) return;
+    final m = _ensureMap(b, key);
+    m['ga'] = ga;
+    m['role'] = role;
+    m['value'] = _clampKnxRoleValue(role, m['value']);
+  }
+
+  sync('actionOff');
+  sync('actionLong');
+}
+
+bool _universalHasLongPress(Map<String, dynamic> b, {required bool switchLayout}) {
+  if (switchLayout) return false;
+  final role = (_ensureMap(b, 'action')['role'] as String?) ?? 'bit';
+  if (_roleIsScene(role)) return true;
+  return b['actionLong'] != null;
 }
 
 /// Zelfde lijst als in JSON — geen kopie, anders gaan .add() verloren.
@@ -79,8 +114,12 @@ Map<String, dynamic> _ensureMap(Map<String, dynamic> parent, String key) {
 
 bool _roleIsBool(String role) => role == 'switch' || role == 'bit';
 
+bool _roleIsScene(String role) => role == 'scene';
+
 ({num min, num max, bool integer})? _knxValueBounds(String role) {
   switch (role) {
+    case 'scene':
+      return (min: 1, max: 64, integer: true);
     case 'byte':
     case 'raw_int':
     case 'scene_number':
@@ -131,6 +170,77 @@ String _knxValueHint(String role) {
   return '$lo–$hi';
 }
 
+String _knxValueCaption(String role) =>
+    _roleIsScene(role) ? 'Scene (1–64)' : 'Waarde';
+
+/// Alleen de waarde (GA/DPT zitten elders). Zelfde hoogte voor bit-dropdown en getalveld.
+class _KnxValueField extends StatelessWidget {
+  const _KnxValueField({
+    required this.knx,
+    required this.role,
+    required this.onChanged,
+    this.compact = false,
+    this.hideLabel = false,
+  });
+
+  final Map<String, dynamic> knx;
+  final String role;
+  final VoidCallback onChanged;
+  final bool compact;
+  final bool hideLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final bounds = _knxValueBounds(role);
+    final label = hideLabel
+        ? ''
+        : (compact
+            ? _knxValueCaption(role)
+            : '${_knxValueCaption(role)} (${_knxValueHint(role)})');
+    if (_roleIsBool(role)) {
+      if (compact) {
+        return _InstallerDropdown(
+          compact: true,
+          label: label,
+          value: knx['value'] == true || knx['value'] == 1 ? '1' : '0',
+          options: const ['1', '0'],
+          optionLabels: const {
+            '1': '1',
+            '0': '0',
+          },
+          onChanged: (v) {
+            knx['value'] = v == '1';
+            onChanged();
+          },
+        );
+      }
+      return LuxeSwitchRow(
+        title: 'Waarde (aan)',
+        value: knx['value'] == true || knx['value'] == 1,
+        onChanged: (v) {
+          knx['value'] = v;
+          onChanged();
+        },
+      );
+    }
+    return _InstallerStrField(
+      key: ValueKey('knx-val-$role-${identityHashCode(knx)}'),
+      compact: compact,
+      label: label.isEmpty ? 'Waarde' : label,
+      hint: _knxValueHint(role),
+      value: '${_clampKnxRoleValue(role, knx['value'])}',
+      number: true,
+      min: bounds?.min,
+      max: bounds?.max,
+      integer: bounds?.integer ?? false,
+      onChanged: (v) {
+        knx['value'] = _clampKnxRoleValue(role, v);
+        onChanged();
+      },
+    );
+  }
+}
+
 /// Eén KNX-telegram (GA + rol + waarde) — gedeeld door Lutron-keypad en universeel paneel.
 class KnxTelegramEditor extends StatelessWidget {
   const KnxTelegramEditor({
@@ -156,13 +266,8 @@ class KnxTelegramEditor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final role = (knx['role'] as String?) ?? roles.first;
-    if (!roles.contains(role)) {
-      knx['role'] = roles.first;
-    }
-    if (!_roleIsBool(role)) {
-      knx['value'] = _clampKnxRoleValue(role, knx['value']);
-    }
+    final roleRaw = (knx['role'] as String?) ?? roles.first;
+    final role = roles.contains(roleRaw) ? roleRaw : roles.first;
 
     final gaField = _InstallerStrField(
       compact: compact,
@@ -176,9 +281,9 @@ class KnxTelegramEditor extends StatelessWidget {
     final roleField = _InstallerDropdown(
       compact: compact,
       label: compact
-          ? 'DPT'
+          ? ''
           : (roleLabels != null ? 'Datatype (DPT)' : 'KNX-rol'),
-      value: knx['role'] as String? ?? roles.first,
+      value: role,
       options: roles,
       optionLabels: roleLabels,
       onChanged: (v) {
@@ -187,46 +292,13 @@ class KnxTelegramEditor extends StatelessWidget {
         onChanged();
       },
     );
-    final bounds = _knxValueBounds(role);
-    final valueField = _roleIsBool(role)
-        ? (compact
-            ? _InstallerDropdown(
-                compact: true,
-                label: 'Waarde',
-                value: knx['value'] == true || knx['value'] == 1 ? '1' : '0',
-                options: const ['1', '0'],
-                optionLabels: const {
-                  '1': '1',
-                  '0': '0',
-                },
-                onChanged: (v) {
-                  knx['value'] = v == '1';
-                  onChanged();
-                },
-              )
-            : LuxeSwitchRow(
-                title: 'Waarde (aan)',
-                value: knx['value'] == true || knx['value'] == 1,
-                onChanged: (v) {
-                  knx['value'] = v;
-                  onChanged();
-                },
-              ))
-        : _InstallerStrField(
-            key: ValueKey('knx-val-$role'),
-            compact: compact,
-            label: compact ? 'Waarde' : 'Waarde (${_knxValueHint(role)})',
-            hint: _knxValueHint(role),
-            value: '${knx['value'] ?? 0}',
-            number: true,
-            min: bounds?.min,
-            max: bounds?.max,
-            integer: bounds?.integer ?? false,
-            onChanged: (v) {
-              knx['value'] = _clampKnxRoleValue(role, v);
-              onChanged();
-            },
-          );
+    final valueField = _KnxValueField(
+      knx: knx,
+      role: role,
+      compact: compact,
+      hideLabel: compact,
+      onChanged: onChanged,
+    );
     final pulseField = showPulseMs && _roleIsBool(role)
         ? _InstallerStrField(
             compact: compact,
@@ -245,6 +317,22 @@ class KnxTelegramEditor extends StatelessWidget {
         : null;
 
     if (compact) {
+      Widget col(int flex, String caption, Widget child) => Expanded(
+            flex: flex,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    caption,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+                child,
+              ],
+            ),
+          );
       return Padding(
         padding: const EdgeInsets.only(bottom: 8),
         child: Column(
@@ -257,26 +345,11 @@ class KnxTelegramEditor extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  flex: 3,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Text(
-                          'Groepadres',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                      ),
-                      gaField,
-                    ],
-                  ),
-                ),
+                col(3, 'Groepadres', gaField),
                 const SizedBox(width: 8),
-                Expanded(flex: 2, child: roleField),
+                col(2, 'DPT', roleField),
                 const SizedBox(width: 8),
-                Expanded(child: valueField),
+                col(1, _roleIsScene(role) ? 'Scene' : 'Waarde', valueField),
               ],
             ),
             if (pulseField != null) ...[
@@ -674,12 +747,14 @@ class _UniversalButtonCardState extends State<_UniversalButtonCard> {
   void initState() {
     super.initState();
     if (widget.switchLayout) _ensureUniversalToggle(widget.button);
+    _syncUniversalSharedKnx(widget.button);
   }
 
   @override
   void didUpdateWidget(_UniversalButtonCard old) {
     super.didUpdateWidget(old);
     if (widget.switchLayout) _ensureUniversalToggle(widget.button);
+    _syncUniversalSharedKnx(widget.button);
   }
 
   void _setMode(_UniversalButtonMode mode) {
@@ -695,6 +770,28 @@ class _UniversalButtonCardState extends State<_UniversalButtonCard> {
     widget.onChanged();
   }
 
+  void _notify() {
+    setState(() {});
+    widget.onChanged();
+  }
+
+  void _setLongPress(bool enabled) {
+    final b = widget.button;
+    if (enabled) {
+      final action = _ensureMap(b, 'action');
+      b['actionLong'] ??= {
+        'ga': action['ga'],
+        'role': action['role'],
+        'value': action['value'],
+      };
+      _syncUniversalSharedKnx(b);
+    } else {
+      b.remove('actionLong');
+      b.remove('confirmLong');
+    }
+    _notify();
+  }
+
   bool get _statusInverted {
     final v = widget.button['statusOnValue'];
     return v == false || v == 0;
@@ -707,6 +804,9 @@ class _UniversalButtonCardState extends State<_UniversalButtonCard> {
     final actionRole = action['role'] as String? ?? 'bit';
     final statusBounds = _knxValueBounds(actionRole);
     final isToggle = _mode == _UniversalButtonMode.toggle;
+    final isScene = _roleIsScene(actionRole);
+    final hasLongPress =
+        _universalHasLongPress(b, switchLayout: widget.switchLayout);
     final captionStyle = Theme.of(context).textTheme.bodySmall;
 
     Widget captioned(String caption, Widget child) => Column(
@@ -787,23 +887,130 @@ class _UniversalButtonCardState extends State<_UniversalButtonCard> {
             ),
             const SizedBox(height: 10),
           ],
-          KnxTelegramEditor(
-            compact: true,
-            title: isToggle ? 'Sturen bij aan' : 'Sturen bij drukken',
-            knx: action,
-            roles: universalKnxRoles,
-            roleLabels: universalRoleDptLabels,
-            onChanged: widget.onChanged,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 3,
+                child: captioned(
+                  'Groepadres',
+                  _InstallerStrField(
+                    key: ValueKey('ul-${b['id']}-ga'),
+                    compact: true,
+                    label: 'Groepadres',
+                    value: action['ga'] as String? ?? '',
+                    onChanged: (v) {
+                      action['ga'] = v;
+                      _syncUniversalSharedKnx(b);
+                      widget.onChanged();
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: captioned(
+                  'DPT',
+                  _InstallerDropdown(
+                    compact: true,
+                    label: '',
+                    value: universalKnxRoles.contains(actionRole)
+                        ? actionRole
+                        : universalKnxRoles.first,
+                    options: universalKnxRoles,
+                    optionLabels: universalRoleDptLabels,
+                    onChanged: (v) {
+                      action['role'] = v;
+                      action['value'] = _clampKnxRoleValue(v, action['value']);
+                      if (_roleIsScene(v)) {
+                        b.remove('actionLong');
+                      }
+                      _syncUniversalSharedKnx(b);
+                      _notify();
+                    },
+                  ),
+                ),
+              ),
+            ],
           ),
-          if (isToggle) ...[
-            KnxTelegramEditor(
-              compact: true,
-              title: 'Sturen bij uit',
-              knx: _ensureMap(b, 'actionOff'),
-              roles: universalKnxRoles,
-              roleLabels: universalRoleDptLabels,
-              onChanged: widget.onChanged,
+          const SizedBox(height: 8),
+          if (isToggle)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: captioned(
+                    isScene ? 'Scene bij aan' : 'Waarde bij aan',
+                    _KnxValueField(
+                      knx: action,
+                      role: actionRole,
+                      compact: true,
+                      hideLabel: true,
+                      onChanged: widget.onChanged,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: captioned(
+                    isScene ? 'Scene bij uit' : 'Waarde bij uit',
+                    _KnxValueField(
+                      knx: _ensureMap(b, 'actionOff'),
+                      role: actionRole,
+                      compact: true,
+                      hideLabel: true,
+                      onChanged: () {
+                        _syncUniversalSharedKnx(b);
+                        widget.onChanged();
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            )
+          else
+            captioned(
+              isScene ? 'Scene' : 'Waarde',
+              _KnxValueField(
+                knx: action,
+                role: actionRole,
+                compact: true,
+                hideLabel: true,
+                onChanged: widget.onChanged,
+              ),
             ),
+          if (isScene && !widget.switchLayout) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Korte druk roept de scene op. Lange druk slaat de huidige stand op.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+          if (!widget.switchLayout && !isScene) ...[
+            LuxeSwitchRow(
+              title: 'Lange druk',
+              subtitle: 'Zelfde groepsadres en DPT, andere waarde',
+              value: b['actionLong'] != null,
+              onChanged: _setLongPress,
+            ),
+            if (b['actionLong'] != null)
+              captioned(
+                'Waarde lange druk',
+                _KnxValueField(
+                  knx: _ensureMap(b, 'actionLong'),
+                  role: actionRole,
+                  compact: true,
+                  hideLabel: true,
+                  onChanged: () {
+                    _syncUniversalSharedKnx(b);
+                    widget.onChanged();
+                  },
+                ),
+              ),
+          ],
+          if (isToggle) ...[
+            const SizedBox(height: 8),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -829,7 +1036,7 @@ class _UniversalButtonCardState extends State<_UniversalButtonCard> {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: _roleIsBool(action['role'] as String? ?? 'bit')
+                  child: _roleIsBool(actionRole)
                       ? LuxeSwitchRow(
                           title: 'Status omdraaien',
                           subtitle: _statusInverted
@@ -872,11 +1079,27 @@ class _UniversalButtonCardState extends State<_UniversalButtonCard> {
           ],
           _UniversalButtonConfirmSection(
             button: b,
+            confirmKey: 'confirm',
+            label: hasLongPress
+                ? 'Bevestiging korte druk'
+                : 'Bevestiging',
             onChanged: () {
               setState(() {});
               widget.onChanged();
             },
           ),
+          if (hasLongPress) ...[
+            const SizedBox(height: 8),
+            _UniversalButtonConfirmSection(
+              button: b,
+              confirmKey: 'confirmLong',
+              label: 'Bevestiging lange druk',
+              onChanged: () {
+                setState(() {});
+                widget.onChanged();
+              },
+            ),
+          ],
         ],
       ),
     );
@@ -893,10 +1116,14 @@ class _UniversalButtonConfirmSection extends StatefulWidget {
     super.key,
     required this.button,
     required this.onChanged,
+    this.confirmKey = 'confirm',
+    this.label = 'Bevestiging',
   });
 
   final Map<String, dynamic> button;
   final VoidCallback onChanged;
+  final String confirmKey;
+  final String label;
 
   @override
   State<_UniversalButtonConfirmSection> createState() =>
@@ -908,7 +1135,7 @@ class _UniversalButtonConfirmSectionState
 
   // Returns null if no confirm, "simple" or "pin"
   String? get _confirmType {
-    final c = widget.button['confirm'];
+    final c = widget.button[widget.confirmKey];
     if (c == null || c == false) return null;
     if (c is Map && c['pin'] != null) return 'pin';
     return 'simple';
@@ -916,15 +1143,15 @@ class _UniversalButtonConfirmSectionState
 
   void _setConfirmType(String? type) {
     final b = widget.button;
+    final key = widget.confirmKey;
     if (type == null) {
-      b.remove('confirm');
+      b.remove(key);
     } else if (type == 'simple') {
-      b['confirm'] = {'title': 'Bevestigen'};
+      b[key] = {'title': 'Bevestigen'};
     } else {
-      // pin — keep existing pin or set empty placeholder
-      final existing = b['confirm'];
+      final existing = b[key];
       final oldPin = (existing is Map) ? existing['pin'] as String? : null;
-      b['confirm'] = {
+      b[key] = {
         'title': 'PIN-bevestiging',
         'pin': oldPin ?? '0000',
       };
@@ -936,7 +1163,7 @@ class _UniversalButtonConfirmSectionState
   @override
   Widget build(BuildContext context) {
     final type = _confirmType;
-    final confirm = widget.button['confirm'];
+    final confirm = widget.button[widget.confirmKey];
     final pin = (confirm is Map) ? confirm['pin'] as String? : null;
     final message = (confirm is Map) ? confirm['message'] as String? : null;
 
@@ -945,7 +1172,7 @@ class _UniversalButtonConfirmSectionState
       children: [
           _InstallerDropdown(
             compact: true,
-            label: 'Bevestiging',
+            label: widget.label,
             value: type ?? 'none',
             options: const ['none', 'simple', 'pin'],
             optionLabels: const {
@@ -957,11 +1184,11 @@ class _UniversalButtonConfirmSectionState
         ),
         if (type == 'simple' || type == 'pin') ...[
           _InstallerStrField(
-            key: ValueKey('ucf-${widget.button['id']}-msg'),
+            key: ValueKey('ucf-${widget.button['id']}-${widget.confirmKey}-msg'),
             label: 'Bevestigingstekst (optioneel)',
             value: message ?? '',
             onChanged: (v) {
-              final c = _ensureMap(widget.button, 'confirm');
+              final c = _ensureMap(widget.button, widget.confirmKey);
               if (v.trim().isEmpty) c.remove('message'); else c['message'] = v.trim();
               widget.onChanged();
             },
@@ -969,13 +1196,13 @@ class _UniversalButtonConfirmSectionState
         ],
         if (type == 'pin') ...[
           _InstallerStrField(
-            key: ValueKey('ucf-${widget.button['id']}-pin'),
+            key: ValueKey('ucf-${widget.button['id']}-${widget.confirmKey}-pin'),
             label: '4-cijferige PIN *',
             value: pin ?? '',
             onChanged: (v) {
               final digits = v.replaceAll(RegExp(r'[^0-9]'), '').substring(
                   0, v.replaceAll(RegExp(r'[^0-9]'), '').length.clamp(0, 4));
-              final c = _ensureMap(widget.button, 'confirm');
+              final c = _ensureMap(widget.button, widget.confirmKey);
               c['pin'] = digits;
               widget.onChanged();
             },

@@ -149,6 +149,12 @@ export function canViewIntercom(
   return acl.includes(intercomId);
 }
 
+/** Can this caller inlezen / leren / KNX-store van hardware-scenes? */
+export function canLearnKnxScenes(req: AuthedRequest): boolean {
+  if (!isStaffRole(req.user?.role)) return false;
+  return getConfig().knxSceneLearn?.enabled === true;
+}
+
 /** Can this caller create / rename / delete scenes?
  *  Installer and superuser always. Users unless `access.editScenes === false`. */
 export function canEditScenes(req: AuthedRequest): boolean {

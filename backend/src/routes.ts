@@ -6,6 +6,7 @@ import { z } from "zod";
 import {
   authenticate,
   canEditScenes,
+  canLearnKnxScenes,
   canReleaseIntercom,
   canViewIntercom,
   currentUser,
@@ -46,6 +47,13 @@ import * as spotify from "./media/spotify";
 import type { KnxBus } from "./knxBus";
 import { logger } from "./logger";
 import { runScene } from "./scenes";
+import {
+  attachKnxSceneLearn,
+  learnKnxScene,
+  startListen,
+  stopListen,
+  storeKnxScene
+} from "./knxSceneLearn";
 import type { SchedulerHandle } from "./scheduler";
 import type {
   CameraDevice,
@@ -357,6 +365,7 @@ export function buildRouter(
   logSampler: LogSamplerHandle
 ) {
   const r = Router();
+  attachKnxSceneLearn(bus, (p) => ws.broadcastSceneHeard(p));
 
   /** Publiek: laat zien of KNX/media bereikbaar zijn (geen auth). */
   /** Public: running version + optional newer GitHub release/tag. */
@@ -1440,7 +1449,14 @@ export function buildRouter(
     icon: z.string().max(40).optional(),
     color: z.string().max(10).optional(),
     actions: z.array(SceneActionSchema).max(64),
-    mediaActions: z.array(SceneMediaActionSchema).max(16).optional()
+    mediaActions: z.array(SceneMediaActionSchema).max(16).optional(),
+    knx: z
+      .object({
+        ga: z.string().min(1).max(20),
+        number: z.number().int().min(1).max(64)
+      })
+      .optional(),
+    members: z.array(z.string().min(1).max(80)).max(64).optional()
   });
 
   r.post("/scenes/:id/run", requireAuth, async (req: AuthedRequest, res) => {
@@ -1465,6 +1481,73 @@ export function buildRouter(
       res.json({ ok: true, sceneId: hit.scene.id });
     } catch (err) {
       logger.warn({ err, id: hit.scene.id }, "scene run failed");
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  r.post("/rooms/:roomId/scenes/listen", requireAuth, (req: AuthedRequest, res) => {
+    if (!canLearnKnxScenes(req))
+      return res.status(403).json({ error: "scene inlezen niet toegestaan" });
+    const room = findRoom(getConfig(), req.params.roomId);
+    if (!room) return res.status(404).json({ error: "unknown room" });
+    const action = (req.body as { action?: string })?.action ?? "start";
+    try {
+      if (action === "stop") stopListen();
+      else startListen(room.id, req.user?.sub ?? "");
+      res.json({ ok: true, listening: action !== "stop" });
+    } catch (err) {
+      res.status(400).json({ error: (err as Error).message });
+    }
+  });
+
+  r.post("/rooms/:roomId/scenes/learn", requireAuth, async (req: AuthedRequest, res) => {
+    if (!canLearnKnxScenes(req))
+      return res.status(403).json({ error: "scene inlezen niet toegestaan" });
+    const parsed = z
+      .object({
+        ga: z.string().min(3).max(20),
+        number: z.number().int().min(1).max(64),
+        extraRoomIds: z.array(z.string()).max(8).optional()
+      })
+      .safeParse(req.body);
+    if (!parsed.success)
+      return res.status(400).json({ error: "bad learn", issues: parsed.error.issues });
+    try {
+      const result = await learnKnxScene({
+        roomId: req.params.roomId,
+        ga: parsed.data.ga,
+        number: parsed.data.number,
+        extraRoomIds: parsed.data.extraRoomIds
+      });
+      await bus.refreshGroupAddresses(collectAllGAs(getConfig()));
+      ws.broadcastConfigChanged(getConfigVersion());
+      res.json({ ok: true, scene: result.scene, members: result.members });
+    } catch (err) {
+      logger.warn({ err }, "knx scene learn failed");
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  r.post("/scenes/:id/store", requireAuth, async (req: AuthedRequest, res) => {
+    if (!canLearnKnxScenes(req))
+      return res.status(403).json({ error: "scene inlezen niet toegestaan" });
+    const hit = findScene(getConfig(), req.params.id);
+    if (!hit) return res.status(404).json({ error: "unknown scene" });
+    if (!hit.scene.knx?.ga)
+      return res.status(400).json({ error: "geen KNX-scene" });
+    try {
+      const parsed = z
+        .object({
+          members: z.array(z.string().min(1).max(80)).max(64).optional()
+        })
+        .safeParse(req.body ?? {});
+      if (!parsed.success)
+        return res.status(400).json({ error: "bad store", issues: parsed.error.issues });
+      await storeKnxScene(hit.scene, bus, parsed.data.members);
+      ws.broadcastConfigChanged(getConfigVersion());
+      res.json({ ok: true, sceneId: hit.scene.id });
+    } catch (err) {
+      logger.warn({ err, id: hit.scene.id }, "knx scene store failed");
       res.status(500).json({ error: (err as Error).message });
     }
   });
@@ -1514,7 +1597,7 @@ export function buildRouter(
     if (!visible) return res.status(403).json({ error: "room not allowed" });
 
     const parsed = z
-      .object({ scenes: z.array(SceneSchema).max(8) })
+      .object({ scenes: z.array(SceneSchema).max(24) })
       .safeParse(req.body);
     if (!parsed.success)
       return res.status(400).json({ error: "bad scenes", issues: parsed.error.issues });

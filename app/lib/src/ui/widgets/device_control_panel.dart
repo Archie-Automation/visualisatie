@@ -35,6 +35,7 @@ class DeviceControlItem {
     this.sublabel,
     this.active = false,
     this.onTap,
+    this.onLongPress,
     this.labelMode = DeviceControlLabelMode.auto,
   });
 
@@ -48,6 +49,7 @@ class DeviceControlItem {
   final String? sublabel;
   final bool active;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final DeviceControlLabelMode labelMode;
 
   bool get hasGlyph => glyph != null || icon != null || arrow != null;
@@ -338,6 +340,7 @@ class _LabeledSquareButton extends StatelessWidget {
             label: item.label,
             active: item.active,
             onTap: item.onTap,
+            onLongPress: item.onLongPress,
           );
 
     Widget inner;
@@ -424,6 +427,7 @@ class _LabeledSquareButton extends StatelessWidget {
 
     final button = _SizedControlSquare(
       onTap: item.onTap,
+      onLongPress: item.onLongPress,
       active: item.active,
       expand: expand,
       height: btnSize,
@@ -488,6 +492,7 @@ class _DeviceControlGlyph extends StatelessWidget {
 class _SizedControlSquare extends StatefulWidget {
   const _SizedControlSquare({
     required this.onTap,
+    this.onLongPress,
     required this.active,
     required this.expand,
     required this.height,
@@ -496,6 +501,7 @@ class _SizedControlSquare extends StatefulWidget {
   });
 
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final bool active;
   final bool expand;
   final double height;
@@ -530,6 +536,7 @@ class _SizedControlSquareState extends State<_SizedControlSquare> {
           ? surface
           : PressScale(
               onTap: widget.onTap!,
+              onLongPress: widget.onLongPress,
               radius: DeviceControlBar.buttonRadius,
               onPressedChanged: (pressed) =>
                   setState(() => _pressed = pressed),
