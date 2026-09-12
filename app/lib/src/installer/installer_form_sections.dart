@@ -37,7 +37,15 @@ const universalRoleDptLabels = <String, String>{
   'raw_int': 'DPT 5.010 — geheel getal',
 };
 
-const universalStyles = ['primary', 'neutral', 'brass', 'danger'];
+void _ensureUniversalToggle(Map<String, dynamic> b) {
+  final action = _ensureMap(b, 'action');
+  b['actionOff'] ??= {
+    'ga': action['ga'] ?? '1/1/1',
+    'role': action['role'] ?? 'bit',
+    'value': false,
+  };
+  b['statusGa'] ??= action['ga'] ?? '1/1/1';
+}
 
 /// Zelfde lijst als in JSON — geen kopie, anders gaan .add() verloren.
 List<Map<String, dynamic>> _ensureList(Map<String, dynamic> parent, String key) {
@@ -113,7 +121,7 @@ class KnxTelegramEditor extends StatelessWidget {
     final roleField = _InstallerDropdown(
       compact: compact,
       label: compact
-          ? ''
+          ? 'DPT'
           : (roleLabels != null ? 'Datatype (DPT)' : 'KNX-rol'),
       value: knx['role'] as String? ?? roles.first,
       options: roles,
@@ -125,15 +133,19 @@ class KnxTelegramEditor extends StatelessWidget {
     );
     final valueField = _roleIsBool(role)
         ? (compact
-            ? Align(
-                alignment: Alignment.centerLeft,
-                child: LuxeOnOffSwitch(
-                  value: knx['value'] == true || knx['value'] == 1,
-                  onChanged: (v) {
-                    knx['value'] = v;
-                    onChanged();
-                  },
-                ),
+            ? _InstallerDropdown(
+                compact: true,
+                label: 'Waarde',
+                value: knx['value'] == true || knx['value'] == 1 ? '1' : '0',
+                options: const ['1', '0'],
+                optionLabels: const {
+                  '1': '1',
+                  '0': '0',
+                },
+                onChanged: (v) {
+                  knx['value'] = v == '1';
+                  onChanged();
+                },
               )
             : LuxeSwitchRow(
                 title: 'Waarde (aan)',
@@ -184,7 +196,22 @@ class KnxTelegramEditor extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(flex: 3, child: gaField),
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          'Groepadres',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                      gaField,
+                    ],
+                  ),
+                ),
                 const SizedBox(width: 8),
                 Expanded(flex: 2, child: roleField),
                 const SizedBox(width: 8),
@@ -467,8 +494,7 @@ class _UniversalPanelInstallerSectionState
     buttons.add({
       'id': 'btn-${_uuid.v4()}',
       'label': layout == 'switch' ? 'Schakelaar $n' : 'Knop $n',
-      'style': 'neutral',
-      'action': action,
+        'action': action,
       if (layout == 'switch') ...{
         'actionOff': {'ga': '1/1/1', 'role': 'bit', 'value': false},
         'statusGa': '1/1/1',
@@ -506,6 +532,11 @@ class _UniversalPanelInstallerSectionState
           },
           onChanged: (v) {
             uni['layout'] = v;
+            if (v == 'switch') {
+              for (final b in buttons) {
+                _ensureUniversalToggle(b);
+              }
+            }
             _notify();
           },
         ),
@@ -531,6 +562,7 @@ class _UniversalPanelInstallerSectionState
           _UniversalButtonCard(
             key: ValueKey(buttons[i]['id'] ?? 'b$i'),
             button: buttons[i],
+            switchLayout: layout == 'switch',
             onChanged: _notify,
             onDelete: () {
               buttons.removeAt(i);
@@ -557,32 +589,42 @@ class _UniversalButtonCard extends StatefulWidget {
     required this.button,
     required this.onChanged,
     required this.onDelete,
+    this.switchLayout = false,
   });
 
   final Map<String, dynamic> button;
   final VoidCallback onChanged;
   final VoidCallback onDelete;
+  final bool switchLayout;
 
   @override
   State<_UniversalButtonCard> createState() => _UniversalButtonCardState();
 }
 
 class _UniversalButtonCardState extends State<_UniversalButtonCard> {
-  _UniversalButtonMode get _mode =>
-      widget.button['actionOff'] != null
-          ? _UniversalButtonMode.toggle
-          : _UniversalButtonMode.single;
+  _UniversalButtonMode get _mode {
+    if (widget.switchLayout) return _UniversalButtonMode.toggle;
+    return widget.button['actionOff'] != null
+        ? _UniversalButtonMode.toggle
+        : _UniversalButtonMode.single;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.switchLayout) _ensureUniversalToggle(widget.button);
+  }
+
+  @override
+  void didUpdateWidget(_UniversalButtonCard old) {
+    super.didUpdateWidget(old);
+    if (widget.switchLayout) _ensureUniversalToggle(widget.button);
+  }
 
   void _setMode(_UniversalButtonMode mode) {
     final b = widget.button;
-    final action = _ensureMap(b, 'action');
     if (mode == _UniversalButtonMode.toggle) {
-      b['actionOff'] ??= {
-        'ga': action['ga'] ?? '1/1/1',
-        'role': action['role'] ?? 'bit',
-        'value': false,
-      };
-      b['statusGa'] ??= action['ga'] ?? '1/1/1';
+      _ensureUniversalToggle(b);
     } else {
       b.remove('actionOff');
       b.remove('statusGa');
@@ -590,6 +632,11 @@ class _UniversalButtonCardState extends State<_UniversalButtonCard> {
     }
     setState(() {});
     widget.onChanged();
+  }
+
+  bool get _statusInverted {
+    final v = widget.button['statusOnValue'];
+    return v == false || v == 0;
   }
 
   @override
@@ -657,53 +704,29 @@ class _UniversalButtonCardState extends State<_UniversalButtonCard> {
             ],
           ),
           const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _InstallerDropdown(
-                  compact: true,
-                  label: 'Stijl',
-                  value: (b['style'] as String?) ?? 'neutral',
-                  options: universalStyles,
-                  optionLabels: const {
-                    'primary': 'Primair',
-                    'neutral': 'Neutraal',
-                    'brass': 'Messing',
-                    'danger': 'Waarschuwing',
-                  },
-                  onChanged: (v) {
-                    b['style'] = v;
-                    widget.onChanged();
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _InstallerDropdown(
-                  compact: true,
-                  label: 'Gedrag',
-                  value: isToggle ? 'toggle' : 'single',
-                  options: const ['single', 'toggle'],
-                  optionLabels: const {
-                    'single': 'Enkele actie',
-                    'toggle': 'Schakelaar',
-                  },
-                  onChanged: (v) {
-                    _setMode(
-                      v == 'toggle'
-                          ? _UniversalButtonMode.toggle
-                          : _UniversalButtonMode.single,
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
+          if (!widget.switchLayout) ...[
+            _InstallerDropdown(
+              compact: true,
+              label: 'Gedrag',
+              value: isToggle ? 'toggle' : 'single',
+              options: const ['single', 'toggle'],
+              optionLabels: const {
+                'single': 'Enkele actie',
+                'toggle': 'Aan / uit',
+              },
+              onChanged: (v) {
+                _setMode(
+                  v == 'toggle'
+                      ? _UniversalButtonMode.toggle
+                      : _UniversalButtonMode.single,
+                );
+              },
+            ),
+            const SizedBox(height: 10),
+          ],
           KnxTelegramEditor(
             compact: true,
-            title: isToggle ? 'Aan' : 'KNX',
+            title: isToggle ? 'Sturen bij aan' : 'Sturen bij drukken',
             knx: action,
             roles: universalKnxRoles,
             roleLabels: universalRoleDptLabels,
@@ -712,7 +735,7 @@ class _UniversalButtonCardState extends State<_UniversalButtonCard> {
           if (isToggle) ...[
             KnxTelegramEditor(
               compact: true,
-              title: 'Uit',
+              title: 'Sturen bij uit',
               knx: _ensureMap(b, 'actionOff'),
               roles: universalKnxRoles,
               roleLabels: universalRoleDptLabels,
@@ -724,7 +747,7 @@ class _UniversalButtonCardState extends State<_UniversalButtonCard> {
                 Expanded(
                   flex: 2,
                   child: captioned(
-                    'Status-GA',
+                    'Status groepsadres',
                     _InstallerStrField(
                       key: ValueKey('ul-${b['id']}-stga'),
                       compact: true,
@@ -741,36 +764,41 @@ class _UniversalButtonCardState extends State<_UniversalButtonCard> {
                     ),
                   ),
                 ),
-                if ((b['statusGa'] as String?)?.trim().isNotEmpty == true) ...[
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _roleIsBool(action['role'] as String? ?? 'bit')
-                        ? LuxeSwitchRow(
-                            title: 'Aan = bit 1',
-                            value: b['statusOnValue'] == true ||
-                                b['statusOnValue'] == 1,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _roleIsBool(action['role'] as String? ?? 'bit')
+                      ? LuxeSwitchRow(
+                          title: 'Status omdraaien',
+                          subtitle: _statusInverted
+                              ? 'Status 0 is aan'
+                              : 'Status 1 is aan',
+                          value: _statusInverted,
+                          onChanged: (v) {
+                            if (v) {
+                              b['statusOnValue'] = false;
+                            } else {
+                              b.remove('statusOnValue');
+                            }
+                            widget.onChanged();
+                            setState(() {});
+                          },
+                        )
+                      : captioned(
+                          'Aan-waarde',
+                          _InstallerStrField(
+                            key: ValueKey('ul-${b['id']}-ston'),
+                            compact: true,
+                            label: 'Waarde die “aan” betekent',
+                            value: '${b['statusOnValue'] ?? 1}',
+                            number: true,
                             onChanged: (v) {
-                              b['statusOnValue'] = v;
+                              final n = num.tryParse(v);
+                              b['statusOnValue'] = n ?? 1;
                               widget.onChanged();
                             },
-                          )
-                        : captioned(
-                            'Aan-waarde',
-                            _InstallerStrField(
-                              key: ValueKey('ul-${b['id']}-ston'),
-                              compact: true,
-                              label: 'Waarde die “aan” betekent',
-                              value: '${b['statusOnValue'] ?? 1}',
-                              number: true,
-                              onChanged: (v) {
-                                final n = num.tryParse(v);
-                                b['statusOnValue'] = n ?? 1;
-                                widget.onChanged();
-                              },
-                            ),
                           ),
-                  ),
-                ],
+                        ),
+                ),
               ],
             ),
             const SizedBox(height: 8),
