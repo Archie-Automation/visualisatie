@@ -36,6 +36,7 @@ class DeviceControlItem {
     this.active = false,
     this.onTap,
     this.onLongPress,
+    this.longPressDuration,
     this.labelMode = DeviceControlLabelMode.auto,
   });
 
@@ -50,6 +51,7 @@ class DeviceControlItem {
   final bool active;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+  final Duration? longPressDuration;
   final DeviceControlLabelMode labelMode;
 
   bool get hasGlyph => glyph != null || icon != null || arrow != null;
@@ -341,6 +343,7 @@ class _LabeledSquareButton extends StatelessWidget {
             active: item.active,
             onTap: item.onTap,
             onLongPress: item.onLongPress,
+            longPressDuration: item.longPressDuration,
           );
 
     Widget inner;
@@ -428,6 +431,7 @@ class _LabeledSquareButton extends StatelessWidget {
     final button = _SizedControlSquare(
       onTap: item.onTap,
       onLongPress: item.onLongPress,
+      longPressDuration: item.longPressDuration,
       active: item.active,
       expand: expand,
       height: btnSize,
@@ -493,6 +497,7 @@ class _SizedControlSquare extends StatefulWidget {
   const _SizedControlSquare({
     required this.onTap,
     this.onLongPress,
+    this.longPressDuration,
     required this.active,
     required this.expand,
     required this.height,
@@ -502,6 +507,7 @@ class _SizedControlSquare extends StatefulWidget {
 
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
+  final Duration? longPressDuration;
   final bool active;
   final bool expand;
   final double height;
@@ -537,6 +543,8 @@ class _SizedControlSquareState extends State<_SizedControlSquare> {
           : PressScale(
               onTap: widget.onTap!,
               onLongPress: widget.onLongPress,
+              longPressDuration:
+                  widget.longPressDuration ?? const Duration(milliseconds: 500),
               radius: DeviceControlBar.buttonRadius,
               onPressedChanged: (pressed) =>
                   setState(() => _pressed = pressed),

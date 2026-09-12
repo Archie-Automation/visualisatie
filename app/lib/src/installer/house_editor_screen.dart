@@ -3509,7 +3509,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       case _FocusKind.knx:
         return _KnxInstallerSection(
           knx: _ensureKnx(),
-          house: _house!,
           onChanged: () => setState(() {}),
           onImport: _importKnx,
           onImportInfo: _showKnxImportInfo,
@@ -3990,7 +3989,6 @@ class _ProjectForm extends ConsumerWidget {
 class _KnxInstallerSection extends StatefulWidget {
   const _KnxInstallerSection({
     required this.knx,
-    required this.house,
     required this.onChanged,
     required this.getToken,
     required this.onImport,
@@ -3998,7 +3996,6 @@ class _KnxInstallerSection extends StatefulWidget {
   });
 
   final Map<String, dynamic> knx;
-  final Map<String, dynamic> house;
   final VoidCallback onChanged;
   final Future<String?> Function() getToken;
   final VoidCallback onImport;
@@ -4158,19 +4155,6 @@ class _KnxInstallerSectionState extends State<_KnxInstallerSection> {
                 ),
               ],
             ),
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
-          child: LuxeSwitchRow(
-            title: 'Scene inlezen vanaf muurknop',
-            subtitle:
-                'Alleen installer en superuser. Lampen gaan even uit/aan tijdens inlezen.',
-            value: (widget.house['knxSceneLearn'] as Map?)?['enabled'] == true,
-            onChanged: (v) {
-              widget.house['knxSceneLearn'] = {'enabled': v};
-              widget.onChanged();
-            },
           ),
         ),
         Expanded(

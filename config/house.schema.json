@@ -1033,6 +1033,16 @@
         "action": { "$ref": "#/definitions/universalAction" },
         "actionOff": { "$ref": "#/definitions/universalAction" },
         "actionLong": { "$ref": "#/definitions/universalAction" },
+        "sceneStoreOnLong": {
+          "type": "boolean",
+          "description": "Lange druk slaat de korte-druk-scene op in KNX. Niet combineren met actionLong."
+        },
+        "longPressMs": {
+          "type": "integer",
+          "minimum": 200,
+          "maximum": 3000,
+          "description": "Hoe lang vasthouden voordat lange druk afgaat. Standaard 500."
+        },
         "confirm": { "$ref": "#/definitions/confirmPrompt" },
         "confirmLong": { "$ref": "#/definitions/confirmPrompt" }
       }

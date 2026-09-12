@@ -210,7 +210,7 @@ export const CommandSchema = z.discriminatedUnion("kind", [
      *  value instead of being derived from the (possibly shared) status GA —
      *  this avoids feedback loops when send- and status-GA are identical. */
     on: z.boolean().optional(),
-    /** Long press: `actionLong`, or scene store when role is `scene`. */
+    /** Long press: `actionLong`, or DPT18 store when `sceneStoreOnLong`. */
     long: z.boolean().optional()
   }),
 
@@ -733,8 +733,11 @@ export async function dispatch(
       });
 
       if (cmd.long) {
-        if (sharedRole === "scene") {
-          await writeUniversalAction(withShared(btn.action), bus, { sceneStore: true });
+        if (btn.sceneStoreOnLong) {
+          if (sharedRole !== "scene") return;
+          await writeUniversalAction(withShared(btn.action), bus, {
+            sceneStore: true
+          });
           return;
         }
         if (!btn.actionLong) return;

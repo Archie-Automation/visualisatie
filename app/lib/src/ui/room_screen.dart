@@ -7,7 +7,6 @@ import '../theme.dart';
 import '../user_favorite_shortcuts.dart';
 import 'app_nav.dart';
 import 'responsive.dart';
-import 'knx_scene_learn_sheet.dart';
 import 'widgets/back_pill.dart';
 import 'widgets/device_widgets.dart';
 import 'widgets/favorite_device_wrap.dart';
@@ -48,7 +47,6 @@ class RoomScreen extends ConsumerWidget {
     Room room,
   ) {
     final canEdit = canEditScenesInApp(ref.watch(authProvider), cfg);
-    final canLearn = canLearnKnxScenesInApp(ref.watch(authProvider), cfg);
     final hp = context.hPad;
 
     return CustomScrollView(
@@ -68,7 +66,7 @@ class RoomScreen extends ConsumerWidget {
         ),
 
         // ── Scenes ────────────────────────────────────────────────────────
-        if (room.scenes.isNotEmpty || canEdit || canLearn)
+        if (room.scenes.isNotEmpty || canEdit)
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(0, 16, 0, 24),
@@ -77,38 +75,12 @@ class RoomScreen extends ConsumerWidget {
                 children: [
                   Padding(
                     padding: EdgeInsets.fromLTRB(hp, 0, hp, 12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text('SCENES',
-                              style: Theme.of(context).textTheme.labelLarge),
-                        ),
-                        if (canLearn)
-                          TextButton(
-                            onPressed: () async {
-                              final ok = await showModalBottomSheet<bool>(
-                                context: context,
-                                isScrollControlled: true,
-                                useSafeArea: true,
-                                backgroundColor: Colors.transparent,
-                                builder: (_) => KnxSceneLearnSheet(
-                                  roomId: room.id,
-                                  config: cfg,
-                                ),
-                              );
-                              if (ok == true) {
-                                ref.invalidate(configProvider);
-                              }
-                            },
-                            child: const Text('Inlezen'),
-                          ),
-                      ],
-                    ),
+                    child: Text('SCENES',
+                        style: Theme.of(context).textTheme.labelLarge),
                   ),
                   SceneStrip(
                     scenes: room.scenes,
                     canEdit: canEdit,
-                    canLearnKnx: canLearn,
                     roomId: room.id,
                     onEdited: (_) => ref.invalidate(configProvider),
                   ),

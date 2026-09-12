@@ -151,8 +151,7 @@ export function canViewIntercom(
 
 /** Can this caller inlezen / leren / KNX-store van hardware-scenes? */
 export function canLearnKnxScenes(req: AuthedRequest): boolean {
-  if (!isStaffRole(req.user?.role)) return false;
-  return getConfig().knxSceneLearn?.enabled === true;
+  return isStaffRole(req.user?.role);
 }
 
 /** Can this caller create / rename / delete scenes?

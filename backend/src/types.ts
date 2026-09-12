@@ -791,6 +791,13 @@ export interface UniversalButton {
   actionOff?: UniversalAction;
   /** Optional long-press telegram on the same GA/DPT as `action`. */
   actionLong?: UniversalAction;
+  /**
+   * When true, long press stores the short-press KNX scene (DPT 18 bit7).
+   * Mutually exclusive with `actionLong`. Default off — long press is optional.
+   */
+  sceneStoreOnLong?: boolean;
+  /** Hold duration before long press fires (ms). Default 500. */
+  longPressMs?: number;
   /** If set, the UI reads this GA to decide whether the button is "on". */
   statusGa?: GA;
   /** The value in `statusGa` that means "on". Defaults to `true`/1. */

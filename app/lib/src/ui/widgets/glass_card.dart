@@ -191,12 +191,14 @@ class PressScale extends StatefulWidget {
     required this.onTap,
     required this.radius,
     this.onLongPress,
+    this.longPressDuration = const Duration(milliseconds: 500),
     this.onPressedChanged,
   });
 
   final Widget child;
   final VoidCallback onTap;
   final VoidCallback? onLongPress;
+  final Duration longPressDuration;
   final double radius;
   final ValueChanged<bool>? onPressedChanged;
 
@@ -207,10 +209,13 @@ class PressScale extends StatefulWidget {
 class _PressScaleState extends State<PressScale> {
   bool _pressed = false;
   Timer? _release;
+  Timer? _longPress;
+  bool _longFired = false;
 
   @override
   void dispose() {
     _release?.cancel();
+    _longPress?.cancel();
     super.dispose();
   }
 
@@ -234,11 +239,27 @@ class _PressScaleState extends State<PressScale> {
   Widget build(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: widget.onTap,
-      onLongPress: widget.onLongPress,
-      onTapDown: (_) => _setPressed(true),
-      onTapUp: (_) => _setPressed(false),
-      onTapCancel: () => _setPressed(false),
+      onTapDown: (_) {
+        _setPressed(true);
+        _longFired = false;
+        _longPress?.cancel();
+        final long = widget.onLongPress;
+        if (long == null) return;
+        _longPress = Timer(widget.longPressDuration, () {
+          if (!mounted) return;
+          _longFired = true;
+          long();
+        });
+      },
+      onTapUp: (_) {
+        _setPressed(false);
+        _longPress?.cancel();
+        if (!_longFired) widget.onTap();
+      },
+      onTapCancel: () {
+        _setPressed(false);
+        _longPress?.cancel();
+      },
       child: AnimatedScale(
         duration: const Duration(milliseconds: 140),
         curve: Curves.easeOutCubic,
