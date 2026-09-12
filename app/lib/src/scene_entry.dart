@@ -1326,12 +1326,20 @@ class SceneDraft {
   /// Media actions that couldn't be matched to any device.
   final List<SceneMediaAction> mediaExtras;
 
+  /// KNX hardware binding; preserved when editing app actions.
+  final String? knxGa;
+  final int? knxNumber;
+  final List<String> members;
+
   SceneDraft({
     required this.name,
     required this.entries,
     this.icon,
     this.extras = const [],
     this.mediaExtras = const [],
+    this.knxGa,
+    this.knxNumber,
+    this.members = const [],
   });
 
   static SceneDraft fromScene(Scene s, HouseConfig cfg) {
@@ -1370,6 +1378,9 @@ class SceneDraft {
       entries: entries,
       extras: remaining,
       mediaExtras: mediaExtras,
+      knxGa: s.knxGa,
+      knxNumber: s.knxNumber,
+      members: s.members,
     );
   }
 
@@ -1388,6 +1399,9 @@ class SceneDraft {
       icon: icon,
       actions: actions,
       mediaActions: mediaActions,
+      knxGa: knxGa,
+      knxNumber: knxNumber,
+      members: members,
     );
   }
 
@@ -1397,5 +1411,8 @@ class SceneDraft {
         entries: [...entries],
         extras: [...extras],
         mediaExtras: [...mediaExtras],
+        knxGa: knxGa,
+        knxNumber: knxNumber,
+        members: [...members],
       );
 }

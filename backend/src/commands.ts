@@ -10,6 +10,7 @@ import { fireplaceVirtual } from "./fireplaceVirtual";
 import { fireplaceIsPlanika, pulseKnxGa } from "./fireplacePulse";
 import { wtwRuntime } from "./wtwRuntime";
 import { pressMvStand } from "./wtw";
+import { encodeSceneByte } from "./knxScene";
 
 type PositionControllableDevice = ShadingDevice | PositionActuatorDevice;
 
@@ -208,7 +209,9 @@ export const CommandSchema = z.discriminatedUnion("kind", [
      *  button has an `actionOff`), the action is chosen directly from this
      *  value instead of being derived from the (possibly shared) status GA —
      *  this avoids feedback loops when send- and status-GA are identical. */
-    on: z.boolean().optional()
+    on: z.boolean().optional(),
+    /** Long press: `actionLong`, or scene store when role is `scene`. */
+    long: z.boolean().optional()
   }),
 
   /* ----------------------------- WTW ------------------------------ */
@@ -721,6 +724,24 @@ export async function dispatch(
       if (device.type !== "universal") throw new Error("not a universal panel");
       const btn = device.universal.buttons.find((b) => b.id === cmd.buttonId);
       if (!btn) throw new Error("unknown button");
+      const sharedGa = btn.action.ga;
+      const sharedRole = btn.action.role;
+      const withShared = (a: UniversalAction): UniversalAction => ({
+        ...a,
+        ga: sharedGa,
+        role: sharedRole
+      });
+
+      if (cmd.long) {
+        if (sharedRole === "scene") {
+          await writeUniversalAction(withShared(btn.action), bus, { sceneStore: true });
+          return;
+        }
+        if (!btn.actionLong) return;
+        await writeUniversalAction(withShared(btn.actionLong), bus);
+        return;
+      }
+
       let action: UniversalAction = btn.action;
       if (btn.actionOff) {
         if (typeof cmd.on === "boolean") {
@@ -738,7 +759,7 @@ export async function dispatch(
           action = isOn ? btn.actionOff : btn.action;
         }
       }
-      await writeUniversalAction(action, bus);
+      await writeUniversalAction(withShared(action), bus);
       return;
     }
 
@@ -817,8 +838,17 @@ function assertMedia(d: Device): void {
   }
 }
 
-async function writeUniversalAction(a: UniversalAction, bus: KnxBus) {
-  const role = a.role; // bit | byte | percent | temperature | raw_int
+async function writeUniversalAction(
+  a: UniversalAction,
+  bus: KnxBus,
+  opts?: { sceneStore?: boolean }
+) {
+  const role = a.role;
+  if (role === "scene") {
+    const n = Math.min(64, Math.max(1, Math.round(Number(a.value) || 1)));
+    await bus.writeRaw(a.ga, Buffer.from([encodeSceneByte(n, !!opts?.sceneStore)]), 8);
+    return;
+  }
   let value: number | boolean = a.value;
   if (role === "bit") {
     value = typeof value === "boolean" ? value : value !== 0;

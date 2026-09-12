@@ -4,6 +4,7 @@ import type { KnxBus } from "./knxBus";
 import type { MediaManager } from "./media/manager";
 import type { HouseConfig, Scene, SceneAction, SceneMediaAction } from "./types";
 import { pulseKnxGa, syncFireplaceVirtualForDiscreteGa } from "./fireplacePulse";
+import { encodeSceneByte } from "./knxScene";
 
 /**
  * Execute a scene: fire every KNX and media action sequentially with any
@@ -21,10 +22,19 @@ export async function runScene(
       id: scene.id,
       name: scene.name,
       actions: scene.actions.length,
-      mediaActions: scene.mediaActions?.length ?? 0
+      mediaActions: scene.mediaActions?.length ?? 0,
+      knx: scene.knx
     },
     "scene run"
   );
+  if (scene.knx?.ga) {
+    await bus.writeRaw(
+      scene.knx.ga,
+      Buffer.from([encodeSceneByte(scene.knx.number, false)]),
+      8
+    );
+    return;
+  }
   for (const action of scene.actions) {
     if (action.delayMs && action.delayMs > 0) {
       await delay(action.delayMs);

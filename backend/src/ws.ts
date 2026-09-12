@@ -36,12 +36,29 @@ type Outgoing =
       type: "intercom.cleared";
       payload: { intercomId: string };
     }
-  | { type: "config_changed"; payload: { version: number } };
+  | { type: "config_changed"; payload: { version: number } }
+  | {
+      type: "scene.heard";
+      payload: {
+        roomId: string;
+        ga: string;
+        number: number;
+        trusted: boolean;
+        timeout?: boolean;
+      };
+    };
 
 export interface WsHub {
   broadcastIntercomRing(intercomId: string, groupId?: string): void;
   broadcastIntercomCleared(intercomId: string): void;
   broadcastConfigChanged(version: number): void;
+  broadcastSceneHeard(payload: {
+    roomId: string;
+    ga: string;
+    number: number;
+    trusted: boolean;
+    timeout?: boolean;
+  }): void;
   close(): Promise<void>;
 }
 
@@ -172,6 +189,9 @@ export function attachWebSocket(
       broadcastAll({ type: "config_changed", payload: { version } });
       // Devices may have been removed — renew KNX snapshot for open clients.
       broadcastAll({ type: "snapshot", payload: bus.getAll() });
+    },
+    broadcastSceneHeard(payload) {
+      broadcastAll({ type: "scene.heard", payload });
     },
     async close() {
       unsubHvac();

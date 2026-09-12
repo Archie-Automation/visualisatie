@@ -136,6 +136,38 @@ class AuthState {
 bool canEditScenesInApp(AuthState auth, HouseConfig cfg) =>
     auth.isStaff || (cfg.me?.canEditScenes ?? false);
 
+/// KNX-scene inlezen/store: alleen staff én huisvlag.
+bool canLearnKnxScenesInApp(AuthState auth, HouseConfig cfg) =>
+    auth.isStaff && cfg.knxSceneLearnEnabled;
+
+class KnxSceneHeard {
+  const KnxSceneHeard({
+    required this.roomId,
+    required this.ga,
+    required this.number,
+    required this.trusted,
+    this.timeout = false,
+  });
+  final String roomId;
+  final String ga;
+  final int number;
+  final bool trusted;
+  final bool timeout;
+}
+
+class KnxSceneHeardController extends Notifier<KnxSceneHeard?> {
+  @override
+  KnxSceneHeard? build() => null;
+
+  void setHeard(KnxSceneHeard v) => state = v;
+  void clear() => state = null;
+}
+
+final knxSceneHeardProvider =
+    NotifierProvider<KnxSceneHeardController, KnxSceneHeard?>(
+  KnxSceneHeardController.new,
+);
+
 class AuthController extends Notifier<AuthState> {
   @override
   AuthState build() {
@@ -428,6 +460,15 @@ class BusController extends Notifier<BusState> {
               ref.read(intercomRingProvider.notifier).markAnsweredElsewhere();
             case 'config_changed':
               ref.invalidate(configProvider);
+            case 'scene.heard':
+              final p = msg['payload'] as Map<String, dynamic>;
+              ref.read(knxSceneHeardProvider.notifier).setHeard(KnxSceneHeard(
+                    roomId: p['roomId'] as String? ?? '',
+                    ga: p['ga'] as String? ?? '',
+                    number: (p['number'] as num?)?.toInt() ?? 1,
+                    trusted: p['trusted'] == true,
+                    timeout: p['timeout'] == true,
+                  ));
           }
         },
         onError: (_) => _scheduleReconnect(),
