@@ -282,6 +282,49 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
     setState(() => _phase = _LearnPhase.overview);
   }
 
+  Future<void> _forgetExisting() async {
+    final id = _scene?.id ?? widget.existing?.id;
+    if (id == null || id.isEmpty) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Inlezing verwijderen?'),
+        content: const Text(
+          'Deze knop verdwijnt uit de app. De KNX-scene in ETS blijft bestaan. '
+          'Daarna kunt u opnieuw inlezen.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuleren'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Verwijderen'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() => _storing = true);
+    try {
+      await ref.read(sceneApiProvider).forgetKnx(widget.roomId, id);
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: LuxeColors.danger,
+          behavior: SnackBarBehavior.floating,
+          content: Text('Verwijderen mislukt: $e'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _storing = false);
+    }
+  }
+
   Future<void> _persistAndStore() async {
     final ga = _ga;
     final number = _number;
@@ -485,13 +528,22 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-          child: TextField(
-            controller: _nameCtrl,
-            decoration: const InputDecoration(
-              labelText: 'Naam van deze knop',
-              hintText: 'Avond, diner, …',
-            ),
-            textCapitalization: TextCapitalization.sentences,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Naam schakelaar',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _nameCtrl,
+                decoration: const InputDecoration(
+                  hintText: 'Avond, diner, …',
+                ),
+                textCapitalization: TextCapitalization.sentences,
+              ),
+            ],
           ),
         ),
         Padding(
@@ -529,27 +581,40 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _storing ? null : _confirmWarn,
-                  child: const Text('Opnieuw inlezen'),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _storing ? null : _confirmWarn,
+                      child: const Text('Opnieuw inlezen'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: FilledButton(
+                      onPressed:
+                          _storing || _ga == null ? null : _persistAndStore,
+                      child: _storing
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Text('Opslaan in KNX'),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: FilledButton(
-                  onPressed: _storing || _ga == null ? null : _persistAndStore,
-                  child: _storing
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Opslaan in KNX'),
+              if ((_scene?.id ?? widget.existing?.id) != null) ...[
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: _storing ? null : _forgetExisting,
+                  child: const Text('Inlezing verwijderen'),
                 ),
-              ),
+              ],
             ],
           ),
         ),

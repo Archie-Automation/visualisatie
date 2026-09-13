@@ -812,3 +812,21 @@ export async function recallKnxBinding(scene: Scene, bus: KnxBus): Promise<void>
   if (!knx?.ga) throw new Error("geen KNX-scene");
   await recallScene(bus, knx.ga, knx.number);
 }
+
+/** Verwijdert alleen de app-inlezing. ETS-scene blijft bestaan. */
+export function forgetKnxRoomScene(roomId: string, sceneId: string): void {
+  let found = false;
+  updateConfig((draft) => {
+    for (const f of draft.floors) {
+      for (const r of f.rooms) {
+        if (r.id !== roomId) continue;
+        const scenes = r.scenes ?? [];
+        const hit = scenes.find((s) => s.id === sceneId);
+        if (!hit?.knx?.ga) return;
+        r.scenes = scenes.filter((s) => s.id !== sceneId);
+        found = true;
+      }
+    }
+  });
+  if (!found) throw new Error("unknown knx scene");
+}

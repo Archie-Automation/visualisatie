@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../api.dart';
 import '../models.dart';
 import '../theme.dart';
+import '../scene_api.dart';
 import 'knx_scene_learn_sheet.dart';
 import 'widgets/glass_card.dart';
 
@@ -77,6 +78,41 @@ class _KnxSceneLearnSectionState extends ConsumerState<KnxSceneLearnSection> {
       ),
     );
     if (ok == true) ref.invalidate(configProvider);
+  }
+
+  Future<void> _forget(Scene scene) async {
+    final roomId = _roomId;
+    if (roomId == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Inlezing verwijderen?'),
+        content: Text(
+          '“${scene.name}” verdwijnt uit de app. De KNX-scene in ETS blijft bestaan. '
+          'Daarna kunt u opnieuw inlezen.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuleren'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Verwijderen'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    try {
+      await ref.read(sceneApiProvider).forgetKnx(roomId, scene.id);
+      ref.invalidate(configProvider);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'), backgroundColor: Colors.red.shade800),
+      );
+    }
   }
 
   @override
@@ -165,7 +201,17 @@ class _KnxSceneLearnSectionState extends ConsumerState<KnxSceneLearnSection> {
                       subtitle: Text(
                         '${knxScenes[i].knxGa}  ·  scene ${knxScenes[i].knxNumber}',
                       ),
-                      trailing: const Icon(Icons.chevron_right),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            tooltip: 'Verwijderen om opnieuw in te lezen',
+                            onPressed: () => _forget(knxScenes[i]),
+                            icon: const Icon(Icons.delete_outline),
+                          ),
+                          const Icon(Icons.chevron_right),
+                        ],
+                      ),
                       onTap: () => _openLearn(existing: knxScenes[i]),
                     ),
                   ],
