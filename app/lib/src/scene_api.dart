@@ -153,6 +153,17 @@ class _SceneApi {
         },
       );
 
+  Future<void> forgetKnx(String roomId, String sceneId) async {
+    final token = _ref.read(authProvider).token ?? '';
+    final res = await http.delete(
+      Uri.parse('$apiBase/api/rooms/$roomId/scenes/$sceneId'),
+      headers: {'authorization': 'Bearer $token'},
+    );
+    if (res.statusCode != 200) {
+      throw Exception('scene verwijderen mislukt: ${res.statusCode} ${res.body}');
+    }
+  }
+
   Future<void> _post(String path, Map<String, dynamic> body) async {
     final token = _ref.read(authProvider).token ?? '';
     final res = await http.post(

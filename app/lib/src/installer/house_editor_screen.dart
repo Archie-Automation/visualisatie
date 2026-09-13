@@ -4539,9 +4539,11 @@ class _KnxForm extends StatelessWidget {
             ),
           ),
           const Divider(height: 32),
-          Text('KNX-scenes: groepsadressen invoeren',
-              style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 4),
+          Text(
+            "KNX scene's inleren",
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: 8),
           Text(
             'Vul hier de scene-groepsadressen in (DPT 18.001) zoals ze in ETS '
             'op de muurknoppen staan, en kies per adres de ruimte.\n\n'

@@ -53,7 +53,8 @@ import {
   learnKnxScene,
   startListen,
   stopListen,
-  storeKnxScene
+  storeKnxScene,
+  forgetKnxRoomScene
 } from "./knxSceneLearn";
 import type { SchedulerHandle } from "./scheduler";
 import type {
@@ -1571,6 +1572,24 @@ export function buildRouter(
     } catch (err) {
       logger.warn({ err, id: hit.scene.id }, "knx scene store failed");
       res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  r.delete("/rooms/:roomId/scenes/:id", requireAuth, (req: AuthedRequest, res) => {
+    if (!canLearnKnxScenes(req))
+      return res.status(403).json({ error: "scene inlezen niet toegestaan" });
+    const room = findRoom(getConfig(), req.params.roomId);
+    if (!room) return res.status(404).json({ error: "unknown room" });
+    try {
+      forgetKnxRoomScene(room.id, req.params.id);
+      ws.broadcastConfigChanged(getConfigVersion());
+      res.json({ ok: true });
+    } catch (err) {
+      const msg = (err as Error).message;
+      if (msg === "unknown knx scene")
+        return res.status(404).json({ error: msg });
+      logger.warn({ err, id: req.params.id }, "knx scene forget failed");
+      res.status(500).json({ error: msg });
     }
   });
 
