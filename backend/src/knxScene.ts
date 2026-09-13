@@ -84,6 +84,21 @@ function asScenePayloadBytes(value: unknown): Buffer | null {
   return null;
 }
 
+/** 1-byte DPT 17/18 payload. Geen DPT1-boolean: dat is een schakelaar. */
+export function extractSceneControlByte(value: unknown): number | null {
+  if (typeof value === "boolean") return null;
+  const buf = asScenePayloadBytes(value);
+  if (buf) {
+    if (buf.length === 1) return buf[0] & 0xff;
+    if (buf.length === 2) return buf[1] & 0xff;
+    return null;
+  }
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 255) {
+    return value;
+  }
+  return null;
+}
+
 export function extractSceneByte(value: unknown): number | null {
   if (value === false) return 0;
   if (value === true) return 1;

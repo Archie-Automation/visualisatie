@@ -39,7 +39,6 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
   Timer? _listenTimer;
   Timer? _pollTimer;
   List<String> _watching = const [];
-  bool _unknownFallback = true;
   bool _heardHandled = false;
 
   @override
@@ -98,13 +97,16 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
     });
   }
 
-  String _listenTimeoutText() {
-    if (_watching.isEmpty) {
-      return 'Geen scene-knop gehoord. De catalogus heeft geen scene-adressen; '
-          'er kwam geen 1-byte telegram binnen op een adres dat niet bij een lamp hoort.';
+  String _listenTimeoutText({String? reason}) {
+    if (reason == 'no_scene_byte') {
+      return 'Lampen of jaloezieën in deze kamer gaven terugmelding, '
+          'maar er kwam geen 1-byte telegram vlak daarvoor (scene-adres).';
     }
-    return 'Geen scene-knop gehoord op ${_watching.length} scene-adressen. '
-        'Druk de knop in deze kamer en probeer opnieuw.';
+    if (_watching.isEmpty) {
+      return 'Geen lampen of jaloezieën in deze kamer om te volgen.';
+    }
+    return 'Geen scene-knop gehoord. Druk de knop in deze kamer; '
+        'we volgen ${_watching.length} groepsadressen van lampen en jaloezieën.';
   }
 
   Future<void> _startListen() async {
@@ -119,7 +121,6 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
       if (!mounted) return;
       setState(() {
         _watching = _stringList(started['watching']);
-        _unknownFallback = started['unknownFallback'] != false || _watching.isEmpty;
       });
       _armListenTimeout();
     } catch (e) {
@@ -148,20 +149,28 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
       if (watching.isNotEmpty && watching.join() != _watching.join()) {
         setState(() {
           _watching = watching;
-          _unknownFallback = st['unknownFallback'] == true || watching.isEmpty;
         });
       }
       final heard = st['heard'];
       if (heard is Map) {
-        _onHeard(KnxSceneHeard(
-          roomId: '${heard['roomId'] ?? ''}',
-          ga: '${heard['ga'] ?? ''}',
-          number: (heard['number'] as num?)?.toInt() ?? 1,
-          trusted: heard['trusted'] == true,
-          timeout: heard['timeout'] == true,
-        ));
+        _onHeard(_heardFromMap(heard));
       }
     } catch (_) {}
+  }
+
+  KnxSceneHeard _heardFromMap(Map<dynamic, dynamic> heard) {
+    return KnxSceneHeard(
+      roomId: '${heard['roomId'] ?? ''}',
+      ga: '${heard['ga'] ?? ''}',
+      number: (heard['number'] as num?)?.toInt() ?? 1,
+      trusted: heard['trusted'] == true,
+      timeout: heard['timeout'] == true,
+      memberIds: [
+        for (final id in (heard['memberIds'] as List?) ?? const [])
+          if ('$id'.trim().isNotEmpty) '$id'.trim(),
+      ],
+      reason: heard['reason'] as String?,
+    );
   }
 
   void _onHeard(KnxSceneHeard heard) {
@@ -174,7 +183,7 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
       _pollTimer?.cancel();
       setState(() {
         _phase = _LearnPhase.error;
-        _error = _listenTimeoutText();
+        _error = _listenTimeoutText(reason: heard.reason);
       });
       return;
     }
@@ -184,14 +193,10 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
     _pollTimer?.cancel();
     _ga = heard.ga;
     _number = heard.number;
-    if (heard.trusted) {
-      _runLearn();
-    } else {
-      setState(() => _phase = _LearnPhase.confirm);
-    }
+    _runLearn(members: heard.memberIds);
   }
 
-  Future<void> _runLearn() async {
+  Future<void> _runLearn({List<String>? members}) async {
     final ga = _ga;
     final number = _number;
     if (ga == null || number == null) return;
@@ -201,6 +206,7 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
             roomId: widget.roomId,
             ga: ga,
             number: number,
+            members: members,
           );
       if (!mounted) return;
       final sceneJson = raw['scene'] as Map<String, dynamic>?;
@@ -333,7 +339,7 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
         );
       case _LearnPhase.learning:
         return _message(
-          'Lampen even uit en aan om te zien welke bij deze scene horen…',
+          'Busverkeer van deze kamer verwerken…',
           progress: true,
         );
       case _LearnPhase.error:
@@ -358,10 +364,10 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
     final sample = _watching.take(24).join(', ');
     final extra = _watching.length > 24 ? ' …' : '';
     final hint = _watching.isEmpty
-        ? 'Geen scene-adressen in de ETS-catalogus. We vangen een 1-byte telegram '
-            'op een adres dat niet bij een lamp of gordijn hoort.'
-        : 'Luisteren naar ${_watching.length} scene-adressen'
-            '${_unknownFallback ? '' : ' (catalogus / huis)'}:\n$sample$extra';
+        ? 'Geen lampen of jaloezieën in deze kamer.'
+        : 'Volgen van ${_watching.length} groepsadressen '
+            '(dim, aan/uit, jaloezie). Het 1-byte telegram vlak vóór de eerste '
+            'terugmelding is het scene-adres.\n$sample$extra';
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
