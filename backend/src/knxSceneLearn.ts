@@ -318,17 +318,24 @@ function statusGas(d: Device): GA[] {
   return [];
 }
 
+/** Listen: alleen stuur en/of status, wat er is. Geen extra kanalen. */
 function monitorGas(d: Device): GA[] {
   const ga = (d as { ga?: Record<string, string | undefined> }).ga ?? {};
-  const extra: GA[] = [];
-  if (d.type === "shading" || d.type === "position_actuator") {
-    extra.push(
-      ...[ga.up_down, ga.stop_step, ga.slat, ga.slat_status, ga.moving].filter(
-        (x): x is string => Boolean(x)
-      )
-    );
+  const pick = (...addrs: (string | undefined)[]) =>
+    [...new Set(addrs.filter((x): x is string => Boolean(x)))];
+  if (d.type === "light_switch") return pick(ga.switch, ga.switch_status);
+  if (d.type === "light_dimmer") {
+    const dim = pick(ga.dim_value, ga.dim_status);
+    return dim.length ? dim : pick(ga.switch, ga.switch_status);
   }
-  return [...new Set([...statusGas(d), ...extra])];
+  if (d.type === "rgbw_ww") {
+    const level = pick(ga.bright, ga.on);
+    return level.length ? level : pick(ga.rgb232);
+  }
+  if (d.type === "shading" || d.type === "position_actuator") {
+    return pick(ga.position, ga.position_status);
+  }
+  return [];
 }
 
 function collectRoomMonitor(
