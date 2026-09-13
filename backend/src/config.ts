@@ -6,7 +6,7 @@ import { normalizeHouseIntercoms } from "./houseIntercoms";
 import { effectiveIntercomReleaseMode } from "./intercomReleaseMode";
 import { logger } from "./logger";
 import type { Device, HouseConfig, GA } from "./types";
-import { catalogSceneAddresses } from "./knxScene";
+import { catalogSceneAddresses, configuredSceneAddresses } from "./knxScene";
 import { normalizeVoip } from "./voip/normalize";
 import { collectZehnderSubscriptions, collectDucoSubscriptions, collectMvSubscriptions, collectModbusSubscriptions } from "./wtw";
 
@@ -234,6 +234,7 @@ export function collectAllGAs(cfg: HouseConfig): GA[] {
   }
 
   for (const ga of catalogSceneAddresses()) add(ga);
+  for (const ga of configuredSceneAddresses(cfg)) add(ga);
 
   return [...out];
 }
@@ -435,6 +436,9 @@ export function buildGAIndex(cfg: HouseConfig): Map<GA, GARole[]> {
   }
   for (const ga of catalogSceneAddresses()) {
     pushGA(index, ga, "scene", "catalog:scene", "universal");
+  }
+  for (const ga of configuredSceneAddresses(cfg)) {
+    pushGA(index, ga, "scene", "config:scene", "universal");
   }
 
   return index;

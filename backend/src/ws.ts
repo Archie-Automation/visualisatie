@@ -47,6 +47,10 @@ type Outgoing =
         timeout?: boolean;
         memberIds?: string[];
         reason?: string;
+        existingId?: string;
+        existingName?: string;
+        members?: unknown[];
+        phase?: string;
       };
     };
 
@@ -62,6 +66,10 @@ export interface WsHub {
     timeout?: boolean;
     memberIds?: string[];
     reason?: string;
+    existingId?: string;
+    existingName?: string;
+    members?: unknown[];
+    phase?: string;
   }): void;
   close(): Promise<void>;
 }

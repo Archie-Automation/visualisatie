@@ -1494,7 +1494,7 @@ export function buildRouter(
     res.json(getListenStatus(room.id));
   });
 
-  r.post("/rooms/:roomId/scenes/listen", requireAuth, (req: AuthedRequest, res) => {
+  r.post("/rooms/:roomId/scenes/listen", requireAuth, async (req: AuthedRequest, res) => {
     if (!canLearnKnxScenes(req))
       return res.status(403).json({ error: "scene inlezen niet toegestaan" });
     const room = findRoom(getConfig(), req.params.roomId);
@@ -1506,7 +1506,7 @@ export function buildRouter(
         res.json({ ok: true, listening: false });
         return;
       }
-      const started = startListen(room.id, req.user?.sub ?? "");
+      const started = await startListen(room.id, req.user?.sub ?? "");
       res.json({
         ok: true,
         listening: true,
@@ -1526,7 +1526,8 @@ export function buildRouter(
         ga: z.string().min(3).max(20),
         number: z.number().int().min(1).max(64),
         extraRoomIds: z.array(z.string()).max(8).optional(),
-        memberIds: z.array(z.string()).max(80).optional()
+        memberIds: z.array(z.string()).max(80).optional(),
+        name: z.string().min(1).max(80).optional()
       })
       .safeParse(req.body);
     if (!parsed.success)
@@ -1537,7 +1538,8 @@ export function buildRouter(
         ga: parsed.data.ga,
         number: parsed.data.number,
         extraRoomIds: parsed.data.extraRoomIds,
-        memberIds: parsed.data.memberIds
+        memberIds: parsed.data.memberIds,
+        name: parsed.data.name
       });
       await bus.refreshGroupAddresses(collectAllGAs(getConfig()));
       ws.broadcastConfigChanged(getConfigVersion());
@@ -1558,12 +1560,13 @@ export function buildRouter(
     try {
       const parsed = z
         .object({
-          members: z.array(z.string().min(1).max(80)).max(64).optional()
+          members: z.array(z.string().min(1).max(80)).max(64).optional(),
+          name: z.string().min(1).max(80).optional()
         })
         .safeParse(req.body ?? {});
       if (!parsed.success)
         return res.status(400).json({ error: "bad store", issues: parsed.error.issues });
-      await storeKnxScene(hit.scene, bus, parsed.data.members);
+      await storeKnxScene(hit.scene, bus, parsed.data.members, parsed.data.name);
       ws.broadcastConfigChanged(getConfigVersion());
       res.json({ ok: true, sceneId: hit.scene.id });
     } catch (err) {

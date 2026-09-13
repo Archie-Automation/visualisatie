@@ -8,6 +8,7 @@ import {
   walkDevices
 } from "./config";
 import {
+  configuredSceneAddresses,
   decodeSceneRecallByte,
   encodeSceneByte,
   extractSceneControlByte,
@@ -18,24 +19,10 @@ import type { KnxBus, KnxTelegram } from "./knxBus";
 import type { Device, HouseConfig, Scene, GA } from "./types";
 
 const LISTEN_MS = 20_000;
-/** Scene-GA zit typisch pal vóór de eerste status van een kamer-apparaat. */
-const SCENE_BEFORE_MS = 800;
-const SCENE_AFTER_MS = 250;
-const BURST_QUIET_MS = 800;
 const SENTINEL_SETTLE_MS = 700;
 const RECALL_WINDOW_MS = 1500;
 const RECALL_IGNORE_MS = 180;
 const BETWEEN_PASSES_MS = 400;
-
-export type SceneHeardPayload = {
-  roomId: string;
-  ga: string;
-  number: number;
-  trusted: boolean;
-  memberIds?: string[];
-  timeout?: boolean;
-  reason?: string;
-};
 
 export type LearnedMember = {
   deviceId: string;
@@ -49,21 +36,31 @@ export type LearnedMember = {
   noFeedback?: boolean;
 };
 
-type SceneCandidate = { ga: string; number: number; ts: number };
+export type SceneHeardPayload = {
+  roomId: string;
+  ga: string;
+  number: number;
+  trusted: boolean;
+  memberIds?: string[];
+  members?: LearnedMember[];
+  existingId?: string;
+  existingName?: string;
+  timeout?: boolean;
+  reason?: string;
+  phase?: string;
+};
+
+type ListenPhase = "wait_button" | "busy";
 
 type ListenSession = {
   roomId: string;
   userId: string;
   timer: ReturnType<typeof setTimeout>;
-  settle: ReturnType<typeof setTimeout> | null;
   watch: Set<string>;
-  roomGas: Set<string>;
-  gaToDevice: Map<string, string>;
-  lastScene: SceneCandidate | null;
-  firstMemberTs: number | null;
-  memberIds: Set<string>;
-  unknownFallback: boolean;
+  sceneGas: Set<string>;
+  phase: ListenPhase;
   seen: number;
+  shadeSnap: Map<string, number | undefined>;
 };
 
 export type ListenStart = {
@@ -74,6 +71,7 @@ export type ListenStart = {
 export type ListenStatus = ListenStart & {
   listening: boolean;
   heard: SceneHeardPayload | null;
+  phase?: ListenPhase;
 };
 
 let busRef: KnxBus | null = null;
@@ -94,171 +92,163 @@ export function attachKnxSceneLearn(
   unsubTelegram = () => bus.off("telegram", onTelegram);
 }
 
-function isKnownNonSceneGa(ga: string): boolean {
-  const roles = busRef?.getGaRoles(ga) ?? [];
-  if (roles.length === 0) return false;
-  return roles.every((r) => r.role !== "scene");
-}
-
 function isGroupRead(evt: string): boolean {
   return /GroupValue[_]?Read/i.test(evt);
 }
 
-function pickScene(s: ListenSession): SceneCandidate | null {
-  if (!s.lastScene) return null;
-  if (s.firstMemberTs == null) return s.lastScene;
-  const dt = s.firstMemberTs - s.lastScene.ts;
-  if (dt >= 0 && dt <= SCENE_BEFORE_MS) return s.lastScene;
-  if (dt < 0 && -dt <= SCENE_AFTER_MS) return s.lastScene;
-  return null;
-}
-
 function emitHeard(payload: SceneHeardPayload): void {
-  logger.info(payload, "knx scene listen heard");
+  logger.info(
+    { ga: payload.ga, number: payload.number, timeout: payload.timeout, members: payload.memberIds?.length },
+    "knx scene listen heard"
+  );
   lastHeard = payload;
   stopListen();
   broadcastHeard?.(payload);
 }
 
-function tryFinishBurst(fromTimeout: boolean): void {
-  if (!listen) return;
-  const scene = pickScene(listen);
-  const members = [...listen.memberIds];
-  if (scene && members.length > 0) {
-    const cfg = getConfig();
-    emitHeard({
-      roomId: listen.roomId,
-      ga: scene.ga,
-      number: scene.number,
-      trusted: isTrustedSceneGa(scene.ga, cfg),
-      memberIds: members
-    });
-    return;
-  }
-  if (!fromTimeout) return;
-  emitHeard({
-    roomId: listen.roomId,
-    ga: "",
-    number: 0,
-    trusted: false,
-    timeout: true,
-    reason: members.length > 0 ? "no_scene_byte" : "timeout",
-    memberIds: members
-  });
-}
-
-function armSettle(): void {
-  if (!listen) return;
-  if (listen.settle) clearTimeout(listen.settle);
-  listen.settle = setTimeout(() => tryFinishBurst(false), BURST_QUIET_MS);
+function findRoomKnxScene(
+  cfg: HouseConfig,
+  roomId: string,
+  ga: string,
+  number: number
+): Scene | undefined {
+  const room = findRoom(cfg, roomId);
+  return room?.scenes?.find((s) => s.knx?.ga === ga && s.knx?.number === number);
 }
 
 function onBusTelegram(info: KnxTelegram): void {
-  if (!listen) return;
+  if (!listen || listen.phase !== "wait_button") return;
   if (info.self) return;
   const evt = String(info.evt ?? "");
   if (isGroupRead(evt)) return;
   const ga = String(info.ga ?? "").trim();
-  if (!ga) return;
-  const now = info.ts || Date.now();
-  const isRoom = listen.roomGas.has(ga);
+  if (!ga || !listen.sceneGas.has(ga)) return;
   const byte = extractSceneControlByte(info.value);
   const number = byte === null ? null : decodeSceneRecallByte(byte);
   listen.seen += 1;
-  if (listen.seen <= 80 || isRoom || number !== null) {
-    logger.info(
-      {
-        ga,
-        src: info.src,
-        evt,
-        isRoom,
-        byte,
-        number,
-        roles: busRef?.getGaRoles(ga).map((r) => r.role) ?? [],
-        value: valuePreview(info.value)
-      },
-      "knx scene listen telegram"
-    );
-  }
-  if (isRoom) {
-    const deviceId = listen.gaToDevice.get(ga);
-    if (deviceId) listen.memberIds.add(deviceId);
-    if (listen.firstMemberTs == null) listen.firstMemberTs = now;
-    armSettle();
-    return;
-  }
+  logger.info(
+    { ga, src: info.src, evt, byte, number, value: valuePreview(info.value) },
+    "knx scene listen telegram"
+  );
   if (byte === null || number === null) return;
-  if (isKnownNonSceneGa(ga)) return;
-  if (listen.firstMemberTs == null) {
-    listen.lastScene = { ga, number, ts: now };
-    return;
-  }
-  if (now - listen.firstMemberTs <= SCENE_AFTER_MS) {
-    const existing = listen.lastScene;
-    const stale =
-      !existing ||
-      Math.abs(listen.firstMemberTs - existing.ts) > SCENE_BEFORE_MS;
-    if (stale) listen.lastScene = { ga, number, ts: now };
-    armSettle();
-  }
+  listen.phase = "busy";
+  const roomId = listen.roomId;
+  const t0 = info.ts || Date.now();
+  void runWizardAfterButton(roomId, ga, number, t0).catch((err) => {
+    logger.warn({ err, ga, number }, "knx scene wizard failed");
+    emitHeard({
+      roomId,
+      ga: "",
+      number: 0,
+      trusted: false,
+      timeout: true,
+      reason: "wizard_failed"
+    });
+  });
 }
 
-export function startListen(roomId: string, userId: string): ListenStart {
+export async function startListen(roomId: string, userId: string): Promise<ListenStart> {
   if (!findRoom(getConfig(), roomId)) throw new Error("unknown room");
   stopListen();
   lastHeard = null;
-  const { roomGas, gaToDevice } = collectRoomMonitor(getConfig(), roomId);
-  const watching = [...roomGas];
-  const unknownFallback = watching.length === 0;
+  const cfg = getConfig();
+  const sceneGas = configuredSceneAddresses(cfg);
+  if (sceneGas.length === 0) {
+    throw new Error(
+      "geen scene-adressen geconfigureerd. Vul ze in bij KNX-gateway in de installer."
+    );
+  }
+  const bus = busRef;
+  if (!bus) throw new Error("KNX bus niet klaar");
+  const inRooms = devicesInRooms(cfg, new Set([roomId]));
+  const lights = inRooms.filter(isLightCandidate);
+  const shades = inRooms.filter(isShadeCandidate);
+  for (const d of lights) {
+    try {
+      await setLightSentinel(d, cfg, bus, 0);
+    } catch (err) {
+      logger.warn({ err, id: d.id }, "scene wizard sentinel 0 failed");
+    }
+  }
+  await sleep(SENTINEL_SETTLE_MS);
+  await requestStatuses(bus, lights);
+  await sleep(SENTINEL_SETTLE_MS);
+  const shadeSnap = new Map<string, number | undefined>();
+  for (const d of shades) shadeSnap.set(d.id, shadePosition(d, bus));
+
   logger.info(
-    { roomId, watching: watching.length, sample: watching.slice(0, 24) },
-    "knx scene listen start (room device GAs)"
+    { roomId, watching: sceneGas.length, sample: sceneGas.slice(0, 24) },
+    "knx scene listen start (configured scene GAs)"
   );
   listen = {
     roomId,
     userId,
-    watch: new Set(watching),
-    roomGas,
-    gaToDevice,
-    lastScene: null,
-    firstMemberTs: null,
-    memberIds: new Set(),
-    settle: null,
-    unknownFallback,
+    watch: new Set(sceneGas),
+    sceneGas: new Set(sceneGas),
+    phase: "wait_button",
     seen: 0,
+    shadeSnap,
     timer: setTimeout(() => {
-      logger.info(
-        {
-          roomId,
-          seen: listen?.seen ?? 0,
-          members: listen ? listen.memberIds.size : 0,
-          hasScene: Boolean(listen?.lastScene)
-        },
-        "knx scene listen timeout"
-      );
-      tryFinishBurst(true);
+      if (!listen || listen.phase !== "wait_button") return;
+      logger.info({ roomId, seen: listen.seen }, "knx scene listen timeout");
+      emitHeard({
+        roomId,
+        ga: "",
+        number: 0,
+        trusted: false,
+        timeout: true,
+        reason: "timeout"
+      });
     }, LISTEN_MS)
   };
-  return { watching, unknownFallback };
+  return { watching: sceneGas, unknownFallback: false };
 }
 
 export function getListenStatus(roomId: string): ListenStatus {
   const watching = listen?.roomId === roomId ? [...listen.watch] : [];
-  const unknownFallback =
-    listen?.roomId === roomId ? listen.unknownFallback : watching.length === 0;
   return {
     listening: listen?.roomId === roomId,
     watching,
-    unknownFallback,
-    heard: lastHeard?.roomId === roomId ? lastHeard : null
+    unknownFallback: watching.length === 0,
+    heard: lastHeard?.roomId === roomId ? lastHeard : null,
+    phase: listen?.roomId === roomId ? listen.phase : undefined
   };
 }
 
 export function stopListen(): void {
   if (!listen) return;
   clearTimeout(listen.timer);
-  if (listen.settle) clearTimeout(listen.settle);
   listen = null;
+}
+
+async function runWizardAfterButton(
+  roomId: string,
+  ga: string,
+  number: number,
+  t0: number
+): Promise<void> {
+  const bus = busRef;
+  if (!bus) throw new Error("KNX bus niet klaar");
+  const cfg = getConfig();
+  const inRooms = devicesInRooms(cfg, new Set([roomId]));
+  const shadeSnap = listen?.shadeSnap ?? new Map<string, number | undefined>();
+  const result = await contrastAfterRecall(bus, cfg, inRooms, ga, number, {
+    skipFirstRecall: true,
+    t0,
+    shadeSnap
+  });
+  const existing = findRoomKnxScene(cfg, roomId, ga, number);
+  emitHeard({
+    roomId,
+    ga,
+    number,
+    trusted: isTrustedSceneGa(ga, cfg),
+    memberIds: result.memberIds,
+    members: result.members,
+    existingId: existing?.id,
+    existingName: existing?.name,
+    phase: "learned"
+  });
 }
 
 function sleep(ms: number): Promise<void> {
@@ -336,22 +326,6 @@ function monitorGas(d: Device): GA[] {
     return pick(ga.position, ga.position_status);
   }
   return [];
-}
-
-function collectRoomMonitor(
-  cfg: HouseConfig,
-  roomId: string
-): { roomGas: Set<string>; gaToDevice: Map<string, string> } {
-  const roomGas = new Set<string>();
-  const gaToDevice = new Map<string, string>();
-  for (const d of devicesInRooms(cfg, new Set([roomId]))) {
-    if (!isLightCandidate(d) && !isShadeCandidate(d)) continue;
-    for (const g of monitorGas(d)) {
-      roomGas.add(g);
-      gaToDevice.set(g, d.id);
-    }
-  }
-  return { roomGas, gaToDevice };
 }
 
 function cacheNum(bus: KnxBus, ga?: string): number | boolean | undefined {
@@ -455,7 +429,8 @@ function atSentinel(level: { on: boolean; percent: number }, target: 0 | 100): b
 function learnedFromIds(
   inRooms: Device[],
   ids: string[],
-  bus: KnxBus
+  bus: KnxBus,
+  noFeedback?: Set<string>
 ): LearnedMember[] {
   const byId = new Map(inRooms.map((d) => [d.id, d]));
   const out: LearnedMember[] = [];
@@ -480,58 +455,49 @@ function learnedFromIds(
         kind: "light",
         confirmed: true,
         on: lv.on,
-        percent: lv.percent
+        percent: lv.percent,
+        noFeedback: noFeedback?.has(d.id)
       });
     }
   }
   return out;
 }
 
-export async function learnKnxScene(opts: {
-  roomId: string;
-  ga: string;
-  number: number;
-  extraRoomIds?: string[];
-  memberIds?: string[];
-}): Promise<{ scene: Scene; members: LearnedMember[] }> {
-  const bus = busRef;
-  if (!bus) throw new Error("KNX bus niet klaar");
-  const cfg = getConfig();
-  const room = findRoom(cfg, opts.roomId);
-  if (!room) throw new Error("unknown room");
-  const number = Math.min(64, Math.max(1, Math.round(opts.number)));
-  const ga = opts.ga.trim();
-  if (!ga) throw new Error("geen groepsadres");
-
-  const roomIds = new Set<string>([opts.roomId, ...(opts.extraRoomIds ?? [])]);
-  const inRooms = devicesInRooms(cfg, roomIds);
-
-  if (opts.memberIds && opts.memberIds.length > 0) {
-    const scene = upsertRoomScene(opts.roomId, ga, number, opts.memberIds);
-    return { scene, members: learnedFromIds(inRooms, opts.memberIds, bus) };
+async function contrastAfterRecall(
+  bus: KnxBus,
+  cfg: HouseConfig,
+  inRooms: Device[],
+  ga: string,
+  number: number,
+  opts: {
+    skipFirstRecall: boolean;
+    t0?: number;
+    shadeSnap?: Map<string, number | undefined>;
   }
+): Promise<{ memberIds: string[]; members: LearnedMember[] }> {
   const lights = inRooms.filter(isLightCandidate);
   const shades = inRooms.filter(isShadeCandidate);
-
   const members = new Set<string>();
   const noFeedback = new Set<string>();
   const shadeHits = new Set<string>();
-
-  const shadeSnap = new Map<string, number | undefined>();
-  for (const d of shades) shadeSnap.set(d.id, shadePosition(d, bus));
-
-  for (const d of lights) {
-    try {
-      await setLightSentinel(d, cfg, bus, 0);
-    } catch (err) {
-      logger.warn({ err, id: d.id }, "scene learn sentinel 0 failed");
-    }
+  const shadeSnap = opts.shadeSnap ?? new Map<string, number | undefined>();
+  if (!opts.shadeSnap) {
+    for (const d of shades) shadeSnap.set(d.id, shadePosition(d, bus));
   }
-  await sleep(SENTINEL_SETTLE_MS);
-  await requestStatuses(bus, lights);
-  await sleep(SENTINEL_SETTLE_MS);
 
-  const canPass: Device[] = [];
+  let canPass: Device[] = [];
+  if (!opts.skipFirstRecall) {
+    for (const d of lights) {
+      try {
+        await setLightSentinel(d, cfg, bus, 0);
+      } catch (err) {
+        logger.warn({ err, id: d.id }, "scene learn sentinel 0 failed");
+      }
+    }
+    await sleep(SENTINEL_SETTLE_MS);
+    await requestStatuses(bus, lights);
+    await sleep(SENTINEL_SETTLE_MS);
+  }
   for (const d of lights) {
     const lv = lightLevel(d, bus);
     if (!atSentinel(lv, 0)) {
@@ -541,24 +507,27 @@ export async function learnKnxScene(opts: {
     canPass.push(d);
   }
 
-  const t0 = Date.now();
-  await recallScene(bus, ga, number);
-  await sleep(RECALL_IGNORE_MS);
+  let t0 = opts.t0 ?? Date.now();
+  if (!opts.skipFirstRecall) {
+    t0 = Date.now();
+    await recallScene(bus, ga, number);
+    await sleep(RECALL_IGNORE_MS);
+  }
   await requestStatuses(bus, [...canPass, ...shades]);
   await sleep(RECALL_WINDOW_MS);
 
   const remaining: Device[] = [];
   for (const d of canPass) {
     const lv = lightLevel(d, bus);
-    const ts = cacheTs(bus, statusGas(d));
-    const inWindow = ts > t0 && ts <= t0 + RECALL_WINDOW_MS + 200;
+    const ts = cacheTs(bus, monitorGas(d).length ? monitorGas(d) : statusGas(d));
+    const inWindow = ts > t0 && ts <= t0 + RECALL_WINDOW_MS + 400;
     if (inWindow && !atSentinel(lv, 0)) members.add(d.id);
     else remaining.push(d);
   }
   for (const d of shades) {
     const before = shadeSnap.get(d.id);
     const after = shadePosition(d, bus);
-    const ts = cacheTs(bus, statusGas(d));
+    const ts = cacheTs(bus, monitorGas(d).length ? monitorGas(d) : statusGas(d));
     const inWindow = ts > t0 && ts <= t0 + RECALL_WINDOW_MS + 400;
     if (
       inWindow &&
@@ -600,52 +569,80 @@ export async function learnKnxScene(opts: {
 
   for (const d of still) {
     const lv = lightLevel(d, bus);
-    const ts = cacheTs(bus, statusGas(d));
+    const ts = cacheTs(bus, monitorGas(d).length ? monitorGas(d) : statusGas(d));
     const inWindow = ts > t1 && ts <= t1 + RECALL_WINDOW_MS + 200;
     if (inWindow && !atSentinel(lv, 100)) members.add(d.id);
   }
 
   const memberIds = [...members, ...shadeHits];
-  const learned: LearnedMember[] = [];
-  const byId = new Map(inRooms.map((d) => [d.id, d]));
-  for (const id of memberIds) {
-    const d = byId.get(id);
-    if (!d) continue;
-    if (isShadeCandidate(d)) {
-      learned.push({
-        deviceId: d.id,
-        name: d.name,
-        type: d.type,
-        kind: "shading",
-        confirmed: false,
-        position: shadePosition(d, bus)
-      });
-    } else {
-      const lv = lightLevel(d, bus);
-      learned.push({
-        deviceId: d.id,
-        name: d.name,
-        type: d.type,
-        kind: "light",
-        confirmed: true,
-        on: lv.on,
-        percent: lv.percent,
-        noFeedback: noFeedback.has(d.id)
-      });
+  const memberSet = new Set(memberIds);
+  for (const d of lights) {
+    if (memberSet.has(d.id)) continue;
+    try {
+      await setLightSentinel(d, cfg, bus, 0);
+    } catch (err) {
+      logger.warn({ err, id: d.id }, "scene wizard restore non-member failed");
     }
   }
 
-  const scene = upsertRoomScene(opts.roomId, ga, number, memberIds);
-  return { scene, members: learned };
+  return {
+    memberIds,
+    members: learnedFromIds(inRooms, memberIds, bus, noFeedback)
+  };
+}
+
+export async function learnKnxScene(opts: {
+  roomId: string;
+  ga: string;
+  number: number;
+  extraRoomIds?: string[];
+  memberIds?: string[];
+  name?: string;
+}): Promise<{ scene: Scene; members: LearnedMember[] }> {
+  const bus = busRef;
+  if (!bus) throw new Error("KNX bus niet klaar");
+  const cfg = getConfig();
+  const room = findRoom(cfg, opts.roomId);
+  if (!room) throw new Error("unknown room");
+  const number = Math.min(64, Math.max(1, Math.round(opts.number)));
+  const ga = opts.ga.trim();
+  if (!ga) throw new Error("geen groepsadres");
+
+  const roomIds = new Set<string>([opts.roomId, ...(opts.extraRoomIds ?? [])]);
+  const inRooms = devicesInRooms(cfg, roomIds);
+
+  if (opts.memberIds) {
+    const scene = upsertRoomScene(
+      opts.roomId,
+      ga,
+      number,
+      opts.memberIds,
+      opts.name
+    );
+    return { scene, members: learnedFromIds(inRooms, opts.memberIds, bus) };
+  }
+  const result = await contrastAfterRecall(bus, cfg, inRooms, ga, number, {
+    skipFirstRecall: false
+  });
+  const scene = upsertRoomScene(
+    opts.roomId,
+    ga,
+    number,
+    result.memberIds,
+    opts.name
+  );
+  return { scene, members: result.members };
 }
 
 function upsertRoomScene(
   roomId: string,
   ga: string,
   number: number,
-  memberIds: string[]
+  memberIds: string[],
+  name?: string
 ): Scene {
   let saved: Scene | undefined;
+  const label = name?.trim();
   updateConfig((draft) => {
     for (const f of draft.floors) {
       for (const r of f.rooms) {
@@ -655,7 +652,7 @@ function upsertRoomScene(
         if (!sc) {
           sc = {
             id: `scn-knx-${roomId}-${ga.replace(/\//g, "-")}-${number}`,
-            name: `Scene ${number}`,
+            name: label || `Scene ${number}`,
             actions: [],
             knx: { ga, number },
             members: memberIds
@@ -665,6 +662,7 @@ function upsertRoomScene(
         } else {
           sc.knx = { ga, number };
           sc.members = memberIds;
+          if (label) sc.name = label;
         }
         saved = sc;
       }
@@ -677,14 +675,17 @@ function upsertRoomScene(
 export async function storeKnxScene(
   scene: Scene,
   bus: KnxBus,
-  memberIds?: string[]
+  memberIds?: string[],
+  name?: string
 ): Promise<void> {
   const knx = scene.knx;
   if (!knx?.ga) throw new Error("geen KNX-scene");
-  if (memberIds) {
+  if (memberIds || name?.trim()) {
     updateConfig((draft) => {
       const hit = findScene(draft, scene.id);
-      if (hit) hit.scene.members = memberIds;
+      if (!hit) return;
+      if (memberIds) hit.scene.members = memberIds;
+      if (name?.trim()) hit.scene.name = name.trim();
     });
   }
   await bus.writeRaw(knx.ga, Buffer.from([encodeSceneByte(knx.number, true)]), 8);

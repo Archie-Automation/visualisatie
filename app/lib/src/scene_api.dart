@@ -122,6 +122,7 @@ class _SceneApi {
     required String ga,
     required int number,
     List<String>? members,
+    String? name,
   }) async {
     final token = _ref.read(authProvider).token ?? '';
     final res = await http.post(
@@ -133,7 +134,8 @@ class _SceneApi {
       body: jsonEncode({
         'ga': ga,
         'number': number,
-        if (members != null && members.isNotEmpty) 'memberIds': members,
+        if (members != null) 'memberIds': members,
+        if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
       }),
     );
     if (res.statusCode != 200) {
@@ -142,9 +144,13 @@ class _SceneApi {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
-  Future<void> store(String sceneId, {List<String>? members}) => _post(
+  Future<void> store(String sceneId, {List<String>? members, String? name}) =>
+      _post(
         '/api/scenes/$sceneId/store',
-        {if (members != null) 'members': members},
+        {
+          if (members != null) 'members': members,
+          if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
+        },
       );
 
   Future<void> _post(String path, Map<String, dynamic> body) async {

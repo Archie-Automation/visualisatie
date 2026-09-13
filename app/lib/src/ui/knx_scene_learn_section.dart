@@ -121,7 +121,7 @@ class _KnxSceneLearnSectionState extends ConsumerState<KnxSceneLearnSection> {
           const SizedBox(height: 12),
           if (knxScenes.isEmpty)
             Text(
-              'Nog geen KNX-scenes in deze kamer. Start inlezen en druk de scene-knop.',
+              'Nog geen KNX-scenes in deze kamer. Eerst scene-adressen invullen in de installer (KNX-gateway), daarna inlezen.',
               style: Theme.of(context).textTheme.bodySmall,
             )
           else

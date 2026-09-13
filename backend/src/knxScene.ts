@@ -50,21 +50,17 @@ export function catalogSceneAddresses(): GA[] {
   return out;
 }
 
-/** Catalogus + bestaande Scene.knx-bindingen. Universele knoppen komen er later bij. */
-export function watchSceneAddresses(cfg: HouseConfig): GA[] {
+/** Scene-GAs die de app-installer heeft ingevuld. */
+export function configuredSceneAddresses(cfg: HouseConfig): GA[] {
+  const out: GA[] = [];
   const seen = new Set<string>();
-  const add = (ga?: string) => {
-    const a = ga?.trim();
-    if (a) seen.add(a);
-  };
-  for (const g of catalogSceneAddresses()) add(g);
-  for (const s of cfg.scenes ?? []) add(s.knx?.ga);
-  for (const f of cfg.floors) {
-    for (const r of f.rooms) {
-      for (const s of r.scenes ?? []) add(s.knx?.ga);
-    }
+  for (const raw of cfg.knxSceneLearn?.addresses ?? []) {
+    const ga = (typeof raw === "string" ? raw : raw?.ga)?.trim();
+    if (!ga || seen.has(ga)) continue;
+    seen.add(ga);
+    out.push(ga);
   }
-  return [...seen];
+  return out;
 }
 
 function asScenePayloadBytes(value: unknown): Buffer | null {
@@ -155,5 +151,8 @@ export function isTrustedSceneGa(ga: GA, cfg: HouseConfig): boolean {
       }
     }
   }
-  return catalogSceneAddresses().includes(addr);
+  return (
+    configuredSceneAddresses(cfg).includes(addr) ||
+    catalogSceneAddresses().includes(addr)
+  );
 }
