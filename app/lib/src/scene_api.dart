@@ -82,10 +82,35 @@ class _SceneApi {
         token: _ref.read(authProvider).token ?? '',
       );
 
-  Future<void> startListen(String roomId) => _post(
-        '/api/rooms/$roomId/scenes/listen',
-        {'action': 'start'},
-      );
+  Future<Map<String, dynamic>> startListen(String roomId) async {
+    final token = _ref.read(authProvider).token ?? '';
+    final res = await http.post(
+      Uri.parse('$apiBase/api/rooms/$roomId/scenes/listen'),
+      headers: {
+        'content-type': 'application/json',
+        'authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'action': 'start'}),
+    );
+    if (res.statusCode != 200) {
+      throw Exception('request failed: ${res.statusCode} ${res.body}');
+    }
+    final body = jsonDecode(res.body);
+    return body is Map<String, dynamic> ? body : <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> listenStatus(String roomId) async {
+    final token = _ref.read(authProvider).token ?? '';
+    final res = await http.get(
+      Uri.parse('$apiBase/api/rooms/$roomId/scenes/listen'),
+      headers: {'authorization': 'Bearer $token'},
+    );
+    if (res.statusCode != 200) {
+      throw Exception('request failed: ${res.statusCode} ${res.body}');
+    }
+    final body = jsonDecode(res.body);
+    return body is Map<String, dynamic> ? body : <String, dynamic>{};
+  }
 
   Future<void> stopListen(String roomId) => _post(
         '/api/rooms/$roomId/scenes/listen',

@@ -37,6 +37,10 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
   List<_MemberRow> _members = [];
   bool _storing = false;
   Timer? _listenTimer;
+  Timer? _pollTimer;
+  List<String> _watching = const [];
+  bool _unknownFallback = true;
+  bool _heardHandled = false;
 
   @override
   void initState() {
@@ -68,6 +72,7 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
   @override
   void dispose() {
     _listenTimer?.cancel();
+    _pollTimer?.cancel();
     final api = ref.read(sceneApiProvider);
     final roomId = widget.roomId;
     api.stopListen(roomId).catchError((_) {});
@@ -75,17 +80,31 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
   }
 
   void _armListenTimeout() {
+    _heardHandled = false;
     _listenTimer?.cancel();
+    _pollTimer?.cancel();
+    _pollTimer = Timer.periodic(const Duration(milliseconds: 400), (_) {
+      _pollListen();
+    });
     _listenTimer = Timer(const Duration(seconds: 20), () {
       if (!mounted) return;
       if (_phase != _LearnPhase.listen) return;
+      _pollTimer?.cancel();
       setState(() {
         _phase = _LearnPhase.error;
-        _error =
-            'Geen scene-knop gehoord. Druk de knop in deze kamer en probeer opnieuw.';
+        _error = _listenTimeoutText();
       });
       ref.read(sceneApiProvider).stopListen(widget.roomId).catchError((_) {});
     });
+  }
+
+  String _listenTimeoutText() {
+    if (_watching.isEmpty) {
+      return 'Geen scene-knop gehoord. De catalogus heeft geen scene-adressen; '
+          'er kwam geen 1-byte telegram binnen op een adres dat niet bij een lamp hoort.';
+    }
+    return 'Geen scene-knop gehoord op ${_watching.length} scene-adressen. '
+        'Druk de knop in deze kamer en probeer opnieuw.';
   }
 
   Future<void> _startListen() async {
@@ -93,10 +112,15 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
     setState(() {
       _phase = _LearnPhase.listen;
       _error = null;
+      _heardHandled = false;
     });
     try {
-      await ref.read(sceneApiProvider).startListen(widget.roomId);
+      final started = await ref.read(sceneApiProvider).startListen(widget.roomId);
       if (!mounted) return;
+      setState(() {
+        _watching = _stringList(started['watching']);
+        _unknownFallback = started['unknownFallback'] != false || _watching.isEmpty;
+      });
       _armListenTimeout();
     } catch (e) {
       if (!mounted) return;
@@ -107,19 +131,57 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
     }
   }
 
+  List<String> _stringList(Object? raw) {
+    if (raw is! List) return const [];
+    return [
+      for (final e in raw)
+        if ('$e'.trim().isNotEmpty) '$e'.trim(),
+    ];
+  }
+
+  Future<void> _pollListen() async {
+    if (!mounted || _phase != _LearnPhase.listen || _heardHandled) return;
+    try {
+      final st = await ref.read(sceneApiProvider).listenStatus(widget.roomId);
+      if (!mounted || _phase != _LearnPhase.listen || _heardHandled) return;
+      final watching = _stringList(st['watching']);
+      if (watching.isNotEmpty && watching.join() != _watching.join()) {
+        setState(() {
+          _watching = watching;
+          _unknownFallback = st['unknownFallback'] == true || watching.isEmpty;
+        });
+      }
+      final heard = st['heard'];
+      if (heard is Map) {
+        _onHeard(KnxSceneHeard(
+          roomId: '${heard['roomId'] ?? ''}',
+          ga: '${heard['ga'] ?? ''}',
+          number: (heard['number'] as num?)?.toInt() ?? 1,
+          trusted: heard['trusted'] == true,
+          timeout: heard['timeout'] == true,
+        ));
+      }
+    } catch (_) {}
+  }
+
   void _onHeard(KnxSceneHeard heard) {
     if (heard.roomId != widget.roomId) return;
+    if (_heardHandled) return;
     if (heard.timeout) {
       if (_phase != _LearnPhase.listen) return;
+      _heardHandled = true;
       _listenTimer?.cancel();
+      _pollTimer?.cancel();
       setState(() {
         _phase = _LearnPhase.error;
-        _error =
-            'Geen scene-knop gehoord. Druk de knop in deze kamer en probeer opnieuw.';
+        _error = _listenTimeoutText();
       });
       return;
     }
+    if (heard.ga.trim().isEmpty) return;
+    _heardHandled = true;
     _listenTimer?.cancel();
+    _pollTimer?.cancel();
     _ga = heard.ga;
     _number = heard.number;
     if (heard.trusted) {
@@ -241,10 +303,7 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
   Widget _body() {
     switch (_phase) {
       case _LearnPhase.listen:
-        return _message(
-          'Druk nu op de scene-knop in deze kamer.\nNiet elders bedienen tot het overzicht er is.',
-          progress: true,
-        );
+        return _listenBody();
       case _LearnPhase.confirm:
         return Padding(
           padding: const EdgeInsets.all(24),
@@ -293,6 +352,39 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
       case _LearnPhase.overview:
         return _overview();
     }
+  }
+
+  Widget _listenBody() {
+    final sample = _watching.take(24).join(', ');
+    final extra = _watching.length > 24 ? ' …' : '';
+    final hint = _watching.isEmpty
+        ? 'Geen scene-adressen in de ETS-catalogus. We vangen een 1-byte telegram '
+            'op een adres dat niet bij een lamp of gordijn hoort.'
+        : 'Luisteren naar ${_watching.length} scene-adressen'
+            '${_unknownFallback ? '' : ' (catalogus / huis)'}:\n$sample$extra';
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(),
+            const SizedBox(height: 20),
+            const Text(
+              'Druk nu op de scene-knop in deze kamer.\n'
+              'Niet elders bedienen tot het overzicht er is.',
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              hint,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _message(String text, {bool progress = false}) {

@@ -9,11 +9,12 @@ import {
   walkDevices
 } from "./config";
 import {
-  catalogSceneAddresses,
   decodeSceneRecallByte,
   encodeSceneByte,
   extractSceneByte,
-  isTrustedSceneGa
+  isTrustedSceneGa,
+  valuePreview,
+  watchSceneAddresses
 } from "./knxScene";
 import type { KnxBus, KnxTelegram } from "./knxBus";
 import type { Device, HouseConfig, Scene, GA } from "./types";
@@ -48,11 +49,25 @@ type ListenSession = {
   roomId: string;
   userId: string;
   timer: ReturnType<typeof setTimeout>;
+  watch: Set<string>;
+  unknownFallback: boolean;
+  seen: number;
+};
+
+export type ListenStart = {
+  watching: string[];
+  unknownFallback: boolean;
+};
+
+export type ListenStatus = ListenStart & {
+  listening: boolean;
+  heard: SceneHeardPayload | null;
 };
 
 let busRef: KnxBus | null = null;
 let broadcastHeard: ((p: SceneHeardPayload) => void) | null = null;
 let listen: ListenSession | null = null;
+let lastHeard: SceneHeardPayload | null = null;
 let unsubTelegram: (() => void) | null = null;
 
 export function attachKnxSceneLearn(
@@ -73,32 +88,51 @@ function isKnownNonSceneGa(ga: string): boolean {
   return roles.every((r) => r.role !== "scene");
 }
 
+function collectWatchList(cfg: HouseConfig): string[] {
+  const seen = new Set(watchSceneAddresses(cfg));
+  walkDevices(cfg, (d) => {
+    if (d.type !== "universal") return;
+    for (const b of d.universal.buttons) {
+      for (const a of [b.action, b.actionOff, b.actionLong]) {
+        if (a?.role === "scene" && a.ga?.trim()) seen.add(a.ga.trim());
+      }
+    }
+  });
+  return [...seen];
+}
+
 function onBusTelegram(info: KnxTelegram): void {
   if (!listen) return;
   if (info.self) return;
-  if (info.evt !== "GroupValue_Write") return;
+  const evt = String(info.evt ?? "");
+  if (/GroupValue[_]?Read/i.test(evt)) return;
   const ga = String(info.ga ?? "").trim();
   if (!ga) return;
-  if (isKnownNonSceneGa(ga)) {
-    logger.debug({ ga }, "knx scene listen skip known device GA");
-    return;
-  }
+  const onWatch = listen.watch.has(ga);
+  const skipKnown = !onWatch && isKnownNonSceneGa(ga);
   const byte = extractSceneByte(info.value);
   const number = byte === null ? null : decodeSceneRecallByte(byte);
-  logger.info(
-    {
-      ga,
-      src: info.src,
-      byte,
-      number,
-      valueType: typeof info.value,
-      bufLen: Buffer.isBuffer(info.value) ? info.value.length : undefined
-    },
-    "knx scene listen telegram"
-  );
+  listen.seen += 1;
+  if (listen.seen <= 80 || onWatch || (!skipKnown && number !== null)) {
+    logger.info(
+      {
+        ga,
+        src: info.src,
+        evt,
+        onWatch,
+        skipKnown,
+        byte,
+        number,
+        roles: busRef?.getGaRoles(ga).map((r) => r.role) ?? [],
+        value: valuePreview(info.value)
+      },
+      "knx scene listen telegram"
+    );
+  }
+  if (skipKnown) return;
   if (byte === null || number === null) return;
   const cfg = getConfig();
-  const trusted = isTrustedSceneGa(ga, cfg);
+  const trusted = onWatch || isTrustedSceneGa(ga, cfg);
   const payload: SceneHeardPayload = {
     roomId: listen.roomId,
     ga,
@@ -106,16 +140,19 @@ function onBusTelegram(info: KnxTelegram): void {
     trusted
   };
   logger.info(payload, "knx scene listen heard");
+  lastHeard = payload;
   stopListen();
   broadcastHeard?.(payload);
 }
 
-export function startListen(roomId: string, userId: string): void {
+export function startListen(roomId: string, userId: string): ListenStart {
   if (!findRoom(getConfig(), roomId)) throw new Error("unknown room");
   stopListen();
-  const catalog = catalogSceneAddresses();
+  lastHeard = null;
+  const watching = collectWatchList(getConfig());
+  const unknownFallback = watching.length === 0;
   logger.info(
-    { roomId, catalogSceneGas: catalog.length },
+    { roomId, watching: watching.length, unknownFallback, sample: watching.slice(0, 20) },
     "knx scene listen start"
   );
   void busRef?.refreshGroupAddresses(collectAllGAs(getConfig())).catch((err) => {
@@ -124,19 +161,35 @@ export function startListen(roomId: string, userId: string): void {
   listen = {
     roomId,
     userId,
+    watch: new Set(watching),
+    unknownFallback,
+    seen: 0,
     timer: setTimeout(() => {
-      logger.info({ roomId }, "knx scene listen timeout");
-      if (broadcastHeard) {
-        broadcastHeard({
-          roomId,
-          ga: "",
-          number: 0,
-          trusted: false,
-          timeout: true
-        });
-      }
+      logger.info({ roomId, seen: listen?.seen ?? 0 }, "knx scene listen timeout");
+      const payload: SceneHeardPayload = {
+        roomId,
+        ga: "",
+        number: 0,
+        trusted: false,
+        timeout: true
+      };
+      lastHeard = payload;
+      if (broadcastHeard) broadcastHeard(payload);
       stopListen();
     }, LISTEN_MS)
+  };
+  return { watching, unknownFallback };
+}
+
+export function getListenStatus(roomId: string): ListenStatus {
+  const watching = listen?.roomId === roomId ? [...listen.watch] : [];
+  const unknownFallback =
+    listen?.roomId === roomId ? listen.unknownFallback : watching.length === 0;
+  return {
+    listening: listen?.roomId === roomId,
+    watching,
+    unknownFallback,
+    heard: lastHeard?.roomId === roomId ? lastHeard : null
   };
 }
 
