@@ -96,13 +96,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   (_topic == _SettingsTopic.spotify ||
                       _topic == _SettingsTopic.knxScenes ||
                       _topic == _SettingsTopic.users);
+              final hideKnxTopic = _topic == _SettingsTopic.knxScenes &&
+                  !cfg.hasKnxSceneLearnAddresses;
               final showMenu = _topic == null ||
                   hideStaffTopic ||
+                  hideKnxTopic ||
                   (_topic == _SettingsTopic.tablet &&
                       !wallTabletDeviceSettingsApply);
               return Theme(
                 data: _settingsTheme(Theme.of(context)),
-                child: showMenu ? _menu(auth) : _detail(cfg, schedAsync, auth),
+                child: showMenu ? _menu(auth, cfg) : _detail(cfg, schedAsync, auth),
               );
             },
           ),
@@ -111,7 +114,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _menu(AuthState auth) {
+  Widget _menu(AuthState auth, HouseConfig cfg) {
     return SafeArea(
       child: ListView(
         physics: const ClampingScrollPhysics(
@@ -170,14 +173,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       onTap: () =>
                           setState(() => _topic = _SettingsTopic.spotify),
                     ),
-                    Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
-                    _SettingsMenuTile(
-                      icon: Icons.tune_outlined,
-                      title: 'KNX-scenes inleren',
-                      subtitle: 'Muurknop inlezen en in KNX opslaan',
-                      onTap: () =>
-                          setState(() => _topic = _SettingsTopic.knxScenes),
-                    ),
+                    if (cfg.hasKnxSceneLearnAddresses) ...[
+                      Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
+                      _SettingsMenuTile(
+                        icon: Icons.tune_outlined,
+                        title: 'KNX-scenes',
+                        subtitle: 'Waarden van KNX-scenes zelf bijstellen',
+                        onTap: () =>
+                            setState(() => _topic = _SettingsTopic.knxScenes),
+                      ),
+                    ],
                     Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
                     _SettingsMenuTile(
                       icon: Icons.people_outline,
@@ -228,7 +233,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _SettingsTopic.schedules => 'Tijdschema\'s',
       _SettingsTopic.tablet => 'Wandtablet',
       _SettingsTopic.spotify => 'Spotify',
-      _SettingsTopic.knxScenes => 'KNX-scenes inleren',
+      _SettingsTopic.knxScenes => 'KNX-scenes',
       _SettingsTopic.users => 'Gebruikers',
     };
     final infoTitle = title;
@@ -261,11 +266,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             'Kies Geavanceerd → Doorgaan tot je “Certificaat OK” ziet, '
             'daarna Verbind Spotify.',
       _SettingsTopic.knxScenes =>
-        'Alleen installer en superuser. Kies een kamer, lees de fysieke scene-knop in, '
-            'stel lampen en gordijnen live bij, en sla op in KNX.\n\n'
-            'Tijdens inlezen gaan lampen in die kamer even uit en aan. '
-            'Opslaan zet alle kanalen op die scene-knop in ETS op de huidige stand.\n\n'
-            'Universele panelen (korte/lange druk) staan hier los van.',
+        'Alleen installer en superuser. U past zelf de waarden aan van KNX-scenes '
+            'die de programmeur in ETS heeft gemaakt: dimstand, aan/uit, gordijnen. '
+            'Lampen of kanalen toevoegen kan niet.\n\n'
+            'Kies de kamer, lees de fysieke scene-knop in, stel bij, en sla op in KNX. '
+            'Opslaan in KNX werkt alleen als scene opslaan (store/leren) in ETS '
+            'is vrijgegeven.\n\n'
+            'Tijdens inlezen gaan lampen in die kamer even uit en aan.',
       _SettingsTopic.users =>
         'Installer ziet alles, inclusief technische configuratie.\n\n'
             'Super user ziet alles in de app en beheert gebruikers, maar niet de KNX-opbouw. '

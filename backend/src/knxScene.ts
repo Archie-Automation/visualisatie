@@ -63,6 +63,24 @@ export function configuredSceneAddresses(cfg: HouseConfig): GA[] {
   return out;
 }
 
+/** Scene-GAs gekoppeld aan deze kamer (lege roomId telt niet mee). */
+export function configuredSceneAddressesForRoom(
+  cfg: HouseConfig,
+  roomId: string
+): GA[] {
+  const out: GA[] = [];
+  const seen = new Set<string>();
+  for (const raw of cfg.knxSceneLearn?.addresses ?? []) {
+    if (typeof raw === "string") continue;
+    const ga = raw?.ga?.trim();
+    const rid = raw?.roomId?.trim();
+    if (!ga || rid !== roomId || seen.has(ga)) continue;
+    seen.add(ga);
+    out.push(ga);
+  }
+  return out;
+}
+
 function asScenePayloadBytes(value: unknown): Buffer | null {
   if (Buffer.isBuffer(value)) return value;
   if (value instanceof Uint8Array) return Buffer.from(value);

@@ -722,6 +722,43 @@ class CurrentUser {
   }
 }
 
+List<KnxSceneLearnAddress> _parseKnxSceneLearnAddresses(Map? sl) {
+  final raw = sl?['addresses'];
+  if (raw is! List) return const [];
+  final out = <KnxSceneLearnAddress>[];
+  for (final e in raw) {
+    if (e is String) {
+      final ga = e.trim();
+      if (ga.isNotEmpty) out.add(KnxSceneLearnAddress(ga: ga));
+      continue;
+    }
+    if (e is! Map) continue;
+    final ga = '${e['ga'] ?? ''}'.trim();
+    if (ga.isEmpty) continue;
+    final name = '${e['name'] ?? ''}'.trim();
+    final roomId = '${e['roomId'] ?? ''}'.trim();
+    out.add(KnxSceneLearnAddress(
+      ga: ga,
+      name: name.isEmpty ? null : name,
+      roomId: roomId.isEmpty ? null : roomId,
+    ));
+  }
+  return out;
+}
+
+/// Scene-GA uit technische configuratie (`knxSceneLearn.addresses`).
+class KnxSceneLearnAddress {
+  final String ga;
+  final String? name;
+  final String? roomId;
+
+  const KnxSceneLearnAddress({
+    required this.ga,
+    this.name,
+    this.roomId,
+  });
+}
+
 class HouseConfig {
   final String projectId;
   final String projectName;
@@ -746,6 +783,8 @@ class HouseConfig {
   final bool satelEnabled;
   /// KNX-scene inlezen vanaf muurknop (installer/superuser).
   final bool knxSceneLearnEnabled;
+  /// Scene-GAs die de installer heeft ingevuld (met optionele ruimte).
+  final List<KnxSceneLearnAddress> knxSceneLearnAddresses;
 
   const HouseConfig({
     required this.projectId,
@@ -763,6 +802,7 @@ class HouseConfig {
     this.displayPanelJson,
     this.satelEnabled = false,
     this.knxSceneLearnEnabled = false,
+    this.knxSceneLearnAddresses = const [],
   });
 
   factory HouseConfig.fromJson(Map<String, dynamic> j) {
@@ -802,8 +842,19 @@ class HouseConfig {
       displayPanelJson: j['displayPanel'] as Map<String, dynamic>?,
       satelEnabled: (j['satel'] as Map?)?['enabled'] == true,
       knxSceneLearnEnabled: (j['knxSceneLearn'] as Map?)?['enabled'] == true,
+      knxSceneLearnAddresses:
+          _parseKnxSceneLearnAddresses(j['knxSceneLearn'] as Map?),
     );
   }
+
+  /// True als er minstens één scene-GA is ingevuld (Instellingen-tegel).
+  bool get hasKnxSceneLearnAddresses => knxSceneLearnAddresses.isNotEmpty;
+
+  /// Kamers waaraan een scene-GA is gekoppeld.
+  Set<String> get knxSceneLearnRoomIds => {
+        for (final a in knxSceneLearnAddresses)
+          if (a.roomId != null && a.roomId!.isNotEmpty) a.roomId!,
+      };
 
   /// All room-bound + global automation devices (no cameras/intercoms).
   Iterable<Device> get allDevices sync* {

@@ -124,6 +124,8 @@ export class KnxBus extends EventEmitter {
   private disabled: boolean;
   private readonly datapoints = new Map<GA, unknown>();
   private busConnected = false;
+  /** Serializes bus I/O. KNXnet/IP tunneling drops on write/read bursts. */
+  private outbound: Promise<void> = Promise.resolve();
   private readonly selfWrites: Array<{ ga: GA; byte?: number; ts: number }> = [];
 
   private host: string;
@@ -174,6 +176,25 @@ export class KnxBus extends EventEmitter {
     await this.connect(collectAllGAs(cfg));
   }
 
+  /** Tunnel alive (false after a gateway drop until reconnect). */
+  get connected(): boolean {
+    return this.simulate || (this.busConnected && Boolean(this.connection));
+  }
+
+  /**
+   * KNXnet/IP tunneling has a tiny outstanding-request window. Bursting
+   * GroupValue_Write/Read (scene wizard, rgbw) closes the tunnel.
+   */
+  private pace<T>(fn: () => Promise<T>, gapMs = 45): Promise<T> {
+    if (this.simulate) return fn();
+    const run = this.outbound.then(fn, fn);
+    this.outbound = run.then(
+      () => new Promise<void>((r) => setTimeout(r, gapMs)),
+      () => new Promise<void>((r) => setTimeout(r, gapMs))
+    );
+    return run;
+  }
+
   async disconnect(): Promise<void> {
     if (this.disabled) return;
     if (this.simulate) {
@@ -189,6 +210,7 @@ export class KnxBus extends EventEmitter {
     this.connection = undefined;
     this.datapoints.clear();
     this.busConnected = false;
+    this.outbound = Promise.resolve();
 
     if (!conn?.Disconnect) return;
 
@@ -239,6 +261,7 @@ export class KnxBus extends EventEmitter {
               this.busConnected = false;
               this.connection = undefined;
               this.datapoints.clear();
+              this.outbound = Promise.resolve();
               this.emit("disconnected");
             });
             this.emit("connected");
@@ -249,6 +272,7 @@ export class KnxBus extends EventEmitter {
             this.busConnected = false;
             this.connection = undefined;
             this.datapoints.clear();
+            this.outbound = Promise.resolve();
             this.emit("disconnected");
             reject(err);
           },
@@ -564,16 +588,14 @@ export class KnxBus extends EventEmitter {
       return;
     }
 
-    const knx = await loadKnxModule();
-    const dp = new knx.Datapoint({ ga, dpt }, this.connection as never);
-    this.noteSelfWrite(ga);
-    await new Promise<void>((resolve, reject) => {
+    await this.pace(async () => {
+      if (!this.connection) throw new Error("KNX not connected");
+      const knx = await loadKnxModule();
+      const dp = new knx.Datapoint({ ga, dpt }, this.connection as never);
+      this.noteSelfWrite(ga);
       dp.write(value);
-      // knx.js does not expose a promise; we optimistically resolve.
-      setTimeout(resolve, 0);
-      void reject;
+      this.updateCache(ga, value, dpt);
     });
-    this.updateCache(ga, value, dpt);
   }
 
   /**
@@ -595,24 +617,29 @@ export class KnxBus extends EventEmitter {
     }
 
     this.noteSelfWrite(ga, data[0]);
-    await new Promise<void>((resolve, reject) => {
-      conn.writeRaw!(ga, data, bits, (err: Error | undefined) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    await this.pace(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          conn.writeRaw!(ga, data, bits, (err: Error | undefined) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        })
+    );
     this.updateCache(ga, data.toString("hex"), "RAW");
   }
 
   /** GroupValue_Read for a bound datapoint (no-op if unbound / simulate). */
   requestRead(ga: GA): void {
-    if (this.simulate || this.disabled) return;
-    const dp = this.datapoints.get(ga) as { read?: () => void } | undefined;
-    try {
-      dp?.read?.();
-    } catch (err) {
-      logger.warn({ err, ga }, "KNX group read failed");
-    }
+    void this.pace(async () => {
+      if (this.simulate || this.disabled || !this.connection) return;
+      const dp = this.datapoints.get(ga) as { read?: () => void } | undefined;
+      try {
+        dp?.read?.();
+      } catch (err) {
+        logger.warn({ err, ga }, "KNX group read failed");
+      }
+    }, 35);
   }
 
   private noteSelfWrite(ga: GA, byte?: number): void {
