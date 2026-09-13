@@ -14,11 +14,63 @@ export function decodeSceneRecallByte(byte: number): number | null {
   return (b & 0x3f) + 1;
 }
 
+function sceneNameHint(text: string): boolean {
+  return /(scene|szene|scène)/i.test(text);
+}
+
+function isCatalogSceneDpt(dpt: string): boolean {
+  const d = dpt.toLowerCase();
+  return (
+    d.includes("17.001") ||
+    d.includes("18.001") ||
+    d.includes("dpt17") ||
+    d.includes("dpt18")
+  );
+}
+
+/** Scene-oproep GAs uit de ETS-catalogus (DPT 17/18 of naam scene/szene). */
+export function catalogSceneAddresses(): GA[] {
+  const out: GA[] = [];
+  const seen = new Set<string>();
+  try {
+    for (const e of loadGaCatalog()) {
+      if (!e.address || seen.has(e.address)) continue;
+      const hit =
+        isCatalogSceneDpt(e.dpt ?? "") ||
+        sceneNameHint(`${e.name} ${e.mainGroup ?? ""} ${e.middleGroup ?? ""}`);
+      if (!hit) continue;
+      seen.add(e.address);
+      out.push(e.address);
+    }
+  } catch {
+    /* catalog optional */
+  }
+  return out;
+}
+
+function asScenePayloadBytes(value: unknown): Buffer | null {
+  if (Buffer.isBuffer(value)) return value;
+  if (value instanceof Uint8Array) return Buffer.from(value);
+  if (Array.isArray(value) && value.every((x) => typeof x === "number")) {
+    return Buffer.from(value as number[]);
+  }
+  if (
+    value &&
+    typeof value === "object" &&
+    (value as { type?: string }).type === "Buffer" &&
+    Array.isArray((value as { data?: unknown }).data)
+  ) {
+    return Buffer.from((value as { data: number[] }).data);
+  }
+  return null;
+}
+
 export function extractSceneByte(value: unknown): number | null {
-  // Alleen 1-byte payloads: een 2-byte temperatuur mag niet als scene tellen.
-  if (Buffer.isBuffer(value)) {
-    if (value.length !== 1) return null;
-    return value[0] & 0xff;
+  const buf = asScenePayloadBytes(value);
+  if (buf) {
+    if (buf.length === 1) return buf[0] & 0xff;
+    if (buf.length === 2) return buf[1] & 0xff;
+    return null;
   }
   if (typeof value === "number" && Number.isFinite(value)) {
     const n = Math.round(value);
@@ -29,10 +81,6 @@ export function extractSceneByte(value: unknown): number | null {
 
 export function knxSceneLearnEnabled(cfg: HouseConfig): boolean {
   return cfg.knxSceneLearn?.enabled === true;
-}
-
-function sceneNameHint(text: string): boolean {
-  return /(scene|szene|scène)/i.test(text);
 }
 
 /** True when this GA is a known KNX scene control (catalog DPT/name or existing binding). */
@@ -49,18 +97,5 @@ export function isTrustedSceneGa(ga: GA, cfg: HouseConfig): boolean {
       }
     }
   }
-  try {
-    for (const e of loadGaCatalog()) {
-      if (e.address !== addr) continue;
-      const dpt = (e.dpt ?? "").toLowerCase();
-      if (dpt.includes("17.001") || dpt.includes("18.001") || dpt.includes("dpt17") || dpt.includes("dpt18")) {
-        return true;
-      }
-      const blob = `${e.name} ${e.mainGroup ?? ""} ${e.middleGroup ?? ""}`;
-      if (sceneNameHint(blob)) return true;
-    }
-  } catch {
-    /* catalog optional */
-  }
-  return false;
+  return catalogSceneAddresses().includes(addr);
 }
