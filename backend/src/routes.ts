@@ -49,6 +49,7 @@ import { logger } from "./logger";
 import { runScene } from "./scenes";
 import {
   attachKnxSceneLearn,
+  getListenStatus,
   learnKnxScene,
   startListen,
   stopListen,
@@ -1485,6 +1486,14 @@ export function buildRouter(
     }
   });
 
+  r.get("/rooms/:roomId/scenes/listen", requireAuth, (req: AuthedRequest, res) => {
+    if (!canLearnKnxScenes(req))
+      return res.status(403).json({ error: "scene inlezen niet toegestaan" });
+    const room = findRoom(getConfig(), req.params.roomId);
+    if (!room) return res.status(404).json({ error: "unknown room" });
+    res.json(getListenStatus(room.id));
+  });
+
   r.post("/rooms/:roomId/scenes/listen", requireAuth, (req: AuthedRequest, res) => {
     if (!canLearnKnxScenes(req))
       return res.status(403).json({ error: "scene inlezen niet toegestaan" });
@@ -1492,9 +1501,18 @@ export function buildRouter(
     if (!room) return res.status(404).json({ error: "unknown room" });
     const action = (req.body as { action?: string })?.action ?? "start";
     try {
-      if (action === "stop") stopListen();
-      else startListen(room.id, req.user?.sub ?? "");
-      res.json({ ok: true, listening: action !== "stop" });
+      if (action === "stop") {
+        stopListen();
+        res.json({ ok: true, listening: false });
+        return;
+      }
+      const started = startListen(room.id, req.user?.sub ?? "");
+      res.json({
+        ok: true,
+        listening: true,
+        watching: started.watching,
+        unknownFallback: started.unknownFallback
+      });
     } catch (err) {
       res.status(400).json({ error: (err as Error).message });
     }

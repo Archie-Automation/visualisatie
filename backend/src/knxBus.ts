@@ -253,12 +253,27 @@ export class KnxBus extends EventEmitter {
             reject(err);
           },
           event: (evt: string, src: string, dest: GA, value: unknown) => {
-            if (evt !== "GroupValue_Write" && evt !== "GroupValue_Response") return;
+            const evtName = String(evt ?? "");
+            const destGa = String(dest ?? "").trim();
+            if (/GroupValue[_]?Read/i.test(evtName)) return;
             const byte = extractByte(value);
-            const self = this.isSelfWrite(dest, byte);
-            this.emit("telegram", { ga: dest, src, value, self, ts: Date.now(), evt });
-            if (evt === "GroupValue_Write" && self) return;
-            this.onBusTelegram(dest, value);
+            const self = this.isSelfWrite(destGa, byte);
+            this.emit("telegram", {
+              ga: destGa,
+              src,
+              value,
+              self,
+              ts: Date.now(),
+              evt: evtName
+            });
+            const cache =
+              evtName === "GroupValue_Write" ||
+              evtName === "GroupValue_Response" ||
+              /GroupValue[_]?Write/i.test(evtName) ||
+              /GroupValue[_]?Response/i.test(evtName);
+            if (!cache) return;
+            if (/Write/i.test(evtName) && self) return;
+            this.onBusTelegram(destGa, value);
           }
         }
       });
