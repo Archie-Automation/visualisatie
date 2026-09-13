@@ -45,6 +45,8 @@ type Outgoing =
         number: number;
         trusted: boolean;
         timeout?: boolean;
+        memberIds?: string[];
+        reason?: string;
       };
     };
 
@@ -58,6 +60,8 @@ export interface WsHub {
     number: number;
     trusted: boolean;
     timeout?: boolean;
+    memberIds?: string[];
+    reason?: string;
   }): void;
   close(): Promise<void>;
 }

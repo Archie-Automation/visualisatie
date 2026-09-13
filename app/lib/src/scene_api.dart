@@ -121,6 +121,7 @@ class _SceneApi {
     required String roomId,
     required String ga,
     required int number,
+    List<String>? members,
   }) async {
     final token = _ref.read(authProvider).token ?? '';
     final res = await http.post(
@@ -129,7 +130,11 @@ class _SceneApi {
         'content-type': 'application/json',
         'authorization': 'Bearer $token',
       },
-      body: jsonEncode({'ga': ga, 'number': number}),
+      body: jsonEncode({
+        'ga': ga,
+        'number': number,
+        if (members != null && members.isNotEmpty) 'memberIds': members,
+      }),
     );
     if (res.statusCode != 200) {
       throw Exception('scene learn failed: ${res.statusCode} ${res.body}');

@@ -146,12 +146,16 @@ class KnxSceneHeard {
     required this.number,
     required this.trusted,
     this.timeout = false,
+    this.memberIds = const [],
+    this.reason,
   });
   final String roomId;
   final String ga;
   final int number;
   final bool trusted;
   final bool timeout;
+  final List<String> memberIds;
+  final String? reason;
 }
 
 class KnxSceneHeardController extends Notifier<KnxSceneHeard?> {
@@ -467,6 +471,11 @@ class BusController extends Notifier<BusState> {
                     number: (p['number'] as num?)?.toInt() ?? 1,
                     trusted: p['trusted'] == true,
                     timeout: p['timeout'] == true,
+                    memberIds: [
+                      for (final id in (p['memberIds'] as List?) ?? const [])
+                        if ('$id'.trim().isNotEmpty) '$id'.trim(),
+                    ],
+                    reason: p['reason'] as String?,
                   ));
           }
         },
