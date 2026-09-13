@@ -365,9 +365,10 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
     final extra = _watching.length > 24 ? ' …' : '';
     final hint = _watching.isEmpty
         ? 'Geen lampen of jaloezieën in deze kamer.'
-        : 'Volgen van ${_watching.length} groepsadressen '
-            '(dim, aan/uit, jaloezie). Het 1-byte telegram vlak vóór de eerste '
-            'terugmelding is het scene-adres.\n$sample$extra';
+        : 'Volgen van ${_watching.length} adressen '
+            '(dim stuur/status, schakelbit, jaloezie positie — wat er is). '
+            'Het 1-byte telegram vlak vóór de eerste terugmelding is het scene-adres.\n'
+            '$sample$extra';
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
