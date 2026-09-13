@@ -1520,7 +1520,7 @@ export interface HouseConfig {
    */
   knxSceneLearn?: {
     enabled?: boolean;
-    addresses?: Array<{ ga: GA; name?: string } | GA>;
+    addresses?: Array<{ ga: GA; name?: string; roomId?: string } | GA>;
   };
   /** Wandtablet idle timeout + screensaver (Android client). */
   displayPanel?: {

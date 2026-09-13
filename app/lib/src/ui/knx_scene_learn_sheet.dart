@@ -88,9 +88,12 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
       builder: (ctx) => AlertDialog(
         title: const Text('Verlichting gaat uit en aan'),
         content: const Text(
-          'Om de scene in te lezen gaat alle verlichting in deze kamer even uit. '
-          'Daarna drukt u de muurknop. De app zet daarna ontbrekende lampen op 100% '
-          'en roept de scene zelf nog eens op.\n\nVerder?',
+          'Om de scene in te lezen gaat alleen de verlichting in deze kamer even uit. '
+          'Andere kamers blijven ongemoeid. Daarna drukt u de muurknop. '
+          'De app zet ontbrekende lampen in deze kamer op 100% '
+          'en roept de scene zelf nog eens op.\n\n'
+          'U past daarna de waarden aan. Opslaan in KNX werkt alleen als '
+          'scene opslaan in ETS is vrijgegeven.\n\nVerder?',
         ),
         actions: [
           TextButton(
@@ -133,10 +136,11 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
 
   String _listenTimeoutText({String? reason}) {
     if (reason == 'wizard_failed') {
-      return 'Inlezen mislukt tijdens de tweede pass. Probeer opnieuw.';
+      return 'Inlezen mislukt tijdens de analyse. '
+          'Als de KNX-verbinding wegviel, verbind opnieuw in de installer en probeer het nog eens.';
     }
     if (_watching.isEmpty) {
-      return 'Geen scene-adressen geconfigureerd. Vul ze in bij KNX-gateway in de installer.';
+      return 'Geen scene-adres voor deze kamer. Koppel een scene-GA aan deze ruimte in de installer (KNX).';
     }
     return 'Geen scene-knop gehoord. Druk de knop in deze kamer; '
         'we luisteren op ${_watching.length} scene-adressen.';

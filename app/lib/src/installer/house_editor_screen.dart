@@ -748,6 +748,26 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     }
   }
 
+  List<({String id, String label})> _sceneLearnRooms() {
+    final out = <({String id, String label})>[];
+    for (final f in _floors()) {
+      final floorName = '${f['name'] ?? ''}'.trim();
+      final rooms = f['rooms'];
+      if (rooms is! List) continue;
+      for (final r in rooms) {
+        if (r is! Map) continue;
+        final id = '${r['id'] ?? ''}'.trim();
+        if (id.isEmpty) continue;
+        final roomName = '${r['name'] ?? ''}'.trim();
+        final label = floorName.isEmpty
+            ? (roomName.isEmpty ? id : roomName)
+            : '$floorName · ${roomName.isEmpty ? id : roomName}';
+        out.add((id: id, label: label));
+      }
+    }
+    return out;
+  }
+
   Map<String, dynamic> _ensureProject() {
     final h = _house!;
     final p = h['project'];
@@ -3521,6 +3541,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         return _KnxInstallerSection(
           knx: _ensureKnx(),
           sceneLearn: _ensureSceneLearn(),
+          rooms: _sceneLearnRooms(),
           onChanged: () => setState(() {}),
           onImport: _importKnx,
           onImportInfo: _showKnxImportInfo,
@@ -4002,6 +4023,7 @@ class _KnxInstallerSection extends StatefulWidget {
   const _KnxInstallerSection({
     required this.knx,
     required this.sceneLearn,
+    required this.rooms,
     required this.onChanged,
     required this.getToken,
     required this.onImport,
@@ -4010,6 +4032,7 @@ class _KnxInstallerSection extends StatefulWidget {
 
   final Map<String, dynamic> knx;
   final Map<String, dynamic> sceneLearn;
+  final List<({String id, String label})> rooms;
   final VoidCallback onChanged;
   final Future<String?> Function() getToken;
   final VoidCallback onImport;
@@ -4175,6 +4198,7 @@ class _KnxInstallerSectionState extends State<_KnxInstallerSection> {
           child: _KnxForm(
             knx: widget.knx,
             sceneLearn: widget.sceneLearn,
+            rooms: widget.rooms,
             onChanged: widget.onChanged,
             onImport: widget.onImport,
             onImportInfo: widget.onImportInfo,
@@ -4439,12 +4463,14 @@ class _KnxForm extends StatelessWidget {
   const _KnxForm({
     required this.knx,
     required this.sceneLearn,
+    required this.rooms,
     required this.onChanged,
     required this.onImport,
     required this.onImportInfo,
   });
   final Map<String, dynamic> knx;
   final Map<String, dynamic> sceneLearn;
+  final List<({String id, String label})> rooms;
   final VoidCallback onChanged;
   final VoidCallback onImport;
   final VoidCallback onImportInfo;
@@ -4513,16 +4539,26 @@ class _KnxForm extends StatelessWidget {
             ),
           ),
           const Divider(height: 32),
-          Text('KNX-scene-adressen',
+          Text('KNX-scenes: groepsadressen invoeren',
               style: Theme.of(context).textTheme.titleSmall),
           const SizedBox(height: 4),
           Text(
-            'Groepsadressen van scene-knoppen (DPT 18) die de KNX-programmeur heeft aangemaakt. '
-            'De app luistert hierop bij Inlezen vanaf muurknop.',
+            'Vul hier de scene-groepsadressen in (DPT 18.001) zoals ze in ETS '
+            'op de muurknoppen staan, en kies per adres de ruimte.\n\n'
+            'Gebruikers kunnen daarna in Instellingen de waarden van die '
+            'KNX-scenes zelf bijstellen (licht, gordijnen) en opslaan in KNX — '
+            'mits scene opslaan (store/leren) in ETS is vrijgegeven.\n\n'
+            'Zonder adressen hieronder verschijnt die functie niet in Instellingen. '
+            'De KNX-programmeur bepaalt welke lampen op de scene zitten; de app '
+            'past alleen de waarden aan.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 8),
-          _SceneAddressList(sceneLearn: sceneLearn, onChanged: onChanged),
+          _SceneAddressList(
+            sceneLearn: sceneLearn,
+            rooms: rooms,
+            onChanged: onChanged,
+          ),
         ] else
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
@@ -4546,8 +4582,13 @@ class _KnxForm extends StatelessWidget {
 }
 
 class _SceneAddressList extends StatelessWidget {
-  const _SceneAddressList({required this.sceneLearn, required this.onChanged});
+  const _SceneAddressList({
+    required this.sceneLearn,
+    required this.rooms,
+    required this.onChanged,
+  });
   final Map<String, dynamic> sceneLearn;
+  final List<({String id, String label})> rooms;
   final VoidCallback onChanged;
 
   List<Map<String, dynamic>> _rows() {
@@ -4571,6 +4612,7 @@ class _SceneAddressList extends StatelessWidget {
         (sceneLearn['addresses'] as List).length != rows.length) {
       sceneLearn['addresses'] = rows;
     }
+    final knownIds = {for (final r in rooms) r.id};
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -4584,21 +4626,15 @@ class _SceneAddressList extends StatelessWidget {
                   'ga',
                   rows[i],
                   onChanged,
-                  labelOverride: 'Scene-GA',
+                  labelOverride: 'Scene-adres (GA)',
                   gaSearch: true,
                   gaDptHint: 'DPT18.001',
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
-                flex: 2,
-                child: _BoundStrField(
-                  'name',
-                  rows[i],
-                  onChanged,
-                  labelOverride: 'Naam (optioneel)',
-                  emptyMeansRemove: true,
-                ),
+                flex: 3,
+                child: _sceneRoomDropdown(rows[i], knownIds),
               ),
               IconButton(
                 tooltip: 'Verwijderen',
@@ -4611,12 +4647,19 @@ class _SceneAddressList extends StatelessWidget {
               ),
             ],
           ),
+          _BoundStrField(
+            'name',
+            rows[i],
+            onChanged,
+            labelOverride: 'Naam (optioneel, intern)',
+            emptyMeansRemove: true,
+          ),
         ],
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton.icon(
             onPressed: () {
-              rows.add(<String, dynamic>{'ga': ''});
+              rows.add(<String, dynamic>{'ga': '', 'roomId': ''});
               sceneLearn['addresses'] = rows;
               onChanged();
             },
@@ -4625,6 +4668,46 @@ class _SceneAddressList extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _sceneRoomDropdown(
+    Map<String, dynamic> row,
+    Set<String> knownIds,
+  ) {
+    final current = '${row['roomId'] ?? ''}'.trim();
+    final items = <DropdownMenuItem<String>>[
+      const DropdownMenuItem(value: '', child: Text('Kies ruimte')),
+      for (final r in rooms)
+        DropdownMenuItem(value: r.id, child: Text(r.label)),
+    ];
+    if (current.isNotEmpty && !knownIds.contains(current)) {
+      items.add(DropdownMenuItem(value: current, child: Text(current)));
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const LuxeFieldLabel('Ruimte / kamer'),
+          DropdownButtonFormField<String>(
+            key: ValueKey('scene-room-$current-${rooms.length}'),
+            initialValue: current,
+            isExpanded: true,
+            decoration: luxeFilledDecoration(),
+            items: items,
+            onChanged: (v) {
+              final next = (v ?? '').trim();
+              if (next.isEmpty) {
+                row.remove('roomId');
+              } else {
+                row['roomId'] = next;
+              }
+              onChanged();
+            },
+          ),
+        ],
+      ),
     );
   }
 }

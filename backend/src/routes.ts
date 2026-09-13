@@ -1537,7 +1537,6 @@ export function buildRouter(
         roomId: req.params.roomId,
         ga: parsed.data.ga,
         number: parsed.data.number,
-        extraRoomIds: parsed.data.extraRoomIds,
         memberIds: parsed.data.memberIds,
         name: parsed.data.name
       });

@@ -24,9 +24,12 @@ class _KnxSceneLearnSectionState extends ConsumerState<KnxSceneLearnSection> {
   HouseConfig get _cfg => ref.watch(configProvider).value ?? widget.cfg;
 
   List<(String id, String label)> get _rooms {
+    final allowed = _cfg.knxSceneLearnRoomIds;
+    if (allowed.isEmpty) return const [];
     final out = <(String, String)>[];
     for (final f in _cfg.floors) {
       for (final r in f.rooms) {
+        if (!allowed.contains(r.id)) continue;
         out.add((r.id, '${f.name} · ${r.name}'));
       }
     }
@@ -45,8 +48,18 @@ class _KnxSceneLearnSectionState extends ConsumerState<KnxSceneLearnSection> {
   @override
   void initState() {
     super.initState();
-    final rooms = widget.cfg.floors.expand((f) => f.rooms);
-    _roomId = rooms.isEmpty ? null : rooms.first.id;
+    final allowed = widget.cfg.knxSceneLearnRoomIds;
+    String? first;
+    for (final f in widget.cfg.floors) {
+      for (final r in f.rooms) {
+        if (allowed.contains(r.id)) {
+          first = r.id;
+          break;
+        }
+      }
+      if (first != null) break;
+    }
+    _roomId = first;
   }
 
   Future<void> _openLearn({Scene? existing}) async {
@@ -69,11 +82,23 @@ class _KnxSceneLearnSectionState extends ConsumerState<KnxSceneLearnSection> {
   @override
   Widget build(BuildContext context) {
     final rooms = _rooms;
+    if (!_cfg.hasKnxSceneLearnAddresses) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(22, 4, 22, 12),
+        child: Text(
+          'Geen scene-adressen in de technische configuratie. '
+          'Vul ze in bij KNX en koppel elke GA aan een ruimte.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      );
+    }
     if (rooms.isEmpty) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(22, 4, 22, 12),
         child: Text(
-          'Geen kamers in dit huis.',
+          _cfg.knxSceneLearnRoomIds.isEmpty
+              ? 'Koppel elk scene-adres aan een ruimte in de technische configuratie (KNX).'
+              : 'Geen kamers in dit huis.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
       );
@@ -121,7 +146,9 @@ class _KnxSceneLearnSectionState extends ConsumerState<KnxSceneLearnSection> {
           const SizedBox(height: 12),
           if (knxScenes.isEmpty)
             Text(
-              'Nog geen KNX-scenes in deze kamer. Eerst scene-adressen invullen in de installer (KNX-gateway), daarna inlezen.',
+              'Nog geen KNX-scene in deze kamer ingelezen. '
+              'Inlezen vangt de muurknop; daarna stelt u de waarden bij en slaat u op in KNX '
+              '(als store in ETS is vrijgegeven).',
               style: Theme.of(context).textTheme.bodySmall,
             )
           else
