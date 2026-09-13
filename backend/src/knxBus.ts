@@ -521,6 +521,11 @@ export class KnxBus extends EventEmitter {
     return [...this.cache.values()];
   }
 
+  /** Roles bound to this GA (empty = not in house.json / catalog). */
+  getGaRoles(ga: GA): GARole[] {
+    return this.gaRoles.get(ga) ?? [];
+  }
+
   /** Push a value to clients without writing the KNX bus (UI echo). */
   reflectLocal(ga: GA, value: number | boolean, role?: string): void {
     const dpt = role ? ROLE_DPT[role] : this.gaToDpt.get(ga);

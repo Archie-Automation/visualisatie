@@ -1,6 +1,7 @@
 import { logger } from "./logger";
 import { dispatch } from "./commands";
 import {
+  collectAllGAs,
   findRoom,
   findScene,
   getConfig,
@@ -8,6 +9,7 @@ import {
   walkDevices
 } from "./config";
 import {
+  catalogSceneAddresses,
   decodeSceneRecallByte,
   encodeSceneByte,
   extractSceneByte,
@@ -65,19 +67,41 @@ export function attachKnxSceneLearn(
   unsubTelegram = () => bus.off("telegram", onTelegram);
 }
 
+function isKnownNonSceneGa(ga: string): boolean {
+  const roles = busRef?.getGaRoles(ga) ?? [];
+  if (roles.length === 0) return false;
+  return roles.every((r) => r.role !== "scene");
+}
+
 function onBusTelegram(info: KnxTelegram): void {
   if (!listen) return;
   if (info.self) return;
   if (info.evt !== "GroupValue_Write") return;
+  const ga = String(info.ga ?? "").trim();
+  if (!ga) return;
+  if (isKnownNonSceneGa(ga)) {
+    logger.debug({ ga }, "knx scene listen skip known device GA");
+    return;
+  }
   const byte = extractSceneByte(info.value);
-  if (byte === null) return;
-  const number = decodeSceneRecallByte(byte);
-  if (number === null) return;
+  const number = byte === null ? null : decodeSceneRecallByte(byte);
+  logger.info(
+    {
+      ga,
+      src: info.src,
+      byte,
+      number,
+      valueType: typeof info.value,
+      bufLen: Buffer.isBuffer(info.value) ? info.value.length : undefined
+    },
+    "knx scene listen telegram"
+  );
+  if (byte === null || number === null) return;
   const cfg = getConfig();
-  const trusted = isTrustedSceneGa(info.ga, cfg);
+  const trusted = isTrustedSceneGa(ga, cfg);
   const payload: SceneHeardPayload = {
     roomId: listen.roomId,
-    ga: info.ga,
+    ga,
     number,
     trusted
   };
@@ -89,6 +113,14 @@ function onBusTelegram(info: KnxTelegram): void {
 export function startListen(roomId: string, userId: string): void {
   if (!findRoom(getConfig(), roomId)) throw new Error("unknown room");
   stopListen();
+  const catalog = catalogSceneAddresses();
+  logger.info(
+    { roomId, catalogSceneGas: catalog.length },
+    "knx scene listen start"
+  );
+  void busRef?.refreshGroupAddresses(collectAllGAs(getConfig())).catch((err) => {
+    logger.warn({ err }, "knx scene listen GA refresh failed");
+  });
   listen = {
     roomId,
     userId,
