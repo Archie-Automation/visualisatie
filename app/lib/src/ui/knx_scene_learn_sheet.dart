@@ -9,7 +9,7 @@ import '../scene_api.dart';
 import '../theme.dart';
 import 'widgets/device_widgets.dart';
 
-enum _LearnPhase { listen, confirm, learning, overview, error }
+enum _LearnPhase { warn, listen, learning, duplicate, overview, error }
 
 /// Inlezen van een KNX-hardware-scene vanaf een muurknop, daarna live bijstellen.
 class KnxSceneLearnSheet extends ConsumerStatefulWidget {
@@ -29,7 +29,7 @@ class KnxSceneLearnSheet extends ConsumerStatefulWidget {
 }
 
 class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
-  _LearnPhase _phase = _LearnPhase.listen;
+  _LearnPhase _phase = _LearnPhase.warn;
   String? _error;
   String? _ga;
   int? _number;
@@ -40,11 +40,14 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
   Timer? _pollTimer;
   List<String> _watching = const [];
   bool _heardHandled = false;
+  String? _duplicateName;
+  late final TextEditingController _nameCtrl;
 
   @override
   void initState() {
     super.initState();
     final existing = widget.existing;
+    _nameCtrl = TextEditingController(text: existing?.name ?? '');
     if (existing != null && existing.isKnxHardware) {
       _ga = existing.knxGa;
       _number = existing.knxNumber;
@@ -65,17 +68,48 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
       _phase = _LearnPhase.overview;
       return;
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) => _startListen());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _confirmWarn());
   }
 
   @override
   void dispose() {
     _listenTimer?.cancel();
     _pollTimer?.cancel();
+    _nameCtrl.dispose();
     final api = ref.read(sceneApiProvider);
     final roomId = widget.roomId;
     api.stopListen(roomId).catchError((_) {});
     super.dispose();
+  }
+
+  Future<void> _confirmWarn() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Verlichting gaat uit en aan'),
+        content: const Text(
+          'Om de scene in te lezen gaat alle verlichting in deze kamer even uit. '
+          'Daarna drukt u de muurknop. De app zet daarna ontbrekende lampen op 100% '
+          'en roept de scene zelf nog eens op.\n\nVerder?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuleren'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Verder'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    if (ok != true) {
+      Navigator.of(context).pop();
+      return;
+    }
+    await _startListen();
   }
 
   void _armListenTimeout() {
@@ -85,7 +119,7 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
     _pollTimer = Timer.periodic(const Duration(milliseconds: 400), (_) {
       _pollListen();
     });
-    _listenTimer = Timer(const Duration(seconds: 20), () {
+    _listenTimer = Timer(const Duration(seconds: 22), () {
       if (!mounted) return;
       if (_phase != _LearnPhase.listen) return;
       _pollTimer?.cancel();
@@ -98,15 +132,14 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
   }
 
   String _listenTimeoutText({String? reason}) {
-    if (reason == 'no_scene_byte') {
-      return 'Lampen of jaloezieën in deze kamer gaven terugmelding, '
-          'maar er kwam geen 1-byte telegram vlak daarvoor (scene-adres).';
+    if (reason == 'wizard_failed') {
+      return 'Inlezen mislukt tijdens de tweede pass. Probeer opnieuw.';
     }
     if (_watching.isEmpty) {
-      return 'Geen lampen of jaloezieën in deze kamer om te volgen.';
+      return 'Geen scene-adressen geconfigureerd. Vul ze in bij KNX-gateway in de installer.';
     }
     return 'Geen scene-knop gehoord. Druk de knop in deze kamer; '
-        'we volgen ${_watching.length} groepsadressen van lampen en jaloezieën.';
+        'we luisteren op ${_watching.length} scene-adressen.';
   }
 
   Future<void> _startListen() async {
@@ -117,7 +150,8 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
       _heardHandled = false;
     });
     try {
-      final started = await ref.read(sceneApiProvider).startListen(widget.roomId);
+      final started =
+          await ref.read(sceneApiProvider).startListen(widget.roomId);
       if (!mounted) return;
       setState(() {
         _watching = _stringList(started['watching']);
@@ -141,15 +175,23 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
   }
 
   Future<void> _pollListen() async {
-    if (!mounted || _phase != _LearnPhase.listen || _heardHandled) return;
+    if (!mounted || _heardHandled) return;
+    if (_phase != _LearnPhase.listen && _phase != _LearnPhase.learning) {
+      return;
+    }
     try {
       final st = await ref.read(sceneApiProvider).listenStatus(widget.roomId);
-      if (!mounted || _phase != _LearnPhase.listen || _heardHandled) return;
+      if (!mounted || _heardHandled) return;
+      if (_phase != _LearnPhase.listen && _phase != _LearnPhase.learning) {
+        return;
+      }
       final watching = _stringList(st['watching']);
       if (watching.isNotEmpty && watching.join() != _watching.join()) {
-        setState(() {
-          _watching = watching;
-        });
+        setState(() => _watching = watching);
+      }
+      if (st['phase'] == 'busy' && _phase == _LearnPhase.listen) {
+        _listenTimer?.cancel();
+        setState(() => _phase = _LearnPhase.learning);
       }
       final heard = st['heard'];
       if (heard is Map) {
@@ -170,14 +212,46 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
           if ('$id'.trim().isNotEmpty) '$id'.trim(),
       ],
       reason: heard['reason'] as String?,
+      existingId: heard['existingId'] as String?,
+      existingName: heard['existingName'] as String?,
+      learnedMembers: [
+        for (final m in (heard['members'] as List?) ?? const [])
+          if (m is Map) Map<String, dynamic>.from(m),
+      ],
     );
+  }
+
+  List<_MemberRow> _membersFromHeard(KnxSceneHeard heard) {
+    if (heard.learnedMembers.isNotEmpty) {
+      return [
+        for (final m in heard.learnedMembers)
+          _MemberRow(
+            deviceId: '${m['deviceId'] ?? ''}',
+            name: '${m['name'] ?? ''}',
+            kind: '${m['kind'] ?? 'light'}',
+            confirmed: m['confirmed'] != false,
+          ),
+      ];
+    }
+    return [
+      for (final id in heard.memberIds)
+        _MemberRow(
+          deviceId: id,
+          name: widget.config.deviceById(id)?.name ?? id,
+          kind: widget.config.deviceById(id)?.type == DeviceType.shading ||
+                  widget.config.deviceById(id)?.type ==
+                      DeviceType.positionActuator
+              ? 'shading'
+              : 'light',
+          confirmed: true,
+        ),
+    ];
   }
 
   void _onHeard(KnxSceneHeard heard) {
     if (heard.roomId != widget.roomId) return;
     if (_heardHandled) return;
     if (heard.timeout) {
-      if (_phase != _LearnPhase.listen) return;
       _heardHandled = true;
       _listenTimer?.cancel();
       _pollTimer?.cancel();
@@ -193,55 +267,48 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
     _pollTimer?.cancel();
     _ga = heard.ga;
     _number = heard.number;
-    _runLearn(members: heard.memberIds);
+    _members = _membersFromHeard(heard);
+    final dup = heard.existingName?.trim();
+    if (dup != null && dup.isNotEmpty) {
+      _duplicateName = dup;
+      if (_nameCtrl.text.trim().isEmpty) _nameCtrl.text = dup;
+      setState(() => _phase = _LearnPhase.duplicate);
+      return;
+    }
+    setState(() => _phase = _LearnPhase.overview);
   }
 
-  Future<void> _runLearn({List<String>? members}) async {
+  Future<void> _persistAndStore() async {
     final ga = _ga;
     final number = _number;
+    final name = _nameCtrl.text.trim();
     if (ga == null || number == null) return;
-    setState(() => _phase = _LearnPhase.learning);
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Geef deze knop een naam.')),
+      );
+      return;
+    }
+    setState(() => _storing = true);
     try {
       final raw = await ref.read(sceneApiProvider).learn(
             roomId: widget.roomId,
             ga: ga,
             number: number,
-            members: members,
+            members: [for (final m in _members) m.deviceId],
+            name: name,
           );
       if (!mounted) return;
       final sceneJson = raw['scene'] as Map<String, dynamic>?;
-      _scene = sceneJson != null ? Scene.fromJson(sceneJson) : null;
-      final list = (raw['members'] as List?) ?? const [];
-      _members = [
-        for (final m in list)
-          if (m is Map)
-            _MemberRow(
-              deviceId: '${m['deviceId'] ?? ''}',
-              name: '${m['name'] ?? ''}',
-              kind: '${m['kind'] ?? 'light'}',
-              confirmed: m['confirmed'] != false,
-            ),
-      ];
-      setState(() => _phase = _LearnPhase.overview);
-      ref.invalidate(configProvider);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _phase = _LearnPhase.error;
-        _error = '$e';
-      });
-    }
-  }
-
-  Future<void> _store() async {
-    final id = _scene?.id;
-    if (id == null) return;
-    setState(() => _storing = true);
-    try {
-      await ref.read(sceneApiProvider).store(
-            id,
-            members: [for (final m in _members) m.deviceId],
-          );
+      _scene = sceneJson != null ? Scene.fromJson(sceneJson) : _scene;
+      final id = _scene?.id;
+      if (id != null) {
+        await ref.read(sceneApiProvider).store(
+              id,
+              members: [for (final m in _members) m.deviceId],
+              name: name,
+            );
+      }
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } catch (e) {
@@ -262,7 +329,9 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
   Widget build(BuildContext context) {
     ref.listen<KnxSceneHeard?>(knxSceneHeardProvider, (prev, next) {
       if (next == null) return;
-      if (_phase == _LearnPhase.listen) _onHeard(next);
+      if (_phase == _LearnPhase.listen || _phase == _LearnPhase.learning) {
+        _onHeard(next);
+      }
     });
 
     final mq = MediaQuery.of(context);
@@ -308,39 +377,38 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
 
   Widget _body() {
     switch (_phase) {
+      case _LearnPhase.warn:
+        return _message('Even geduld…', progress: true);
       case _LearnPhase.listen:
         return _listenBody();
-      case _LearnPhase.confirm:
+      case _LearnPhase.learning:
+        return _message(
+          'Lampen analyseren, daarna 100% en scene opnieuw oproepen…',
+          progress: true,
+        );
+      case _LearnPhase.duplicate:
         return Padding(
           padding: const EdgeInsets.all(24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Scene $_number op $_ga — klopt dat?',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Dit groepsadres staat niet als scene in de catalogus. Bevestig alleen als u een scene-knop indrukte.',
-                style: Theme.of(context).textTheme.bodySmall,
+                'Scene-adres $_ga nummer $_number bestaat al als “$_duplicateName”. '
+                'Meerdere knoppen kunnen hetzelfde KNX-slot delen. '
+                'Doorgaan overschrijft die scene.',
+                style: Theme.of(context).textTheme.bodyLarge,
               ),
               const SizedBox(height: 24),
               FilledButton(
-                onPressed: _runLearn,
-                child: const Text('Ja, inlezen'),
+                onPressed: () => setState(() => _phase = _LearnPhase.overview),
+                child: const Text('Doorgaan'),
               ),
               TextButton(
-                onPressed: _startListen,
-                child: const Text('Nee, opnieuw luisteren'),
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Annuleren'),
               ),
             ],
           ),
-        );
-      case _LearnPhase.learning:
-        return _message(
-          'Busverkeer van deze kamer verwerken…',
-          progress: true,
         );
       case _LearnPhase.error:
         return Padding(
@@ -351,7 +419,7 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
                   style: Theme.of(context).textTheme.bodyLarge),
               const SizedBox(height: 16),
               FilledButton(
-                  onPressed: _startListen, child: const Text('Opnieuw')),
+                  onPressed: _confirmWarn, child: const Text('Opnieuw')),
             ],
           ),
         );
@@ -364,11 +432,8 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
     final sample = _watching.take(24).join(', ');
     final extra = _watching.length > 24 ? ' …' : '';
     final hint = _watching.isEmpty
-        ? 'Geen lampen of jaloezieën in deze kamer.'
-        : 'Volgen van ${_watching.length} adressen '
-            '(dim stuur/status, schakelbit, jaloezie positie — wat er is). '
-            'Het 1-byte telegram vlak vóór de eerste terugmelding is het scene-adres.\n'
-            '$sample$extra';
+        ? 'Geen scene-adressen geconfigureerd.'
+        : 'Luisteren op ${_watching.length} scene-adressen:\n$sample$extra';
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -378,7 +443,7 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
             const CircularProgressIndicator(),
             const SizedBox(height: 20),
             const Text(
-              'Druk nu op de scene-knop in deze kamer.\n'
+              'Verlichting is uit. Druk nu op de scene-knop in deze kamer.\n'
               'Niet elders bedienen tot het overzicht er is.',
               textAlign: TextAlign.center,
             ),
@@ -416,17 +481,26 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+          child: TextField(
+            controller: _nameCtrl,
+            decoration: const InputDecoration(
+              labelText: 'Naam van deze knop',
+              hintText: 'Avond, diner, …',
+            ),
+            textCapitalization: TextCapitalization.sentences,
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
           child: Text(
-            _scene == null
-                ? 'Scene $_number'
-                : '${_scene!.name}  ·  $_ga / $_number',
-            style: Theme.of(context).textTheme.bodyMedium,
+            _ga == null ? '' : '$_ga  ·  scene $_number',
+            style: Theme.of(context).textTheme.bodySmall,
           ),
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
           child: Text(
-            'Alle kanalen op deze scene-knop in KNX worden op de huidige stand gezet.',
+            'Stel de waardes bij. Opslaan zet alle KNX-kanalen op dit scene-slot.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         ),
@@ -438,7 +512,7 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 24),
                   child: Text(
-                    'Geen lampen herkend. Voeg handmatig toe of leer opnieuw.',
+                    'Geen lampen of jaloezieën herkend bij deze scene.',
                     textAlign: TextAlign.center,
                   ),
                 ),
@@ -446,25 +520,6 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
                 if (i > 0) const SizedBox(height: 12),
                 _memberTile(cfg, _members[i]),
               ],
-              ..._addableDevices(cfg).map(
-                (d) => Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: OutlinedButton(
-                    onPressed: () => setState(() {
-                      _members = [
-                        ..._members,
-                        _MemberRow(
-                          deviceId: d.id,
-                          name: d.name,
-                          kind: d.usesPositionControl ? 'shading' : 'light',
-                          confirmed: true,
-                        ),
-                      ];
-                    }),
-                    child: Text('Toevoegen: ${d.name}'),
-                  ),
-                ),
-              ),
             ],
           ),
         ),
@@ -474,14 +529,14 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: _ga == null ? _startListen : _runLearn,
-                  child: const Text('Opnieuw leren'),
+                  onPressed: _storing ? null : _confirmWarn,
+                  child: const Text('Opnieuw inlezen'),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: FilledButton(
-                  onPressed: _storing || _scene == null ? null : _store,
+                  onPressed: _storing || _ga == null ? null : _persistAndStore,
                   child: _storing
                       ? const SizedBox(
                           width: 18,
@@ -513,26 +568,6 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
         if (d == null) Text(m.name),
       ],
     );
-  }
-
-  Iterable<Device> _addableDevices(HouseConfig cfg) {
-    Room? room;
-    for (final f in cfg.floors) {
-      for (final r in f.rooms) {
-        if (r.id == widget.roomId) room = r;
-      }
-    }
-    if (room == null) return const [];
-    final have = {for (final m in _members) m.deviceId};
-    return room.devices.where((d) {
-      if (have.contains(d.id)) return false;
-      if (d.isLutronBusControl) return false;
-      return d.type == DeviceType.lightSwitch ||
-          d.type == DeviceType.lightDimmer ||
-          d.type == DeviceType.rgbwWw ||
-          d.type == DeviceType.shading ||
-          d.type == DeviceType.positionActuator;
-    });
   }
 }
 

@@ -1516,9 +1516,12 @@ export interface HouseConfig {
   autoUpdate?: boolean;
   /**
    * Inlezen van KNX-scenes vanaf een muurknop (twee-pass contrast + store).
-   * Standaard uit. Alleen installer/superuser, en alleen als enabled.
+   * `addresses` = scene-GAs die de KNX-programmeur heeft aangemaakt (installer).
    */
-  knxSceneLearn?: { enabled?: boolean };
+  knxSceneLearn?: {
+    enabled?: boolean;
+    addresses?: Array<{ ga: GA; name?: string } | GA>;
+  };
   /** Wandtablet idle timeout + screensaver (Android client). */
   displayPanel?: {
     enabled?: boolean;

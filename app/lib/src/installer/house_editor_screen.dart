@@ -757,6 +757,17 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     return m;
   }
 
+  Map<String, dynamic> _ensureSceneLearn() {
+    final h = _house!;
+    var sl = h['knxSceneLearn'];
+    if (sl is! Map<String, dynamic>) {
+      sl = <String, dynamic>{'addresses': <dynamic>[]};
+      h['knxSceneLearn'] = sl;
+    }
+    if (sl['addresses'] is! List) sl['addresses'] = <dynamic>[];
+    return sl;
+  }
+
   Map<String, dynamic> _ensureKnx() {
     final h = _house!;
     final k = h['knx'];
@@ -3509,6 +3520,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       case _FocusKind.knx:
         return _KnxInstallerSection(
           knx: _ensureKnx(),
+          sceneLearn: _ensureSceneLearn(),
           onChanged: () => setState(() {}),
           onImport: _importKnx,
           onImportInfo: _showKnxImportInfo,
@@ -3989,6 +4001,7 @@ class _ProjectForm extends ConsumerWidget {
 class _KnxInstallerSection extends StatefulWidget {
   const _KnxInstallerSection({
     required this.knx,
+    required this.sceneLearn,
     required this.onChanged,
     required this.getToken,
     required this.onImport,
@@ -3996,6 +4009,7 @@ class _KnxInstallerSection extends StatefulWidget {
   });
 
   final Map<String, dynamic> knx;
+  final Map<String, dynamic> sceneLearn;
   final VoidCallback onChanged;
   final Future<String?> Function() getToken;
   final VoidCallback onImport;
@@ -4160,6 +4174,7 @@ class _KnxInstallerSectionState extends State<_KnxInstallerSection> {
         Expanded(
           child: _KnxForm(
             knx: widget.knx,
+            sceneLearn: widget.sceneLearn,
             onChanged: widget.onChanged,
             onImport: widget.onImport,
             onImportInfo: widget.onImportInfo,
@@ -4423,11 +4438,13 @@ class _LutronForm extends StatelessWidget {
 class _KnxForm extends StatelessWidget {
   const _KnxForm({
     required this.knx,
+    required this.sceneLearn,
     required this.onChanged,
     required this.onImport,
     required this.onImportInfo,
   });
   final Map<String, dynamic> knx;
+  final Map<String, dynamic> sceneLearn;
   final VoidCallback onChanged;
   final VoidCallback onImport;
   final VoidCallback onImportInfo;
@@ -4495,6 +4512,17 @@ class _KnxForm extends StatelessWidget {
               onTap: onImport,
             ),
           ),
+          const Divider(height: 32),
+          Text('KNX-scene-adressen',
+              style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 4),
+          Text(
+            'Groepsadressen van scene-knoppen (DPT 18) die de KNX-programmeur heeft aangemaakt. '
+            'De app luistert hierop bij Inlezen vanaf muurknop.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 8),
+          _SceneAddressList(sceneLearn: sceneLearn, onChanged: onChanged),
         ] else
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 16),
@@ -4512,6 +4540,90 @@ class _KnxForm extends StatelessWidget {
               ],
             ),
           ),
+      ],
+    );
+  }
+}
+
+class _SceneAddressList extends StatelessWidget {
+  const _SceneAddressList({required this.sceneLearn, required this.onChanged});
+  final Map<String, dynamic> sceneLearn;
+  final VoidCallback onChanged;
+
+  List<Map<String, dynamic>> _rows() {
+    final raw = sceneLearn['addresses'];
+    if (raw is! List) return const [];
+    final out = <Map<String, dynamic>>[];
+    for (final e in raw) {
+      if (e is Map<String, dynamic>) {
+        out.add(e);
+      } else if (e is String && e.trim().isNotEmpty) {
+        out.add({'ga': e.trim()});
+      }
+    }
+    return out;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = _rows();
+    if (sceneLearn['addresses'] is! List ||
+        (sceneLearn['addresses'] as List).length != rows.length) {
+      sceneLearn['addresses'] = rows;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (var i = 0; i < rows.length; i++) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                flex: 3,
+                child: _BoundStrField(
+                  'ga',
+                  rows[i],
+                  onChanged,
+                  labelOverride: 'Scene-GA',
+                  gaSearch: true,
+                  gaDptHint: 'DPT18.001',
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 2,
+                child: _BoundStrField(
+                  'name',
+                  rows[i],
+                  onChanged,
+                  labelOverride: 'Naam (optioneel)',
+                  emptyMeansRemove: true,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Verwijderen',
+                onPressed: () {
+                  rows.removeAt(i);
+                  sceneLearn['addresses'] = rows;
+                  onChanged();
+                },
+                icon: const Icon(Icons.delete_outline),
+              ),
+            ],
+          ),
+        ],
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () {
+              rows.add(<String, dynamic>{'ga': ''});
+              sceneLearn['addresses'] = rows;
+              onChanged();
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('Scene-adres toevoegen'),
+          ),
+        ),
       ],
     );
   }

@@ -148,6 +148,9 @@ class KnxSceneHeard {
     this.timeout = false,
     this.memberIds = const [],
     this.reason,
+    this.existingId,
+    this.existingName,
+    this.learnedMembers = const [],
   });
   final String roomId;
   final String ga;
@@ -156,6 +159,9 @@ class KnxSceneHeard {
   final bool timeout;
   final List<String> memberIds;
   final String? reason;
+  final String? existingId;
+  final String? existingName;
+  final List<Map<String, dynamic>> learnedMembers;
 }
 
 class KnxSceneHeardController extends Notifier<KnxSceneHeard?> {
@@ -476,6 +482,12 @@ class BusController extends Notifier<BusState> {
                         if ('$id'.trim().isNotEmpty) '$id'.trim(),
                     ],
                     reason: p['reason'] as String?,
+                    existingId: p['existingId'] as String?,
+                    existingName: p['existingName'] as String?,
+                    learnedMembers: [
+                      for (final m in (p['members'] as List?) ?? const [])
+                        if (m is Map<String, dynamic>) m,
+                    ],
                   ));
           }
         },
