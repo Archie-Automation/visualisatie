@@ -50,13 +50,13 @@ class CameraInfo {
 
 final cameraInfoProvider =
     FutureProvider.family<CameraInfo, String>((ref, id) async {
-  // Keep alive so switching cameras doesn't re-fetch info we already have.
   ref.keepAlive();
-  final auth = ref.watch(authProvider);
-  if (!auth.isAuthed) throw StateError('not authenticated');
+  final isAuthed = ref.watch(authProvider.select((a) => a.isAuthed));
+  if (!isAuthed) throw StateError('not authenticated');
+  final token = ref.read(authProvider).token;
   final res = await http.get(
     Uri.parse('$apiBase/api/cameras/$id'),
-    headers: {'authorization': 'Bearer ${auth.token}'},
+    headers: {'authorization': 'Bearer $token'},
   );
   if (res.statusCode != 200) {
     throw StateError('camera fetch failed: ${res.statusCode}');
