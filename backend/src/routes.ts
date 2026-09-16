@@ -162,11 +162,20 @@ function httpAppHome(req: { get(h: string): string | undefined }): string {
 }
 
 /** Minimal HTML page shown in the browser after the Spotify redirect. */
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function spotifyResultPage(
   message: string,
   home?: string,
   autoRedirect = false
 ): string {
+  const safe = escapeHtml(message);
   const dest = (home ?? "").replace(/\/+$/, "");
   const refresh =
     autoRedirect && dest
@@ -183,7 +192,7 @@ ${refresh}
 display:flex;align-items:center;justify-content:center;height:100vh;margin:0;text-align:center}
 .card{max-width:420px;padding:2rem}h1{font-size:1.25rem;margin:0 0 .75rem}
 p{color:#b3b3b3;margin:0}a{color:#1db954}</style></head>
-<body><div class="card"><h1>Spotify</h1><p>${message}</p>${back}</div></body></html>`;
+<body><div class="card"><h1>Spotify</h1><p>${safe}</p>${back}</div></body></html>`;
 }
 
 /**
@@ -246,7 +255,7 @@ function publicConfig(cfg: HouseConfig, role: string, userId?: string) {
         | undefined;
       const safeIntercom = {
         ...restIc,
-        sipPassword: restIc.sipPassword ? "" : restIc.sipPassword,
+        sipPassword: "",
         ...(doorbird && typeof doorbird === "object"
           ? { doorbird: { ...doorbird, password: "" } }
           : {}),
@@ -463,11 +472,30 @@ export function buildRouter(
     });
   });
 
-  /** Proxy for Sonos/Spotify album art — no auth (Image.network sends no JWT). */
+  /** Proxy for Sonos/Spotify album art.
+   *  Image.network kan geen JWT meesturen, dus geen requireAuth.
+   *  SSRF-bescherming: blokkeer private/link-local/metadata-IPs. */
   r.get("/media-art", async (req, res) => {
     const u = req.query["u"];
     if (typeof u !== "string" || !u.startsWith("http")) {
       return res.status(400).send("bad url");
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(u);
+    } catch {
+      return res.status(400).send("bad url");
+    }
+    const host = parsed.hostname.toLowerCase();
+    if (
+      host === "localhost" ||
+      host.endsWith(".local") ||
+      host === "[::1]" ||
+      /^(127\.|10\.|0\.|192\.168\.|169\.254\.)/.test(host) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+      /^(fc|fd)/i.test(host)
+    ) {
+      return res.status(403).send("private address blocked");
     }
     try {
       const upstream = await fetch(u, {
@@ -1269,12 +1297,17 @@ export function buildRouter(
   r.post("/voip/endpoints/:id/password", requireAuth, requireAdmin, (req: AuthedRequest, res) => {
     const id = req.params.id;
     const cfg = getConfig();
-    const ep = cfg.voip?.endpoints?.find((e) => e.id === id);
-    if (!ep) return res.status(404).json({ error: "onbekend toestel" });
-    ep.password = randomSipPassword();
-    persistConfig(cfg);
+    if (!cfg.voip?.endpoints?.some((e) => e.id === id)) {
+      return res.status(404).json({ error: "onbekend toestel" });
+    }
+    const newPassword = randomSipPassword();
+    updateConfig((draft) => {
+      const ep = draft.voip?.endpoints?.find((e) => e.id === id);
+      if (!ep) return;
+      ep.password = newPassword;
+    });
     void syncVoipFromConfig(getConfig());
-    res.json({ ok: true, password: ep.password });
+    res.json({ ok: true, password: newPassword });
   });
 
   /**

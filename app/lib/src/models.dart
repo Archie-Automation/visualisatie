@@ -759,6 +759,26 @@ class KnxSceneLearnAddress {
   });
 }
 
+/// Cached O(1) device-by-id lookup. Rebuilds when the config instance changes.
+class _DeviceByIdCache {
+  HouseConfig? _cfg;
+  Map<String, Device> _map = const {};
+
+  Device? lookup(HouseConfig cfg, String id) {
+    if (!identical(_cfg, cfg)) {
+      final m = <String, Device>{};
+      for (final d in cfg.intercoms) { m[d.id] = d; }
+      for (final d in cfg.cameras) { m[d.id] = d; }
+      for (final d in cfg.allDevices) { m.putIfAbsent(d.id, () => d); }
+      _map = m;
+      _cfg = cfg;
+    }
+    return _map[id];
+  }
+}
+
+final _deviceByIdCache = _DeviceByIdCache();
+
 class HouseConfig {
   final String projectId;
   final String projectName;
@@ -876,18 +896,7 @@ class HouseConfig {
     return out;
   }
 
-  Device? deviceById(String id) {
-    for (final d in intercoms) {
-      if (d.id == id) return d;
-    }
-    for (final d in cameras) {
-      if (d.id == id) return d;
-    }
-    for (final d in allDevices) {
-      if (d.id == id) return d;
-    }
-    return null;
-  }
+  Device? deviceById(String id) => _deviceByIdCache.lookup(this, id);
 
   /// Returns the [Room] that contains [deviceId], or `null` for global /
   /// camera / intercom devices.

@@ -518,8 +518,14 @@ class _FavoriteShortcutRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final floor = cfg.floors.firstWhere((f) => f.id == shortcut.floorId);
-    final room = floor.rooms.firstWhere((r) => r.id == shortcut.roomId);
+    final floor = cfg.floors.cast<Floor?>().firstWhere(
+        (f) => f!.id == shortcut.floorId,
+        orElse: () => null);
+    if (floor == null) return const SizedBox.shrink();
+    final room = floor.rooms.cast<Room?>().firstWhere(
+        (r) => r!.id == shortcut.roomId,
+        orElse: () => null);
+    if (room == null) return const SizedBox.shrink();
     final category = shortcut.isRoomOnly
         ? null
         : RoomControlCategory.tryParseSlug(shortcut.categorySlug!);
