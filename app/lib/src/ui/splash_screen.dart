@@ -72,7 +72,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       _tryNavigate();
     } else {
       _failCount++;
-      if (!kIsWeb && _failCount >= 2 && !_showServerField) {
+      if (_failCount >= 3 && !_showServerField) {
         setState(() => _showServerField = true);
       }
       _retryTimer = Timer(_kPingInterval, _pingOnce);
@@ -156,12 +156,13 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                     if (_showServerField) ...[
                       const SizedBox(height: 36),
                       Text(
-                        'Server niet bereikbaar. Controleer het adres.',
+                        'Server niet bereikbaar.',
                         textAlign: TextAlign.center,
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               color: LuxeColors.inkSoft,
                             ),
                       ),
+                      if (!kIsWeb) ...[
                       const SizedBox(height: 16),
                       TextField(
                         controller: _server,
@@ -191,6 +192,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                         ),
                         onSubmitted: (_) => _applyServer(),
                       ),
+                      ],
                       const SizedBox(height: 16),
                       FilledButton(
                         style: FilledButton.styleFrom(
@@ -200,7 +202,18 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                           shape: const StadiumBorder(),
                           elevation: 0,
                         ),
-                        onPressed: _savingServer ? null : _applyServer,
+                        onPressed: _savingServer
+                            ? null
+                            : kIsWeb
+                                ? () {
+                                    setState(() {
+                                      _failCount = 0;
+                                      _showServerField = false;
+                                    });
+                                    _retryTimer?.cancel();
+                                    _pingOnce();
+                                  }
+                                : _applyServer,
                         child: _savingServer
                             ? SizedBox(
                                 width: 18,
@@ -210,7 +223,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                                   color: LuxeColors.onInk,
                                 ),
                               )
-                            : const Text('Opnieuw verbinden'),
+                            : Text(kIsWeb
+                                ? 'Opnieuw proberen'
+                                : 'Opnieuw verbinden'),
                       ),
                     ],
                   ],

@@ -28,7 +28,26 @@ class RoomScreen extends ConsumerWidget {
       body: LuxeBackdrop(
         child: cfgAsync.when(
           loading: () => const SizedBox.shrink(),
-          error: (e, _) => Center(child: Text('$e')),
+          error: (e, _) => Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.error_outline_rounded,
+                    size: 40, color: LuxeColors.inkSoft),
+                const SizedBox(height: 12),
+                Text('Kan kamer niet laden',
+                    style: Theme.of(context).textTheme.titleSmall),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                      backgroundColor: LuxeColors.ink),
+                  onPressed: () => appBack(context),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  label: const Text('Terug'),
+                ),
+              ],
+            ),
+          ),
           data: (cfg) {
             final floor = cfg.floors.cast<Floor?>().firstWhere(
                 (f) => f!.id == floorId,
