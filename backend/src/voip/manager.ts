@@ -19,7 +19,6 @@ const registered = new Set<string>();
 const channelIntercom = new Map<string, string>();
 let lastRingIntercomId: string | null = null;
 let answeredBroadcastFor: string | null = null;
-let lastWrite = "";
 
 export function setVoipHub(h: WsHub): void {
   hub = h;
@@ -173,7 +172,6 @@ export function resolveUserEndpoint(
 export async function syncVoipFromConfig(cfg: HouseConfig): Promise<void> {
   normalizeVoip(cfg);
   const dir = writeAsteriskConfig(cfg);
-  lastWrite = dir;
   logger.info({ dir, enabled: cfg.voip?.enabled === true }, "Asterisk-config geschreven");
   if (!cfg.voip?.enabled) {
     ami?.close();
@@ -271,8 +269,10 @@ function onAmiEvent(ev: AmiFields): void {
   }
   if (event === "Hangup") {
     const uid = ev.Uniqueid;
-    const ic = uid ? channelIntercom.get(uid) : undefined;
+    const linked = ev.Linkedid;
+    const ic = uid ? channelIntercom.get(uid) : (linked ? channelIntercom.get(linked) : undefined);
     if (uid) channelIntercom.delete(uid);
+    if (linked) channelIntercom.delete(linked);
     if (ic) hub?.broadcastIntercomCleared(ic);
     return;
   }
@@ -305,4 +305,3 @@ export function startVoipAmiWatch(): void {
   }, 8000);
 }
 
-export { lastWrite };

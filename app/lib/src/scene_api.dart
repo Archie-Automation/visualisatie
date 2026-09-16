@@ -71,16 +71,22 @@ class _SceneApi {
         token: _ref.read(authProvider).token ?? '',
       );
 
-  Future<void> saveGlobal(List<Scene> scenes) => saveGlobalScenes(
-        scenes: scenes,
-        token: _ref.read(authProvider).token ?? '',
-      );
+  Future<void> saveGlobal(List<Scene> scenes) async {
+    await saveGlobalScenes(
+      scenes: scenes,
+      token: _ref.read(authProvider).token ?? '',
+    );
+    _ref.invalidate(configProvider);
+  }
 
-  Future<void> saveRoom(String roomId, List<Scene> scenes) => saveRoomScenes(
-        roomId: roomId,
-        scenes: scenes,
-        token: _ref.read(authProvider).token ?? '',
-      );
+  Future<void> saveRoom(String roomId, List<Scene> scenes) async {
+    await saveRoomScenes(
+      roomId: roomId,
+      scenes: scenes,
+      token: _ref.read(authProvider).token ?? '',
+    );
+    _ref.invalidate(configProvider);
+  }
 
   Future<Map<String, dynamic>> startListen(String roomId) async {
     final token = _ref.read(authProvider).token ?? '';
@@ -141,6 +147,7 @@ class _SceneApi {
     if (res.statusCode != 200) {
       throw Exception('scene learn failed: ${res.statusCode} ${res.body}');
     }
+    _ref.invalidate(configProvider);
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
@@ -162,6 +169,7 @@ class _SceneApi {
     if (res.statusCode != 200) {
       throw Exception('scene verwijderen mislukt: ${res.statusCode} ${res.body}');
     }
+    _ref.invalidate(configProvider);
   }
 
   Future<void> _post(String path, Map<String, dynamic> body) async {

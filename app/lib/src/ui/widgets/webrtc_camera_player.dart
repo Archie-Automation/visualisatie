@@ -204,20 +204,33 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
   Future<void> _teardown() async {
     _connectTimeout?.cancel();
     _iceWatchdog?.cancel();
-    try {
-      _renderer.srcObject = null;
-    } catch (_) {}
-    try {
-      await _pc?.close();
-    } catch (_) {}
+    final pc = _pc;
     _pc = null;
+    try {
+      if (mounted) {
+        _renderer.srcObject = null;
+      }
+    } finally {
+      try {
+        await pc?.close();
+      } catch (_) {}
+    }
   }
 
   @override
   void dispose() {
     _connectTimeout?.cancel();
     _iceWatchdog?.cancel();
-    _teardown();
+    try {
+      _renderer.srcObject = null;
+    } catch (_) {}
+    final pc = _pc;
+    _pc = null;
+    unawaited(() async {
+      try {
+        await pc?.close();
+      } catch (_) {}
+    }());
     _renderer.dispose();
     super.dispose();
   }

@@ -22,6 +22,7 @@ class IntercomController extends ChangeNotifier {
   MediaStream? _localStream;
   bool _muted = false;
   bool _started = false;
+  bool registrationInFlight = false;
   bool _localTerminate = false;
   Timer? _elsewhereTimer;
 
@@ -159,6 +160,7 @@ class IntercomController extends ChangeNotifier {
 
   @override
   void dispose() {
+    registrationInFlight = false;
     if (_started) _archieSipStop();
     super.dispose();
   }

@@ -24,7 +24,6 @@ import 'ui/settings_screen.dart';
 import 'installer/house_editor_screen.dart';
 import 'intercom/intercom_sip_providers.dart';
 import 'ui/alarm_screen.dart';
-import 'ui/widgets/incoming_call_overlay.dart';
 import 'ui/widgets/inactivity_layer.dart';
 import 'ui/widgets/media_tile.dart';
 import 'ui/widgets/melding_alert_sound_layer.dart';
@@ -59,6 +58,7 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    CallService.instance?.dispose();
     _routerRefresh.dispose();
     super.dispose();
   }
@@ -279,13 +279,9 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
         ref.watch(softwareVersionStatusProvider);
         final layered = SatelEntryDelayLayer(
           child: MeldingAlertSoundLayer(
-            child: SipIncomingCallLayer(
-              child: IncomingCallOverlay(
-                child: InactivityLayer(
-                  router: _router,
-                  child: child ?? const SizedBox.shrink(),
-                ),
-              ),
+            child: InactivityLayer(
+              router: _router,
+              child: child ?? const SizedBox.shrink(),
             ),
           ),
         );

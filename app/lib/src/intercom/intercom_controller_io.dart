@@ -20,6 +20,7 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
   final SIPUAHelper _helper = SIPUAHelper();
   bool _listenerAttached = false;
   bool _started = false;
+  bool registrationInFlight = false;
 
   Call? _activeCall;
   IntercomSipPhase _phase = IntercomSipPhase.idle;
@@ -309,6 +310,7 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
 
   @override
   void dispose() {
+    registrationInFlight = false;
     _activeCall?.hangup();
     _resetCall();
     if (_listenerAttached) {

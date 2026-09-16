@@ -134,6 +134,21 @@ class RoomScreen extends ConsumerWidget {
         ),
 
         // ── Device tiles ──────────────────────────────────────────────────
+        if (room.devices.isEmpty)
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                  context.isPhone ? 14 : 28, 24, context.isPhone ? 14 : 28, 64),
+              child: Text(
+                'Geen apparaten in deze ruimte.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: LuxeColors.inkSoft),
+              ),
+            ),
+          )
+        else
         SliverPadding(
           padding: EdgeInsets.fromLTRB(
               context.isPhone ? 14 : 28, 8, context.isPhone ? 14 : 28, 64),

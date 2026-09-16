@@ -4,7 +4,7 @@ import type { KnxBus } from "./knxBus";
 import type { MediaManager } from "./media/manager";
 import type { LutronIntegrationManager } from "./lutron/manager";
 import { resolveLutronLoadOutput } from "./lutron/resolve";
-import { walkDevices, wtwDptToRoleConfig } from "./config";
+import { findDevice, walkDevices, wtwDptToRoleConfig } from "./config";
 import { hvacSwitchLock } from "./hvacSwitchLock";
 import { fireplaceVirtual } from "./fireplaceVirtual";
 import { fireplaceIsPlanika, pulseKnxGa } from "./fireplacePulse";
@@ -291,17 +291,6 @@ export const CommandSchema = z.discriminatedUnion("kind", [
 ]);
 
 export type Command = z.infer<typeof CommandSchema>;
-
-function findDevice(cfg: HouseConfig, id: string): Device | undefined {
-  for (const c of cfg.cameras ?? []) {
-    if (c.id === id) return c;
-  }
-  let found: Device | undefined;
-  walkDevices(cfg, (d) => {
-    if (d.id === id) found = d;
-  });
-  return found;
-}
 
 export async function dispatch(
   cmd: Command,

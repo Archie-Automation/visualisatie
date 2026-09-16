@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -151,25 +152,45 @@ class _IntercomPlayerState extends ConsumerState<IntercomPlayer> {
   }
 
   Future<void> _teardown() async {
-    try {
-      _renderer.srcObject = null;
-    } catch (_) {}
-    try {
-      for (final t in _localStream?.getTracks() ?? <MediaStreamTrack>[]) {
-        await t.stop();
-      }
-      await _localStream?.dispose();
-    } catch (_) {}
+    final pc = _pc;
+    final stream = _localStream;
+    _pc = null;
     _localStream = null;
     try {
-      await _pc?.close();
-    } catch (_) {}
-    _pc = null;
+      if (mounted) {
+        _renderer.srcObject = null;
+      }
+      for (final t in stream?.getTracks() ?? <MediaStreamTrack>[]) {
+        await t.stop();
+      }
+      await stream?.dispose();
+    } finally {
+      try {
+        await pc?.close();
+      } catch (_) {}
+    }
   }
 
   @override
   void dispose() {
-    _teardown();
+    try {
+      _renderer.srcObject = null;
+    } catch (_) {}
+    final pc = _pc;
+    final stream = _localStream;
+    _pc = null;
+    _localStream = null;
+    unawaited(() async {
+      try {
+        for (final t in stream?.getTracks() ?? <MediaStreamTrack>[]) {
+          await t.stop();
+        }
+        await stream?.dispose();
+      } catch (_) {}
+      try {
+        await pc?.close();
+      } catch (_) {}
+    }());
     _renderer.dispose();
     super.dispose();
   }

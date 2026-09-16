@@ -331,7 +331,6 @@ export class SonosDriver {
     try {
       const favs = await client.getFavorites();
       const base = `http://${this.device.sonos.host}:${this.device.sonos.port ?? 1400}`;
-      const sonosBase2 = `http://${this.device.sonos.host}:${this.device.sonos.port ?? 1400}`;
       return favs.items
         .filter(
           (f) =>
@@ -344,7 +343,7 @@ export class SonosDriver {
           const absImg = rawImg
             ? rawImg.startsWith("http")
               ? rawImg
-              : `${sonosBase2}${rawImg.startsWith("/") ? "" : "/"}${rawImg}`
+              : `${base}${rawImg.startsWith("/") ? "" : "/"}${rawImg}`
             : undefined;
           return {
             id: f.title as string,

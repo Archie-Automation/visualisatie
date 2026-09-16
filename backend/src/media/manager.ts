@@ -704,6 +704,7 @@ export class MediaManager extends EventEmitter {
 
 function walk(cfg: HouseConfig, fn: (d: Device) => void): void {
   for (const f of cfg.floors) for (const r of f.rooms) for (const d of r.devices) fn(d);
+  for (const d of cfg.devices ?? []) fn(d);
 }
 
 function baseState(id: string, brand: "sonos" | "bluesound"): MediaState {

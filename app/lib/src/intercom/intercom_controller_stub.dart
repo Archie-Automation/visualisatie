@@ -15,6 +15,7 @@ class IntercomController extends ChangeNotifier {
 
   IntercomSipPhase _phase = IntercomSipPhase.idle;
   String? boundIntercomId;
+  bool registrationInFlight = false;
 
   IntercomSipPhase get phase => _phase;
   String? get remoteLabel => null;
@@ -51,6 +52,7 @@ class IntercomController extends ChangeNotifier {
 
   @override
   void dispose() {
+    registrationInFlight = false;
     super.dispose();
   }
 }

@@ -11,16 +11,25 @@ import 'proximity_wake.dart';
 /// Opens the intercom screen on ring. No native CallKit UI.
 class CallService {
   CallService._(this._ref);
-  final WidgetRef _ref;
+  WidgetRef _ref;
   GoRouter? _router;
   Timer? _panelRingTimer;
 
   static CallService? _instance;
   static CallService? get instance => _instance;
 
+  /// [ref] comes from [ArchieOsApp] (app-lifetime), not a page widget.
   static Future<void> init(WidgetRef ref, GoRouter router) async {
     _instance ??= CallService._(ref);
+    _instance!._ref = ref;
     _instance!._router = router;
+  }
+
+  void dispose() {
+    _panelRingTimer?.cancel();
+    _panelRingTimer = null;
+    _router = null;
+    if (identical(_instance, this)) _instance = null;
   }
 
   Future<void> showIncoming(IntercomRing ring) async {
