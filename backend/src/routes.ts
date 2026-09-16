@@ -10,8 +10,8 @@ import {
   canReleaseIntercom,
   canViewIntercom,
   currentUser,
-  requireAdmin,
   requireAuth,
+  requireInstaller,
   requireStaff,
   type AuthedRequest
 } from "./auth";
@@ -137,8 +137,22 @@ function stripHash(u: User): User {
   return { ...u, passwordHash: "" };
 }
 
-/** Short-lived OAuth `state` values for the Spotify login (CSRF guard). */
-const spotifyAuthStates = new Set<string>();
+/** Nonce → expiry timestamp (ms). Replaces the old Set + setTimeout pattern
+ *  to avoid per-entry timer leaks and race conditions. */
+const spotifyAuthStates = new Map<string, number>();
+const SPOTIFY_STATE_TTL_MS = 10 * 60 * 1000;
+
+/** Remove all expired nonces in one pass (lazy cleanup). */
+function pruneSpotifyStates(): void {
+  const now = Date.now();
+  for (const [nonce, expiry] of spotifyAuthStates) {
+    if (expiry <= now) spotifyAuthStates.delete(nonce);
+  }
+}
+
+/** Per-intercom rate limit for the ring webhook: max 1 ring per 5 s. */
+const lastRingWebhookTs = new Map<string, number>();
+const RING_WEBHOOK_COOLDOWN_MS = 5_000;
 
 /** HTTP origin of the Flutter app (never 127.0.0.1 when the request came via LAN). */
 function httpAppHome(req: { get(h: string): string | undefined }): string {
@@ -425,7 +439,7 @@ export function buildRouter(
    * Public: stream the latest Android APK from the GitHub Release asset.
    * Uses GITHUB_TOKEN on the server so tablets never need a GitHub credential.
    */
-  r.get("/app/android.apk", async (req, res) => {
+  r.get("/app/android.apk", requireAuth, async (req, res) => {
     const force = req.query.refresh === "1" || req.query.refresh === "true";
     if (force) await getGithubLatest(true);
     const result = await fetchAndroidApkFromGithub();
@@ -543,7 +557,7 @@ export function buildRouter(
     });
   });
 
-  r.post("/satel-config", requireAuth, requireAdmin, (req: AuthedRequest, res) => {
+  r.post("/satel-config", requireAuth, requireInstaller, (req: AuthedRequest, res) => {
     const { enabled, partitions } = req.body ?? {};
     updateConfig((draft) => {
       draft.satel = draft.satel ?? {};
@@ -704,7 +718,7 @@ export function buildRouter(
     res.json(publicConfig(cfg, req.user!.role, req.user!.sub));
   });
 
-  r.post("/config/reload", requireAuth, requireAdmin, async (_req, res) => {
+  r.post("/config/reload", requireAuth, requireInstaller, async (_req, res) => {
     const cfg = loadConfig();
     syncGo2rtcProcessAfterConfigWritten(writeGo2rtcConfig(cfg));
     void syncVoipFromConfig(cfg);
@@ -726,7 +740,7 @@ export function buildRouter(
   });
 
   /** Herstart backend: Docker via container-restart; lokaal via nieuw proces. */
-  r.post("/admin/restart", requireAuth, requireAdmin, (req: AuthedRequest, res) => {
+  r.post("/admin/restart", requireAuth, requireInstaller, (req: AuthedRequest, res) => {
     logger.warn({ userId: req.user?.sub }, "admin requested backend restart");
     res.status(200).json({
       ok: true,
@@ -737,11 +751,11 @@ export function buildRouter(
     });
   });
 
-  r.get("/admin/update", requireAuth, requireAdmin, (_req, res) => {
+  r.get("/admin/update", requireAuth, requireInstaller, (_req, res) => {
     res.json(readServerUpdateStatus());
   });
 
-  r.post("/admin/update", requireAuth, requireAdmin, (req: AuthedRequest, res) => {
+  r.post("/admin/update", requireAuth, requireInstaller, (req: AuthedRequest, res) => {
     const result = requestServerUpdate(req.user?.username || "admin");
     if (!result.ok) {
       res.status(result.status).json({
@@ -753,7 +767,7 @@ export function buildRouter(
     res.json({ ok: true, ...result.status });
   });
 
-  r.put("/admin/auto-update", requireAuth, requireAdmin, (req, res) => {
+  r.put("/admin/auto-update", requireAuth, requireInstaller, (req, res) => {
     const enabled = (req.body as { enabled?: boolean })?.enabled;
     if (typeof enabled !== "boolean") {
       res.status(400).json({ error: "missing_enabled", message: "enabled (bool) verplicht" });
@@ -765,11 +779,11 @@ export function buildRouter(
     res.json({ ok: true, autoUpdate: enabled });
   });
 
-  r.get("/installer/house", requireAuth, requireAdmin, (_req, res) => {
+  r.get("/installer/house", requireAuth, requireInstaller, (_req, res) => {
     res.json(installerHouseForClient(getConfig()));
   });
 
-  r.put("/installer/house", requireAuth, requireAdmin, async (req, res) => {
+  r.put("/installer/house", requireAuth, requireInstaller, async (req, res) => {
     const incomingUsers = (req.body as { users?: unknown })?.users;
     const credErr = assertUserLoginCredentials(
       Array.isArray(incomingUsers)
@@ -840,7 +854,7 @@ export function buildRouter(
     res.json({ ok: true, version });
   });
 
-  r.get("/installer/knx-status", requireAuth, requireAdmin, (_req, res) => {
+  r.get("/installer/knx-status", requireAuth, requireInstaller, (_req, res) => {
     res.json(bus.getStatus());
   });
 
@@ -851,7 +865,7 @@ export function buildRouter(
    * reference data) but does NOT touch house.json — the installer confirms the
    * device proposal in the UI, which then merges + saves via PUT /installer/house.
    */
-  r.post("/installer/import-knx", requireAuth, requireAdmin, (req, res) => {
+  r.post("/installer/import-knx", requireAuth, requireInstaller, (req, res) => {
     const xml =
       typeof req.body === "string"
         ? req.body
@@ -888,11 +902,11 @@ export function buildRouter(
   });
 
   /** Searchable GA catalog for the installer GA fields (name + address + DPT). */
-  r.get("/installer/knx-ga", requireAuth, requireAdmin, (_req, res) => {
+  r.get("/installer/knx-ga", requireAuth, requireInstaller, (_req, res) => {
     res.json({ catalog: loadGaCatalog() });
   });
 
-  r.get("/installer/lutron-status", requireAuth, requireAdmin, (_req, res) => {
+  r.get("/installer/lutron-status", requireAuth, requireInstaller, (_req, res) => {
     const clients = lutron.getStatus();
     const row = clients.find((c) => c.deviceId === "house") ?? clients[0];
     if (!row) {
@@ -914,7 +928,7 @@ export function buildRouter(
     });
   });
 
-  r.post("/installer/lutron-reconnect", requireAuth, requireAdmin, (_req, res) => {
+  r.post("/installer/lutron-reconnect", requireAuth, requireInstaller, (_req, res) => {
     try {
       lutron.reconnect();
       const clients = lutron.getStatus();
@@ -936,7 +950,7 @@ export function buildRouter(
     }
   });
 
-  r.post("/installer/knx-reconnect", requireAuth, requireAdmin, async (_req, res) => {
+  r.post("/installer/knx-reconnect", requireAuth, requireInstaller, async (_req, res) => {
     try {
       await bus.reconnect();
       res.json({ ok: true, ...bus.getStatus() });
@@ -949,7 +963,7 @@ export function buildRouter(
     }
   });
 
-  r.post("/installer/sonos-probe", requireAuth, requireAdmin, async (req, res) => {
+  r.post("/installer/sonos-probe", requireAuth, requireInstaller, async (req, res) => {
     const host = req.body?.host as string | undefined;
     const portRaw = req.body?.port;
     const port =
@@ -961,7 +975,7 @@ export function buildRouter(
     res.json(result);
   });
 
-  r.post("/installer/camera-probe", requireAuth, requireAdmin, async (req, res) => {
+  r.post("/installer/camera-probe", requireAuth, requireInstaller, async (req, res) => {
     const result = await probeCameraStreams({
       rtsp: req.body?.rtsp as string | undefined,
       previewRtsp: req.body?.previewRtsp as string | undefined,
@@ -973,7 +987,7 @@ export function buildRouter(
   r.post(
     "/installer/voip/test-ring",
     requireAuth,
-    requireAdmin,
+    requireInstaller,
     async (req: AuthedRequest, res) => {
       const groupId = String(req.body?.groupId ?? "").trim();
       const intercomId = String(req.body?.intercomId ?? "").trim();
@@ -1268,7 +1282,7 @@ export function buildRouter(
     });
   });
 
-  r.get("/voip/status", requireAuth, requireAdmin, (req, res) => {
+  r.get("/voip/status", requireAuth, requireInstaller, (req, res) => {
     const cfg = getConfig();
     const regs = new Set(voipRegisteredExts());
     res.json({
@@ -1294,7 +1308,7 @@ export function buildRouter(
     });
   });
 
-  r.post("/voip/endpoints/:id/password", requireAuth, requireAdmin, (req: AuthedRequest, res) => {
+  r.post("/voip/endpoints/:id/password", requireAuth, requireInstaller, (req: AuthedRequest, res) => {
     const id = req.params.id;
     const cfg = getConfig();
     if (!cfg.voip?.endpoints?.some((e) => e.id === id)) {
@@ -1337,6 +1351,14 @@ export function buildRouter(
       logger.warn({ id: ic.id, ip: req.ip }, "ring-webhook: ongeldige passcode");
       return res.status(403).json({ error: "invalid passcode" });
     }
+
+    const now = Date.now();
+    const lastTs = lastRingWebhookTs.get(ic.id) ?? 0;
+    if (now - lastTs < RING_WEBHOOK_COOLDOWN_MS) {
+      logger.debug({ id: ic.id, ip: req.ip }, "ring-webhook: rate limited");
+      return res.status(429).json({ error: "too many requests" });
+    }
+    lastRingWebhookTs.set(ic.id, now);
 
     ws.broadcastIntercomRing(ic.id);
     logger.info({ id: ic.id, ip: req.ip, kind: ic.intercom.kind ?? "generic" },
@@ -1812,7 +1834,7 @@ export function buildRouter(
     r.post(
       "/debug/ring/:id",
       requireAuth,
-      requireAdmin,
+      requireInstaller,
       (req: AuthedRequest, res) => {
         const ic = collectIntercoms(getConfig()).find(
           (i) => i.id === req.params.id
@@ -1995,9 +2017,7 @@ export function buildRouter(
       });
     }
     const state = randomUUID();
-    spotifyAuthStates.add(state);
-    // Expire unused states after 10 minutes to avoid unbounded growth.
-    setTimeout(() => spotifyAuthStates.delete(state), 10 * 60 * 1000);
+    spotifyAuthStates.set(state, Date.now() + SPOTIFY_STATE_TTL_MS);
     res.json({ url: spotify.buildAuthUrl(state, spotifyServerBase(req)) });
   });
 
@@ -2031,7 +2051,10 @@ p{color:#b3b3b3;margin:0}</style></head>
       return res.status(400).send(spotifyResultPage("Ongeldige of verlopen login-poging.", home));
     }
     const nonce = spotify.parseOauthNonce(state);
-    if (!spotifyAuthStates.has(nonce)) {
+    pruneSpotifyStates();
+    const expiry = spotifyAuthStates.get(nonce);
+    if (expiry === undefined || expiry <= Date.now()) {
+      spotifyAuthStates.delete(nonce);
       return res.status(400).send(spotifyResultPage("Ongeldige of verlopen login-poging.", home));
     }
     spotifyAuthStates.delete(nonce);
@@ -2079,7 +2102,10 @@ p{color:#b3b3b3;margin:0}</style></head>
       return res.status(400).json({ error: "Ongeldige of verlopen login-poging." });
     }
     const nonce = spotify.parseOauthNonce(state);
-    if (!spotifyAuthStates.has(nonce)) {
+    pruneSpotifyStates();
+    const finishExpiry = spotifyAuthStates.get(nonce);
+    if (finishExpiry === undefined || finishExpiry <= Date.now()) {
+      spotifyAuthStates.delete(nonce);
       return res.status(400).json({ error: "Ongeldige of verlopen login-poging." });
     }
     spotifyAuthStates.delete(nonce);

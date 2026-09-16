@@ -54,6 +54,7 @@ class AndroidApkInstallResult {
 Future<AndroidApkInstallResult> downloadAndInstallAndroidApk({
   void Function(double progress)? onProgress,
   String? fileName,
+  String? token,
 }) async {
   if (!supportsAndroidApkUpdate) {
     return AndroidApkInstallResult.fail('not_android');
@@ -68,6 +69,9 @@ Future<AndroidApkInstallResult> downloadAndInstallAndroidApk({
 
   final uri = Uri.parse('$apiBase/api/app/android.apk?refresh=1');
   final request = http.Request('GET', uri);
+  if (token != null && token.isNotEmpty) {
+    request.headers['authorization'] = 'Bearer $token';
+  }
   final client = http.Client();
   try {
     final response = await client.send(request).timeout(

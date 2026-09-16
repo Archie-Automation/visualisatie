@@ -616,13 +616,16 @@ Future<({bool ok, String? error})> _satelAction(
         )
         .timeout(const Duration(seconds: 6));
     if (res.statusCode == 204) return (ok: true, error: null);
+    if (res.statusCode == 401 || res.statusCode == 403) {
+      return (ok: false, error: 'Ongeldige code');
+    }
     final resBody = res.body;
     final msg = resBody.isNotEmpty
         ? ((jsonDecode(resBody) as Map<String, dynamic>)['detail'] as String?)
         : null;
-    return (ok: false, error: msg ?? 'HTTP ${res.statusCode}');
+    return (ok: false, error: msg ?? 'Uitschakelen mislukt.');
   } catch (e) {
-    return (ok: false, error: e.toString());
+    return (ok: false, error: 'Verbinding met alarm mislukt.');
   }
 }
 

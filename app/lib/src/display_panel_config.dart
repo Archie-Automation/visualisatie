@@ -208,25 +208,14 @@ Room? roomById(HouseConfig cfg, String roomId) {
   return null;
 }
 
-/// Live ruimte-/GA-temperatuur voor het screensaver-paneel.
-double? resolveDisplayTemperature({
+/// Resolve the temperature GA once; read the value from the bus separately.
+String? resolveDisplayTemperatureGa({
   required HouseConfig? cfg,
-  required BusState bus,
   required DisplayPanelSettings settings,
 }) {
-  if (settings.useOutdoorTemperature) {
-    final ga = settings.temperatureGa?.trim();
-    if (ga == null || ga.isEmpty) return null;
-    final v = bus.values[ga];
-    if (v is num) return v.toDouble();
-    return null;
-  }
-  final ga = settings.temperatureGa?.trim();
-  if (ga != null && ga.isNotEmpty) {
-    final v = bus.values[ga];
-    if (v is num) return v.toDouble();
-    return null;
-  }
+  final explicit = settings.temperatureGa?.trim();
+  if (explicit != null && explicit.isNotEmpty) return explicit;
+  if (settings.useOutdoorTemperature) return null;
   final roomId = settings.temperatureRoomId?.trim();
   if (roomId == null || roomId.isEmpty || cfg == null) return null;
   final room = roomById(cfg, roomId);
@@ -234,19 +223,26 @@ double? resolveDisplayTemperature({
   for (final d in room.devices) {
     if (d.type == DeviceType.climate) {
       final tga = d.ga['actual_temp'];
-      if (tga != null) {
-        final v = bus.values[tga];
-        if (v is num) return v.toDouble();
-      }
+      if (tga != null && tga.isNotEmpty) return tga;
     } else if (d.type == DeviceType.ac) {
       final ac = d.raw['ac'] as Map<String, dynamic>?;
       final tga = (ac?['actualTemp'] as Map?)?['ga'] as String?;
-      if (tga != null) {
-        final v = bus.values[tga];
-        if (v is num) return v.toDouble();
-      }
+      if (tga != null && tga.isNotEmpty) return tga;
     }
   }
+  return null;
+}
+
+/// Live ruimte-/GA-temperatuur voor het screensaver-paneel.
+double? resolveDisplayTemperature({
+  required HouseConfig? cfg,
+  required BusState bus,
+  required DisplayPanelSettings settings,
+}) {
+  final ga = resolveDisplayTemperatureGa(cfg: cfg, settings: settings);
+  if (ga == null) return null;
+  final v = bus.values[ga];
+  if (v is num) return v.toDouble();
   return null;
 }
 

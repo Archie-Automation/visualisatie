@@ -647,6 +647,9 @@ export class KnxBus extends EventEmitter {
     while (this.selfWrites.length && this.selfWrites[0].ts < cutoff) {
       this.selfWrites.shift();
     }
+    if (this.selfWrites.length > 50) {
+      this.selfWrites.splice(0, this.selfWrites.length - 50);
+    }
   }
 
   private isSelfWrite(ga: GA, byte?: number): boolean {

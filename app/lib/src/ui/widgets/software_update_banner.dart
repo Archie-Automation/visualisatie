@@ -69,6 +69,7 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
       _error = null;
     });
     final result = await downloadAndInstallAndroidApk(
+      token: ref.read(authProvider).token,
       fileName: apk?.name,
       onProgress: (p) {
         if (mounted) setState(() => _progress = p);

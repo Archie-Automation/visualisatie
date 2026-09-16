@@ -57,9 +57,11 @@ Future<void> runScheduleNow({
 /// Fetches the current schedule list and caches it. The editor invalidates
 /// this after every save so the list re-fetches.
 final schedulesProvider = FutureProvider<List<Schedule>>((ref) async {
-  final auth = ref.watch(authProvider);
-  if (!auth.isAuthed) return const [];
-  return fetchSchedules(token: auth.token!);
+  final isAuthed = ref.watch(authProvider.select((a) => a.isAuthed));
+  if (!isAuthed) return const [];
+  final token = ref.read(authProvider).token;
+  if (token == null) return const [];
+  return fetchSchedules(token: token);
 });
 
 final scheduleApiProvider = Provider<_ScheduleApi>((ref) => _ScheduleApi(ref));
@@ -70,8 +72,11 @@ class _ScheduleApi {
 
   String get _token => _ref.read(authProvider).token ?? '';
 
-  Future<void> save(List<Schedule> schedules) =>
-      saveSchedules(schedules: schedules, token: _token);
+  Future<void> save(List<Schedule> schedules) async {
+    await saveSchedules(schedules: schedules, token: _token);
+    _ref.invalidate(schedulesProvider);
+    _ref.invalidate(configProvider);
+  }
 
   Future<void> runNow(String id) => runScheduleNow(id: id, token: _token);
 }

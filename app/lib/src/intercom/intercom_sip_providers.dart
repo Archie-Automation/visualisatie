@@ -1,5 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api.dart';
@@ -39,18 +38,16 @@ final sipStartupProvider = Provider<void>((ref) {
   });
 });
 
-bool _starting = false;
-
 Future<void> _startRegistration({
   required IntercomController controller,
   required String token,
   required HouseConfig cfg,
 }) async {
   if (kIsWeb) return;
-  if (_starting) return;
-    if (controller.isStarted) return;
-    if (controller.phase != IntercomSipPhase.idle) return;
-  _starting = true;
+  if (controller.registrationInFlight) return;
+  if (controller.isStarted) return;
+  if (controller.phase != IntercomSipPhase.idle) return;
+  controller.registrationInFlight = true;
   try {
     final me = await fetchVoipMe(token: token);
     if (me != null && me['enabled'] == true && me['sip'] is Map) {
@@ -81,16 +78,6 @@ Future<void> _startRegistration({
   } catch (e) {
     debugPrint('[SIP] registratie mislukt: $e');
   } finally {
-    _starting = false;
+    controller.registrationInFlight = false;
   }
-}
-
-/// SIP-incoming UI lives on [IntercomScreen], not as a second overlay.
-class SipIncomingCallLayer extends StatelessWidget {
-  const SipIncomingCallLayer({super.key, required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) => child;
 }

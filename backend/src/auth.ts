@@ -106,9 +106,6 @@ export function requireInstaller(
   next();
 }
 
-/** @deprecated Use requireInstaller. Kept so old call sites keep compiling. */
-export const requireAdmin = requireInstaller;
-
 /** Installer or super user (user management, full customer app). */
 export function requireStaff(
   req: AuthedRequest,
