@@ -30,8 +30,24 @@ class RoomScreen extends ConsumerWidget {
           loading: () => const SizedBox.shrink(),
           error: (e, _) => Center(child: Text('$e')),
           data: (cfg) {
-            final floor = cfg.floors.firstWhere((f) => f.id == floorId);
-            final room = floor.rooms.firstWhere((r) => r.id == roomId);
+            final floor = cfg.floors.cast<Floor?>().firstWhere(
+                (f) => f!.id == floorId,
+                orElse: () => null);
+            if (floor == null) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (context.mounted) appBack(context);
+              });
+              return const SizedBox.shrink();
+            }
+            final room = floor.rooms.cast<Room?>().firstWhere(
+                (r) => r!.id == roomId,
+                orElse: () => null);
+            if (room == null) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (context.mounted) appBack(context);
+              });
+              return const SizedBox.shrink();
+            }
             return _buildRoom(context, ref, cfg, floor, room);
           },
         ),

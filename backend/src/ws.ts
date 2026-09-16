@@ -17,6 +17,14 @@ import { captureOnIntercomRing } from "./intercomCaptures";
 import { userIdsInVoipGroup } from "./voip/ringTargets";
 
 const SECRET = process.env.JWT_SECRET ?? "dev-secret-change-me";
+if (
+  SECRET === "dev-secret-change-me" &&
+  process.env.NODE_ENV === "production"
+) {
+  throw new Error(
+    "JWT_SECRET env niet gezet — weiger te starten in production."
+  );
+}
 
 type Outgoing =
   | { type: "snapshot"; payload: GAState[] }

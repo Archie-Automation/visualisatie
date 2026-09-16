@@ -14,6 +14,15 @@ import {
 } from "./roles";
 
 const SECRET = process.env.JWT_SECRET ?? "dev-secret-change-me";
+if (
+  SECRET === "dev-secret-change-me" &&
+  process.env.NODE_ENV === "production"
+) {
+  throw new Error(
+    "JWT_SECRET env niet gezet — weiger te starten in production. " +
+      "Stel JWT_SECRET in als Docker env of in .env."
+  );
+}
 const TTL = process.env.TOKEN_TTL ?? "12h";
 
 export interface TokenPayload {

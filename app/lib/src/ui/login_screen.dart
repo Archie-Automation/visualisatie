@@ -18,8 +18,8 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _server = TextEditingController(text: apiBase);
-  final _user = TextEditingController(text: 'admin');
-  final _pass = TextEditingController(text: 'admin');
+  final _user = TextEditingController();
+  final _pass = TextEditingController();
   bool _busy = false;
   String? _err;
 
