@@ -748,13 +748,15 @@ class _FloorRoomsBlock extends ConsumerWidget {
               itemCount: rooms.length,
               itemBuilder: (context, i) {
                 final room = rooms[i];
-                return _RoomDashboardRow(
+                return RepaintBoundary(
                   key: ValueKey(room.id),
-                  floor: floor,
-                  room: room,
-                  index: i,
-                  showDivider: false,
-                  onOpenRoom: () => onOpenRoom(room),
+                  child: _RoomDashboardRow(
+                    floor: floor,
+                    room: room,
+                    index: i,
+                    showDivider: false,
+                    onOpenRoom: () => onOpenRoom(room),
+                  ),
                 );
               },
             ),
@@ -843,7 +845,9 @@ class _RoomDashboardRow extends ConsumerWidget {
                   ),
                 ),
               ),
-              _RoomActivityBadges(floor: floor, room: room),
+              RepaintBoundary(
+                child: _RoomActivityBadges(floor: floor, room: room),
+              ),
             ],
           ),
         ),
@@ -983,7 +987,7 @@ Widget _header(
           ),
         ),
         const SizedBox(width: 12),
-        _HouseActivityHeaderButtons(cfg: cfg),
+        RepaintBoundary(child: _HouseActivityHeaderButtons(cfg: cfg)),
         // On narrow phones collapse installer icon into a single menu
         if (auth.isInstaller) ...[
           _GlassIconButton(
@@ -1262,7 +1266,9 @@ class _Systemen extends ConsumerWidget {
                   child: Padding(
                     padding: EdgeInsets.only(
                         right: i < orderedChips.length - 1 ? 14 : 0),
-                    child: _SystemChip(data: chip, cfg: cfg),
+                    child: RepaintBoundary(
+                      child: _SystemChip(data: chip, cfg: cfg),
+                    ),
                   ),
                 );
               },
