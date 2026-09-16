@@ -58,8 +58,37 @@ class DashboardScreen extends ConsumerWidget {
             error: (e, _) => Center(
               child: Padding(
                 padding: const EdgeInsets.all(32),
-                child: Text('Kan huis niet laden:\n$e',
-                    textAlign: TextAlign.center),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.cloud_off_rounded,
+                        size: 48, color: LuxeColors.inkSoft),
+                    const SizedBox(height: 16),
+                    Text(
+                      'Kan configuratie niet laden',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Controleer de verbinding en probeer opnieuw.',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(color: LuxeColors.inkSoft),
+                    ),
+                    const SizedBox(height: 20),
+                    FilledButton.icon(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: LuxeColors.ink,
+                      ),
+                      onPressed: () => ref.invalidate(configProvider),
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Opnieuw proberen'),
+                    ),
+                  ],
+                ),
               ),
             ),
             data: (cfg) => _DashboardBody(key: ValueKey(cfg.projectName), cfg: cfg),
