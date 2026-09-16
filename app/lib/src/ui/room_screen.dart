@@ -107,10 +107,12 @@ class RoomScreen extends ConsumerWidget {
             separatorBuilder: (_, __) => const SizedBox(height: 18),
             itemBuilder: (_, i) {
               final device = room.devices[i];
-              return FavoriteDeviceWrap(
-                device: device,
-                cfg: cfg,
-                child: deviceWidget(device),
+              return RepaintBoundary(
+                child: FavoriteDeviceWrap(
+                  device: device,
+                  cfg: cfg,
+                  child: deviceWidget(device),
+                ),
               );
             },
           ),

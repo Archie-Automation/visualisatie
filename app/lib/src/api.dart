@@ -292,11 +292,15 @@ class BusController extends Notifier<BusState> {
   bool _disposed = false;
   int _retryDelay = 2; // seconds, doubles on each failure up to 30s
   static const _dimHoldDuration = Duration(milliseconds: 1200);
+  static const _batchWindow = Duration(milliseconds: 80);
   final Map<String, ({int percent, DateTime until})> _dimHolds = {};
+  final Map<String, dynamic> _pendingGas = {};
+  Timer? _batchTimer;
 
   void patchDimPercent(String ga, int percent) {
     final p = percent.clamp(0, 100);
     _dimHolds[ga] = (percent: p, until: DateTime.now().add(_dimHoldDuration));
+    _pendingGas.remove(ga);
     state = state.update(ga, p);
   }
 
@@ -312,7 +316,17 @@ class BusController extends Notifier<BusState> {
         _dimHolds.remove(ga);
       }
     }
-    state = state.update(ga, value);
+    _pendingGas[ga] = value;
+    _batchTimer ??= Timer(_batchWindow, _flushBatch);
+  }
+
+  void _flushBatch() {
+    _batchTimer = null;
+    if (_pendingGas.isEmpty) return;
+    final next = Map<String, dynamic>.from(state.values);
+    next.addAll(_pendingGas);
+    _pendingGas.clear();
+    state = _mergeDimHolds(BusState(next));
   }
 
   BusState _mergeDimHolds(BusState base) {
@@ -345,6 +359,7 @@ class BusController extends Notifier<BusState> {
   BusState build() {
     ref.onDispose(() {
       _disposed = true;
+      _batchTimer?.cancel();
       _sub?.cancel();
       _ch?.sink.close();
     });
