@@ -183,9 +183,11 @@ export class KnxBus extends EventEmitter {
 
   /**
    * KNXnet/IP tunneling has a tiny outstanding-request window. Bursting
-   * GroupValue_Write/Read (scene wizard, rgbw) closes the tunnel.
+   * GroupValue_Write (scene recall/store via writeRaw) can close the tunnel.
+   * Normal interactive writes (dimmer, switch) are fine at UI speed.
+   * Only writeRaw uses this; write() and requestRead() stay direct.
    */
-  private pace<T>(fn: () => Promise<T>, gapMs = 45): Promise<T> {
+  private paceRaw<T>(fn: () => Promise<T>, gapMs = 45): Promise<T> {
     if (this.simulate) return fn();
     const run = this.outbound.then(fn, fn);
     this.outbound = run.then(
@@ -588,14 +590,12 @@ export class KnxBus extends EventEmitter {
       return;
     }
 
-    await this.pace(async () => {
-      if (!this.connection) throw new Error("KNX not connected");
-      const knx = await loadKnxModule();
-      const dp = new knx.Datapoint({ ga, dpt }, this.connection as never);
-      this.noteSelfWrite(ga);
-      dp.write(value);
-      this.updateCache(ga, value, dpt);
-    });
+    if (!this.connection) throw new Error("KNX not connected");
+    const knx = await loadKnxModule();
+    const dp = new knx.Datapoint({ ga, dpt }, this.connection as never);
+    this.noteSelfWrite(ga);
+    dp.write(value);
+    this.updateCache(ga, value, dpt);
   }
 
   /**
@@ -617,7 +617,7 @@ export class KnxBus extends EventEmitter {
     }
 
     this.noteSelfWrite(ga, data[0]);
-    await this.pace(
+    await this.paceRaw(
       () =>
         new Promise<void>((resolve, reject) => {
           conn.writeRaw!(ga, data, bits, (err: Error | undefined) => {
@@ -631,15 +631,13 @@ export class KnxBus extends EventEmitter {
 
   /** GroupValue_Read for a bound datapoint (no-op if unbound / simulate). */
   requestRead(ga: GA): void {
-    void this.pace(async () => {
-      if (this.simulate || this.disabled || !this.connection) return;
-      const dp = this.datapoints.get(ga) as { read?: () => void } | undefined;
-      try {
-        dp?.read?.();
-      } catch (err) {
-        logger.warn({ err, ga }, "KNX group read failed");
-      }
-    }, 35);
+    if (this.simulate || this.disabled || !this.connection) return;
+    const dp = this.datapoints.get(ga) as { read?: () => void } | undefined;
+    try {
+      dp?.read?.();
+    } catch (err) {
+      logger.warn({ err, ga }, "KNX group read failed");
+    }
   }
 
   private noteSelfWrite(ga: GA, byte?: number): void {
