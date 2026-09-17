@@ -61,8 +61,13 @@ extension ResponsiveX on BuildContext {
   /// Height of the favourite carousel.
   double get favCarouselH => isPhone ? 148.0 : 164.0;
 
-  /// Height of the pinned room header (back + titles).
+  /// Height of the pinned room header (back + titles), excluding status bar.
   double get roomStickyHeaderH => isPhone ? 92.0 : 108.0;
+
+  /// Header chrome + top inset. Use this as the bar height so the back
+  /// control is not clipped inside a 92px box under the notch.
+  double get roomStickyHeaderExtent =>
+      roomStickyHeaderH + MediaQuery.paddingOf(this).top;
 
   /// Height of the SliverAppBar on a room screen.
   double get roomHeaderH => isPhone ? 200.0 : 280.0;

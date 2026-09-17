@@ -333,9 +333,14 @@ class _FloorBrowseHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StickyHeaderSurface(
-      height: context.roomStickyHeaderH,
+      height: context.roomStickyHeaderExtent,
       child: Padding(
-        padding: EdgeInsets.fromLTRB(context.hPad - 4, 14, 8, 14),
+        padding: EdgeInsets.fromLTRB(
+          context.hPad - 4,
+          14 + MediaQuery.paddingOf(context).top,
+          8,
+          14,
+        ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
