@@ -154,6 +154,11 @@ function pruneSpotifyStates(): void {
 const lastRingWebhookTs = new Map<string, number>();
 const RING_WEBHOOK_COOLDOWN_MS = 5_000;
 
+/** APK-proxy: max 8 downloads / 10 min (home NUC, geen JWT). */
+const apkDownloadTs: number[] = [];
+const APK_WINDOW_MS = 10 * 60_000;
+const APK_MAX = 8;
+
 /** HTTP origin of the Flutter app (never 127.0.0.1 when the request came via LAN). */
 function httpAppHome(req: { get(h: string): string | undefined }): string {
   const httpPort = process.env.PORT ?? "4000";
@@ -436,10 +441,20 @@ export function buildRouter(
   });
 
   /**
-   * Public: stream the latest Android APK from the GitHub Release asset.
-   * Uses GITHUB_TOKEN on the server so tablets never need a GitHub credential.
+   * Stream the latest Android APK from the GitHub Release asset.
+   * Geen JWT: de tablet moet kunnen updaten ook als de sessie-token
+   * niet meekomt op de streaming download. Rate-limit i.p.v. auth.
    */
-  r.get("/app/android.apk", requireAuth, async (req, res) => {
+  r.get("/app/android.apk", async (req, res) => {
+    const now = Date.now();
+    while (apkDownloadTs.length > 0 && now - apkDownloadTs[0]! > APK_WINDOW_MS) {
+      apkDownloadTs.shift();
+    }
+    if (apkDownloadTs.length >= APK_MAX) {
+      return res.status(429).json({ error: "too many apk downloads" });
+    }
+    apkDownloadTs.push(now);
+
     const force = req.query.refresh === "1" || req.query.refresh === "true";
     if (force) await getGithubLatest(true);
     const result = await fetchAndroidApkFromGithub();

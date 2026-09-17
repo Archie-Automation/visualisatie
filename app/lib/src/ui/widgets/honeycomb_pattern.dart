@@ -33,12 +33,14 @@ class HoneycombPattern extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final phone = context.isPhone;
     return IgnorePointer(
       child: RepaintBoundary(
         child: CustomPaint(
           painter: _HoneycombPainter(
             color: color.withValues(alpha: opacity.clamp(0.0, 1.0)),
-            hexSize: hexSize,
+            hexSize: phone ? hexSize * 1.35 : hexSize,
+            antiAlias: !phone,
           ),
           size: Size.infinite,
         ),
@@ -48,10 +50,15 @@ class HoneycombPattern extends StatelessWidget {
 }
 
 class _HoneycombPainter extends CustomPainter {
-  _HoneycombPainter({required this.color, required this.hexSize});
+  _HoneycombPainter({
+    required this.color,
+    required this.hexSize,
+    required this.antiAlias,
+  });
 
   final Color color;
   final double hexSize;
+  final bool antiAlias;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -61,7 +68,7 @@ class _HoneycombPainter extends CustomPainter {
       ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.85
-      ..isAntiAlias = true;
+      ..isAntiAlias = antiAlias;
 
     // Pointy-top hex grid.
     final w = math.sqrt(3) * hexSize;
@@ -99,5 +106,7 @@ class _HoneycombPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _HoneycombPainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.hexSize != hexSize;
+      oldDelegate.color != color ||
+      oldDelegate.hexSize != hexSize ||
+      oldDelegate.antiAlias != antiAlias;
 }
