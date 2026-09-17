@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'ui/responsive.dart';
+
 /// Semantic palette for light / dark. Bound into [LuxeColors] at runtime so
 /// existing `LuxeColors.ink` call-sites follow the active theme.
 @immutable
@@ -348,6 +350,21 @@ class LuxeShadows {
 
   static List<BoxShadow> chip(BuildContext context) =>
       Theme.of(context).brightness == Brightness.dark ? darkLift : soft;
+
+  /// Phone (web + native): één kleine schaduw. Tablet/PC houden de volle lift.
+  static List<BoxShadow>? adapt(BuildContext context, List<BoxShadow>? shadows) {
+    if (shadows == null || shadows.isEmpty) return shadows;
+    if (!context.isPhone) return shadows;
+    if (identical(shadows, brassGlow)) {
+      return const [
+        BoxShadow(
+            color: Color(0x30D4B06E), blurRadius: 10, offset: Offset(0, 3)),
+      ];
+    }
+    return const [
+      BoxShadow(color: Color(0x1A000000), blurRadius: 6, offset: Offset(0, 2)),
+    ];
+  }
 }
 
 /// Shared chrome for dashboard scene / system / room-category chips.
@@ -423,15 +440,17 @@ class LuxeRimBox extends StatelessWidget {
     final opaqueRim = Color.alphaBlend(rimColor, LuxeColors.surface);
     final borderRadius = BorderRadius.circular(radius);
     final innerR = (radius - rimWidth).clamp(0.0, radius);
+    final shadows = LuxeShadows.adapt(context, this.shadows);
 
     Widget content = padding == null
         ? child
         : Padding(padding: padding!, child: child);
 
-    // Web/CanvasKit: Border + fill is one layer. CustomPaint rim per chip
-    // jankt horizontal/vertical scroll. Impeller (Android) keeps the ring
+    // Web/CanvasKit + phone Impeller: Border + fill is one layer. CustomPaint
+    // rim per chip jankt under scroll. Wall-tablet Impeller keeps the ring
     // painter to avoid grainy Border.all.
-    if (kIsWeb) {
+    if (kIsWeb || context.isPhone) {
+      final phone = context.isPhone;
       Widget body = DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: borderRadius,
@@ -439,11 +458,13 @@ class LuxeRimBox extends StatelessWidget {
           border: Border.all(color: opaqueRim, width: rimWidth),
           boxShadow: shadows,
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(innerR),
-          clipBehavior: Clip.hardEdge,
-          child: content,
-        ),
+        child: phone
+            ? content
+            : ClipRRect(
+                borderRadius: BorderRadius.circular(innerR),
+                clipBehavior: Clip.hardEdge,
+                child: content,
+              ),
       );
       if (width != null || height != null) {
         body = SizedBox(width: width, height: height, child: body);
@@ -484,7 +505,7 @@ class LuxeRimBox extends StatelessWidget {
       ],
     );
 
-    if (shadows != null && shadows!.isNotEmpty) {
+    if (shadows != null && shadows.isNotEmpty) {
       body = DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: borderRadius,

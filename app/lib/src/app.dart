@@ -370,6 +370,10 @@ class _AppScrollBehavior extends MaterialScrollBehavior {
       const ClampingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
 
   @override
+  MultitouchDragStrategy getMultitouchDragStrategy(BuildContext context) =>
+      MultitouchDragStrategy.latestPointer;
+
+  @override
   Widget buildOverscrollIndicator(
     BuildContext context,
     Widget child,

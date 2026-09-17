@@ -27,7 +27,8 @@ class HoneycombPattern extends StatelessWidget {
     return HoneycombPattern(
       color: useDark ? Colors.white : p.ink,
       opacity: useDark ? 0.028 : 0.07,
-      hexSize: context.isPhone ? 40 : 56,
+      // Phone: grotere cellen = minder paths onder scroll.
+      hexSize: context.isPhone ? 64 : 56,
     );
   }
 
@@ -39,6 +40,7 @@ class HoneycombPattern extends StatelessWidget {
           painter: _HoneycombPainter(
             color: color.withValues(alpha: opacity.clamp(0.0, 1.0)),
             hexSize: hexSize,
+            antiAlias: !context.isPhone,
           ),
           size: Size.infinite,
         ),
@@ -48,10 +50,15 @@ class HoneycombPattern extends StatelessWidget {
 }
 
 class _HoneycombPainter extends CustomPainter {
-  _HoneycombPainter({required this.color, required this.hexSize});
+  _HoneycombPainter({
+    required this.color,
+    required this.hexSize,
+    required this.antiAlias,
+  });
 
   final Color color;
   final double hexSize;
+  final bool antiAlias;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -61,27 +68,27 @@ class _HoneycombPainter extends CustomPainter {
       ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.85
-      ..isAntiAlias = true;
+      ..isAntiAlias = antiAlias;
 
-    // Pointy-top hex grid.
+    // Pointy-top hex grid — one path, one stroke.
     final w = math.sqrt(3) * hexSize;
     final h = 1.5 * hexSize;
     final cols = (size.width / w).ceil() + 2;
     final rows = (size.height / h).ceil() + 2;
+    final path = Path();
 
     for (var row = -1; row < rows; row++) {
       for (var col = -1; col < cols; col++) {
         final cx = col * w + (row.isOdd ? w * 0.5 : 0);
         final cy = row * h;
-        _drawHex(canvas, Offset(cx, cy), hexSize, paint);
+        _addHex(path, Offset(cx, cy), hexSize);
       }
     }
+    canvas.drawPath(path, paint);
   }
 
-  void _drawHex(Canvas canvas, Offset center, double r, Paint paint) {
-    final path = Path();
+  void _addHex(Path path, Offset center, double r) {
     for (var i = 0; i < 6; i++) {
-      // Pointy-top: start at -90°.
       final a = -math.pi / 2 + i * math.pi / 3;
       final p = Offset(
         center.dx + r * math.cos(a),
@@ -94,10 +101,11 @@ class _HoneycombPainter extends CustomPainter {
       }
     }
     path.close();
-    canvas.drawPath(path, paint);
   }
 
   @override
   bool shouldRepaint(covariant _HoneycombPainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.hexSize != hexSize;
+      oldDelegate.color != color ||
+      oldDelegate.hexSize != hexSize ||
+      oldDelegate.antiAlias != antiAlias;
 }

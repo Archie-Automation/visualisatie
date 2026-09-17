@@ -1,6 +1,7 @@
 ﻿import 'dart:async';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -403,9 +404,11 @@ class _FloorTabBar extends ConsumerWidget {
           controller: scrollController,
           scrollDirection: Axis.horizontal,
           primary: false,
-          clipBehavior: Clip.none,
+          clipBehavior: context.stripClip,
           physics: const ClampingScrollPhysics(),
           padding: pad,
+          addRepaintBoundaries: false,
+          addAutomaticKeepAlives: false,
           itemCount: floors.length,
           separatorBuilder: (_, __) => const SizedBox(width: 10),
           itemBuilder: (context, i) {
@@ -748,15 +751,29 @@ class _FloorRoomsBlock extends ConsumerWidget {
 
     final orderMap = ref.watch(roomOrderProvider);
     final rooms = applyRoomOrder(orderMap, floor);
+    final inlineReorder = !kIsWeb && !context.isPhone;
+
+    Widget roomRow(int i) {
+      final room = rooms[i];
+      final row = _RoomDashboardRow(
+        floor: floor,
+        room: room,
+        index: i,
+        showDivider: false,
+        inlineReorder: inlineReorder,
+        onOpenRoom: () => onOpenRoom(room),
+      );
+      if (kIsWeb) return KeyedSubtree(key: ValueKey(room.id), child: row);
+      return RepaintBoundary(key: ValueKey(room.id), child: row);
+    }
 
     return Padding(
-      // Only bottom spacing; cards go edge-to-edge horizontally.
       padding: EdgeInsets.only(bottom: 28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Full-width room list (geen top/bottom banen).
-          ReorderableListView.builder(
+          if (inlineReorder)
+            ReorderableListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
               buildDefaultDragHandles: false,
@@ -775,21 +792,120 @@ class _FloorRoomsBlock extends ConsumerWidget {
                     .reorder(floor.id, reordered.map((r) => r.id).toList());
               },
               itemCount: rooms.length,
-              itemBuilder: (context, i) {
-                final room = rooms[i];
-                return RepaintBoundary(
-                  key: ValueKey(room.id),
-                  child: _RoomDashboardRow(
-                    floor: floor,
-                    room: room,
-                    index: i,
-                    showDivider: false,
-                    onOpenRoom: () => onOpenRoom(room),
-                  ),
-                );
-              },
+              itemBuilder: (context, i) => roomRow(i),
+            )
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [for (var i = 0; i < rooms.length; i++) roomRow(i)],
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _RoomReorderSheet extends ConsumerStatefulWidget {
+  const _RoomReorderSheet({required this.floor});
+  final Floor floor;
+
+  @override
+  ConsumerState<_RoomReorderSheet> createState() => _RoomReorderSheetState();
+}
+
+class _RoomReorderSheetState extends ConsumerState<_RoomReorderSheet> {
+  late List<Room> _rooms;
+
+  @override
+  void initState() {
+    super.initState();
+    _rooms = applyRoomOrder(ref.read(roomOrderProvider), widget.floor);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      child: Container(
+        color: LuxeColors.cream,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _sheetHandle(),
+            Padding(
+              padding: EdgeInsets.fromLTRB(22, 10, 22, 4),
+              child: Row(
+                children: [
+                  Icon(Icons.drag_indicator_rounded,
+                      size: 20, color: LuxeColors.brass),
+                  SizedBox(width: 10),
+                  Text('Kamers rangschikken',
+                      style: Theme.of(context).textTheme.titleLarge),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 2, 22, 12),
+              child: Text(
+                'Sleep de handgreep om de volgorde te wijzigen.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: LuxeColors.inkSoft),
+              ),
+            ),
+            SizedBox(
+              height: (_rooms.length * 60.0).clamp(0.0, 380.0),
+              child: ReorderableListView.builder(
+                itemCount: _rooms.length,
+                buildDefaultDragHandles: false,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                onReorder: (oldIndex, newIndex) {
+                  if (newIndex > oldIndex) newIndex--;
+                  setState(() {
+                    final item = _rooms.removeAt(oldIndex);
+                    _rooms.insert(newIndex, item);
+                  });
+                  ref.read(roomOrderProvider.notifier).reorder(
+                        widget.floor.id,
+                        _rooms.map((r) => r.id).toList(),
+                      );
+                },
+                itemBuilder: (_, i) {
+                  final room = _rooms[i];
+                  return ListTile(
+                    key: ValueKey(room.id),
+                    contentPadding: EdgeInsets.symmetric(horizontal: 8),
+                    leading: ReorderableDelayedDragStartListener(
+                      index: i,
+                      child: Padding(
+                        padding: EdgeInsets.all(8),
+                        child: Icon(Icons.drag_handle_rounded,
+                            color: LuxeColors.inkSoft),
+                      ),
+                    ),
+                    title: Text(room.name,
+                        style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: LuxeColors.ink)),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 24),
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: LuxeColors.ink,
+                  minimumSize: const Size.fromHeight(52),
+                  shape: const StadiumBorder(),
+                ),
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Klaar'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -803,6 +919,7 @@ class _RoomDashboardRow extends ConsumerWidget {
     required this.index,
     required this.showDivider,
     required this.onOpenRoom,
+    this.inlineReorder = true,
   });
 
   final Floor floor;
@@ -810,6 +927,7 @@ class _RoomDashboardRow extends ConsumerWidget {
   final int index;
   final bool showDivider;
   final VoidCallback onOpenRoom;
+  final bool inlineReorder;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -827,9 +945,8 @@ class _RoomDashboardRow extends ConsumerWidget {
           child: Row(
             children: [
               // Drag handle — long-press first so horizontal swipes don't reorder.
-              ReorderableDelayedDragStartListener(
-                index: index,
-                child: MouseRegion(
+              Builder(builder: (context) {
+                Widget handle = MouseRegion(
                   cursor: SystemMouseCursors.grab,
                   child: Padding(
                     padding: EdgeInsets.fromLTRB(2, 6, 12, 6),
@@ -839,8 +956,24 @@ class _RoomDashboardRow extends ConsumerWidget {
                       color: LuxeColors.inkSoft.withValues(alpha: 0.75),
                     ),
                   ),
-                ),
-              ),
+                );
+                if (inlineReorder) {
+                  return ReorderableDelayedDragStartListener(
+                    index: index,
+                    child: handle,
+                  );
+                }
+                return GestureDetector(
+                  onLongPress: () => showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    useSafeArea: true,
+                    backgroundColor: Colors.transparent,
+                    builder: (_) => _RoomReorderSheet(floor: floor),
+                  ),
+                  child: handle,
+                );
+              }),
               // Name + chevron together form the tap target for room navigation.
               Expanded(
                 child: GestureDetector(
@@ -1261,7 +1394,8 @@ class _Systemen extends ConsumerWidget {
           ),
           SizedBox(
             height: chipH + vPad * 2,
-            child: ReorderableListView.builder(
+            child: (!kIsWeb && !context.isPhone)
+                ? ReorderableListView.builder(
               scrollController: scrollController,
               scrollDirection: Axis.horizontal,
               primary: false,
@@ -1301,7 +1435,24 @@ class _Systemen extends ConsumerWidget {
                   ),
                 );
               },
-            ),
+            )
+                : ListView.separated(
+                    controller: scrollController,
+                    scrollDirection: Axis.horizontal,
+                    primary: false,
+                    clipBehavior: context.stripClip,
+                    physics: const ClampingScrollPhysics(),
+                    padding: EdgeInsets.fromLTRB(
+                        context.hPad, vPad, context.hPad, vPad),
+                    addRepaintBoundaries: false,
+                    addAutomaticKeepAlives: false,
+                    itemCount: orderedChips.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 14),
+                    itemBuilder: (ctx, i) {
+                      final chip = orderedChips[i];
+                      return _SystemChip(data: chip, cfg: cfg);
+                    },
+                  ),
           ),
         ],
       ),

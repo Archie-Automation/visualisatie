@@ -2352,7 +2352,7 @@ class _HvacModeButtonState extends State<_HvacModeButton> {
       square = DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(radius),
-          boxShadow: DeviceControlBar.buttonShadows(active: true),
+          boxShadow: DeviceControlBar.buttonShadows(context, active: true),
         ),
         child: Container(
           width: size,
@@ -5467,7 +5467,7 @@ class _MeldingActiveButton extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(DeviceControlBar.buttonRadius),
-          boxShadow: DeviceControlBar.buttonShadows(active: true),
+          boxShadow: DeviceControlBar.buttonShadows(context, active: true),
         ),
         child: Container(
           width: size,
@@ -5578,7 +5578,7 @@ class _MeldingAlertRow extends ConsumerWidget {
                 decoration: BoxDecoration(
                   borderRadius:
                       BorderRadius.circular(DeviceControlBar.buttonRadius),
-                  boxShadow: DeviceControlBar.buttonShadows(active: true),
+                  boxShadow: DeviceControlBar.buttonShadows(context, active: true),
                 ),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8),

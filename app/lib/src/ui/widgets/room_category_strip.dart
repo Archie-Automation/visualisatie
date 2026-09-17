@@ -35,9 +35,11 @@ class RoomCategoryStrip extends StatelessWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         primary: false,
-        clipBehavior: Clip.none,
+        clipBehavior: context.stripClip,
         physics: const ClampingScrollPhysics(),
         padding: EdgeInsets.fromLTRB(hPad, vPad, hPad, vPad),
+        addRepaintBoundaries: false,
+        addAutomaticKeepAlives: false,
         itemCount: segments.length,
         separatorBuilder: (_, __) => const SizedBox(width: 14),
         itemBuilder: (context, i) {

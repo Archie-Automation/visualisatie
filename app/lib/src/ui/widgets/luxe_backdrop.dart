@@ -7,9 +7,13 @@ import 'honeycomb_pattern.dart';
 /// Page canvas only (gradient + honeycomb). No child — used by [LuxeBackdrop]
 /// and by sticky headers so they match the page instead of a flat bar.
 class LuxeCanvas extends StatelessWidget {
-  const LuxeCanvas({super.key, this.dark = false});
+  const LuxeCanvas({super.key, this.dark = false, this.compact = false});
 
   final bool dark;
+
+  /// Sticky bars: same gradient, no extra washes / honeycomb. Painting a
+  /// full hex grid in a 92px pinned header every scroll frame is wasted.
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -19,6 +23,7 @@ class LuxeCanvas extends StatelessWidget {
         (useDark ? LuxePalette.dark : LuxePalette.light);
 
     final phoneLight = !useDark && context.isPhone;
+    final cheap = compact || context.isPhone;
     final cream = phoneLight ? LuxePalette.phoneCream : p.cream;
     final creamLight = phoneLight ? LuxePalette.phoneCreamLight : p.creamLight;
     final creamDeep = phoneLight ? LuxePalette.phoneCreamDeep : p.creamDeep;
@@ -41,54 +46,57 @@ class LuxeCanvas extends StatelessWidget {
             ),
           ),
         ),
-        IgnorePointer(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.centerRight,
-                colors: [
-                  p.brass.withValues(alpha: brassWash),
-                  Colors.transparent,
-                ],
+        if (!cheap) ...[
+          IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.centerRight,
+                  colors: [
+                    p.brass.withValues(alpha: brassWash),
+                    Colors.transparent,
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-        IgnorePointer(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.bottomRight,
-                end: Alignment.center,
-                colors: [
-                  p.brassGlow.withValues(alpha: glowWash),
-                  Colors.transparent,
-                ],
+          IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomRight,
+                  end: Alignment.center,
+                  colors: [
+                    p.brassGlow.withValues(alpha: glowWash),
+                    Colors.transparent,
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-        IgnorePointer(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  Colors.transparent,
-                  Colors.transparent,
-                  Colors.black.withValues(alpha: useDark ? 0.28 : 0.10),
-                ],
-                stops: const [0.0, 0.18, 0.78, 1.0],
+          IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.transparent,
+                    Colors.transparent,
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: useDark ? 0.28 : 0.10),
+                  ],
+                  stops: const [0.0, 0.18, 0.78, 1.0],
+                ),
               ),
             ),
           ),
-        ),
-        IgnorePointer(
-          child: HoneycombPattern.ambient(context, dark: useDark),
-        ),
+        ],
+        if (!compact)
+          IgnorePointer(
+            child: HoneycombPattern.ambient(context, dark: useDark),
+          ),
       ],
     );
   }
@@ -111,8 +119,10 @@ class StickyHeaderSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Widget canvas = const RepaintBoundary(
-      child: IgnorePointer(child: LuxeCanvas()),
+    Widget canvas = RepaintBoundary(
+      child: IgnorePointer(
+        child: LuxeCanvas(compact: context.isPhone),
+      ),
     );
     if (boxShadow != null && boxShadow!.isNotEmpty) {
       canvas = DecoratedBox(
