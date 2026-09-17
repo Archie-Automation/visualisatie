@@ -6,8 +6,10 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
 
-  <!-- Responsive viewport — CRITICAL for smartphones -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <!-- Responsive viewport — CRITICAL for smartphones.
+       overlays-content: Safari-chrome / toetsenbord mag de Flutter-view
+       niet resizen (dat trilt de hele UI bij scrollen). -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=overlays-content">
 
   <meta name="description" content="Archie OS Smart Home">
 
@@ -32,16 +34,24 @@
   <style>
     html, body {
       margin: 0; padding: 0;
-      width: 100%; height: 100%;
+      width: 100%;
+      height: 100%;
+      height: 100lvh;
       background: #F5F0E8;
-      /* Reduce iOS Safari edge-swipe / overscroll stealing horizontal pans. */
+      /* Pin the document so iOS Safari toolbar show/hide cannot rubber-band
+         or resize the Flutter canvas mid-scroll. */
+      position: fixed;
+      inset: 0;
       overflow: hidden;
       overscroll-behavior: none;
       overscroll-behavior-x: none;
+      touch-action: manipulation;
+      -webkit-text-size-adjust: 100%;
     }
-    flt-glass-pane, flt-scene, flutter-view {
+    flt-glass-pane, flt-scene, flt-scene-host, flutter-view {
       overscroll-behavior: none;
       overscroll-behavior-x: none;
+      touch-action: manipulation;
     }
     #flutter-loading {
       position: fixed;

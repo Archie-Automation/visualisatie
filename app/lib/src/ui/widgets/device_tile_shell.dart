@@ -185,7 +185,7 @@ class DeviceTileIconBadge extends StatelessWidget {
     return Material(
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(outerR),
-      clipBehavior: Clip.antiAlias,
+      clipBehavior: context.isPhone ? Clip.hardEdge : Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(outerR),

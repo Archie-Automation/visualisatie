@@ -56,9 +56,11 @@ class SceneStrip extends ConsumerWidget {
         controller: scrollController,
         scrollDirection: Axis.horizontal,
         primary: false,
-        clipBehavior: Clip.none,
+        clipBehavior: context.stripClip,
         physics: const ClampingScrollPhysics(),
         padding: EdgeInsets.fromLTRB(hPad, vPad, hPad, vPad),
+        addRepaintBoundaries: false,
+        addAutomaticKeepAlives: false,
         itemCount: count,
         separatorBuilder: (_, __) => const SizedBox(width: 14),
         itemBuilder: (context, i) {

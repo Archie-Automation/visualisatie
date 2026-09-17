@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -155,15 +156,17 @@ class RoomScreen extends ConsumerWidget {
           sliver: SliverList.separated(
             itemCount: room.devices.length,
             separatorBuilder: (_, __) => const SizedBox(height: 18),
+            addRepaintBoundaries: !kIsWeb,
+            addAutomaticKeepAlives: false,
             itemBuilder: (_, i) {
               final device = room.devices[i];
-              return RepaintBoundary(
-                child: FavoriteDeviceWrap(
-                  device: device,
-                  cfg: cfg,
-                  child: deviceWidget(device),
-                ),
+              final tile = FavoriteDeviceWrap(
+                device: device,
+                cfg: cfg,
+                child: deviceWidget(device),
               );
+              if (kIsWeb) return tile;
+              return RepaintBoundary(child: tile);
             },
           ),
         ),

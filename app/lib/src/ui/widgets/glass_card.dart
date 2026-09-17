@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart'
 import 'package:flutter/material.dart';
 
 import '../../theme.dart';
+import '../responsive.dart';
 
 /// Frosted / elevated surface — the visual workhorse of the app.
 ///
@@ -56,33 +57,38 @@ class GlassCard extends StatelessWidget {
     final effectiveTint = tint ?? p.surface.withValues(alpha: alpha);
     final highlight = p.glassHighlight;
 
-    Widget content = Stack(
-      children: [
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          child: IgnorePointer(
-            child: Container(
-              height: radius + (isDark ? 14 : 10),
-              decoration: BoxDecoration(
-                borderRadius:
-                    BorderRadius.vertical(top: Radius.circular(radius)),
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    highlight,
-                    highlight.withValues(alpha: 0),
-                  ],
+    Widget content;
+    if (context.isPhone) {
+      content = Padding(padding: padding, child: child);
+    } else {
+      content = Stack(
+        children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: IgnorePointer(
+              child: Container(
+                height: radius + (isDark ? 14 : 10),
+                decoration: BoxDecoration(
+                  borderRadius:
+                      BorderRadius.vertical(top: Radius.circular(radius)),
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      highlight,
+                      highlight.withValues(alpha: 0),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-        Padding(padding: padding, child: child),
-      ],
-    );
+          Padding(padding: padding, child: child),
+        ],
+      );
+    }
 
     if (_useBackdropBlur) {
       content = BackdropFilter(
@@ -105,7 +111,7 @@ class GlassCard extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(radius),
               color: effectiveTint,
-              boxShadow: shadows,
+              boxShadow: LuxeShadows.adapt(context, shadows),
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(radius),
@@ -169,7 +175,7 @@ class SolidGlassCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: fill,
               borderRadius: BorderRadius.circular(radius),
-              boxShadow: shadows,
+              boxShadow: LuxeShadows.adapt(context, shadows),
             ),
             child: child,
           );

@@ -33,6 +33,13 @@ extension ResponsiveX on BuildContext {
   bool get isDesktop => !isPhone && (_shortest >= 900 || _w >= 1100);
   bool get isTablet => !isPhone && !isDesktop;
 
+  /// Phone: minder compositor-lagen onder scroll. Tablet/PC blijven rijk.
+  bool get cheapScrollLayers => isPhone;
+
+  /// Chip-shadows may bleed on tablet/PC. On phone that overdraw jitters
+  /// against the parent vertical scroll.
+  Clip get stripClip => cheapScrollLayers ? Clip.hardEdge : Clip.none;
+
   /// Horizontal padding used on top-level page content.
   double get hPad => isPhone ? 20.0 : 40.0;
 

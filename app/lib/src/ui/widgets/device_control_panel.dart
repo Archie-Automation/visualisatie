@@ -199,7 +199,11 @@ class DeviceControlButtonSurface extends StatelessWidget {
       rimWidth: rimW,
       rimColor: rim,
       fillColor: fill,
-      shadows: DeviceControlBar.buttonShadows(active: active, pressed: pressed),
+      shadows: DeviceControlBar.buttonShadows(
+        context,
+        active: active,
+        pressed: pressed,
+      ),
       padding: padding,
       child: body,
     );
@@ -956,12 +960,14 @@ class DeviceControlBar {
     );
   }
 
-  static List<BoxShadow> buttonShadows({
+  static List<BoxShadow> buttonShadows(
+    BuildContext context, {
     bool active = false,
     bool pressed = false,
   }) {
+    final List<BoxShadow> raw;
     if (pressed) {
-      return [
+      raw = [
         BoxShadow(
           color: LuxeColors.brass.withValues(alpha: 0.38),
           blurRadius: 12,
@@ -970,8 +976,10 @@ class DeviceControlBar {
         ),
         ...LuxeShadows.controlButton,
       ];
+    } else {
+      raw = active ? LuxeShadows.brassGlow : LuxeShadows.controlButton;
     }
-    return active ? LuxeShadows.brassGlow : LuxeShadows.controlButton;
+    return LuxeShadows.adapt(context, raw) ?? const [];
   }
 
   static List<List<DeviceControlItem>> chunk(
