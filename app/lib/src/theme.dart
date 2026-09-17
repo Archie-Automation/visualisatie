@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -309,31 +310,40 @@ class DeviceControlIcons {
 }
 
 class LuxeShadows {
-  /// Soft lift — één kleine schaduw. Drie grote blurs (32/60px) maakten
-  /// horizontaal én verticaal scrollen trillerig op telefoon/web.
+  /// Soft lift — keeps cards above a recessed canvas.
   static const List<BoxShadow> soft = [
-    BoxShadow(color: Color(0x18000000), blurRadius: 8, offset: Offset(0, 3)),
+    BoxShadow(color: Color(0x12000000), blurRadius: 12, offset: Offset(0, 4)),
+    BoxShadow(color: Color(0x18000000), blurRadius: 32, offset: Offset(0, 16)),
+    BoxShadow(color: Color(0x14000000), blurRadius: 60, offset: Offset(0, 30)),
   ];
 
   static const List<BoxShadow> controlButton = [
-    BoxShadow(color: Color(0x14000000), blurRadius: 6, offset: Offset(0, 2)),
+    BoxShadow(color: Color(0x10000000), blurRadius: 6, offset: Offset(0, 2)),
+    BoxShadow(color: Color(0x14000000), blurRadius: 18, offset: Offset(0, 8)),
+    BoxShadow(color: Color(0x10000000), blurRadius: 36, offset: Offset(0, 18)),
   ];
 
   static const List<BoxShadow> lift = [
-    BoxShadow(color: Color(0x1A000000), blurRadius: 10, offset: Offset(0, 4)),
+    BoxShadow(color: Color(0x14000000), blurRadius: 14, offset: Offset(0, 5)),
+    BoxShadow(color: Color(0x1C000000), blurRadius: 44, offset: Offset(0, 20)),
+    BoxShadow(color: Color(0x1E000000), blurRadius: 90, offset: Offset(0, 48)),
   ];
 
   static const List<BoxShadow> brassGlow = [
     BoxShadow(
-        color: Color(0x28D4B06E),
-        blurRadius: 16,
-        spreadRadius: -4,
-        offset: Offset(0, 4)),
+        color: Color(0x40D4B06E),
+        blurRadius: 44,
+        spreadRadius: -6,
+        offset: Offset(0, 6)),
+    BoxShadow(
+        color: Color(0x14000000), blurRadius: 24, offset: Offset(0, 10)),
   ];
 
   /// Subtle dark lift — depth without heavy black blobs.
   static const List<BoxShadow> darkLift = [
-    BoxShadow(color: Color(0x38000000), blurRadius: 8, offset: Offset(0, 3)),
+    BoxShadow(color: Color(0x38000000), blurRadius: 10, offset: Offset(0, 3)),
+    BoxShadow(color: Color(0x2A000000), blurRadius: 24, offset: Offset(0, 12)),
+    BoxShadow(color: Color(0x1C000000), blurRadius: 40, offset: Offset(0, 20)),
   ];
 
   static List<BoxShadow> chip(BuildContext context) =>
@@ -417,6 +427,30 @@ class LuxeRimBox extends StatelessWidget {
     Widget content = padding == null
         ? child
         : Padding(padding: padding!, child: child);
+
+    // Web/CanvasKit: Border + fill is one layer. CustomPaint rim per chip
+    // jankt horizontal/vertical scroll. Impeller (Android) keeps the ring
+    // painter to avoid grainy Border.all.
+    if (kIsWeb) {
+      Widget body = DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: borderRadius,
+          color: fillColor,
+          border: Border.all(color: opaqueRim, width: rimWidth),
+          boxShadow: shadows,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(innerR),
+          clipBehavior: Clip.hardEdge,
+          child: content,
+        ),
+      );
+      if (width != null || height != null) {
+        body = SizedBox(width: width, height: height, child: body);
+      }
+      return body;
+    }
+
     content = Padding(
       padding: EdgeInsets.all(rimWidth),
       child: ClipRRect(
