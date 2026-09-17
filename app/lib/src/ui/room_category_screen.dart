@@ -176,12 +176,10 @@ class _CategoryBody extends ConsumerWidget {
         segment.devices.firstOrNull?.name ??
         segment.labelUpper;
 
-    return SafeArea(
-      bottom: false,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          FunctionScreenHeader(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        FunctionScreenHeader(
             onBack: onBack,
             title: titleText,
             subtitle: '${room.name} · ${floor.name}',
@@ -245,8 +243,7 @@ class _CategoryBody extends ConsumerWidget {
                     itemBuilder: (_, i) => deviceWidget(devices[i]),
                   ),
           ),
-        ],
-      ),
+      ],
     );
   }
 }

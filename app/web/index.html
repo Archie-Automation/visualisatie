@@ -7,9 +7,9 @@
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
 
   <!-- Responsive viewport — CRITICAL for smartphones.
-       overlays-content: Safari-chrome / toetsenbord mag de Flutter-view
-       niet resizen (dat trilt de hele UI bij scrollen). -->
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=overlays-content">
+       Geen viewport-fit=cover: dat tekent onder de notch en maakt
+       de terugknop onraakbaar op iPhone Safari. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
   <meta name="description" content="Archie OS Smart Home">
 
@@ -36,22 +36,14 @@
       margin: 0; padding: 0;
       width: 100%;
       height: 100%;
-      height: 100lvh;
       background: #F5F0E8;
-      /* Pin the document so iOS Safari toolbar show/hide cannot rubber-band
-         or resize the Flutter canvas mid-scroll. */
-      position: fixed;
-      inset: 0;
       overflow: hidden;
       overscroll-behavior: none;
       overscroll-behavior-x: none;
-      touch-action: manipulation;
-      -webkit-text-size-adjust: 100%;
     }
     flt-glass-pane, flt-scene, flt-scene-host, flutter-view {
       overscroll-behavior: none;
       overscroll-behavior-x: none;
-      touch-action: manipulation;
     }
     #flutter-loading {
       position: fixed;

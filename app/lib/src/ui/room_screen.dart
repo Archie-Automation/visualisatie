@@ -96,7 +96,7 @@ class RoomScreen extends ConsumerWidget {
             floor: floor,
             room: room,
             cfg: cfg,
-            headerHeight: context.roomStickyHeaderH,
+            headerHeight: context.roomStickyHeaderExtent,
             onBack: () => appBack(context),
           ),
         ),
@@ -212,13 +212,13 @@ class _RoomStickyHeader extends SliverPersistentHeaderDelegate {
     final backSize = isPhone ? 44.0 : 48.0;
     final roomFont = isPhone ? 18.0 : 20.0;
 
+    final topInset = MediaQuery.paddingOf(context).top;
     return StickyHeaderSurface(
       height: headerHeight,
-      child: SafeArea(
-        bottom: false,
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(isPhone ? 8 : 12, 0, isPhone ? 8 : 12, 10),
-          child: Stack(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+            isPhone ? 8 : 12, topInset, isPhone ? 8 : 12, 10),
+        child: Stack(
             alignment: Alignment.center,
             children: [
               IgnorePointer(
@@ -304,7 +304,6 @@ class _RoomStickyHeader extends SliverPersistentHeaderDelegate {
                 child: BackPill(onTap: onBack),
               ),
             ],
-          ),
         ),
       ),
     );

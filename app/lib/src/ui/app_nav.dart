@@ -17,7 +17,11 @@ void appOpen(BuildContext context, String location) {
 }
 
 void appBack(BuildContext context, {String fallback = '/'}) {
-  final target = _readFrom(context) ?? fallback;
+  final here = currentAppLocation(context);
+  var target = _readFrom(context) ?? fallback;
+  if (!_isInternalLocation(target) || _sameRoutePath(target, here)) {
+    target = fallback;
+  }
   if (_flatWebNav) {
     context.replace(target);
     return;
@@ -76,4 +80,12 @@ bool _isInternalLocation(String? loc) {
   if (!path.startsWith('/')) return false;
   if (path.startsWith('//')) return false;
   return true;
+}
+
+bool _sameRoutePath(String a, String b) {
+  final pa = Uri.tryParse(a)?.path ?? a;
+  final pb = Uri.tryParse(b)?.path ?? b;
+  final na = pa.isEmpty ? '/' : pa;
+  final nb = pb.isEmpty ? '/' : pb;
+  return na == nb;
 }
