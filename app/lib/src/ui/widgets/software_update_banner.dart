@@ -309,11 +309,10 @@ String _apkInstallErrorMessage(String? code) {
       return 'Installatie mislukt. Tik opnieuw op Installeren.';
     default:
       if (code != null && code.startsWith('download_http_401')) {
-        return 'GitHub token verlopen of ongeldig. '
-            'Controleer GITHUB_TOKEN in docker/.env op de NUC.';
+        return 'Niet ingelogd of sessie verlopen. Log opnieuw in en probeer de update opnieuw.';
       }
       if (code != null && code.startsWith('download_http_403')) {
-        return 'GitHub toegang geweigerd (403). '
+        return 'GitHub toegang geweigerd. '
             'Controleer GITHUB_TOKEN in docker/.env op de NUC.';
       }
       if (code != null && code.startsWith('download_http_404')) {

@@ -309,40 +309,31 @@ class DeviceControlIcons {
 }
 
 class LuxeShadows {
-  /// Soft lift — keeps cards above a recessed canvas.
+  /// Soft lift — één kleine schaduw. Drie grote blurs (32/60px) maakten
+  /// horizontaal én verticaal scrollen trillerig op telefoon/web.
   static const List<BoxShadow> soft = [
-    BoxShadow(color: Color(0x12000000), blurRadius: 12, offset: Offset(0, 4)),
-    BoxShadow(color: Color(0x18000000), blurRadius: 32, offset: Offset(0, 16)),
-    BoxShadow(color: Color(0x14000000), blurRadius: 60, offset: Offset(0, 30)),
+    BoxShadow(color: Color(0x18000000), blurRadius: 8, offset: Offset(0, 3)),
   ];
 
   static const List<BoxShadow> controlButton = [
-    BoxShadow(color: Color(0x10000000), blurRadius: 6, offset: Offset(0, 2)),
-    BoxShadow(color: Color(0x14000000), blurRadius: 18, offset: Offset(0, 8)),
-    BoxShadow(color: Color(0x10000000), blurRadius: 36, offset: Offset(0, 18)),
+    BoxShadow(color: Color(0x14000000), blurRadius: 6, offset: Offset(0, 2)),
   ];
 
   static const List<BoxShadow> lift = [
-    BoxShadow(color: Color(0x14000000), blurRadius: 14, offset: Offset(0, 5)),
-    BoxShadow(color: Color(0x1C000000), blurRadius: 44, offset: Offset(0, 20)),
-    BoxShadow(color: Color(0x1E000000), blurRadius: 90, offset: Offset(0, 48)),
+    BoxShadow(color: Color(0x1A000000), blurRadius: 10, offset: Offset(0, 4)),
   ];
 
   static const List<BoxShadow> brassGlow = [
     BoxShadow(
-        color: Color(0x40D4B06E),
-        blurRadius: 44,
-        spreadRadius: -6,
-        offset: Offset(0, 6)),
-    BoxShadow(
-        color: Color(0x14000000), blurRadius: 24, offset: Offset(0, 10)),
+        color: Color(0x28D4B06E),
+        blurRadius: 16,
+        spreadRadius: -4,
+        offset: Offset(0, 4)),
   ];
 
   /// Subtle dark lift — depth without heavy black blobs.
   static const List<BoxShadow> darkLift = [
-    BoxShadow(color: Color(0x38000000), blurRadius: 10, offset: Offset(0, 3)),
-    BoxShadow(color: Color(0x2A000000), blurRadius: 24, offset: Offset(0, 12)),
-    BoxShadow(color: Color(0x1C000000), blurRadius: 40, offset: Offset(0, 20)),
+    BoxShadow(color: Color(0x38000000), blurRadius: 8, offset: Offset(0, 3)),
   ];
 
   static List<BoxShadow> chip(BuildContext context) =>

@@ -86,7 +86,10 @@ class LuxeCanvas extends StatelessWidget {
             ),
           ),
         ),
-        HoneycombPattern.ambient(context, dark: useDark),
+        if (!context.isPhone)
+          IgnorePointer(
+            child: HoneycombPattern.ambient(context, dark: useDark),
+          ),
       ],
     );
   }
@@ -108,27 +111,23 @@ class StickyHeaderSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQuery.sizeOf(context);
-    Widget canvas = IgnorePointer(
-      child: ClipRect(
-        child: OverflowBox(
-          alignment: Alignment.topLeft,
-          minWidth: size.width,
-          maxWidth: size.width,
-          minHeight: size.height,
-          maxHeight: size.height,
-          child: const LuxeCanvas(),
-        ),
-      ),
-    );
+    // Do NOT OverflowBox a full-screen LuxeCanvas here. That re-paints
+    // honeycomb + 4 gradients on every scroll frame of a pinned header.
+    final p = Theme.of(context).extension<LuxePalette>() ?? LuxeColors.active;
+    final phone = context.isPhone;
+    final useDark = Theme.of(context).brightness == Brightness.dark;
+    final fill = useDark
+        ? p.creamLight
+        : (phone ? LuxePalette.phoneCreamLight : p.creamLight);
+    Widget canvas = ColoredBox(color: fill);
     if (boxShadow != null && boxShadow!.isNotEmpty) {
       canvas = DecoratedBox(
-        decoration: BoxDecoration(boxShadow: boxShadow),
-        child: canvas,
+        decoration: BoxDecoration(color: fill, boxShadow: boxShadow),
+        child: const SizedBox.expand(),
       );
     }
     return Material(
-      color: Colors.transparent,
+      color: fill,
       child: SizedBox(
         height: height,
         child: Stack(
