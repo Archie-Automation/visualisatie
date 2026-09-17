@@ -86,17 +86,17 @@ class LuxeCanvas extends StatelessWidget {
             ),
           ),
         ),
-        if (!context.isPhone)
-          IgnorePointer(
-            child: HoneycombPattern.ambient(context, dark: useDark),
-          ),
+        IgnorePointer(
+          child: HoneycombPattern.ambient(context, dark: useDark),
+        ),
       ],
     );
   }
 }
 
-/// Sticky header that still covers scrolling content, but paints the same
-/// full-page canvas as [LuxeBackdrop] (clipped to the bar) — not a flat fill.
+/// Sticky header: same [LuxeCanvas] as the page, clipped to the bar.
+/// Do not OverflowBox a full-screen canvas — that paints honeycomb for the
+/// whole viewport every scroll frame, and the clip already hides it.
 class StickyHeaderSurface extends StatelessWidget {
   const StickyHeaderSurface({
     super.key,
@@ -111,23 +111,17 @@ class StickyHeaderSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Do NOT OverflowBox a full-screen LuxeCanvas here. That re-paints
-    // honeycomb + 4 gradients on every scroll frame of a pinned header.
-    final p = Theme.of(context).extension<LuxePalette>() ?? LuxeColors.active;
-    final phone = context.isPhone;
-    final useDark = Theme.of(context).brightness == Brightness.dark;
-    final fill = useDark
-        ? p.creamLight
-        : (phone ? LuxePalette.phoneCreamLight : p.creamLight);
-    Widget canvas = ColoredBox(color: fill);
+    Widget canvas = const RepaintBoundary(
+      child: IgnorePointer(child: LuxeCanvas()),
+    );
     if (boxShadow != null && boxShadow!.isNotEmpty) {
       canvas = DecoratedBox(
-        decoration: BoxDecoration(color: fill, boxShadow: boxShadow),
-        child: const SizedBox.expand(),
+        decoration: BoxDecoration(boxShadow: boxShadow),
+        child: canvas,
       );
     }
     return Material(
-      color: fill,
+      color: Colors.transparent,
       child: SizedBox(
         height: height,
         child: Stack(
