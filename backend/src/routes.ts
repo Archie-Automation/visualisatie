@@ -71,6 +71,12 @@ import {
   getGithubLatest,
   isUpdateAvailableOnGithub
 } from "./githubLatest";
+import {
+  apkCacheFile,
+  ensureApkCacheDir,
+  pruneApkCache,
+  readCachedApk
+} from "./apkCache";
 import { readServerUpdateStatus, requestServerUpdate } from "./serverUpdate";
 import {
   cameraPath,
@@ -441,9 +447,10 @@ export function buildRouter(
   });
 
   /**
-   * Stream the latest Android APK from the GitHub Release asset.
-   * Geen JWT: de tablet moet kunnen updaten ook als de sessie-token
-   * niet meekomt op de streaming download. Rate-limit i.p.v. auth.
+   * Stream the latest Android APK.
+   * Cache on disk after the first GitHub fetch so tablets hit the NUC, not
+   * GitHub. Geen JWT (rate-limit). No refresh=1 wait before headers — that
+   * closed the Android client before a status line arrived.
    */
   r.get("/app/android.apk", async (req, res) => {
     const now = Date.now();
@@ -455,25 +462,113 @@ export function buildRouter(
     }
     apkDownloadTs.push(now);
 
-    const force = req.query.refresh === "1" || req.query.refresh === "true";
-    if (force) await getGithubLatest(true);
-    const result = await fetchAndroidApkFromGithub();
-    if (!result.ok) {
-      res.status(result.status).json({ error: result.error });
-      return;
+    req.setTimeout(10 * 60 * 1000);
+    res.setTimeout(10 * 60 * 1000);
+
+    try {
+      const latest = await getGithubLatest(false);
+      const meta = latest?.androidApk;
+      if (!meta) {
+        res.status(404).json({ error: "no_android_apk_on_latest_release" });
+        return;
+      }
+
+      const cached = readCachedApk(meta.id, meta.sizeBytes);
+      if (cached) {
+        const size = fs.statSync(cached).size;
+        res.setHeader(
+          "Content-Type",
+          "application/vnd.android.package-archive"
+        );
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${meta.name.replace(/"/g, "")}"`
+        );
+        res.setHeader("Content-Length", String(size));
+        fs.createReadStream(cached).pipe(res);
+        return;
+      }
+
+      // Send headers before talking to GitHub. The installed tablet APK
+      // uses HttpClient idleTimeout 15s — waiting for GitHub first closed
+      // the socket with "Connection closed before full header was received".
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.android.package-archive"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${meta.name.replace(/"/g, "")}"`
+      );
+      if (meta.sizeBytes > 0) {
+        res.setHeader("Content-Length", String(meta.sizeBytes));
+      }
+      res.flushHeaders();
+
+      const result = await fetchAndroidApkFromGithub();
+      if (!result.ok) {
+        logger.warn(
+          { error: result.error, status: result.status },
+          "GitHub APK-fetch na headers mislukt"
+        );
+        if (!res.writableEnded) res.destroy();
+        return;
+      }
+
+      ensureApkCacheDir();
+      pruneApkCache(result.id);
+      const dest = apkCacheFile(result.id);
+      const tmp = `${dest}.part`;
+      try {
+        fs.unlinkSync(tmp);
+      } catch {
+        /* ignore */
+      }
+      const fileOut = fs.createWriteStream(tmp);
+      const github = Readable.fromWeb(result.body);
+
+      const failCache = () => {
+        try {
+          fs.unlinkSync(tmp);
+        } catch {
+          /* ignore */
+        }
+      };
+      fileOut.on("error", failCache);
+      github.on("error", (err) => {
+        logger.warn({ err }, "GitHub APK-stream onderbroken");
+        failCache();
+        if (!res.writableEnded) res.destroy();
+      });
+      fileOut.on("finish", () => {
+        try {
+          if (result.sizeBytes > 0 && fileOut.bytesWritten !== result.sizeBytes) {
+            failCache();
+            return;
+          }
+          fs.renameSync(tmp, dest);
+        } catch (err) {
+          logger.warn({ err }, "APK-cache hernoemen mislukt");
+          failCache();
+        }
+      });
+
+      github.pipe(fileOut);
+      await new Promise<void>((resolve, reject) => {
+        res.on("finish", resolve);
+        res.on("close", () => resolve());
+        github.on("error", reject);
+        res.on("error", reject);
+        github.pipe(res);
+      });
+    } catch (err) {
+      logger.warn({ err }, "APK-download naar tablet mislukt");
+      if (!res.headersSent) {
+        res.status(502).json({ error: "apk_download_failed" });
+      } else if (!res.writableEnded) {
+        res.destroy();
+      }
     }
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.android.package-archive"
-    );
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${result.name.replace(/"/g, "")}"`
-    );
-    if (result.sizeBytes > 0) {
-      res.setHeader("Content-Length", String(result.sizeBytes));
-    }
-    Readable.fromWeb(result.body).pipe(res);
   });
 
   r.get("/health", (_req, res) => {

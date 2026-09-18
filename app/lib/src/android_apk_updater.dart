@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -67,16 +68,37 @@ Future<AndroidApkInstallResult> downloadAndInstallAndroidApk({
     return AndroidApkInstallResult.fail('install_permission_denied');
   }
 
-  final uri = Uri.parse('$apiBase/api/app/android.apk?refresh=1');
-  final request = http.Request('GET', uri);
-  if (token != null && token.isNotEmpty) {
-    request.headers['authorization'] = 'Bearer $token';
-  }
-  final client = http.Client();
+  final uri = Uri.parse('$apiBase/api/app/android.apk');
+  // Default HttpClient idleTimeout is 15s. GitHub-via-NUC often needs longer
+  // before the first header — that was "Connection closed before full header".
+  final io = HttpClient()
+    ..connectionTimeout = const Duration(seconds: 45)
+    ..idleTimeout = const Duration(minutes: 5);
+  final client = IOClient(io);
   try {
-    final response = await client.send(request).timeout(
-          const Duration(minutes: 10),
-        );
+    http.StreamedResponse? response;
+    Object? lastErr;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        final request = http.Request('GET', uri);
+        if (token != null && token.isNotEmpty) {
+          request.headers['authorization'] = 'Bearer $token';
+        }
+        response = await client.send(request).timeout(
+              const Duration(minutes: 10),
+            );
+        lastErr = null;
+        break;
+      } catch (e) {
+        lastErr = e;
+        if (attempt == 0) {
+          await Future<void>.delayed(const Duration(seconds: 2));
+        }
+      }
+    }
+    if (response == null) {
+      return AndroidApkInstallResult.fail('$lastErr');
+    }
     if (response.statusCode != 200) {
       return AndroidApkInstallResult.fail(
         'download_http_${response.statusCode}',

@@ -69,7 +69,8 @@ function stripV(tag: string): string {
 }
 
 async function ghJson(url: string): Promise<{ ok: boolean; status: number; body: unknown }> {
-  let res = await fetch(url, { headers: headers() });
+  const signal = AbortSignal.timeout(12_000);
+  let res = await fetch(url, { headers: headers(), signal });
 
   // If the token caused a 401/403, retry without auth (for public repos or
   // when the stored token is expired). A missing token is the most common
@@ -84,7 +85,7 @@ async function ghJson(url: string): Promise<{ ok: boolean; status: number; body:
       "User-Agent": "archie-os-version-check",
       "X-GitHub-Api-Version": "2022-11-28"
     };
-    res = await fetch(url, { headers: anonHeaders });
+    res = await fetch(url, { headers: anonHeaders, signal });
   }
 
   let body: unknown = null;
@@ -410,6 +411,7 @@ export function isUpdateAvailableOnGithub(
 /** Stream the latest release APK from GitHub (uses GITHUB_TOKEN for private repos). */
 export async function fetchAndroidApkFromGithub(): Promise<{
   ok: true;
+  id: number;
   name: string;
   sizeBytes: number;
   body: ReadableStream<Uint8Array>;
@@ -424,44 +426,73 @@ export async function fetchAndroidApkFromGithub(): Promise<{
     ...headers(),
     Accept: "application/octet-stream"
   };
-  let res = await fetch(apk.apiUrl, { headers: apkHeaders, redirect: "follow" });
-
-  // Expired / wrong token → retry anonymously (only works for public repos).
-  if ((res.status === 401 || res.status === 403) && githubToken()) {
-    logger.warn(
-      { status: res.status, assetId: apk.id, name: apk.name },
-      "GitHub APK-download: token geweigerd – opnieuw zonder token"
-    );
-    res = await fetch(apk.apiUrl, {
-      headers: { Accept: "application/octet-stream", "User-Agent": "archie-os-version-check" },
-      redirect: "follow"
+      const signal = AbortSignal.timeout(60_000);
+  try {
+    let res = await fetch(apk.apiUrl, {
+      headers: apkHeaders,
+      redirect: "follow",
+      signal
     });
-  }
 
-  if (!res.ok || !res.body) {
-    const hint =
-      res.status === 401 || res.status === 403
-        ? "Controleer GITHUB_TOKEN in docker/.env (token verlopen of onvoldoende rechten)"
-        : res.status === 404
-        ? "APK-asset niet gevonden op release 'android-latest'"
-        : undefined;
+    // Expired / wrong token → retry anonymously (only works for public repos).
+    if ((res.status === 401 || res.status === 403) && githubToken()) {
+      logger.warn(
+        { status: res.status, assetId: apk.id, name: apk.name },
+        "GitHub APK-download: token geweigerd – opnieuw zonder token"
+      );
+      res = await fetch(apk.apiUrl, {
+        headers: {
+          Accept: "application/octet-stream",
+          "User-Agent": "archie-os-version-check"
+        },
+        redirect: "follow",
+        signal
+      });
+    }
+
+    if (!res.ok || !res.body) {
+      const hint =
+        res.status === 401 || res.status === 403
+          ? "Controleer GITHUB_TOKEN in docker/.env (token verlopen of onvoldoende rechten)"
+          : res.status === 404
+          ? "APK-asset niet gevonden op release 'android-latest'"
+          : undefined;
+      logger.warn(
+        { status: res.status, assetId: apk.id, name: apk.name, hint },
+        "GitHub APK-download mislukt"
+      );
+      return {
+        ok: false,
+        status: res.status === 404 ? 404 : 502,
+        error: hint
+          ? `github_apk_download_failed_${res.status}: ${hint}`
+          : `github_apk_download_failed_${res.status}`
+      };
+    }
+
+    return {
+      ok: true,
+      id: apk.id,
+      name: apk.name,
+      sizeBytes: apk.sizeBytes,
+      body: res.body as ReadableStream<Uint8Array>
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const timedOut =
+      msg.includes("abort") ||
+      msg.includes("Timeout") ||
+      msg.includes("timeout");
     logger.warn(
-      { status: res.status, assetId: apk.id, name: apk.name, hint },
-      "GitHub APK-download mislukt"
+      { err, assetId: apk.id, name: apk.name },
+      timedOut
+        ? "GitHub APK-download: timeout (NUC bereikt GitHub niet op tijd)"
+        : "GitHub APK-download: netwerkfout"
     );
     return {
       ok: false,
-      status: res.status === 404 ? 404 : 502,
-      error: hint
-        ? `github_apk_download_failed_${res.status}: ${hint}`
-        : `github_apk_download_failed_${res.status}`
+      status: timedOut ? 504 : 502,
+      error: timedOut ? "github_apk_timeout" : "github_apk_network"
     };
   }
-
-  return {
-    ok: true,
-    name: apk.name,
-    sizeBytes: apk.sizeBytes,
-    body: res.body as ReadableStream<Uint8Array>
-  };
 }
