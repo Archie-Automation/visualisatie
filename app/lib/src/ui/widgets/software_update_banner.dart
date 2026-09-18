@@ -318,8 +318,17 @@ String _apkInstallErrorMessage(String? code) {
       if (code != null && code.startsWith('download_http_404')) {
         return 'APK niet gevonden op GitHub. Staat er een release "android-latest" met .apk?';
       }
+      if (code != null && code.startsWith('download_http_504')) {
+        return 'De NUC kreeg de APK niet op tijd van GitHub. Controleer netwerk/GITHUB_TOKEN en probeer opnieuw.';
+      }
       if (code != null && code.startsWith('download_http_')) {
         return 'Download mislukt ($code). Staat er een .apk op de GitHub Release?';
+      }
+      if (code != null &&
+          (code.contains('Connection closed before full header') ||
+              code.contains('ClientException'))) {
+        return 'Verbinding met de NUC viel weg tijdens de download. '
+            'Update eerst de server, daarna opnieuw Installeren.';
       }
       return 'Update mislukt${code == null || code.isEmpty ? '.' : ': $code'}';
   }
