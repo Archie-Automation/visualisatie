@@ -760,6 +760,10 @@ ThemeData buildLuxeTheme([Brightness brightness = Brightness.light]) {
       hintStyle: TextStyle(color: p.inkFaint),
       labelStyle: TextStyle(color: p.inkSoft),
       floatingLabelStyle: TextStyle(color: p.inkSoft),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide(color: p.brass, width: 1.5),
+      ),
     ),
   );
 }

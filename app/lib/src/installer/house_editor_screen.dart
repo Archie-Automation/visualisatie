@@ -4545,14 +4545,14 @@ class _KnxForm extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Vul hier de scene-groepsadressen in (DPT 18.001) zoals ze in ETS '
-            'op de muurknoppen staan, en kies per adres de ruimte.\n\n'
-            'Gebruikers kunnen daarna in Instellingen de waarden van die '
-            'KNX-scenes zelf bijstellen (licht, gordijnen) en opslaan in KNX — '
-            'mits scene opslaan (store/leren) in ETS is vrijgegeven.\n\n'
-            'Zonder adressen hieronder verschijnt die functie niet in Instellingen. '
-            'De KNX-programmeur bepaalt welke lampen op de scene zitten; de app '
-            'past alleen de waarden aan.',
+            'Per knop: ruimte, schakelaar (positie in de kamer), knopnaam, '
+            'optioneel scene (avond, dag, sfeer), het scene-groepsadres '
+            '(DPT 18.001) en het fysieke adres van die schakelaar.\n\n'
+            'Meerdere schakelaars in één ruimte mogen hetzelfde groepsadres '
+            'delen. Bij inlezen wordt het fysieke adres van de drukker '
+            'gecontroleerd, zodat de juiste schakelaar wordt herkend.\n\n'
+            'In Instellingen verschijnt het overzicht per ruimte. '
+            'Scene opslaan in KNX werkt alleen als store/leren in ETS is vrijgegeven.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 8),
@@ -4615,62 +4615,156 @@ class _SceneAddressList extends StatelessWidget {
       sceneLearn['addresses'] = rows;
     }
     final knownIds = {for (final r in rooms) r.id};
+    final byRoom = <String, List<int>>{};
+    for (var i = 0; i < rows.length; i++) {
+      final rid = '${rows[i]['roomId'] ?? ''}'.trim();
+      byRoom.putIfAbsent(rid, () => []).add(i);
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (var i = 0; i < rows.length; i++) ...[
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                flex: 3,
-                child: _BoundStrField(
-                  'ga',
-                  rows[i],
-                  onChanged,
-                  labelOverride: 'Scene-adres (GA)',
-                  gaSearch: true,
-                  gaDptHint: 'DPT18.001',
-                ),
+        for (final room in rooms)
+          if (byRoom[room.id] != null) ...[
+            Padding(
+              padding: const EdgeInsets.only(top: 12, bottom: 6),
+              child: Text(
+                room.label,
+                style: Theme.of(context).textTheme.titleSmall,
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                flex: 3,
-                child: _sceneRoomDropdown(rows[i], knownIds),
-              ),
-              IconButton(
-                tooltip: 'Verwijderen',
-                onPressed: () {
-                  rows.removeAt(i);
-                  sceneLearn['addresses'] = rows;
-                  onChanged();
-                },
-                icon: const Icon(Icons.delete_outline),
-              ),
-            ],
+            ),
+            for (final i in byRoom[room.id]!)
+              _addressCard(context, rows, i, knownIds),
+          ],
+        if (byRoom[''] != null) ...[
+          Padding(
+            padding: const EdgeInsets.only(top: 12, bottom: 6),
+            child: Text(
+              'Geen ruimte',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
           ),
-          _BoundStrField(
-            'name',
-            rows[i],
-            onChanged,
-            labelOverride: 'Naam (optioneel, intern)',
-            emptyMeansRemove: true,
-          ),
+          for (final i in byRoom['']!)
+            _addressCard(context, rows, i, knownIds),
         ],
         Align(
           alignment: Alignment.centerLeft,
           child: TextButton.icon(
             onPressed: () {
-              rows.add(<String, dynamic>{'ga': '', 'roomId': ''});
+              final lastRoom = rows.isEmpty
+                  ? ''
+                  : '${rows.last['roomId'] ?? ''}'.trim();
+              rows.add(<String, dynamic>{
+                'ga': '',
+                if (lastRoom.isNotEmpty) 'roomId': lastRoom,
+              });
               sceneLearn['addresses'] = rows;
               onChanged();
             },
             icon: const Icon(Icons.add),
-            label: const Text('Scene-adres toevoegen'),
+            label: const Text('Knop / scene-adres toevoegen'),
           ),
         ),
       ],
     );
+  }
+
+  Widget _addressCard(
+    BuildContext context,
+    List<Map<String, dynamic>> rows,
+    int i,
+    Set<String> knownIds,
+  ) {
+    final row = rows[i];
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: LuxeColors.lineSoft),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 4, 4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _addressCardTitle(row),
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Verwijderen',
+                    onPressed: () {
+                      rows.removeAt(i);
+                      sceneLearn['addresses'] = rows;
+                      onChanged();
+                    },
+                    icon: const Icon(Icons.delete_outline),
+                  ),
+                ],
+              ),
+              _sceneRoomDropdown(row, knownIds),
+              _BoundStrField(
+                'switchName',
+                row,
+                onChanged,
+                labelOverride: 'Schakelaar (positie in de ruimte)',
+                hintText: 'bij de deur, naast het bed, …',
+                emptyMeansRemove: true,
+              ),
+              _BoundStrField(
+                'physicalAddress',
+                row,
+                onChanged,
+                labelOverride: 'Fysiek adres schakelaar',
+                hintText: '1.1.15',
+                emptyMeansRemove: true,
+              ),
+              _BoundStrField(
+                'buttonName',
+                row,
+                onChanged,
+                labelOverride: 'Knop',
+                hintText: 'boven, links, …',
+                emptyMeansRemove: true,
+              ),
+              _BoundStrField(
+                'name',
+                row,
+                onChanged,
+                labelOverride: 'Scene (optioneel)',
+                hintText: 'avond, dag, sfeer, …',
+                emptyMeansRemove: true,
+              ),
+              _BoundStrField(
+                'ga',
+                row,
+                onChanged,
+                labelOverride: 'Scene-adres (GA)',
+                gaSearch: true,
+                gaDptHint: 'DPT18.001',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _addressCardTitle(Map<String, dynamic> row) {
+    final sw = '${row['switchName'] ?? ''}'.trim();
+    final btn = '${row['buttonName'] ?? ''}'.trim();
+    final scene = '${row['name'] ?? ''}'.trim();
+    final parts = [
+      if (sw.isNotEmpty) sw,
+      if (btn.isNotEmpty) btn,
+      if (scene.isNotEmpty) scene,
+    ];
+    if (parts.isEmpty) return 'Knop';
+    return parts.join(' · ');
   }
 
   Widget _sceneRoomDropdown(
@@ -5101,7 +5195,7 @@ class _ShadingSubtypeChip extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: selected ? scheme.primary : scheme.outlineVariant,
+              color: selected ? LuxeColors.brass : scheme.outlineVariant,
               width: selected ? 1.5 : 1,
             ),
           ),
@@ -5732,7 +5826,7 @@ class _FireplaceInstallerSection extends StatelessWidget {
           if (planika) ...[
             const SizedBox(height: 8),
             Text(
-              'Planika: 4 commando-GA’s (Start/Stop/Omhoog/Omlaag) — de app '
+              'Planika: 4 commando-GA’s (Aan/Uit/Omhoog/Omlaag) — de app '
               'schrijft alleen 1; de puls maakt KNX. Status alleen via de 4 '
               'contacten; geen aan/uit-adres. Working = aan. Combinaties: '
               'Error+Fuel = Bijvullen, Working+Ready = Wachten/Koelen.',
@@ -5933,8 +6027,8 @@ class _FireplaceInstallerSection extends StatelessWidget {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    row('on', 'Start'),
-                    row('off', 'Stop'),
+                    row('on', 'Aan'),
+                    row('off', 'Uit'),
                     row('up', 'Omhoog'),
                     row('down', 'Omlaag'),
                   ],
@@ -6279,11 +6373,29 @@ class _DeviceForm extends StatelessWidget {
                   onChanged();
                 },
               ),
-              if (showSystemTile) _DeviceSystemTilePicker(
-                device: device,
-                house: house,
-                onChanged: onChanged,
-              ),
+              if (type == 'position_actuator')
+                LuxeSwitchRow(
+                  title: 'Toon bij Zonwering / gordijn',
+                  subtitle:
+                      'Standaard aan: zelfde tegel als zonwering, geen eigen '
+                      'POSITIE-tegel. Uit: verdwijnt uit die visualisatie; zet '
+                      'het dan op een eigen systeemtegel.',
+                  value: device['showInShading'] != false,
+                  onChanged: (v) {
+                    if (v) {
+                      device.remove('showInShading');
+                    } else {
+                      device['showInShading'] = false;
+                    }
+                    onChanged();
+                  },
+                ),
+              if (showSystemTile || type == 'position_actuator')
+                _DeviceSystemTilePicker(
+                  device: device,
+                  house: house,
+                  onChanged: onChanged,
+                ),
             ],
           ),
         ),

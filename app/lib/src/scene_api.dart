@@ -129,6 +129,9 @@ class _SceneApi {
     required int number,
     List<String>? members,
     String? name,
+    String? src,
+    String? switchName,
+    String? buttonName,
   }) async {
     final token = _ref.read(authProvider).token ?? '';
     final res = await http.post(
@@ -142,6 +145,11 @@ class _SceneApi {
         'number': number,
         if (members != null) 'memberIds': members,
         if (name != null && name.trim().isNotEmpty) 'name': name.trim(),
+        if (src != null && src.trim().isNotEmpty) 'src': src.trim(),
+        if (switchName != null && switchName.trim().isNotEmpty)
+          'switchName': switchName.trim(),
+        if (buttonName != null && buttonName.trim().isNotEmpty)
+          'buttonName': buttonName.trim(),
       }),
     );
     if (res.statusCode != 200) {

@@ -12,7 +12,11 @@ import {
   encodeSceneByte,
   extractSceneControlByte,
   isTrustedSceneGa,
-  valuePreview
+  matchSceneLearnAddress,
+  normalizeIndividualAddress,
+  parseSceneLearnAddresses,
+  valuePreview,
+  type SceneLearnAddress
 } from "./knxScene";
 import type { KnxBus, KnxTelegram } from "./knxBus";
 import type { Device, HouseConfig, Scene, GA } from "./types";
@@ -47,6 +51,10 @@ export type SceneHeardPayload = {
   timeout?: boolean;
   reason?: string;
   phase?: string;
+  src?: string;
+  switchName?: string;
+  buttonName?: string;
+  sceneName?: string;
 };
 
 type ListenPhase = "wait_button" | "busy";
@@ -59,6 +67,7 @@ type ListenSession = {
   sceneGas: Set<string>;
   phase: ListenPhase;
   seen: number;
+  ignoredSrc: number;
   shadeSnap: Map<string, number | undefined>;
 };
 
@@ -125,15 +134,37 @@ function onBusTelegram(info: KnxTelegram): void {
   const byte = extractSceneControlByte(info.value);
   const number = byte === null ? null : decodeSceneRecallByte(byte);
   listen.seen += 1;
+  const matched = matchSceneLearnAddress(
+    getConfig(),
+    listen.roomId,
+    ga,
+    info.src
+  );
   logger.info(
-    { ga, src: info.src, evt, byte, number, value: valuePreview(info.value) },
+    {
+      ga,
+      src: info.src,
+      matched: Boolean(matched),
+      evt,
+      byte,
+      number,
+      value: valuePreview(info.value)
+    },
     "knx scene listen telegram"
   );
   if (byte === null || number === null) return;
+  if (!matched) {
+    listen.ignoredSrc += 1;
+    logger.info(
+      { ga, src: info.src, roomId: listen.roomId },
+      "knx scene listen ignored: fysiek adres hoort niet bij deze kamer"
+    );
+    return;
+  }
   listen.phase = "busy";
   const roomId = listen.roomId;
   const t0 = info.ts || Date.now();
-  void runWizardAfterButton(roomId, ga, number, t0).catch(async (err) => {
+  void runWizardAfterButton(roomId, ga, number, t0, info.src, matched).catch(async (err) => {
     logger.warn({ err, ga, number }, "knx scene wizard failed");
     emitHeard({
       roomId,
@@ -202,17 +233,21 @@ export async function startListen(roomId: string, userId: string): Promise<Liste
     sceneGas: new Set(sceneGas),
     phase: "wait_button",
     seen: 0,
+    ignoredSrc: 0,
     shadeSnap,
     timer: setTimeout(() => {
       if (!listen || listen.phase !== "wait_button") return;
-      logger.info({ roomId, seen: listen.seen }, "knx scene listen timeout");
+      logger.info(
+        { roomId, seen: listen.seen, ignoredSrc: listen.ignoredSrc },
+        "knx scene listen timeout"
+      );
       emitHeard({
         roomId,
         ga: "",
         number: 0,
         trusted: false,
         timeout: true,
-        reason: "timeout"
+        reason: listen.ignoredSrc > 0 ? "wrong_switch" : "timeout"
       });
     }, LISTEN_MS)
   };
@@ -236,11 +271,39 @@ export function stopListen(): void {
   listen = null;
 }
 
+function namesForHeard(
+  roomId: string,
+  ga: string,
+  src: string | undefined,
+  seed: SceneLearnAddress
+): { switchName?: string; buttonName?: string; sceneName?: string } {
+  const srcN = normalizeIndividualAddress(src || seed.physicalAddress);
+  const rows = parseSceneLearnAddresses(getConfig()).filter((a) => {
+    if (a.roomId !== roomId || a.ga !== ga) return false;
+    if (!srcN || !a.physicalAddress) return true;
+    return normalizeIndividualAddress(a.physicalAddress) === srcN;
+  });
+  const switchName = seed.switchName || rows.find((r) => r.switchName)?.switchName;
+  const uniqueButtons = [
+    ...new Set(rows.map((r) => r.buttonName).filter((n): n is string => Boolean(n)))
+  ];
+  const uniqueScenes = [
+    ...new Set(rows.map((r) => r.name).filter((n): n is string => Boolean(n)))
+  ];
+  return {
+    ...(switchName ? { switchName } : {}),
+    ...(uniqueButtons.length === 1 ? { buttonName: uniqueButtons[0] } : {}),
+    ...(uniqueScenes.length === 1 ? { sceneName: uniqueScenes[0] } : {})
+  };
+}
+
 async function runWizardAfterButton(
   roomId: string,
   ga: string,
   number: number,
-  t0: number
+  t0: number,
+  src?: string,
+  matched?: SceneLearnAddress
 ): Promise<void> {
   const bus = busRef;
   if (!bus) throw new Error("KNX bus niet klaar");
@@ -253,6 +316,7 @@ async function runWizardAfterButton(
     shadeSnap
   });
   const existing = findRoomKnxScene(cfg, roomId, ga, number);
+  const names = matched ? namesForHeard(roomId, ga, src, matched) : {};
   emitHeard({
     roomId,
     ga,
@@ -262,7 +326,9 @@ async function runWizardAfterButton(
     members: result.members,
     existingId: existing?.id,
     existingName: existing?.name,
-    phase: "learned"
+    phase: "learned",
+    ...(src ? { src } : {}),
+    ...names
   });
 }
 
@@ -713,6 +779,9 @@ export async function learnKnxScene(opts: {
   number: number;
   memberIds?: string[];
   name?: string;
+  src?: string;
+  switchName?: string;
+  buttonName?: string;
 }): Promise<{ scene: Scene; members: LearnedMember[] }> {
   const bus = busRef;
   if (!bus) throw new Error("KNX bus niet klaar");
@@ -726,6 +795,11 @@ export async function learnKnxScene(opts: {
   const inRooms = devicesInRoom(cfg, opts.roomId);
   const allowed = new Set(inRooms.map((d) => d.id));
   const memberIds = (opts.memberIds ?? []).filter((id) => allowed.has(id));
+  const knxMeta = {
+    src: opts.src?.trim() || undefined,
+    switchName: opts.switchName?.trim() || undefined,
+    buttonName: opts.buttonName?.trim() || undefined
+  };
 
   if (opts.memberIds) {
     const scene = upsertRoomScene(
@@ -733,7 +807,8 @@ export async function learnKnxScene(opts: {
       ga,
       number,
       memberIds,
-      opts.name
+      opts.name,
+      knxMeta
     );
     return { scene, members: learnedFromIds(inRooms, memberIds, bus) };
   }
@@ -745,7 +820,8 @@ export async function learnKnxScene(opts: {
     ga,
     number,
     result.memberIds,
-    opts.name
+    opts.name,
+    knxMeta
   );
   return { scene, members: result.members };
 }
@@ -755,28 +831,47 @@ function upsertRoomScene(
   ga: string,
   number: number,
   memberIds: string[],
-  name?: string
+  name?: string,
+  knxMeta?: { src?: string; switchName?: string; buttonName?: string }
 ): Scene {
   let saved: Scene | undefined;
   const label = name?.trim();
+  const src = knxMeta?.src?.trim();
+  const switchName = knxMeta?.switchName?.trim();
+  const buttonName = knxMeta?.buttonName?.trim();
   updateConfig((draft) => {
     for (const f of draft.floors) {
       for (const r of f.rooms) {
         if (r.id !== roomId) continue;
         const scenes = r.scenes ?? [];
         let sc = scenes.find((s) => s.knx?.ga === ga && s.knx?.number === number);
+        const knx = {
+          ga,
+          number,
+          ...(src ? { src } : sc?.knx?.src ? { src: sc.knx.src } : {}),
+          ...(switchName
+            ? { switchName }
+            : sc?.knx?.switchName
+              ? { switchName: sc.knx.switchName }
+              : {}),
+          ...(buttonName
+            ? { buttonName }
+            : sc?.knx?.buttonName
+              ? { buttonName: sc.knx.buttonName }
+              : {})
+        };
         if (!sc) {
           sc = {
             id: `scn-knx-${roomId}-${ga.replace(/\//g, "-")}-${number}`,
             name: label || `Scene ${number}`,
             actions: [],
-            knx: { ga, number },
+            knx,
             members: memberIds
           };
           scenes.push(sc);
           r.scenes = scenes;
         } else {
-          sc.knx = { ga, number };
+          sc.knx = knx;
           sc.members = memberIds;
           if (label) sc.name = label;
         }

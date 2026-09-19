@@ -1693,7 +1693,10 @@ export function buildRouter(
         number: z.number().int().min(1).max(64),
         extraRoomIds: z.array(z.string()).max(8).optional(),
         memberIds: z.array(z.string()).max(80).optional(),
-        name: z.string().min(1).max(80).optional()
+        name: z.string().min(1).max(80).optional(),
+        src: z.string().max(20).optional(),
+        switchName: z.string().max(80).optional(),
+        buttonName: z.string().max(80).optional()
       })
       .safeParse(req.body);
     if (!parsed.success)
@@ -1704,7 +1707,10 @@ export function buildRouter(
         ga: parsed.data.ga,
         number: parsed.data.number,
         memberIds: parsed.data.memberIds,
-        name: parsed.data.name
+        name: parsed.data.name,
+        src: parsed.data.src,
+        switchName: parsed.data.switchName,
+        buttonName: parsed.data.buttonName
       });
       await bus.refreshGroupAddresses(collectAllGAs(getConfig()));
       ws.broadcastConfigChanged(getConfigVersion());

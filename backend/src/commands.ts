@@ -509,7 +509,7 @@ export async function dispatch(
           return;
         }
         if (fireplaceIsPlanika(fp)) {
-          throw new Error("Planika start/stop-GA ontbreekt");
+          throw new Error("Planika aan/uit-GA ontbreekt");
         }
       }
       const onGa = fp.onOff?.ga;

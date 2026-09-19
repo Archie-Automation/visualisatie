@@ -2919,7 +2919,6 @@ class _FireplaceTileState extends ConsumerState<FireplaceTile> {
         ? onOffRaw.cast<String, dynamic>()
         : <String, dynamic>{};
     final discreteMode = _fireplaceIsDiscrete(cfg);
-    final planika = fireplaceIsPlanika(cfg);
     final statusBits = fireplaceStatusBitsMap(cfg);
     final hasStatusBits = fireplaceHasStatusBits(cfg);
     final onStatusGa = onOff['statusGa'] as String? ?? onOff['ga'] as String?;
@@ -3061,13 +3060,7 @@ class _FireplaceTileState extends ConsumerState<FireplaceTile> {
                 ),
               ],
             ),
-            trailing: planika
-                ? DeviceTileLayout.trailingStartStop(
-                    running: on,
-                    onStart: () => sendDiscrete('on'),
-                    onStop: () => sendDiscrete('off'),
-                  )
-                : DeviceTileLayout.trailingSwitch(
+            trailing: DeviceTileLayout.trailingSwitch(
                     context: context,
                     value: on,
                     onChanged: toggleOn,

@@ -151,6 +151,10 @@ class KnxSceneHeard {
     this.existingId,
     this.existingName,
     this.learnedMembers = const [],
+    this.src,
+    this.switchName,
+    this.buttonName,
+    this.sceneName,
   });
   final String roomId;
   final String ga;
@@ -162,6 +166,10 @@ class KnxSceneHeard {
   final String? existingId;
   final String? existingName;
   final List<Map<String, dynamic>> learnedMembers;
+  final String? src;
+  final String? switchName;
+  final String? buttonName;
+  final String? sceneName;
 }
 
 class KnxSceneHeardController extends Notifier<KnxSceneHeard?> {
@@ -504,6 +512,10 @@ class BusController extends Notifier<BusState> {
                       for (final m in (p['members'] as List?) ?? const [])
                         if (m is Map<String, dynamic>) m,
                     ],
+                    src: (p['src'] as String?)?.trim(),
+                    switchName: (p['switchName'] as String?)?.trim(),
+                    buttonName: (p['buttonName'] as String?)?.trim(),
+                    sceneName: (p['sceneName'] as String?)?.trim(),
                   ));
           }
         },

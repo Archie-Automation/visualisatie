@@ -144,10 +144,16 @@ String? defaultSystemSlugForType(DeviceType type) {
 }
 
 /// Explicit `systemId` wins; otherwise the type default (not Diverse).
+/// Klep/raam zonder `systemId` valt onder zonwering, tenzij de installateur
+/// `showInShading` uitzet — dan alleen een gekozen/custom tegel.
 String? systemSlugForDevice(Device d, [HouseConfig? cfg]) {
   final assigned = (d.raw['systemId'] as String?)?.trim();
   if (assigned != null && assigned.isNotEmpty) {
     if (houseSystemBySlug(assigned, cfg) != null) return assigned;
+  }
+  if (d.type == DeviceType.positionActuator &&
+      !d.showInShadingVisualization) {
+    return null;
   }
   return defaultSystemSlugForType(d.type);
 }

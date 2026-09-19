@@ -59,21 +59,13 @@ class FavoriteDeviceWrap extends ConsumerWidget {
                   height: 44,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: isFav
-                        ? LuxeColors.brass.withValues(alpha: 0.12)
-                        : LuxeColors.ink.withValues(alpha: 0.04),
+                    color: LuxeColors.ink.withValues(alpha: 0.04),
                     border: Border.all(
-                      color: isFav
-                          ? LuxeColors.brass.withValues(alpha: 0.45)
-                          : LuxeColors.ink.withValues(alpha: 0.18),
+                      color: LuxeColors.ink.withValues(alpha: 0.18),
                     ),
                   ),
                   child: Center(
-                    child: Icon(
-                      isFav ? Icons.star_rounded : Icons.star_outline_rounded,
-                      size: 22,
-                      color: isFav ? LuxeColors.brass : LuxeColors.inkSoft,
-                    ),
+                    child: _FavoriteStar(active: isFav, size: 22),
                   ),
                 ),
               ),
@@ -81,6 +73,45 @@ class FavoriteDeviceWrap extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Goud alleen in de ster. Ring en sterrand blijven antraciet (light: goud
+/// op goud was onleesbaar).
+class _FavoriteStar extends StatelessWidget {
+  const _FavoriteStar({required this.active, this.size = 22});
+
+  final bool active;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!active) {
+      return Icon(
+        Icons.star_outline_rounded,
+        size: size,
+        color: LuxeColors.inkSoft,
+      );
+    }
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(
+            Icons.star_rounded,
+            size: size,
+            color: LuxeColors.brass,
+          ),
+          Icon(
+            Icons.star_outline_rounded,
+            size: size,
+            color: LuxeColors.ink,
+          ),
+        ],
+      ),
     );
   }
 }
