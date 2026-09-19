@@ -4129,7 +4129,9 @@ class _KnxInstallerSectionState extends State<_KnxInstallerSection> {
                               ? 'Simulatiemodus (KNX_SIMULATE=1): geen echte bus'
                               : (_status!.connected
                                   ? 'Tunnel actief naar gateway'
-                                  : 'Geen verbinding met KNX-gateway'),
+                                  : _status!.reconnecting
+                                      ? 'Tunnel weg, opnieuw verbinden'
+                                      : 'Geen verbinding met KNX-gateway'),
                       child: Icon(
                         Icons.circle,
                         size: 22,
@@ -4139,7 +4141,9 @@ class _KnxInstallerSectionState extends State<_KnxInstallerSection> {
                                 ? Colors.amber.shade700
                                 : _status!.connected
                                     ? Colors.green.shade600
-                                    : Colors.grey.shade500,
+                                    : _status!.reconnecting
+                                        ? Colors.amber.shade700
+                                        : Colors.grey.shade500,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -4159,7 +4163,9 @@ class _KnxInstallerSectionState extends State<_KnxInstallerSection> {
                                     ? 'Simulatie actief (${_status!.host}:${_status!.port})'
                                     : _status!.connected
                                         ? 'Verbonden met ${_status!.host}:${_status!.port}'
-                                        : 'Niet verbonden ? backend: ${_status!.host}:${_status!.port}',
+                                        : _status!.reconnecting
+                                            ? 'Opnieuw verbinden met ${_status!.host}:${_status!.port}'
+                                            : 'Niet verbonden — backend: ${_status!.host}:${_status!.port}',
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],

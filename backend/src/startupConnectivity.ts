@@ -12,6 +12,7 @@ export type ConnectivitySnapshot = {
     disabled: boolean;
     host: string;
     port: number;
+    reconnecting: boolean;
   };
   media: { id: string; name: string; brand: string; online: boolean }[];
   lutron: {
