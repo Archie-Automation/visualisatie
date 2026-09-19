@@ -194,13 +194,8 @@ export class KnxBus extends EventEmitter {
     await this.teardownConnection();
     this.closing = false;
     if (this.disabled) return;
-    try {
-      await this.connect(collectAllGAs(cfg));
-      this.reconnectAttempt = 0;
-    } catch (err) {
-      this.scheduleAutoReconnect();
-      throw err;
-    }
+    await this.connect(collectAllGAs(cfg));
+    this.reconnectAttempt = 0;
   }
 
   private clearReconnectTimer(): void {
@@ -212,7 +207,7 @@ export class KnxBus extends EventEmitter {
   /** Tunnel weg of start mislukt: opnieuw proberen, backoff tot 30 s. */
   private scheduleAutoReconnect(): void {
     if (this.closing || this.disabled || this.simulate) return;
-    if (this.reconnectTimer || this.reconnecting) return;
+    if (this.reconnectTimer) return;
     const delay = Math.min(30_000, 1000 * 2 ** Math.min(this.reconnectAttempt, 5));
     this.reconnectAttempt += 1;
     logger.warn(
