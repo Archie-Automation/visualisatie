@@ -233,6 +233,13 @@ class Device {
   bool get usesPositionControl =>
       type == DeviceType.shading || type == DeviceType.positionActuator;
 
+  /// Klep/raam hoort bij Zonwering / gordijn tenzij de installateur het uitzet.
+  bool get showInShadingVisualization {
+    if (type == DeviceType.shading) return true;
+    if (type != DeviceType.positionActuator) return false;
+    return raw['showInShading'] != false;
+  }
+
   /// `knx` (standaard) of `lutron` — direct Homeworks #OUTPUT i.p.v. KNX-GA.
   String get busControl {
     final s = (raw['control'] as String?)?.trim();
@@ -537,6 +544,9 @@ class Scene {
   final List<SceneMediaAction> mediaActions;
   final String? knxGa;
   final int? knxNumber;
+  final String? knxSrc;
+  final String? knxSwitchName;
+  final String? knxButtonName;
   final List<String> members;
 
   const Scene({
@@ -548,6 +558,9 @@ class Scene {
     this.mediaActions = const [],
     this.knxGa,
     this.knxNumber,
+    this.knxSrc,
+    this.knxSwitchName,
+    this.knxButtonName,
     this.members = const [],
   });
 
@@ -568,6 +581,9 @@ class Scene {
           .toList(),
       knxGa: knx is Map ? knx['ga'] as String? : null,
       knxNumber: knx is Map ? (knx['number'] as num?)?.toInt() : null,
+      knxSrc: knx is Map ? (knx['src'] as String?)?.trim() : null,
+      knxSwitchName: knx is Map ? (knx['switchName'] as String?)?.trim() : null,
+      knxButtonName: knx is Map ? (knx['buttonName'] as String?)?.trim() : null,
       members: ((j['members'] as List?) ?? const [])
           .map((e) => '$e')
           .where((e) => e.isNotEmpty)
@@ -584,7 +600,15 @@ class Scene {
         if (mediaActions.isNotEmpty)
           'mediaActions': mediaActions.map((a) => a.toJson()).toList(),
         if (knxGa != null && knxNumber != null)
-          'knx': {'ga': knxGa, 'number': knxNumber},
+          'knx': {
+            'ga': knxGa,
+            'number': knxNumber,
+            if (knxSrc != null && knxSrc!.isNotEmpty) 'src': knxSrc,
+            if (knxSwitchName != null && knxSwitchName!.isNotEmpty)
+              'switchName': knxSwitchName,
+            if (knxButtonName != null && knxButtonName!.isNotEmpty)
+              'buttonName': knxButtonName,
+          },
         if (members.isNotEmpty) 'members': members,
       };
 
@@ -596,6 +620,9 @@ class Scene {
     List<SceneMediaAction>? mediaActions,
     String? knxGa,
     int? knxNumber,
+    String? knxSrc,
+    String? knxSwitchName,
+    String? knxButtonName,
     List<String>? members,
   }) =>
       Scene(
@@ -607,6 +634,9 @@ class Scene {
         mediaActions: mediaActions ?? this.mediaActions,
         knxGa: knxGa ?? this.knxGa,
         knxNumber: knxNumber ?? this.knxNumber,
+        knxSrc: knxSrc ?? this.knxSrc,
+        knxSwitchName: knxSwitchName ?? this.knxSwitchName,
+        knxButtonName: knxButtonName ?? this.knxButtonName,
         members: members ?? this.members,
       );
 }
@@ -737,10 +767,16 @@ List<KnxSceneLearnAddress> _parseKnxSceneLearnAddresses(Map? sl) {
     if (ga.isEmpty) continue;
     final name = '${e['name'] ?? ''}'.trim();
     final roomId = '${e['roomId'] ?? ''}'.trim();
+    final switchName = '${e['switchName'] ?? ''}'.trim();
+    final buttonName = '${e['buttonName'] ?? ''}'.trim();
+    final physicalAddress = '${e['physicalAddress'] ?? ''}'.trim();
     out.add(KnxSceneLearnAddress(
       ga: ga,
       name: name.isEmpty ? null : name,
       roomId: roomId.isEmpty ? null : roomId,
+      switchName: switchName.isEmpty ? null : switchName,
+      buttonName: buttonName.isEmpty ? null : buttonName,
+      physicalAddress: physicalAddress.isEmpty ? null : physicalAddress,
     ));
   }
   return out;
@@ -751,11 +787,17 @@ class KnxSceneLearnAddress {
   final String ga;
   final String? name;
   final String? roomId;
+  final String? switchName;
+  final String? buttonName;
+  final String? physicalAddress;
 
   const KnxSceneLearnAddress({
     required this.ga,
     this.name,
     this.roomId,
+    this.switchName,
+    this.buttonName,
+    this.physicalAddress,
   });
 }
 

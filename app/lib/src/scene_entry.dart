@@ -521,9 +521,7 @@ class FireplaceEntry extends SceneEntry {
   @override
   String summary() {
     String base;
-    if (fireplaceIsPlanika(_cfg)) {
-      base = on ? 'Start' : 'Stop';
-    } else if (!on) {
+    if (!on) {
       base = 'Uit';
     } else {
       final sr = _stepRanges;
@@ -1329,6 +1327,9 @@ class SceneDraft {
   /// KNX hardware binding; preserved when editing app actions.
   final String? knxGa;
   final int? knxNumber;
+  final String? knxSrc;
+  final String? knxSwitchName;
+  final String? knxButtonName;
   final List<String> members;
 
   SceneDraft({
@@ -1339,6 +1340,9 @@ class SceneDraft {
     this.mediaExtras = const [],
     this.knxGa,
     this.knxNumber,
+    this.knxSrc,
+    this.knxSwitchName,
+    this.knxButtonName,
     this.members = const [],
   });
 
@@ -1380,6 +1384,9 @@ class SceneDraft {
       mediaExtras: mediaExtras,
       knxGa: s.knxGa,
       knxNumber: s.knxNumber,
+      knxSrc: s.knxSrc,
+      knxSwitchName: s.knxSwitchName,
+      knxButtonName: s.knxButtonName,
       members: s.members,
     );
   }
@@ -1401,6 +1408,9 @@ class SceneDraft {
       mediaActions: mediaActions,
       knxGa: knxGa,
       knxNumber: knxNumber,
+      knxSrc: knxSrc,
+      knxSwitchName: knxSwitchName,
+      knxButtonName: knxButtonName,
       members: members,
     );
   }
@@ -1413,6 +1423,9 @@ class SceneDraft {
         mediaExtras: [...mediaExtras],
         knxGa: knxGa,
         knxNumber: knxNumber,
+        knxSrc: knxSrc,
+        knxSwitchName: knxSwitchName,
+        knxButtonName: knxButtonName,
         members: [...members],
       );
 }

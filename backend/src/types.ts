@@ -254,6 +254,11 @@ export interface PositionActuatorDevice extends DeviceBase {
   slider?: boolean;
   /** Which controls appear in the customer app (same keys as shading). */
   shadingUi?: ShadingUi;
+  /**
+   * In de klant-app bij Zonwering / gordijn. Default `true`.
+   * `false`: geen kamer-/systeemtegel zonwering; wel custom systeemtegel.
+   */
+  showInShading?: boolean;
   ga: ShadingGA;
 }
 
@@ -1386,7 +1391,14 @@ export interface Scene {
   /** Optional Sonos/Bluesound commands executed after/between KNX actions. */
   mediaActions?: SceneMediaAction[];
   /** KNX hardware scene (DPT 18.001) bound to a wall button. */
-  knx?: { ga: GA; number: number };
+  knx?: {
+    ga: GA;
+    number: number;
+    /** Individual address of the switch that last recalled this slot. */
+    src?: string;
+    switchName?: string;
+    buttonName?: string;
+  };
   /** Device ids learned as members of this KNX scene. */
   members?: string[];
 }
@@ -1520,7 +1532,20 @@ export interface HouseConfig {
    */
   knxSceneLearn?: {
     enabled?: boolean;
-    addresses?: Array<{ ga: GA; name?: string; roomId?: string } | GA>;
+    addresses?: Array<
+      | {
+          ga: GA;
+          name?: string;
+          roomId?: string;
+          /** Positie van de schakelaar in de ruimte. */
+          switchName?: string;
+          /** Knop op die schakelaar die de scene aanroept. */
+          buttonName?: string;
+          /** Individueel adres van de schakelaar (bijv. 1.1.15). */
+          physicalAddress?: string;
+        }
+      | GA
+    >;
   };
   /** Wandtablet idle timeout + screensaver (Android client). */
   displayPanel?: {

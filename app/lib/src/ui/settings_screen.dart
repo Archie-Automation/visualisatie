@@ -269,7 +269,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         'Alleen installer en superuser. U past zelf de waarden aan van KNX-scenes '
             'die de programmeur in ETS heeft gemaakt: dimstand, aan/uit, gordijnen. '
             'Lampen of kanalen toevoegen kan niet.\n\n'
-            'Kies de kamer, lees de fysieke scene-knop in, stel bij, en sla op in KNX. '
+            'Overzicht per ruimte: schakelaar, knop en scene. '
+            'Lees de fysieke knop in (groepsadres + fysiek adres), stel bij, en sla op in KNX. '
             'Opslaan in KNX werkt alleen als scene opslaan (store/leren) in ETS '
             'is vrijgegeven.\n\n'
             'Tijdens inlezen gaan lampen in die kamer even uit en aan.',

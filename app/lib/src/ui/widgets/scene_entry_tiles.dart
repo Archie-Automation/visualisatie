@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../device_control_specs.dart';
-import '../../fireplace_status.dart';
 import '../../fireplace_step_ranges.dart';
 import '../../media_api.dart';
 import '../../models.dart';
@@ -432,23 +431,21 @@ class _OnOffRow extends StatelessWidget {
   const _OnOffRow({
     required this.on,
     required this.onChanged,
-    this.startStop = false,
   });
   final bool on;
   final ValueChanged<bool> onChanged;
-  final bool startStop;
   @override
   Widget build(BuildContext context) {
     return SegmentedButton<bool>(
       showSelectedIcon: false,
-      segments: [
+      segments: const [
         ButtonSegment(
           value: true,
-          label: Text(startStop ? 'START' : 'AAN'),
+          label: Text('AAN'),
         ),
         ButtonSegment(
           value: false,
-          label: Text(startStop ? 'STOP' : 'UIT'),
+          label: Text('UIT'),
         ),
       ],
       selected: {on},
@@ -722,12 +719,10 @@ class _FireplaceControls extends StatelessWidget {
     final fp = entry.device.raw['fireplace'] as Map?;
     final cfg = fp?.cast<String, dynamic>();
     final discrete = cfg != null && cfg['controlMode'] == 'discrete';
-    final planika = cfg != null && fireplaceIsPlanika(cfg);
 
     if (discrete) {
       return _OnOffRow(
         on: entry.on,
-        startStop: planika,
         onChanged: (v) => onChanged(FireplaceEntry(
             device: entry.device,
             on: v,

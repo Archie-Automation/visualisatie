@@ -59,6 +59,10 @@ type Outgoing =
         existingName?: string;
         members?: unknown[];
         phase?: string;
+        src?: string;
+        switchName?: string;
+        buttonName?: string;
+        sceneName?: string;
       };
     };
 
@@ -78,6 +82,10 @@ export interface WsHub {
     existingName?: string;
     members?: unknown[];
     phase?: string;
+    src?: string;
+    switchName?: string;
+    buttonName?: string;
+    sceneName?: string;
   }): void;
   close(): Promise<void>;
 }

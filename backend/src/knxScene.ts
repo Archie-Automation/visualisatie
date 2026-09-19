@@ -50,15 +50,58 @@ export function catalogSceneAddresses(): GA[] {
   return out;
 }
 
+export type SceneLearnAddress = {
+  ga: GA;
+  roomId?: string;
+  name?: string;
+  switchName?: string;
+  buttonName?: string;
+  physicalAddress?: string;
+};
+
+/** Individueel adres `1.1.15` — leading zeros weg. */
+export function normalizeIndividualAddress(raw?: string | null): string {
+  const s = String(raw ?? "").trim();
+  const m = s.match(/^(\d+)\.(\d+)\.(\d+)$/);
+  if (!m) return s;
+  return `${Number(m[1])}.${Number(m[2])}.${Number(m[3])}`;
+}
+
+export function parseSceneLearnAddresses(cfg: HouseConfig): SceneLearnAddress[] {
+  const out: SceneLearnAddress[] = [];
+  for (const raw of cfg.knxSceneLearn?.addresses ?? []) {
+    if (typeof raw === "string") {
+      const ga = raw.trim();
+      if (ga) out.push({ ga });
+      continue;
+    }
+    const ga = raw?.ga?.trim();
+    if (!ga) continue;
+    const roomId = raw.roomId?.trim();
+    const name = raw.name?.trim();
+    const switchName = raw.switchName?.trim();
+    const buttonName = raw.buttonName?.trim();
+    const physicalAddress = raw.physicalAddress?.trim();
+    out.push({
+      ga,
+      ...(roomId ? { roomId } : {}),
+      ...(name ? { name } : {}),
+      ...(switchName ? { switchName } : {}),
+      ...(buttonName ? { buttonName } : {}),
+      ...(physicalAddress ? { physicalAddress } : {})
+    });
+  }
+  return out;
+}
+
 /** Scene-GAs die de app-installer heeft ingevuld. */
 export function configuredSceneAddresses(cfg: HouseConfig): GA[] {
   const out: GA[] = [];
   const seen = new Set<string>();
-  for (const raw of cfg.knxSceneLearn?.addresses ?? []) {
-    const ga = (typeof raw === "string" ? raw : raw?.ga)?.trim();
-    if (!ga || seen.has(ga)) continue;
-    seen.add(ga);
-    out.push(ga);
+  for (const a of parseSceneLearnAddresses(cfg)) {
+    if (seen.has(a.ga)) continue;
+    seen.add(a.ga);
+    out.push(a.ga);
   }
   return out;
 }
@@ -70,15 +113,39 @@ export function configuredSceneAddressesForRoom(
 ): GA[] {
   const out: GA[] = [];
   const seen = new Set<string>();
-  for (const raw of cfg.knxSceneLearn?.addresses ?? []) {
-    if (typeof raw === "string") continue;
-    const ga = raw?.ga?.trim();
-    const rid = raw?.roomId?.trim();
-    if (!ga || rid !== roomId || seen.has(ga)) continue;
-    seen.add(ga);
-    out.push(ga);
+  for (const a of parseSceneLearnAddresses(cfg)) {
+    if (a.roomId !== roomId || seen.has(a.ga)) continue;
+    seen.add(a.ga);
+    out.push(a.ga);
   }
   return out;
+}
+
+/**
+ * Welke geconfigureerde knop hoort bij dit telegram?
+ * Heeft de GA in deze kamer fysieke adressen, dan moet `src` matchen.
+ */
+export function matchSceneLearnAddress(
+  cfg: HouseConfig,
+  roomId: string,
+  ga: string,
+  src?: string
+): SceneLearnAddress | undefined {
+  const rows = parseSceneLearnAddresses(cfg).filter(
+    (a) => a.roomId === roomId && a.ga === ga
+  );
+  if (rows.length === 0) return undefined;
+  const srcN = normalizeIndividualAddress(src);
+  const bySrc = rows.filter(
+    (a) =>
+      a.physicalAddress &&
+      srcN &&
+      normalizeIndividualAddress(a.physicalAddress) === srcN
+  );
+  if (bySrc.length) return bySrc[0];
+  const anyPhys = rows.some((a) => Boolean(a.physicalAddress));
+  if (anyPhys && srcN) return undefined;
+  return rows[0];
 }
 
 function asScenePayloadBytes(value: unknown): Buffer | null {

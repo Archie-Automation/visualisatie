@@ -84,6 +84,12 @@ class RoomScreen extends ConsumerWidget {
   ) {
     final canEdit = canEditScenesInApp(ref.watch(authProvider), cfg);
     final hp = context.hPad;
+    final visibleDevices = [
+      for (final d in room.devices)
+        if (d.type != DeviceType.positionActuator ||
+            d.showInShadingVisualization)
+          d,
+    ];
 
     return CustomScrollView(
       physics: const ClampingScrollPhysics(
@@ -135,7 +141,7 @@ class RoomScreen extends ConsumerWidget {
         ),
 
         // ── Device tiles ──────────────────────────────────────────────────
-        if (room.devices.isEmpty)
+        if (visibleDevices.isEmpty)
           SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.fromLTRB(
@@ -154,12 +160,12 @@ class RoomScreen extends ConsumerWidget {
           padding: EdgeInsets.fromLTRB(
               context.isPhone ? 14 : 28, 8, context.isPhone ? 14 : 28, 64),
           sliver: SliverList.separated(
-            itemCount: room.devices.length,
+            itemCount: visibleDevices.length,
             separatorBuilder: (_, __) => const SizedBox(height: 18),
             addRepaintBoundaries: !kIsWeb,
             addAutomaticKeepAlives: false,
             itemBuilder: (_, i) {
-              final device = room.devices[i];
+              final device = visibleDevices[i];
               final tile = FavoriteDeviceWrap(
                 device: device,
                 cfg: cfg,

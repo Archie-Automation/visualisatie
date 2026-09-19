@@ -343,9 +343,14 @@ enum RoomControlCategory {
             d.type == DeviceType.fan ||
             d.type == DeviceType.wtw;
       case RoomControlCategory.shading:
-        return d.type == DeviceType.shading;
+        return d.type == DeviceType.shading ||
+            (d.type == DeviceType.positionActuator &&
+                d.showInShadingVisualization);
       case RoomControlCategory.position:
-        return d.type == DeviceType.positionActuator;
+        // Geen eigen kamertegel meer; oude /category/position-URLs blijven
+        // de zichtbare klep/raam-apparaten tonen.
+        return d.type == DeviceType.positionActuator &&
+            d.showInShadingVisualization;
       case RoomControlCategory.audio:
         return d.type == DeviceType.mediaSonos ||
             d.type == DeviceType.mediaBluesound;
@@ -417,8 +422,9 @@ class RoomSegment {
 List<RoomSegment> roomControlSegments(List<Device> devices) {
   final out = <RoomSegment>[];
 
-  // Fixed categories in order.
+  // Fixed categories in order. Positie-aansturing deelt de zonweringtegel.
   for (final c in RoomControlCategory.values) {
+    if (c == RoomControlCategory.position) continue;
     final list = devices.where(c.matchesDevice).toList();
     if (list.isNotEmpty) out.add(RoomSegment.fromCategory(c, list));
   }
