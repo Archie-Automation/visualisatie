@@ -127,6 +127,13 @@ export class KnxBus extends EventEmitter {
   /** Serializes bus I/O. KNXnet/IP tunneling drops on write/read bursts. */
   private outbound: Promise<void> = Promise.resolve();
   private readonly selfWrites: Array<{ ga: GA; byte?: number; ts: number }> = [];
+  /** True while we tear the tunnel down on purpose (geen auto-reconnect). */
+  private closing = false;
+  private reconnectTimer?: NodeJS.Timeout;
+  private reconnectAttempt = 0;
+  private reconnecting: Promise<void> | null = null;
+  /** Invalidates pending boot-reads after disconnect/reconnect. */
+  private connGen = 0;
 
   private host: string;
   private port: number;
@@ -148,13 +155,15 @@ export class KnxBus extends EventEmitter {
     disabled: boolean;
     host: string;
     port: number;
+    reconnecting: boolean;
   } {
     return {
       connected: this.busConnected,
       simulate: this.simulate,
       disabled: this.disabled,
       host: this.host,
-      port: this.port
+      port: this.port,
+      reconnecting: Boolean(this.reconnectTimer || this.reconnecting)
     };
   }
 
@@ -170,10 +179,62 @@ export class KnxBus extends EventEmitter {
    * (respects KNX_GATEWAY_HOST / KNX_GATEWAY_PORT overrides).
    */
   async reconnect(): Promise<void> {
+    if (this.reconnecting) return this.reconnecting;
+    this.reconnecting = this.doReconnect().finally(() => {
+      this.reconnecting = null;
+    });
+    return this.reconnecting;
+  }
+
+  private async doReconnect(): Promise<void> {
     const cfg = getConfig();
     this.applyGateway(cfg);
-    await this.disconnect();
-    await this.connect(collectAllGAs(cfg));
+    this.closing = true;
+    this.clearReconnectTimer();
+    await this.teardownConnection();
+    this.closing = false;
+    if (this.disabled) return;
+    try {
+      await this.connect(collectAllGAs(cfg));
+      this.reconnectAttempt = 0;
+    } catch (err) {
+      this.scheduleAutoReconnect();
+      throw err;
+    }
+  }
+
+  private clearReconnectTimer(): void {
+    if (!this.reconnectTimer) return;
+    clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = undefined;
+  }
+
+  /** Tunnel weg of start mislukt: opnieuw proberen, backoff tot 30 s. */
+  private scheduleAutoReconnect(): void {
+    if (this.closing || this.disabled || this.simulate) return;
+    if (this.reconnectTimer || this.reconnecting) return;
+    const delay = Math.min(30_000, 1000 * 2 ** Math.min(this.reconnectAttempt, 5));
+    this.reconnectAttempt += 1;
+    logger.warn(
+      { delayMs: delay, attempt: this.reconnectAttempt, host: this.host, port: this.port },
+      "KNX-tunnel weg — opnieuw verbinden"
+    );
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = undefined;
+      void this.reconnect().catch((err) => {
+        logger.warn({ err }, "KNX auto-reconnect mislukt");
+      });
+    }, delay);
+  }
+
+  private markDropped(): void {
+    this.busConnected = false;
+    this.connection = undefined;
+    this.datapoints.clear();
+    this.outbound = Promise.resolve();
+    this.connGen += 1;
+    this.emit("disconnected");
+    if (!this.closing) this.scheduleAutoReconnect();
   }
 
   /** Tunnel alive (false after a gateway drop until reconnect). */
@@ -198,7 +259,14 @@ export class KnxBus extends EventEmitter {
   }
 
   async disconnect(): Promise<void> {
-    if (this.disabled) return;
+    this.closing = true;
+    this.clearReconnectTimer();
+    await this.teardownConnection();
+    this.closing = false;
+  }
+
+  private async teardownConnection(): Promise<void> {
+    this.connGen += 1;
     if (this.simulate) {
       this.busConnected = false;
       this.datapoints.clear();
@@ -248,35 +316,54 @@ export class KnxBus extends EventEmitter {
 
     const knx = await loadKnxModule();
     return new Promise((resolve, reject) => {
+      let settled = false;
+      const fail = (err: Error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(giveUp);
+        reject(err);
+      };
+      const ok = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(giveUp);
+        resolve();
+      };
+      const giveUp = setTimeout(() => {
+        logger.warn({ host: this.host, port: this.port }, "KNX connect timeout");
+        if (this.connection === conn) {
+          this.markDropped();
+        }
+        fail(new Error("KNX connect timeout"));
+      }, 20_000);
       const conn = knx.Connection({
         ipAddr: this.host,
         ipPort: this.port,
         physAddr: this.physicalAddress,
+        // knx.js: pauze tussen uitgaande telegrams. 0 = burst, tunnel valt.
+        minimumDelay: 20,
         handlers: {
           connected: () => {
             logger.info({ host: this.host, port: this.port }, "KNX gateway connected");
             this.bindDatapoints(knx, conn, groupAddresses);
-            this.scheduleGroupReads(groupAddresses);
             this.busConnected = true;
+            this.reconnectAttempt = 0;
+            this.scheduleGroupReads(groupAddresses);
             const emitter = conn as { on?: (e: string, fn: () => void) => void };
             emitter.on?.("disconnected", () => {
-              this.busConnected = false;
-              this.connection = undefined;
-              this.datapoints.clear();
-              this.outbound = Promise.resolve();
-              this.emit("disconnected");
+              if (this.connection !== conn) return;
+              logger.warn({ host: this.host, port: this.port }, "KNX gateway disconnected");
+              this.markDropped();
             });
             this.emit("connected");
-            resolve();
+            ok();
           },
           error: (err: Error) => {
             logger.error({ err }, "KNX connection error");
-            this.busConnected = false;
-            this.connection = undefined;
-            this.datapoints.clear();
-            this.outbound = Promise.resolve();
-            this.emit("disconnected");
-            reject(err);
+            if (this.connection === conn || !this.connection) {
+              this.markDropped();
+            }
+            fail(err);
           },
           event: (evt: string, src: string, dest: GA, value: unknown) => {
             const evtName = String(evt ?? "");
@@ -490,9 +577,7 @@ export class KnxBus extends EventEmitter {
         (idx.get(ga) ?? []).some((r) => READ_PRIORITY_ROLES.has(r.role)) ? 0 : 1;
       return pri(a) - pri(b);
     });
-
-    let delay = 400;
-    let scheduled = 0;
+    const todo: GA[] = [];
     for (const ga of gas) {
       const roles = idx.get(ga) ?? [];
       // Media KNX GAs are command-only. A GroupValue_Read at boot would
@@ -505,20 +590,31 @@ export class KnxBus extends EventEmitter {
       ) {
         continue;
       }
+      if (!(this.datapoints.get(ga) as { read?: () => void } | undefined)?.read) {
+        continue;
+      }
+      todo.push(ga);
+    }
+    if (todo.length === 0) return;
+    const gen = this.connGen;
+    logger.info({ scheduled: todo.length }, "KNX group reads scheduled");
+    void this.runGroupReads(todo, gen);
+  }
+
+  private async runGroupReads(gas: GA[], gen: number): Promise<void> {
+    await new Promise<void>((r) => setTimeout(r, 400));
+    for (const ga of gas) {
+      if (gen !== this.connGen || !this.busConnected) return;
       const dp = this.datapoints.get(ga) as { read?: () => void } | undefined;
       if (!dp?.read) continue;
-      scheduled++;
-      setTimeout(() => {
+      await this.paceRaw(async () => {
+        if (gen !== this.connGen || !this.busConnected) return;
         try {
           dp.read!();
         } catch (err) {
           logger.warn({ err, ga }, "KNX group read failed");
         }
-      }, delay);
-      delay += 35;
-    }
-    if (scheduled > 0) {
-      logger.info({ scheduled }, "KNX group reads scheduled");
+      }, 70);
     }
   }
 

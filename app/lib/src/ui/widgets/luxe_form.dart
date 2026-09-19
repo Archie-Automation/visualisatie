@@ -203,47 +203,42 @@ class LuxeNavRow extends StatelessWidget {
       padding: rounded
           ? const EdgeInsets.symmetric(horizontal: 6, vertical: 2)
           : EdgeInsets.zero,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: selected ? selectedFill : Colors.transparent,
-          borderRadius: radius,
-          border: selected
-              ? Border.all(color: LuxeColors.brass, width: 1.5)
-              : null,
-        ),
-        child: Material(
-          color: Colors.transparent,
-          borderRadius: radius,
-          clipBehavior: Clip.antiAlias,
-          child: Row(
-            children: [
-              Expanded(
-                child: InkWell(
-                  onTap: onTap,
-                  borderRadius: radius,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 11, 4, 11),
-                    child: Row(
-                      children: [
-                        Icon(icon, color: LuxeColors.ink, size: 20),
-                        const SizedBox(width: 12),
-                        Expanded(child: titleBlock),
-                      ],
-                    ),
+      child: Material(
+        color: selected ? selectedFill : Colors.transparent,
+        borderRadius: radius,
+        clipBehavior: Clip.antiAlias,
+        child: Row(
+          children: [
+            Expanded(
+              child: InkWell(
+                onTap: onTap,
+                borderRadius: radius,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 11, 4, 11),
+                  child: Row(
+                    children: [
+                      Icon(
+                        icon,
+                        color: selected ? LuxeColors.brass : LuxeColors.ink,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(child: titleBlock),
+                    ],
                   ),
                 ),
               ),
-              trailing ??
-                  Padding(
-                    padding: const EdgeInsets.only(right: 10),
-                    child: Icon(
-                      Icons.chevron_right_rounded,
-                      size: 20,
-                      color: LuxeColors.inkSoft,
-                    ),
+            ),
+            trailing ??
+                Padding(
+                  padding: const EdgeInsets.only(right: 10),
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    size: 20,
+                    color: LuxeColors.inkSoft,
                   ),
-            ],
-          ),
+                ),
+          ],
         ),
       ),
     );

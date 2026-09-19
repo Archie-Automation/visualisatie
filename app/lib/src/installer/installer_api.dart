@@ -102,12 +102,14 @@ class InstallerKnxStatus {
     required this.simulate,
     required this.host,
     required this.port,
+    this.reconnecting = false,
   });
 
   final bool connected;
   final bool simulate;
   final String host;
   final int port;
+  final bool reconnecting;
 
   factory InstallerKnxStatus.fromJson(Map<String, dynamic> j) {
     return InstallerKnxStatus(
@@ -115,6 +117,7 @@ class InstallerKnxStatus {
       simulate: j['simulate'] == true,
       host: j['host'] as String? ?? '',
       port: (j['port'] as num?)?.toInt() ?? 3671,
+      reconnecting: j['reconnecting'] == true,
     );
   }
 }
