@@ -223,6 +223,7 @@ export class KnxBus extends EventEmitter {
   }
 
   private markDropped(): void {
+    if (!this.busConnected && !this.connection) return;
     this.busConnected = false;
     this.connection = undefined;
     this.datapoints.clear();
@@ -280,14 +281,17 @@ export class KnxBus extends EventEmitter {
     if (!conn?.Disconnect) return;
 
     try {
-      await new Promise<void>((resolve) => {
-        try {
-          conn.Disconnect!(() => resolve());
-        } catch (err) {
-          logger.warn({ err }, "KNX Disconnect() mislukt — verbinding lokaal gewist");
-          resolve();
-        }
-      });
+      await Promise.race([
+        new Promise<void>((resolve) => {
+          try {
+            conn.Disconnect!(() => resolve());
+          } catch (err) {
+            logger.warn({ err }, "KNX Disconnect() mislukt — verbinding lokaal gewist");
+            resolve();
+          }
+        }),
+        new Promise<void>((resolve) => setTimeout(resolve, 5_000))
+      ]);
     } catch (err) {
       logger.warn({ err }, "KNX disconnect mislukt — verbinding lokaal gewist");
     }
@@ -324,21 +328,31 @@ export class KnxBus extends EventEmitter {
         clearTimeout(giveUp);
         resolve();
       };
+      const safeDisconnect = (c: unknown) => {
+        try {
+          (c as { Disconnect?: (cb: () => void) => void })?.Disconnect?.(() => {});
+        } catch { /* ignore */ }
+      };
+      let conn: unknown;
       const giveUp = setTimeout(() => {
         logger.warn({ host: this.host, port: this.port }, "KNX connect timeout");
-        if (this.connection === conn) {
+        if (conn && this.connection === conn) {
           this.markDropped();
         }
+        safeDisconnect(conn);
         fail(new Error("KNX connect timeout"));
       }, 20_000);
-      const conn = knx.Connection({
+      conn = knx.Connection({
         ipAddr: this.host,
         ipPort: this.port,
         physAddr: this.physicalAddress,
-        // knx.js: pauze tussen uitgaande telegrams. 0 = burst, tunnel valt.
         minimumDelay: 20,
         handlers: {
           connected: () => {
+            if (settled) {
+              safeDisconnect(conn);
+              return;
+            }
             logger.info({ host: this.host, port: this.port }, "KNX gateway connected");
             this.bindDatapoints(knx, conn, groupAddresses);
             this.busConnected = true;
@@ -355,12 +369,13 @@ export class KnxBus extends EventEmitter {
           },
           error: (err: Error) => {
             logger.error({ err }, "KNX connection error");
-            if (this.connection === conn || !this.connection) {
+            if (this.connection === conn) {
               this.markDropped();
             }
             fail(err);
           },
           event: (evt: string, src: string, dest: GA, value: unknown) => {
+            if (this.connection !== conn) return;
             const evtName = String(evt ?? "");
             const destGa = String(dest ?? "").trim();
             if (/GroupValue[_]?Read/i.test(evtName)) return;

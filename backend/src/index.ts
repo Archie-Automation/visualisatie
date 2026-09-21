@@ -248,6 +248,10 @@ function main() {
   process.on("SIGTERM", () => { shutdown(); process.exit(0); });
   process.on("SIGINT", () => { shutdown(); process.exit(0); });
 
+  process.on("unhandledRejection", (reason) => {
+    logger.error({ reason }, "Unhandled promise rejection — server draait door");
+  });
+
   const reportMs = Number(process.env.STARTUP_CONNECTIVITY_REPORT_MS ?? 5000);
   setTimeout(() => {
     try {
