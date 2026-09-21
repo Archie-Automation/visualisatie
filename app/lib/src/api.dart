@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -300,6 +301,9 @@ class BusController extends Notifier<BusState> {
   StreamSubscription? _sub;
   bool _disposed = false;
   int _retryDelay = 2; // seconds, doubles on each failure up to 30s
+  /// Incremented on every `_connect()` call. Stale calls detect they're
+  /// outdated and stop without corrupting the connection.
+  int _connectGen = 0;
   static const _dimHoldDuration = Duration(milliseconds: 1200);
   static const _batchWindow = Duration(milliseconds: 80);
   final Map<String, ({int percent, DateTime until})> _dimHolds = {};
@@ -391,6 +395,7 @@ class BusController extends Notifier<BusState> {
   }
 
   Future<void> _connect() async {
+    final gen = ++_connectGen;
     if (_disposed) return;
     final auth = ref.read(authProvider);
     if (!auth.isAuthed || !auth.restoreComplete) return;
@@ -422,9 +427,9 @@ class BusController extends Notifier<BusState> {
       }
     } catch (_) {/* offline — ws will provide state */}
 
-    if (_disposed) return;
+    if (gen != _connectGen || _disposed) return;
     await primeMediaStates(ref);
-    if (_disposed) return;
+    if (gen != _connectGen || _disposed) return;
 
     try {
       final wsUrl = apiBase.replaceFirst(RegExp('^http'), 'ws');
@@ -432,6 +437,10 @@ class BusController extends Notifier<BusState> {
       _ch = WebSocketChannel.connect(
           Uri.parse('$wsUrl/ws?token=${auth2.token}'));
       await _ch!.ready;
+      if (gen != _connectGen) {
+        try { _ch?.sink.close(); } catch (_) {}
+        return;
+      }
       _retryDelay = 2; // reset backoff on successful connection
 
       _sub = _ch!.stream.listen(
@@ -480,7 +489,8 @@ class BusController extends Notifier<BusState> {
                   );
             case 'wtw.logic.snapshot':
               final wtwList =
-                  (msg['payload'] as List).cast<Map<String, dynamic>>();
+                  (msg['payload'] as List?)?.cast<Map<String, dynamic>>() ??
+                      const [];
               ref.read(wtwLogicProvider.notifier).snapshot(wtwList);
             case 'intercom.ring':
               final p = msg['payload'] as Map<String, dynamic>;
@@ -524,19 +534,26 @@ class BusController extends Notifier<BusState> {
         cancelOnError: false,
       );
     } catch (_) {
-      _scheduleReconnect();
+      if (gen == _connectGen) _scheduleReconnect();
     }
   }
 
   void _scheduleReconnect() {
     if (_disposed) return;
+    final closeCode = _ch?.closeCode;
     _sub?.cancel();
     _sub = null;
     try { _ch?.sink.close(); } catch (_) {}
     _ch = null;
+    // Server rejected the JWT — force re-login instead of hammering.
+    if (closeCode == 4401) {
+      ref.read(authProvider.notifier).logout();
+      return;
+    }
     final delay = _retryDelay;
     _retryDelay = (_retryDelay * 2).clamp(2, 30);
-    Future.delayed(Duration(seconds: delay), () {
+    final jitterMs = math.Random().nextInt(math.min(delay * 250, 3000));
+    Future.delayed(Duration(seconds: delay, milliseconds: jitterMs), () {
       if (!_disposed) _connect();
     });
   }
@@ -550,8 +567,6 @@ class BusController extends Notifier<BusState> {
     _retryDelay = 2;
     _connect();
   }
-
-  Future<void> _init() => _connect();
 
   Future<void> send(Map<String, dynamic> command) async {
     final auth = ref.read(authProvider);
