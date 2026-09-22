@@ -15,6 +15,9 @@ Future<void> runScene({
     Uri.parse('$apiBase/api/scenes/$sceneId/run'),
     headers: {'authorization': 'Bearer $token'},
   );
+  if (res.statusCode == 401) {
+    throw Exception('Sessie verlopen — log opnieuw in');
+  }
   if (res.statusCode != 200) {
     throw Exception('scene run failed: ${res.statusCode} ${res.body}');
   }
@@ -66,10 +69,19 @@ class _SceneApi {
   _SceneApi(this._ref);
   final Ref _ref;
 
-  Future<void> run(String sceneId) => runScene(
+  Future<void> run(String sceneId) async {
+    try {
+      await runScene(
         sceneId: sceneId,
         token: _ref.read(authProvider).token ?? '',
       );
+    } catch (e) {
+      if ('$e'.contains('Sessie verlopen')) {
+        _ref.read(authProvider.notifier).logout();
+      }
+      rethrow;
+    }
+  }
 
   Future<void> saveGlobal(List<Scene> scenes) async {
     await saveGlobalScenes(
@@ -190,6 +202,10 @@ class _SceneApi {
       },
       body: jsonEncode(body),
     );
+    if (res.statusCode == 401) {
+      _ref.read(authProvider.notifier).logout();
+      throw Exception('Sessie verlopen — log opnieuw in');
+    }
     if (res.statusCode != 200) {
       throw Exception('request failed: ${res.statusCode} ${res.body}');
     }
