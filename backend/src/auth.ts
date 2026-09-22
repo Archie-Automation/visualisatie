@@ -23,7 +23,7 @@ if (
       "Stel JWT_SECRET in als Docker env of in .env."
   );
 }
-const TTL = process.env.TOKEN_TTL ?? "30d";
+const TTL = process.env.TOKEN_TTL ?? "365d";
 
 export interface TokenPayload {
   sub: string;
