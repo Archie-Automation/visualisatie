@@ -424,6 +424,9 @@ class BusController extends Notifier<BusState> {
             (data['wtwLogics'] as List?)?.cast<Map<String, dynamic>>() ??
                 const [];
         ref.read(wtwLogicProvider.notifier).snapshot(wtwLogics);
+      } else if (snap.statusCode == 401) {
+        ref.read(authProvider.notifier).logout();
+        return;
       }
     } catch (_) {/* offline — ws will provide state */}
 
@@ -570,7 +573,7 @@ class BusController extends Notifier<BusState> {
 
   Future<void> send(Map<String, dynamic> command) async {
     final auth = ref.read(authProvider);
-    await http.post(
+    final res = await http.post(
       Uri.parse('$apiBase/api/command'),
       headers: {
         'content-type': 'application/json',
@@ -578,6 +581,9 @@ class BusController extends Notifier<BusState> {
       },
       body: jsonEncode(command),
     );
+    if (res.statusCode == 401) {
+      ref.read(authProvider.notifier).logout();
+    }
   }
 
   /// Like [send] but verifies the response and throws the backend error
@@ -592,6 +598,10 @@ class BusController extends Notifier<BusState> {
       },
       body: jsonEncode(command),
     );
+    if (res.statusCode == 401) {
+      ref.read(authProvider.notifier).logout();
+      throw Exception('Sessie verlopen — log opnieuw in');
+    }
     if (res.statusCode >= 400) {
       String msg = 'Opdracht mislukt';
       try {
