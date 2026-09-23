@@ -3,8 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'src/installer/installer_app.dart';
+import 'src/theme.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
@@ -18,5 +19,10 @@ void main() {
     if (kDebugMode) return ErrorWidget(details.exception);
     return const SizedBox.shrink();
   };
+  try {
+    await preloadLuxeFonts();
+  } catch (e) {
+    if (kDebugMode) debugPrint('Font preload mislukt: $e');
+  }
   runApp(const ProviderScope(child: ArchieOsInstallerApp()));
 }
