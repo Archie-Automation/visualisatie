@@ -6,6 +6,7 @@ import 'src/api.dart';
 import 'src/app.dart';
 import 'src/app_bootstrap.dart';
 import 'src/kiosk_system_ui.dart';
+import 'src/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +28,11 @@ Future<void> main() async {
 
   await applyAndroidKioskSystemUi();
   await loadApiBaseOverride();
+  try {
+    await preloadLuxeFonts();
+  } catch (e) {
+    if (kDebugMode) debugPrint('Font preload mislukt: $e');
+  }
   runApp(
     ValueListenableBuilder<int>(
       valueListenable: appBootEpoch,

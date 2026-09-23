@@ -589,6 +589,23 @@ class LuxeSpacing {
   static const double xxl = 56;
 }
 
+/// Load Inter / Lexend Deca / Cormorant from the app bundle before the first
+/// frame. Without this, Google Fonts fetches over the network and the UI
+/// swaps typeface and metrics a moment after the screen appears.
+Future<void> preloadLuxeFonts() async {
+  GoogleFonts.config.allowRuntimeFetching = false;
+  await GoogleFonts.pendingFonts([
+    GoogleFonts.inter(fontWeight: FontWeight.w300),
+    GoogleFonts.inter(fontWeight: FontWeight.w400),
+    GoogleFonts.inter(fontWeight: FontWeight.w500),
+    GoogleFonts.inter(fontWeight: FontWeight.w600),
+    GoogleFonts.inter(fontWeight: FontWeight.w700),
+    GoogleFonts.lexendDeca(fontWeight: FontWeight.w200),
+    GoogleFonts.cormorantGaramond(fontWeight: FontWeight.w300),
+    GoogleFonts.cormorantGaramond(fontWeight: FontWeight.w400),
+  ]);
+}
+
 ThemeData buildLuxeTheme([Brightness brightness = Brightness.light]) {
   // Quiet luxury active. Rollback:
   //   light → LuxePalette.lightLegacy
