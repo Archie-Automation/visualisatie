@@ -2665,8 +2665,6 @@ class _FireplaceFlameBar extends StatelessWidget {
     required this.stepRanges,
     required this.legacySteps,
     required this.activeStep,
-    required this.currentPct,
-    required this.levelDisplay,
     required this.onStep,
     this.enabled = true,
   });
@@ -2674,8 +2672,6 @@ class _FireplaceFlameBar extends StatelessWidget {
   final List<Map<String, dynamic>>? stepRanges;
   final int? legacySteps;
   final int activeStep;
-  final int currentPct;
-  final String? levelDisplay;
   final ValueChanged<int> onStep;
   final bool enabled;
 
@@ -2719,26 +2715,12 @@ class _FireplaceFlameBar extends StatelessWidget {
       ];
     }
 
-    final headerValue = (stepRanges != null && stepRanges!.length >= 2)
-        ? fireplaceStepLabel(ranges: stepRanges, step1Based: activeStep)
-        : _fireplaceFlameValueLabel(currentPct, levelDisplay);
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'VLAMSTAND',
-                style: DeviceControlBar.sectionTitleStyle(context),
-              ),
-            ),
-            Text(
-              headerValue,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
+        Text(
+          'VLAMSTAND',
+          style: DeviceControlBar.sectionTitleStyle(context),
         ),
         SizedBox(height: DeviceControlBar.sectionTitleGap),
         DeviceControlBar.singleRow(context, items),
@@ -2802,28 +2784,6 @@ Map<String, dynamic>? _fireplacePulse(
     Map<String, dynamic>? discrete, String key) {
   final m = discrete?[key];
   return m is Map ? m.cast<String, dynamic>() : null;
-}
-
-String _fireplaceFlameLevelLabel(String? levelDisplay) {
-  switch (levelDisplay) {
-    case 'volt_10':
-      return 'NIVEAU (0–10 V)';
-    case 'volt_3':
-      return 'NIVEAU (0–3 V)';
-    default:
-      return 'VLAMHOOGTE';
-  }
-}
-
-String _fireplaceFlameValueLabel(int level, String? levelDisplay) {
-  switch (levelDisplay) {
-    case 'volt_10':
-      return '${(level * 0.1).toStringAsFixed(1)} V';
-    case 'volt_3':
-      return '${(level * 0.03).toStringAsFixed(2)} V';
-    default:
-      return '$level%';
-  }
 }
 
 /// Openhaard uit: vlam met schuine streep.
@@ -2944,10 +2904,10 @@ class _FireplaceTileState extends ConsumerState<FireplaceTile> {
     final legacySteps = (flame?['steps'] as num?)?.toInt();
     final usePctBands =
         stepRanges != null && stepRanges.length >= 2 && flame != null;
-    final levelDisplay = flame?['levelDisplay'] as String?;
-    final flameStatusGa =
-        (flame?['statusGa'] as String?) ?? (flame?['ga'] as String?);
-    final flameVal = flameStatusGa == null ? null : bus.values[flameStatusGa];
+    final flameGa = (flame?['ga'] as String?)?.trim();
+    final flameVal = (flameGa == null || flameGa.isEmpty)
+        ? null
+        : bus.values[flameGa];
     final flameRaw = flameVal is num ? flameVal.toInt() : 0;
     final stepUiValue = usePctBands
         ? busPercentToFlameStep(stepRanges, flameRaw.clamp(0, 100))
@@ -2972,8 +2932,8 @@ class _FireplaceTileState extends ConsumerState<FireplaceTile> {
       final notifier = ref.read(busProvider.notifier);
       if (v) {
         final onPct = (flame?['onPercent'] as num?)?.round();
-        if (onPct != null && flameStatusGa != null) {
-          notifier.patchDimPercent(flameStatusGa, onPct.clamp(0, 100));
+        if (onPct != null && flameGa != null && flameGa.isNotEmpty) {
+          notifier.patchDimPercent(flameGa, onPct.clamp(0, 100));
         }
       }
       await notifier.send({
@@ -2986,17 +2946,17 @@ class _FireplaceTileState extends ConsumerState<FireplaceTile> {
     Future<void> setFlame(int v) async {
       if (!on) return;
       final notifier = ref.read(busProvider.notifier);
-      if (flameStatusGa != null) {
-        if (usePctBands && stepRanges != null) {
+      if (flameGa != null && flameGa.isNotEmpty) {
+        if (usePctBands) {
           notifier.patchDimPercent(
-            flameStatusGa,
+            flameGa,
             writePercentForFlameStep(
               stepRanges,
               v.clamp(1, stepRanges.length),
             ),
           );
         } else if (legacySteps == null) {
-          notifier.patchDimPercent(flameStatusGa, v.clamp(0, 100));
+          notifier.patchDimPercent(flameGa, v.clamp(0, 100));
         }
       }
       await notifier.send({
@@ -3093,12 +3053,10 @@ class _FireplaceTileState extends ConsumerState<FireplaceTile> {
                 stepRanges: stepRanges,
                 legacySteps: legacySteps,
                 activeStep: usePctBands
-                    ? stepUiValue.clamp(1, stepRanges!.length)
+                    ? stepUiValue.clamp(1, stepRanges.length)
                     : legacySteps != null
                         ? legacyBarValue
                         : _pctToDefaultStep(sliderPct),
-                currentPct: flameRaw,
-                levelDisplay: levelDisplay,
                 enabled: on,
                 onStep: setFlame,
               ),

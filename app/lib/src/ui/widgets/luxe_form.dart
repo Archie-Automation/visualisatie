@@ -261,7 +261,14 @@ class LuxeAddRow extends StatelessWidget {
           children: [
             Icon(Icons.add_rounded, size: 20, color: LuxeColors.brassDeep),
             const SizedBox(width: 10),
-            Text(label, style: Theme.of(context).textTheme.bodyLarge),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            ),
           ],
         ),
       ),
@@ -317,6 +324,8 @@ class LuxeSectionTitle extends StatelessWidget {
               children: [
                 Text(
                   title.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.labelLarge,
                 ),
                 if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
