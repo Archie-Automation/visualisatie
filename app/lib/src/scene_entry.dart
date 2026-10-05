@@ -501,8 +501,7 @@ class FireplaceEntry extends SceneEntry {
     }
     final onOff = (_cfg['onOff'] as Map?) ?? const {};
     final onGa = (onOff['statusGa'] as String?) ?? (onOff['ga'] as String?);
-    final flameGa = ((_cfg['flame'] as Map?)?['statusGa'] as String?) ??
-        ((_cfg['flame'] as Map?)?['ga'] as String?);
+    final flameGa = ((_cfg['flame'] as Map?)?['ga'] as String?);
     final onV = onGa == null ? null : bus.values[onGa];
     final flameV = flameGa == null ? null : bus.values[flameGa];
     final sr = _stepRanges;

@@ -2142,7 +2142,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             'onOff': {'ga': '1/1/1', 'statusGa': '1/1/2'},
             'flame': {
               'ga': '1/2/1',
-              'statusGa': '1/2/2',
               'levelDisplay': 'percent',
             },
           },
@@ -2725,17 +2724,20 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   Widget _buildingStructureWide(BuildContext context, Widget tree) {
     return LayoutBuilder(
       builder: (ctx, c) {
-        final navW = c.maxWidth >= 1280 ? 280.0 : 220.0;
+        final w = c.maxWidth;
+        // Tablet: a 280px menu plus the inspector left each column ~150px,
+        // so floor/room/device names collapsed to a few letters.
+        final navW = w >= 1600 ? 280.0 : 240.0;
         return Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             SizedBox(width: navW, child: tree),
             Expanded(
-              flex: 5,
+              flex: 3,
               child: _millerRow(context),
             ),
             Expanded(
-              flex: 4,
+              flex: 2,
               child: _buildingInspector(context),
             ),
           ],
@@ -2747,11 +2749,11 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   Widget _millerRow(BuildContext context) {
     return LayoutBuilder(
       builder: (ctx, c) {
-        const minCol = 176.0;
+        const colMin = 300.0;
         final floors = _millerFloorsColumn(context);
         final rooms = _millerRoomsColumn(context);
         final devices = _millerDevicesColumn(context);
-        if (c.maxWidth >= minCol * 3) {
+        if (c.maxWidth >= colMin * 3) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -2766,9 +2768,9 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              SizedBox(width: 200, child: floors),
-              SizedBox(width: 200, child: rooms),
-              SizedBox(width: 200, child: devices),
+              SizedBox(width: colMin, child: floors),
+              SizedBox(width: colMin, child: rooms),
+              SizedBox(width: colMin, child: devices),
             ],
           ),
         );
@@ -5613,10 +5615,6 @@ void _fireplaceApplyMode(Map<String, dynamic> fp, _FireplaceOpMode mode) {
             ? oldM['levelDisplay']
             : 'percent',
       };
-      final st = oldM['statusGa'];
-      if (st is String && st.trim().isNotEmpty) {
-        flame['statusGa'] = st.trim();
-      }
       final steps = oldM['steps'];
       if (steps is int && steps >= 2 && steps <= 10) {
         flame['steps'] = steps;
@@ -5889,8 +5887,8 @@ class _FireplaceInstallerSection extends StatelessWidget {
                 style: theme.textTheme.labelLarge),
             const SizedBox(height: 4),
             Text(
-              'Schrijf-GA voor het analoge niveau. 100 % = 10 V of 3 V, afhankelijk '
-              'van de actor. De app toont de gekozen schaal; de bus blijft 0–100 %.',
+              'Eén groepsadres voor de vlam (DPT5, 0–100 % op de bus = 0–10 V of 0–3 V). '
+              'De gekozen standknop is de status; er is geen apart statusadres.',
               style: theme.textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
@@ -5909,18 +5907,9 @@ class _FireplaceInstallerSection extends StatelessWidget {
                       'ga',
                       flame,
                       onChanged,
-                      labelOverride: 'Groepsadres schrijven (byte 0–100 %)',
+                      labelOverride: 'Groepsadres (byte 0–100 %)',
                       hintText: 'bijv. 6/2/1',
                       key: ValueKey('fp-fl-${device['id']}-ga'),
-                    ),
-                    _BoundStrField(
-                      'statusGa',
-                      flame,
-                      onChanged,
-                      labelOverride: 'Groepsadres status (byte, aanbevolen)',
-                      hintText: 'bijv. 6/2/2',
-                      emptyMeansRemove: true,
-                      key: ValueKey('fp-fl-${device['id']}-st'),
                     ),
                     _BoundStrField(
                       'onPercent',
