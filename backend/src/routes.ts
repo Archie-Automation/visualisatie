@@ -352,6 +352,50 @@ function parseIntRange(
   return Math.min(max, Math.max(min, Math.floor(n)));
 }
 
+/** Cloud metadata, loopback and the rest of the LAN stay closed. */
+function isBlockedArtHost(parsed: URL): boolean {
+  const host = parsed.hostname.toLowerCase();
+  return (
+    host === "localhost" ||
+    host.endsWith(".local") ||
+    host === "[::1]" ||
+    /^(127\.|10\.|0\.|192\.168\.|169\.254\.)/.test(host) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+    /^(fc|fd)/i.test(host)
+  );
+}
+
+/** Sonos and BluOS serve cover art from the player on the LAN. */
+function isPlayerArtworkUrl(parsed: URL): boolean {
+  const port = parsed.port || (parsed.protocol === "https:" ? "443" : "80");
+  const path = parsed.pathname;
+  if (port === "1400" && /^\/getaa$/i.test(path)) return true;
+  if (
+    port === "11000" &&
+    /art|image|cover/i.test(path)
+  ) {
+    return true;
+  }
+  const host = parsed.hostname.toLowerCase();
+  let allowed = false;
+  walkDevices(getConfig(), (d) => {
+    if (allowed) return;
+    if (d.type === "media_sonos") {
+      const h = d.sonos.host?.trim().toLowerCase();
+      const p = String(d.sonos.port ?? 1400);
+      if (h && h === host && p === port && /^\/getaa$/i.test(path)) allowed = true;
+    }
+    if (d.type === "media_bluesound") {
+      const h = d.bluesound.host?.trim().toLowerCase();
+      const p = String(d.bluesound.port ?? 11000);
+      if (h && h === host && p === port && /art|image|cover/i.test(path)) {
+        allowed = true;
+      }
+    }
+  });
+  return allowed;
+}
+
 /** Sonos/TuneIn sometimes omit or mangle Content-Type; sniff magic bytes. */
 function sniffImageContentType(
   buf: ArrayBuffer,
@@ -598,56 +642,60 @@ export function buildRouter(
 
   /** Proxy for Sonos/Spotify album art.
    *  Image.network kan geen JWT meesturen, dus geen requireAuth.
-   *  SSRF-bescherming: blokkeer private/link-local/metadata-IPs. */
+   *  SSRF: privé-adressen blijven dicht, behalve Sonos/BluOS-artwork op de speler. */
   r.get("/media-art", async (req, res) => {
     const u = req.query["u"];
     if (typeof u !== "string" || !u.startsWith("http")) {
       return res.status(400).send("bad url");
     }
-    let parsed: URL;
-    try {
-      parsed = new URL(u);
-    } catch {
-      return res.status(400).send("bad url");
-    }
-    const host = parsed.hostname.toLowerCase();
-    if (
-      host === "localhost" ||
-      host.endsWith(".local") ||
-      host === "[::1]" ||
-      /^(127\.|10\.|0\.|192\.168\.|169\.254\.)/.test(host) ||
-      /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
-      /^(fc|fd)/i.test(host)
-    ) {
-      return res.status(403).send("private address blocked");
-    }
-    try {
-      const upstream = await fetch(u, {
-        signal: AbortSignal.timeout(4000),
-        headers: { "User-Agent": "Linux UPnP/1.0 Sonos/80.0-00000" }
-      });
-      if (!upstream.ok) {
-        return res.status(404).send("not found");
+    let current = u;
+    for (let hop = 0; hop < 3; hop++) {
+      let parsed: URL;
+      try {
+        parsed = new URL(current);
+      } catch {
+        return res.status(400).send("bad url");
       }
-      const ct = upstream.headers.get("content-type") ?? "";
-      const buf = await upstream.arrayBuffer();
-      if (buf.byteLength === 0 || buf.byteLength > 2_000_000) {
-        return res.status(404).send("no image");
+      if (isBlockedArtHost(parsed) && !isPlayerArtworkUrl(parsed)) {
+        return res.status(403).send("private address blocked");
       }
-      const sniffed = sniffImageContentType(buf, ct);
-      if (!sniffed) {
-        return res.status(404).send("no image");
+      try {
+        const upstream = await fetch(current, {
+          redirect: "manual",
+          signal: AbortSignal.timeout(4000),
+          headers: { "User-Agent": "Linux UPnP/1.0 Sonos/80.0-00000" }
+        });
+        if (upstream.status >= 300 && upstream.status < 400) {
+          const loc = upstream.headers.get("location");
+          if (!loc) return res.status(404).send("not found");
+          current = new URL(loc, current).toString();
+          continue;
+        }
+        if (!upstream.ok) {
+          return res.status(404).send("not found");
+        }
+        const ct = upstream.headers.get("content-type") ?? "";
+        const buf = await upstream.arrayBuffer();
+        if (buf.byteLength === 0 || buf.byteLength > 2_000_000) {
+          return res.status(404).send("no image");
+        }
+        const sniffed = sniffImageContentType(buf, ct);
+        if (!sniffed) {
+          return res.status(404).send("no image");
+        }
+        res.setHeader("Content-Type", sniffed);
+        const isSonosGetaa = /\/getaa(?:\?|$)/i.test(current);
+        res.setHeader(
+          "Cache-Control",
+          isSonosGetaa ? "no-cache" : "public, max-age=3600"
+        );
+        res.send(Buffer.from(buf));
+        return;
+      } catch {
+        return res.status(502).send("upstream error");
       }
-      res.setHeader("Content-Type", sniffed);
-      const isSonosGetaa = /\/getaa(?:\?|$)/i.test(u);
-      res.setHeader(
-        "Cache-Control",
-        isSonosGetaa ? "no-cache" : "public, max-age=3600"
-      );
-      res.send(Buffer.from(buf));
-    } catch {
-      res.status(502).send("upstream error");
     }
+    return res.status(404).send("not found");
   });
 
   // ── Satel integration config (enabled + partitions) ─────────────────────
