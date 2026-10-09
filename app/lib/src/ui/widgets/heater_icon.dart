@@ -128,13 +128,13 @@ class _HeaterIconPainter extends CustomPainter {
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTRB(w * 0.34, h * 0.02, w * 0.66, h * 0.09),
-        Radius.circular(w * 0.025),
+        Rect.fromLTRB(w * 0.36, h * 0.035, w * 0.64, h * 0.078),
+        Radius.circular(w * 0.02),
       ),
       fill,
     );
     canvas.drawRect(
-      Rect.fromLTRB(w * 0.44, h * 0.08, w * 0.56, h * 0.17),
+      Rect.fromLTRB(w * 0.47, h * 0.072, w * 0.53, h * 0.17),
       fill,
     );
 
@@ -146,8 +146,8 @@ class _HeaterIconPainter extends CustomPainter {
           Radius.circular(w * 0.08),
         ),
       );
-    const slotYs = <double>[0.23, 0.335, 0.44];
-    final slotH = h * 0.048;
+    const slotYs = <double>[0.21, 0.32, 0.43];
+    final slotH = h * 0.072;
     for (final y in slotYs) {
       body.addRRect(
         RRect.fromRectAndRadius(
