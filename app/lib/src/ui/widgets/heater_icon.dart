@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 /// Sentinel — render via [iconWidgetForData] / [universalIconGlyph], niet [Icon].
 const IconData heaterIconData = IconData(0xF001);
 
-/// Terrasheater: reflector, paal en voet. Warmteslierten onder de kap
-/// animeren als [animate].
+/// Hangende terrasheater (plafond): ophanging, paneel, warmte naar beneden.
+/// Warmteslierten animeren als [animate].
 class HeaterIcon extends StatefulWidget {
   const HeaterIcon({
     super.key,
@@ -125,68 +125,64 @@ class _HeaterIconPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
-    final dome = Path()
-      ..moveTo(w * 0.16, h * 0.32)
-      ..quadraticBezierTo(w * 0.50, h * 0.02, w * 0.84, h * 0.32);
-    canvas.drawPath(dome, line);
     canvas.drawLine(
-      Offset(w * 0.12, h * 0.34),
-      Offset(w * 0.88, h * 0.34),
+      Offset(w * 0.18, h * 0.08),
+      Offset(w * 0.82, h * 0.08),
+      line,
+    );
+    canvas.drawLine(
+      Offset(w * 0.30, h * 0.08),
+      Offset(w * 0.30, h * 0.22),
+      line,
+    );
+    canvas.drawLine(
+      Offset(w * 0.70, h * 0.08),
+      Offset(w * 0.70, h * 0.22),
       line,
     );
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTRB(w * 0.40, h * 0.37, w * 0.60, h * 0.50),
-        Radius.circular(w * 0.04),
+        Rect.fromLTRB(w * 0.12, h * 0.22, w * 0.88, h * 0.50),
+        Radius.circular(w * 0.08),
       ),
       line,
     );
-
     canvas.drawLine(
-      Offset(w * 0.50, h * 0.50),
-      Offset(w * 0.50, h * 0.74),
-      line,
-    );
-    canvas.drawLine(
-      Offset(w * 0.50, h * 0.70),
-      Offset(w * 0.22, h * 0.94),
-      line,
-    );
-    canvas.drawLine(
-      Offset(w * 0.50, h * 0.70),
-      Offset(w * 0.78, h * 0.94),
+      Offset(w * 0.22, h * 0.40),
+      Offset(w * 0.78, h * 0.40),
       line,
     );
 
     final heat = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke * 0.72
+      ..strokeWidth = stroke * 0.7
       ..strokeCap = StrokeCap.round;
     const slots = <(double, double)>[
-      (0.28, -1),
-      (0.72, 1),
+      (0.30, -1),
+      (0.50, 0),
+      (0.70, 1),
     ];
     for (var i = 0; i < slots.length; i++) {
       final (xFrac, bendSign) = slots[i];
       var pulse = 1.0;
       if (animate) {
-        final phase = t * 2 * math.pi + i * 1.4;
+        final phase = t * 2 * math.pi + i * 0.9;
         pulse = 0.35 + 0.65 * ((math.sin(phase) + 1) / 2);
       }
-      final len = h * 0.16 * (animate ? (0.55 + 0.45 * pulse) : 1.0);
+      final len = h * 0.22 * (animate ? (0.5 + 0.5 * pulse) : 1.0);
       heat.color = color.withValues(
-        alpha: animate ? pulse.clamp(0.3, 1.0) : 0.85,
+        alpha: animate ? pulse.clamp(0.28, 1.0) : 0.8,
       );
       final x = w * xFrac;
-      final top = h * 0.38;
-      final bend = w * 0.05 * bendSign;
+      final top = h * 0.54;
+      final bend = w * 0.045 * bendSign;
       final path = Path()
         ..moveTo(x, top)
         ..quadraticBezierTo(
           x + bend,
           top + len * 0.55,
-          x + bend * 0.25,
+          x + bend * 0.2,
           top + len,
         );
       canvas.drawPath(path, heat);
