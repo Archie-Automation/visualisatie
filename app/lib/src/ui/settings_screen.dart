@@ -12,6 +12,7 @@ import '../doorbell_ringer.dart';
 import '../media_api.dart';
 import '../models.dart';
 import '../roles.dart';
+import '../screen_clean.dart';
 import '../schedule_api.dart';
 import '../software_version.dart';
 import '../theme.dart';
@@ -155,6 +156,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         setState(() => _topic = _SettingsTopic.schedules),
                   ),
                   if (wallTabletDeviceSettingsApply) ...[
+                    Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
+                    _SettingsMenuTile(
+                      icon: Icons.cleaning_services_outlined,
+                      title: 'Scherm schoonmaken',
+                      subtitle: '20 seconden geen reactie op aanraken',
+                      showChevron: false,
+                      onTap: () =>
+                          ref.read(screenCleanProvider.notifier).start(),
+                    ),
                     Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
                     _SettingsMenuTile(
                       icon: Icons.tablet_android_outlined,
@@ -2207,12 +2217,14 @@ class _SettingsMenuTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.showChevron = true,
   });
 
   final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
+  final bool showChevron;
 
   @override
   Widget build(BuildContext context) {
@@ -2240,11 +2252,12 @@ class _SettingsMenuTile extends StatelessWidget {
                 ],
               ),
             ),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 20,
-              color: LuxeColors.inkSoft,
-            ),
+            if (showChevron)
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: LuxeColors.inkSoft,
+              ),
           ],
         ),
       ),

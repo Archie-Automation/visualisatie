@@ -13,6 +13,7 @@ import 'package:intl/intl.dart';
 import '../../api.dart';
 import '../../display_panel_config.dart';
 import '../../idle_reset.dart';
+import '../../screen_clean.dart';
 import '../../inactivity_controller.dart';
 import '../../kiosk_system_ui.dart';
 import '../../media_api.dart';
@@ -350,6 +351,7 @@ class _InactivityLayerState extends ConsumerState<InactivityLayer> {
 
   void _onTick() {
     if (!mounted || !_displayPanelActive) return;
+    if (ref.read(screenCleanProvider) != null) return;
     final auth = ref.read(authProvider);
     if (!auth.isAuthed || !auth.restoreComplete) return;
 
