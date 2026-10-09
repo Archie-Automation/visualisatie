@@ -252,7 +252,7 @@ git_with_token() {
 run_update() {
   requested_by="$1"
   log "update start requestedBy=$requested_by"
-  ST_STATE=running ST_STEP=git ST_MESSAGE="Code ophalen van GitHub…" ST_REQUESTED_BY="$requested_by" ST_STARTED=1 ST_CLEAR_ERROR=1 write_status
+  ST_STATE=running ST_STEP=git ST_MESSAGE="Server wordt bijgewerkt." ST_REQUESTED_BY="$requested_by" ST_STARTED=1 ST_CLEAR_ERROR=1 write_status
 
   DOCKER="$(detect_docker)"
   if [ -z "$DOCKER" ]; then
@@ -294,7 +294,7 @@ run_update() {
   if command -v git >/dev/null 2>&1; then
     if [ ! -d "$ROOT/.git" ]; then
       log "no .git in $ROOT — git init + origin"
-      ST_STATE=running ST_STEP=git ST_MESSAGE="Koppelen aan GitHub…" write_status
+      ST_STATE=running ST_STEP=git ST_MESSAGE="Server wordt bijgewerkt." write_status
       ensure_git_origin || log "git init/origin failed"
     fi
     fetch_url="$(origin_https)"
@@ -335,7 +335,7 @@ run_update() {
   rm -f "$git_err"
 
   if [ "$code_ok" -eq 0 ]; then
-    ST_STATE=running ST_STEP=git ST_MESSAGE="Code ophalen van GitHub…" write_status
+    ST_STATE=running ST_STEP=git ST_MESSAGE="Server wordt bijgewerkt." write_status
     if apply_github_tarball "$branch" "$tok"; then
       code_ok=1
       log "tarball ok branch=$branch"
@@ -345,7 +345,7 @@ run_update() {
 
   if [ "$code_ok" -eq 0 ]; then
     restore_secrets
-    ST_STATE=error ST_STEP=git ST_MESSAGE="GitHub ophalen mislukt. De NUC kan GitHub niet bereiken (netwerk) of de repo is privé zonder geldige GITHUB_TOKEN." ST_ERROR="git_fetch_failed" ST_FINISHED=1 write_status
+    ST_STATE=error ST_STEP=git ST_MESSAGE="Software ophalen mislukt. Controleer de netwerkverbinding van de NUC." ST_ERROR="git_fetch_failed" ST_FINISHED=1 write_status
     log "fail git_fetch_failed"
     return 1
   fi
@@ -365,7 +365,7 @@ run_update() {
     log "warn asterisk compose failed (app is up)"
   fi
 
-  ST_STATE=success ST_STEP= ST_MESSAGE="Server is bijgewerkt." ST_CLEAR_ERROR=1 ST_FINISHED=1 write_status
+  ST_STATE=success ST_STEP= ST_MESSAGE="Server wordt bijgewerkt." ST_CLEAR_ERROR=1 ST_FINISHED=1 write_status
   log "update success"
   NEED_REEXEC=1
   return 0

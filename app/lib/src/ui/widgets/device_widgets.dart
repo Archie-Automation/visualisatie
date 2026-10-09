@@ -2599,7 +2599,7 @@ class IntercomTile extends ConsumerWidget {
             padding: EdgeInsets.only(bottom: 14),
             child: Row(
               children: [
-                Icon(Icons.doorbell_outlined,
+                Icon(Icons.notifications_outlined,
                     color: LuxeColors.brass, size: 22),
                 SizedBox(width: 12),
                 Expanded(

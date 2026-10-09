@@ -461,7 +461,7 @@ class _VoipInstallerSectionState extends State<VoipInstallerSection> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const LuxeSectionTitle(
-          icon: Icons.doorbell_outlined,
+          icon: Icons.notifications_outlined,
           title: 'Intercom',
           subtitle:
               'Koppel een IP-deurstation aan tablets en telefoons. '

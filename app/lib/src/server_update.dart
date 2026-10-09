@@ -100,7 +100,7 @@ String serverUpdateProgressMessage(ServerUpdateStatus status) {
   final m = status.message.trim();
   if (status.isIdle &&
       (m.isEmpty || m.toLowerCase().contains('wacht op update'))) {
-    return 'Server is bijgewerkt.';
+    return 'Server wordt bijgewerkt.';
   }
   if (m.isEmpty) return 'Bezig met bijwerken…';
   return m;
@@ -135,11 +135,7 @@ Future<ServerUpdateStatus> waitForServerUpdate({
         case ServerUpdateWaitDecision.success:
           return ServerUpdateStatus(
             state: 'success',
-            message: last.isSuccess
-                ? (last.message.isEmpty
-                    ? 'Server is bijgewerkt.'
-                    : last.message)
-                : 'Server is bijgewerkt.',
+            message: 'Server wordt bijgewerkt.',
             agentReady: last.agentReady,
             step: last.step,
             error: last.error,

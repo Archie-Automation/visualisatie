@@ -156,7 +156,7 @@ class IntercomDeviceSetupCard extends StatelessWidget {
         children: [
           const _StepTitle(
             step: 1,
-            icon: Icons.doorbell_outlined,
+            icon: Icons.notifications_outlined,
             title: 'Deurstation',
             subtitle: 'Gegevens zoals ingesteld op het fysieke toestel '
                 '(2N, DoorBird, Axis).',
