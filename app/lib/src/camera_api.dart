@@ -207,6 +207,20 @@ Future<IntercomCapture> takeIntercomCapture({
   );
 }
 
+Future<void> deleteIntercomCapture({
+  required String intercomId,
+  required String captureId,
+  required String? token,
+}) async {
+  final res = await http.delete(
+    Uri.parse('$apiBase/api/intercoms/$intercomId/captures/$captureId'),
+    headers: {'authorization': 'Bearer $token'},
+  );
+  if (res.statusCode != 200) {
+    throw StateError('capture delete failed: ${res.statusCode}');
+  }
+}
+
 Future<Uint8List> fetchIntercomCaptureJpeg({
   required String url,
   required String? token,

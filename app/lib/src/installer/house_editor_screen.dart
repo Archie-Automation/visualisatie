@@ -2834,6 +2834,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             icon: Icons.layers_outlined,
             title: _namedOr(floors[i], 'Verdieping'),
             subtitle: _countLabel(_roomList(i).length, 'kamer', 'kamers'),
+            selectedTextMatchesIcon: true,
             selected: _sel.fi == i &&
                 (_sel.kind == _FocusKind.floor ||
                     _sel.kind == _FocusKind.room ||
@@ -2881,6 +2882,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             title: _namedOr(rooms[ri], 'Kamer'),
             subtitle: _countLabel(
                 _deviceList(fi, ri).length, 'apparaat', 'apparaten'),
+            selectedTextMatchesIcon: true,
             selected: _sel.ri == ri &&
                 (_sel.kind == _FocusKind.room ||
                     _sel.kind == _FocusKind.device),
@@ -2933,6 +2935,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             icon: Icons.tune_outlined,
             title: _namedOr(devices[di], 'Apparaat'),
             subtitle: _deviceRowSubtitle(devices[di]),
+            selectedTextMatchesIcon: true,
             selected:
                 _sel.kind == _FocusKind.device && _sel.di == di,
             trailing: _rowTrash(
@@ -3103,6 +3106,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   title: _namedOr(floors[i], 'Verdieping'),
                   subtitle:
                       _countLabel(_roomList(i).length, 'kamer', 'kamers'),
+                  selectedTextMatchesIcon: true,
                   selected: _sel.kind == _FocusKind.floor && _sel.fi == i,
                   trailing: _rowTrash(
                     tooltip: 'Verdieping verwijderen',
@@ -3394,6 +3398,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               icon: Icons.tune_outlined,
               title: _namedOr(devices[di], 'Apparaat'),
               subtitle: _deviceRowSubtitle(devices[di]),
+              selectedTextMatchesIcon: true,
               selected: _sel.kind == _FocusKind.device &&
                   _sel.fi == fi &&
                   _sel.ri == ri &&
@@ -3496,6 +3501,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   title: _namedOr(rooms[ri], 'Kamer'),
                   subtitle: _countLabel(
                       _deviceList(fi, ri).length, 'apparaat', 'apparaten'),
+                  selectedTextMatchesIcon: true,
                   selected:
                       _sel.kind == _FocusKind.room && _sel.fi == fi && _sel.ri == ri,
                   trailing: _rowTrash(
@@ -5805,11 +5811,12 @@ class _FireplaceInstallerSection extends StatelessWidget {
               ),
               DropdownMenuItem(
                 value: _FireplaceOpMode.discretePulses,
-                child: Text('Mertik GV60 (4× puls start/stop/omhoog/omlaag)'),
+                child: Text(
+                    'Mertik GV60 (4× puls start/stop/omhoog/omlaag, geen status)'),
               ),
               DropdownMenuItem(
                 value: _FireplaceOpMode.planika,
-                child: Text('Planika (start/stop + 4 status)'),
+                child: Text('Planika (start/stop + 4× status)'),
               ),
             ],
             onChanged: (_FireplaceOpMode? next) {
