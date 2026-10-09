@@ -7,8 +7,8 @@ import 'campfire_icon.dart';
 /// Sentinel — render via [iconWidgetForData] / [universalIconGlyph], niet [Icon].
 const IconData heaterIconData = IconData(0xF001);
 
-/// Hangende terrasheater, even hoog als de airco: twee golvende spiralen en warmte naar beneden.
-/// Spiralen en warmtestrepen bewegen als [animate].
+/// Hangende heater: plafondbeugel, rooster, hittestraaltjes.
+/// Alleen de stralen bewegen als [animate].
 class HeaterIcon extends StatefulWidget {
   const HeaterIcon({
     super.key,
@@ -122,105 +122,87 @@ class _HeaterIconPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final stroke = (w * 0.072).clamp(1.3, 2.2);
-    final line = Paint()
+    final fill = Paint()
       ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
+      ..style = PaintingStyle.fill;
 
-    // Zelfde kader als de airco: body 0.10–0.52, warmte tot 0.94.
-    final bodyTop = h * 0.10;
-    final bodyBottom = h * 0.52;
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTRB(w * 0.08, bodyTop, w * 0.92, bodyBottom),
-        Radius.circular(w * 0.07),
+        Rect.fromLTRB(w * 0.34, h * 0.02, w * 0.66, h * 0.09),
+        Radius.circular(w * 0.025),
       ),
-      line,
+      fill,
+    );
+    canvas.drawRect(
+      Rect.fromLTRB(w * 0.44, h * 0.08, w * 0.56, h * 0.17),
+      fill,
     );
 
-    final coil = Paint()
+    final body = Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTRB(w * 0.06, h * 0.16, w * 0.94, h * 0.56),
+          Radius.circular(w * 0.08),
+        ),
+      );
+    const slotYs = <double>[0.23, 0.335, 0.44];
+    final slotH = h * 0.048;
+    for (final y in slotYs) {
+      body.addRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTRB(w * 0.16, h * y, w * 0.84, h * y + slotH),
+          Radius.circular(slotH / 2),
+        ),
+      );
+    }
+    canvas.drawPath(body, fill);
+
+    final heat = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke * 0.65
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    const rows = <double>[0.24, 0.38];
-    for (var i = 0; i < rows.length; i++) {
-      final phase = animate ? t * 2 * math.pi + i * 0.9 : i * 0.6;
-      var pulse = 0.9;
-      if (animate) {
-        pulse = 0.45 + 0.55 * ((math.sin(phase) + 1) / 2);
-      }
-      coil.color = color.withValues(alpha: pulse.clamp(0.4, 1.0));
-      _glowCoil(
+      ..strokeWidth = (w * 0.055).clamp(1.15, 2.0)
+      ..strokeCap = StrokeCap.round;
+    const xs = <double>[0.28, 0.50, 0.72];
+    final top = h * 0.64;
+    final bottom = h * 0.96;
+    for (var i = 0; i < xs.length; i++) {
+      final phase = animate ? t * math.pi * 2 + i * 1.15 : i * 1.4;
+      heat.color = color.withValues(
+        alpha: animate
+            ? (0.4 + 0.6 * ((math.sin(phase * 0.7) + 1) / 2)).clamp(0.35, 1.0)
+            : 1,
+      );
+      _heatRay(
         canvas,
-        coil,
-        y: h * rows[i],
-        left: w * 0.20,
-        right: w * 0.80,
-        amp: h * 0.032,
+        heat,
+        x: w * xs[i],
+        top: top,
+        bottom: bottom,
+        amp: w * 0.038,
         phase: phase,
       );
     }
-
-    final airTop = bodyBottom + h * 0.07;
-    final airBottom = h * 0.94;
-    final heat = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke * 0.7
-      ..strokeCap = StrokeCap.round;
-    const slots = <(double, double)>[
-      (0.32, -1),
-      (0.50, 0),
-      (0.68, 1),
-    ];
-    for (var i = 0; i < slots.length; i++) {
-      final (xFrac, bendSign) = slots[i];
-      var pulse = 1.0;
-      if (animate) {
-        final phase = t * 2 * math.pi + i * 0.9;
-        pulse = 0.35 + 0.65 * ((math.sin(phase) + 1) / 2);
-      }
-      final length = animate ? (0.55 + 0.45 * pulse) : 1.0;
-      final bottomY = airTop + (airBottom - airTop) * length;
-      heat.color = color.withValues(
-        alpha: animate ? pulse.clamp(0.28, 1.0) : 0.8,
-      );
-      final x = w * xFrac;
-      final bend = w * 0.04 * bendSign;
-      final path = Path()
-        ..moveTo(x, airTop)
-        ..quadraticBezierTo(
-          x + bend,
-          (airTop + bottomY) / 2,
-          x + bend * 0.35,
-          bottomY,
-        );
-      canvas.drawPath(path, heat);
-    }
   }
 
-  void _glowCoil(
+  void _heatRay(
     Canvas canvas,
     Paint paint, {
-    required double y,
-    required double left,
-    required double right,
+    required double x,
+    required double top,
+    required double bottom,
     required double amp,
     required double phase,
   }) {
-    const steps = 18;
+    const steps = 14;
     final path = Path();
     for (var s = 0; s <= steps; s++) {
       final u = s / steps;
-      final x = left + (right - left) * u;
-      final yy = y + math.sin(u * math.pi * 5 + phase) * amp;
+      final y = top + (bottom - top) * u;
+      final xx = x + math.sin(u * math.pi * 2 + phase) * amp;
       if (s == 0) {
-        path.moveTo(x, yy);
+        path.moveTo(xx, y);
       } else {
-        path.lineTo(x, yy);
+        path.lineTo(xx, y);
       }
     }
     canvas.drawPath(path, paint);
