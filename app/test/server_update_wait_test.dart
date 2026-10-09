@@ -62,7 +62,7 @@ void main() {
       serverUpdateProgressMessage(
         _s('idle', message: 'Wacht op update-opdracht.'),
       ),
-      'Server is bijgewerkt.',
+      'Server wordt bijgewerkt.',
     );
   });
 }

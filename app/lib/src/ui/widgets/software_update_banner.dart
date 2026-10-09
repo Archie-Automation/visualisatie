@@ -220,9 +220,8 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
     if (apkWaiting && !apkReady) {
       return _Banner(
         message: _error ??
-            'Server is nieuwer. Wachten op tablet-APK van GitHub Actions '
-            '(duurt vaak 10–15 min na een push). Blijft dit hangen: '
-            'check of de android-apk job op GitHub klaar is.',
+            'Server is nieuwer. De app-update wordt klaargezet. '
+            'Dit duurt vaak 10–15 minuten.',
       );
     }
 
@@ -243,7 +242,7 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
       if (admin) {
         return _Banner(
           message: ver.isEmpty
-              ? 'Nieuwe versie op GitHub. Eenmalig op de NUC: sudo bash docker/install.sh. Daarna vanaf de tablet.'
+              ? 'Nieuwe versie. Eenmalig op de NUC: sudo bash docker/install.sh. Daarna vanaf de tablet.'
               : 'Nieuwe versie ($ver). Eenmalig op de NUC: sudo bash docker/install.sh. Daarna vanaf de tablet.',
           actionLabel: latest?.htmlUrl != null ? 'Bekijken' : null,
           onAction: latest?.htmlUrl != null
@@ -287,7 +286,7 @@ String _apkInstallErrorMessage(String? code) {
       return 'Sta “apps uit onbekende bronnen” toe voor Archie OS en tik opnieuw op Installeren.';
     case 'apk_too_small':
     case 'apk_missing':
-      return 'De gedownloade APK is ongeldig. Controleer of de GitHub Release een .apk heeft.';
+      return 'De gedownloade app is ongeldig. Probeer het later opnieuw.';
     case 'apk_invalid':
       return 'Het gedownloade bestand is geen geldige app. Probeer het later opnieuw.';
     case 'apk_not_newer':
@@ -312,17 +311,16 @@ String _apkInstallErrorMessage(String? code) {
         return 'Niet ingelogd of sessie verlopen. Log opnieuw in en probeer de update opnieuw.';
       }
       if (code != null && code.startsWith('download_http_403')) {
-        return 'GitHub toegang geweigerd. '
-            'Controleer GITHUB_TOKEN in docker/.env op de NUC.';
+        return 'Download geweigerd. Controleer de serverinstellingen op de NUC.';
       }
       if (code != null && code.startsWith('download_http_404')) {
-        return 'APK niet gevonden op GitHub. Staat er een release "android-latest" met .apk?';
+        return 'De app-update is nog niet beschikbaar. Probeer het later opnieuw.';
       }
       if (code != null && code.startsWith('download_http_504')) {
-        return 'De NUC kreeg de APK niet op tijd van GitHub. Controleer netwerk/GITHUB_TOKEN en probeer opnieuw.';
+        return 'De NUC kreeg de app-update niet op tijd. Controleer het netwerk en probeer opnieuw.';
       }
       if (code != null && code.startsWith('download_http_')) {
-        return 'Download mislukt ($code). Staat er een .apk op de GitHub Release?';
+        return 'Download mislukt ($code). Probeer het later opnieuw.';
       }
       if (code != null &&
           (code.contains('Connection closed before full header') ||

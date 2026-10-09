@@ -80,7 +80,7 @@ const kHouseSystems = <HouseSystem>[
   HouseSystem(
     slug: 'intercom',
     name: 'Intercom',
-    icon: Icons.doorbell_outlined,
+    icon: Icons.notifications_outlined,
     types: [DeviceType.intercom],
   ),
   HouseSystem(

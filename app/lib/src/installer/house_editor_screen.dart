@@ -1925,7 +1925,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               for (var i = 0; i < list.length; i++) ...[
                 if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
                 LuxeNavRow(
-                  icon: Icons.doorbell_outlined,
+                  icon: Icons.notifications_outlined,
                   title: () {
                     final name = (list[i]['name'] as String?)?.trim();
                     if (name != null && name.isNotEmpty) return name;
@@ -2653,7 +2653,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               onTap: () => _selectFocus(const _Focus.audio()),
             ),
             LuxeNavRow(
-              icon: Icons.doorbell_outlined,
+              icon: Icons.notifications_outlined,
               title: 'Intercom',
               selected: _sel.kind == _FocusKind.intercoms ||
                   _sel.kind == _FocusKind.intercomDetail,
@@ -6613,7 +6613,7 @@ IconData _deviceFormIcon(String type) => switch (type) {
       'melding' => Icons.notifications_outlined,
       'media_sonos' || 'media_bluesound' => Icons.speaker_outlined,
       'camera' => Icons.videocam_outlined,
-      'intercom' => Icons.doorbell_outlined,
+      'intercom' => Icons.notifications_outlined,
       'lutron_homeworks' => Icons.dialpad_outlined,
       _ => Icons.devices_outlined,
     };
