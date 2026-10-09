@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 /// Sentinel — render via [iconWidgetForData] / [universalIconGlyph], niet [Icon].
 const IconData heaterIconData = IconData(0xF001);
 
-/// Schuine balk (niet horizontaal, anders leest het als de airco).
-/// Warmtestreepjes animeren als [animate].
+/// Terrasheater: reflector, paal en voet. Warmteslierten onder de kap
+/// animeren als [animate].
 class HeaterIcon extends StatefulWidget {
   const HeaterIcon({
     super.key,
@@ -117,76 +117,80 @@ class _HeaterIconPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final stroke = (w * 0.085).clamp(1.6, 2.6);
+    final stroke = (w * 0.072).clamp(1.3, 2.2);
+    final line = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
 
-    canvas.save();
-    canvas.translate(w / 2, h / 2);
-    canvas.rotate(-0.62);
-    canvas.scale(0.78);
-    canvas.translate(-w / 2, -h / 2);
-
-    // Balk — stil; het canvas staat schuin t.o.v. de horizontale airco.
-    final bar = RRect.fromRectAndRadius(
-      Rect.fromLTRB(w * 0.14, h * 0.22, w * 0.86, h * 0.38),
-      Radius.circular(w * 0.06),
+    final dome = Path()
+      ..moveTo(w * 0.16, h * 0.32)
+      ..quadraticBezierTo(w * 0.50, h * 0.02, w * 0.84, h * 0.32);
+    canvas.drawPath(dome, line);
+    canvas.drawLine(
+      Offset(w * 0.12, h * 0.34),
+      Offset(w * 0.88, h * 0.34),
+      line,
     );
+
     canvas.drawRRect(
-      bar,
-      Paint()
-        ..color = color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = stroke,
+      RRect.fromRectAndRadius(
+        Rect.fromLTRB(w * 0.40, h * 0.37, w * 0.60, h * 0.50),
+        Radius.circular(w * 0.04),
+      ),
+      line,
     );
 
-    final rayTop = h * 0.42;
-    final rayBottomFull = h * 0.9;
-    final amplitude = w * 0.055;
-    final centers = [w * 0.28, w * 0.5, w * 0.72];
+    canvas.drawLine(
+      Offset(w * 0.50, h * 0.50),
+      Offset(w * 0.50, h * 0.74),
+      line,
+    );
+    canvas.drawLine(
+      Offset(w * 0.50, h * 0.70),
+      Offset(w * 0.22, h * 0.94),
+      line,
+    );
+    canvas.drawLine(
+      Offset(w * 0.50, h * 0.70),
+      Offset(w * 0.78, h * 0.94),
+      line,
+    );
 
-    for (var i = 0; i < centers.length; i++) {
-      double pulse = 1.0;
+    final heat = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke * 0.72
+      ..strokeCap = StrokeCap.round;
+    const slots = <(double, double)>[
+      (0.28, -1),
+      (0.72, 1),
+    ];
+    for (var i = 0; i < slots.length; i++) {
+      final (xFrac, bendSign) = slots[i];
+      var pulse = 1.0;
       if (animate) {
-        final phase = t * 2 * math.pi + i * 0.9;
+        final phase = t * 2 * math.pi + i * 1.4;
         pulse = 0.35 + 0.65 * ((math.sin(phase) + 1) / 2);
       }
-      final length = animate ? (0.55 + 0.45 * pulse) : 1.0;
-      final rayBottom = rayTop + (rayBottomFull - rayTop) * length;
-      _drawDownWave(
-        canvas,
-        cx: centers[i],
-        top: rayTop,
-        bottom: rayBottom,
-        amplitude: amplitude,
-        paint: Paint()
-          ..color = color.withValues(
-            alpha: animate ? pulse.clamp(0.25, 1.0) : 1.0,
-          )
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke * 0.92
-          ..strokeCap = StrokeCap.round,
+      final len = h * 0.16 * (animate ? (0.55 + 0.45 * pulse) : 1.0);
+      heat.color = color.withValues(
+        alpha: animate ? pulse.clamp(0.3, 1.0) : 0.85,
       );
+      final x = w * xFrac;
+      final top = h * 0.38;
+      final bend = w * 0.05 * bendSign;
+      final path = Path()
+        ..moveTo(x, top)
+        ..quadraticBezierTo(
+          x + bend,
+          top + len * 0.55,
+          x + bend * 0.25,
+          top + len,
+        );
+      canvas.drawPath(path, heat);
     }
-    canvas.restore();
-  }
-
-  void _drawDownWave(
-    Canvas canvas, {
-    required double cx,
-    required double top,
-    required double bottom,
-    required double amplitude,
-    required Paint paint,
-  }) {
-    final path = Path()..moveTo(cx, top);
-    const steps = 8;
-    final dy = (bottom - top) / steps;
-    for (var i = 1; i <= steps; i++) {
-      final y = top + dy * i;
-      final phase = i / steps * math.pi;
-      final x = cx + math.sin(phase * 2.4 + cx) * amplitude;
-      path.lineTo(x, y);
-    }
-    canvas.drawPath(path, paint);
   }
 
   @override
