@@ -12,6 +12,7 @@ class CampfireIcon extends StatefulWidget {
     required this.size,
     required this.color,
     this.animate = true,
+    this.filledLogs = false,
   });
 
   final double size;
@@ -19,6 +20,9 @@ class CampfireIcon extends StatefulWidget {
 
   /// Statusbadge flikkert. Op een bedieningsknop blijft de vlam stil.
   final bool animate;
+
+  /// Kamerstatus: stronken voller ingekleurd, nog wel met de witte nerf.
+  final bool filledLogs;
 
   @override
   State<CampfireIcon> createState() => _CampfireIconState();
@@ -65,7 +69,10 @@ class _CampfireIconState extends State<CampfireIcon>
       fit: StackFit.expand,
       children: [
         CustomPaint(
-          painter: _CampfireLogsPainter(color: widget.color),
+          painter: _CampfireLogsPainter(
+            color: widget.color,
+            filled: widget.filledLogs,
+          ),
         ),
         Align(
           alignment: const Alignment(0, -0.48),
@@ -104,24 +111,29 @@ class _CampfireIconState extends State<CampfireIcon>
 }
 
 class _CampfireLogsPainter extends CustomPainter {
-  _CampfireLogsPainter({required this.color});
+  _CampfireLogsPainter({required this.color, required this.filled});
 
   final Color color;
+  final bool filled;
 
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final logWidth = (w * 0.082).clamp(1.45, 2.15);
+    final logWidth = filled
+        ? (w * 0.115).clamp(2.2, 3.6)
+        : (w * 0.082).clamp(1.45, 2.15);
     final logs = Paint()
-      ..color = color.withValues(alpha: 0.72)
+      ..color = filled ? color : color.withValues(alpha: 0.72)
       ..style = PaintingStyle.stroke
       ..strokeWidth = logWidth
       ..strokeCap = StrokeCap.round;
     final grain = Paint()
       ..color = const Color(0xF2FFFFFF)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = (logWidth * 0.28).clamp(0.55, 0.85)
+      ..strokeWidth = filled
+          ? (logWidth * 0.16).clamp(0.45, 0.7)
+          : (logWidth * 0.28).clamp(0.55, 0.85)
       ..strokeCap = StrokeCap.round;
 
     void log(Offset a, Offset b) {
@@ -135,5 +147,5 @@ class _CampfireLogsPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _CampfireLogsPainter oldDelegate) =>
-      oldDelegate.color != color;
+      oldDelegate.color != color || oldDelegate.filled != filled;
 }

@@ -92,7 +92,7 @@ const kHouseSystems = <HouseSystem>[
   HouseSystem(
     slug: 'meldingen',
     name: 'Meldingen',
-    icon: Icons.notifications_outlined,
+    icon: Icons.announcement_outlined,
     types: [DeviceType.melding],
   ),
 ];
