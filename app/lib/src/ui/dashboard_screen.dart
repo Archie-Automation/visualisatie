@@ -2321,7 +2321,10 @@ class _RoomActivityBadges extends ConsumerWidget {
               'lighting',
             ),
           if (fireplaceOn)
-            tap(_FireBadge(size: glyph + 2, color: color), 'fireplace'),
+            tap(
+              _FireBadge(size: glyph + 2, color: color, filledLogs: true),
+              'fireplace',
+            ),
           if (heaterOn)
             tap(
               _HeaterBadge(size: glyph, color: color),
@@ -2363,15 +2366,18 @@ class _FireBadge extends StatelessWidget {
   const _FireBadge({
     this.size = _RoomActivityBadges._glyphSize + 2,
     this.color,
+    this.filledLogs = false,
   });
   final double size;
   final Color? color;
+  final bool filledLogs;
 
   @override
   Widget build(BuildContext context) {
     return CampfireIcon(
       size: size,
       color: color ?? LuxeColors.brass,
+      filledLogs: filledLogs,
     );
   }
 }

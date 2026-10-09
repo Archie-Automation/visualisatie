@@ -402,7 +402,7 @@ class RoomSegment {
   factory RoomSegment.fromMelding(Device device) => RoomSegment._(
         slug: 'melding__${device.id}',
         labelUpper: device.name.toUpperCase(),
-        icon: Icons.notifications_outlined,
+        icon: Icons.announcement_outlined,
         devices: [device],
       );
 

@@ -5303,7 +5303,7 @@ class _MeldingIconBadge extends StatelessWidget {
               child: Icon(
                 urgency != null
                     ? MeldingTile._urgencyIcon(urgency!)
-                    : Icons.notifications_outlined,
+                    : Icons.announcement_outlined,
                 size: glyph,
                 color: active ? accentColor : LuxeColors.ink,
               ),
