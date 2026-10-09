@@ -92,6 +92,7 @@ import {
 } from "./cameras";
 import {
   captureIntercomStill,
+  deleteIntercomCapture,
   listIntercomCaptures,
   readIntercomCaptureJpeg
 } from "./intercomCaptures";
@@ -1338,6 +1339,18 @@ export function buildRouter(
       if (!buf) return res.status(404).end();
       res.setHeader("Cache-Control", "private, max-age=86400");
       res.type("jpeg").send(buf);
+    }
+  );
+
+  r.delete(
+    "/intercoms/:id/captures/:captureId",
+    requireAuth,
+    (req: AuthedRequest, res) => {
+      if (!canViewIntercom(req, req.params.id))
+        return res.status(403).json({ error: "not allowed" });
+      const ok = deleteIntercomCapture(req.params.id, req.params.captureId);
+      if (!ok) return res.status(404).json({ error: "unknown capture" });
+      res.json({ ok: true });
     }
   );
 

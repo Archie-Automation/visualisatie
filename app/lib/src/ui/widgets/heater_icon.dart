@@ -5,7 +5,8 @@ import 'package:flutter/material.dart';
 /// Sentinel — render via [iconWidgetForData] / [universalIconGlyph], niet [Icon].
 const IconData heaterIconData = IconData(0xF001);
 
-/// Balk stil; warmtestreepjes animeren (als [animate]).
+/// Schuine balk (niet horizontaal, anders leest het als de airco).
+/// Warmtestreepjes animeren als [animate].
 class HeaterIcon extends StatefulWidget {
   const HeaterIcon({
     super.key,
@@ -118,7 +119,13 @@ class _HeaterIconPainter extends CustomPainter {
     final h = size.height;
     final stroke = (w * 0.085).clamp(1.6, 2.6);
 
-    // Horizontale balk — stil.
+    canvas.save();
+    canvas.translate(w / 2, h / 2);
+    canvas.rotate(-0.62);
+    canvas.scale(0.78);
+    canvas.translate(-w / 2, -h / 2);
+
+    // Balk — stil; het canvas staat schuin t.o.v. de horizontale airco.
     final bar = RRect.fromRectAndRadius(
       Rect.fromLTRB(w * 0.14, h * 0.22, w * 0.86, h * 0.38),
       Radius.circular(w * 0.06),
@@ -159,6 +166,7 @@ class _HeaterIconPainter extends CustomPainter {
           ..strokeCap = StrokeCap.round,
       );
     }
+    canvas.restore();
   }
 
   void _drawDownWave(

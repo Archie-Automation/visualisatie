@@ -22,6 +22,7 @@ import 'responsive.dart';
 import 'widgets/back_pill.dart';
 import 'widgets/device_tile_shell.dart';
 import 'widgets/glass_card.dart';
+import 'widgets/campfire_icon.dart';
 import 'widgets/heater_icon.dart';
 import 'widgets/light_status_icon.dart';
 import 'widgets/split_unit_icon.dart';
@@ -2358,7 +2359,7 @@ class _RoomActivityBadges extends ConsumerWidget {
 /*  Animated fire badge                                                 */
 /* ------------------------------------------------------------------ */
 
-class _FireBadge extends StatefulWidget {
+class _FireBadge extends StatelessWidget {
   const _FireBadge({
     this.size = _RoomActivityBadges._glyphSize + 2,
     this.color,
@@ -2367,47 +2368,10 @@ class _FireBadge extends StatefulWidget {
   final Color? color;
 
   @override
-  State<_FireBadge> createState() => _FireBadgeState();
-}
-
-class _FireBadgeState extends State<_FireBadge>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1750),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return ClipRect(
-      child: AnimatedBuilder(
-        animation: _ctrl,
-        builder: (_, __) {
-          final t = _ctrl.value * 2 * pi;
-          // Subtle scale flicker between 0.82 and 1.0
-          final scale = 0.82 + 0.18 * ((sin(t * 1.7) + sin(t * 2.3) + 2) / 4);
-          return Transform.scale(
-            scale: scale,
-            child: Icon(
-              Icons.local_fire_department_rounded,
-              size: widget.size,
-              color: widget.color ?? LuxeColors.brass,
-            ),
-          );
-        },
-      ),
+    return CampfireIcon(
+      size: size,
+      color: color ?? LuxeColors.brass,
     );
   }
 }

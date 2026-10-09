@@ -68,9 +68,6 @@ class _IntercomCaptureOverlayState
         ref.invalidate(intercomCapturesProvider(widget.intercomId));
       });
     });
-    final captures = ref.watch(intercomCapturesProvider(widget.intercomId));
-    final count = captures.value?.length ?? 0;
-
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -92,7 +89,6 @@ class _IntercomCaptureOverlayState
               _FrameIconButton(
                 tooltip: 'Recente foto’s',
                 icon: Icons.photo_library_outlined,
-                badge: count > 0 ? (count > 9 ? '10' : '$count') : null,
                 onTap: _openGallery,
               ),
               const SizedBox(width: 8),
@@ -116,14 +112,12 @@ class _FrameIconButton extends StatelessWidget {
     required this.onTap,
     required this.tooltip,
     this.loading = false,
-    this.badge,
   });
 
   final IconData icon;
   final VoidCallback onTap;
   final String tooltip;
   final bool loading;
-  final String? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -143,46 +137,62 @@ class _FrameIconButton extends StatelessWidget {
           child: SizedBox(
             width: 44,
             height: 44,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                if (loading)
-                  SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: LuxeColors.brass,
-                    ),
-                  )
-                else
-                  Icon(icon, size: 22, color: LuxeColors.ink),
-                if (badge != null)
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 4, vertical: 1),
-                      decoration: BoxDecoration(
+            child: Center(
+              child: loading
+                  ? SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
                         color: LuxeColors.brass,
-                        borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(
-                        badge!,
-                        style: const TextStyle(
-                          fontSize: 8,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF1C1914),
-                          height: 1.1,
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
+                    )
+                  : Icon(icon, size: 22, color: LuxeColors.ink),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+Future<void> _deleteCapture(
+  BuildContext context,
+  WidgetRef ref, {
+  required String intercomId,
+  required IntercomCapture capture,
+}) async {
+  final ok = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('Foto wissen'),
+      content: const Text('Deze foto wordt verwijderd.'),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Annuleren'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Wissen'),
+        ),
+      ],
+    ),
+  );
+  if (ok != true || !context.mounted) return;
+  try {
+    await deleteIntercomCapture(
+      intercomId: intercomId,
+      captureId: capture.id,
+      token: ref.read(authProvider).token,
+    );
+    ref.invalidate(intercomCapturesProvider(intercomId));
+  } catch (_) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        behavior: SnackBarBehavior.floating,
+        content: Text('Foto wissen mislukt.'),
       ),
     );
   }
@@ -298,20 +308,46 @@ class _CaptureGallerySheet extends ConsumerWidget {
                               ),
                             ),
                             const SizedBox(height: 8),
-                            Text(
-                              fmt.format(cap.at.toLocal()),
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: LuxeColors.ink,
-                              ),
-                            ),
-                            Text(
-                              ring ? 'Bij aanbellen' : 'Handmatig',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: LuxeColors.inkSoft,
-                              ),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        fmt.format(cap.at.toLocal()),
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: LuxeColors.ink,
+                                        ),
+                                      ),
+                                      Text(
+                                        ring ? 'Bij aanbellen' : 'Handmatig',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: LuxeColors.inkSoft,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  tooltip: 'Foto wissen',
+                                  onPressed: () => _deleteCapture(
+                                    context,
+                                    ref,
+                                    intercomId: intercomId,
+                                    capture: cap,
+                                  ),
+                                  icon: Icon(
+                                    Icons.delete_outline,
+                                    color: LuxeColors.inkSoft,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         );

@@ -159,6 +159,7 @@ class LuxeNavRow extends StatelessWidget {
     this.trailing,
     this.selected = false,
     this.rounded = false,
+    this.selectedTextMatchesIcon = false,
   });
 
   final IconData icon;
@@ -167,6 +168,8 @@ class LuxeNavRow extends StatelessWidget {
   final Widget? trailing;
   final bool selected;
   final bool rounded;
+  /// Dark mode: geselecteerde titel en subtitel in dezelfde kleur als het icoon.
+  final bool selectedTextMatchesIcon;
   final VoidCallback onTap;
 
   @override
@@ -174,6 +177,9 @@ class LuxeNavRow extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final selectedFill =
         isDark ? LuxeColors.surfaceDarkElev : LuxeColors.surfaceDim;
+    final iconColor = selected ? LuxeColors.brass : LuxeColors.ink;
+    final selectedLabelColor =
+        selected && isDark && selectedTextMatchesIcon ? iconColor : null;
     final radius = rounded
         ? const BorderRadius.all(LuxeRadius.sm)
         : BorderRadius.zero;
@@ -184,6 +190,7 @@ class LuxeNavRow extends StatelessWidget {
           title,
           style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: selectedLabelColor,
               ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -192,7 +199,9 @@ class LuxeNavRow extends StatelessWidget {
           const SizedBox(height: 1),
           Text(
             subtitle!,
-            style: Theme.of(context).textTheme.bodySmall,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: selectedLabelColor,
+                ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -219,7 +228,7 @@ class LuxeNavRow extends StatelessWidget {
                     children: [
                       Icon(
                         icon,
-                        color: selected ? LuxeColors.brass : LuxeColors.ink,
+                        color: iconColor,
                         size: 20,
                       ),
                       const SizedBox(width: 12),

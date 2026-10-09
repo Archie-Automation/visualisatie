@@ -71,6 +71,25 @@ export function listIntercomCaptures(intercomId: string): IntercomCaptureMeta[] 
   return readIndex(intercomId).slice(0, MAX_INTERCOM_CAPTURES);
 }
 
+export function deleteIntercomCapture(
+  intercomId: string,
+  captureId: string
+): boolean {
+  const id = safeId(captureId);
+  if (!id) return false;
+  const items = readIndex(intercomId);
+  const next = items.filter((m) => safeId(m.id) !== id);
+  if (next.length === items.length) return false;
+  const file = path.join(dirFor(intercomId), `${id}.jpg`);
+  try {
+    if (fs.existsSync(file)) fs.unlinkSync(file);
+  } catch {
+    /* index is still updated below */
+  }
+  writeIndex(intercomId, next);
+  return true;
+}
+
 export function readIntercomCaptureJpeg(
   intercomId: string,
   captureId: string

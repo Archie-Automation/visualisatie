@@ -72,9 +72,9 @@ class _SolidArrowPainter extends CustomPainter {
           size,
           tip: tip,
           tail: tail,
-          headFraction: 0.42,
-          headCap: size.shortestSide * 0.44,
-          headWidth: 0.62,
+          headFraction: 0.52,
+          headCap: size.shortestSide * 0.54,
+          headWidth: 0.72,
         );
     }
   }
@@ -88,7 +88,7 @@ class _SolidArrowPainter extends CustomPainter {
     final mid = w / 2;
     final leftInner = mid - centerGap;
     final rightInner = mid + centerGap;
-    final headCap = size.height * 0.46;
+    final headCap = size.height * 0.56;
 
     if (outward) {
       _drawArrow(
@@ -96,18 +96,18 @@ class _SolidArrowPainter extends CustomPainter {
         size,
         tip: Offset(tipPad, cy),
         tail: Offset(leftInner, cy),
-        headFraction: 0.48,
+        headFraction: 0.58,
         headCap: headCap,
-        headWidth: 0.58,
+        headWidth: 0.68,
       );
       _drawArrow(
         canvas,
         size,
         tip: Offset(w - tipPad, cy),
         tail: Offset(rightInner, cy),
-        headFraction: 0.48,
+        headFraction: 0.58,
         headCap: headCap,
-        headWidth: 0.58,
+        headWidth: 0.68,
       );
     } else {
       _drawArrow(
@@ -115,18 +115,18 @@ class _SolidArrowPainter extends CustomPainter {
         size,
         tip: Offset(leftInner, cy),
         tail: Offset(tipPad, cy),
-        headFraction: 0.48,
+        headFraction: 0.58,
         headCap: headCap,
-        headWidth: 0.58,
+        headWidth: 0.68,
       );
       _drawArrow(
         canvas,
         size,
         tip: Offset(rightInner, cy),
         tail: Offset(w - tipPad, cy),
-        headFraction: 0.48,
+        headFraction: 0.58,
         headCap: headCap,
-        headWidth: 0.58,
+        headWidth: 0.68,
       );
     }
   }
