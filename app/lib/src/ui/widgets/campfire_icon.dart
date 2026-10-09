@@ -2,6 +2,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+/// Sentinel — render via [iconWidgetForData], niet [Icon].
+const IconData campfireIconData = IconData(0xF002);
+
 /// Oude flikkerende vlam, met een licht kruis van twee stronken eronder.
 class CampfireIcon extends StatefulWidget {
   const CampfireIcon({
@@ -109,22 +112,25 @@ class _CampfireLogsPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
+    final logWidth = (w * 0.082).clamp(1.45, 2.15);
     final logs = Paint()
-      ..color = color.withValues(alpha: 0.62)
+      ..color = color.withValues(alpha: 0.72)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = (w * 0.055).clamp(1.05, 1.45)
+      ..strokeWidth = logWidth
+      ..strokeCap = StrokeCap.round;
+    final grain = Paint()
+      ..color = const Color(0xF2FFFFFF)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = (logWidth * 0.28).clamp(0.55, 0.85)
       ..strokeCap = StrokeCap.round;
 
-    canvas.drawLine(
-      Offset(w * 0.16, h * 0.76),
-      Offset(w * 0.84, h * 0.92),
-      logs,
-    );
-    canvas.drawLine(
-      Offset(w * 0.16, h * 0.92),
-      Offset(w * 0.84, h * 0.76),
-      logs,
-    );
+    void log(Offset a, Offset b) {
+      canvas.drawLine(a, b, logs);
+      canvas.drawLine(a, b, grain);
+    }
+
+    log(Offset(w * 0.16, h * 0.76), Offset(w * 0.84, h * 0.92));
+    log(Offset(w * 0.16, h * 0.92), Offset(w * 0.84, h * 0.76));
   }
 
   @override

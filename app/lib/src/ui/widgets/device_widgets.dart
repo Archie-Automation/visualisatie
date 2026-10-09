@@ -2787,7 +2787,7 @@ Map<String, dynamic>? _fireplacePulse(
   return m is Map ? m.cast<String, dynamic>() : null;
 }
 
-/// Openhaard uit: vlam met schuine streep.
+/// Openhaard uit: hetzelfde kampvuur, iets vager.
 class _FireplaceHeaderGlyph extends StatelessWidget {
   const _FireplaceHeaderGlyph({
     required this.on,
@@ -2801,58 +2801,15 @@ class _FireplaceHeaderGlyph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final icon = CampfireIcon(
-      size: size,
-      color: color,
-      animate: false,
-    );
-    if (on) return icon;
-
-    return SizedBox(
-      width: size,
-      height: size,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          icon,
-          CustomPaint(
-            size: Size(size, size),
-            painter: _IconSlashPainter(
-              color: color.withValues(alpha: 0.92),
-              strokeWidth: DeviceControlIcons.graphicStrokeFor(size) * 1.15,
-            ),
-          ),
-        ],
+    return Opacity(
+      opacity: on ? 1 : 0.48,
+      child: CampfireIcon(
+        size: size,
+        color: color,
+        animate: false,
       ),
     );
   }
-}
-
-class _IconSlashPainter extends CustomPainter {
-  const _IconSlashPainter({required this.color, required this.strokeWidth});
-
-  final Color color;
-  final double strokeWidth;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round
-      ..style = PaintingStyle.stroke;
-    final pad = size.shortestSide * 0.12;
-    canvas.drawLine(
-      Offset(pad, size.height - pad),
-      Offset(size.width - pad, pad),
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _IconSlashPainter oldDelegate) =>
-      oldDelegate.color != color ||
-      oldDelegate.strokeWidth != strokeWidth;
 }
 
 class FireplaceTile extends ConsumerStatefulWidget {
