@@ -2,8 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// Oude flikkerende vlam, met twee lichtere stronken eronder.
-/// Alleen de contour, zodat het hout niet massief ingekleurd is.
+/// Oude flikkerende vlam, met een licht kruis van twee stronken eronder.
 class CampfireIcon extends StatefulWidget {
   const CampfireIcon({
     super.key,
@@ -83,45 +82,21 @@ class _CampfireLogsPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
     final logs = Paint()
-      ..color = color.withValues(alpha: 0.55)
+      ..color = color.withValues(alpha: 0.62)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = (w * 0.07).clamp(1.15, 1.7)
-      ..strokeJoin = StrokeJoin.round;
+      ..strokeWidth = (w * 0.055).clamp(1.05, 1.45)
+      ..strokeCap = StrokeCap.round;
 
-    _drawLog(
-      canvas,
+    canvas.drawLine(
+      Offset(w * 0.16, h * 0.76),
+      Offset(w * 0.84, h * 0.92),
       logs,
-      Offset(w * 0.14, h * 0.74),
-      Offset(w * 0.86, h * 0.90),
-      w * 0.22,
     );
-    _drawLog(
-      canvas,
+    canvas.drawLine(
+      Offset(w * 0.16, h * 0.92),
+      Offset(w * 0.84, h * 0.76),
       logs,
-      Offset(w * 0.14, h * 0.90),
-      Offset(w * 0.86, h * 0.74),
-      w * 0.22,
     );
-  }
-
-  void _drawLog(Canvas canvas, Paint paint, Offset a, Offset b, double girth) {
-    final mid = Offset((a.dx + b.dx) / 2, (a.dy + b.dy) / 2);
-    final angle = math.atan2(b.dy - a.dy, b.dx - a.dx);
-    canvas.save();
-    canvas.translate(mid.dx, mid.dy);
-    canvas.rotate(angle);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromCenter(
-          center: Offset.zero,
-          width: (b - a).distance,
-          height: girth,
-        ),
-        Radius.circular(girth / 2),
-      ),
-      paint,
-    );
-    canvas.restore();
   }
 
   @override
