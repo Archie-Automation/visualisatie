@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 /// Sentinel — render via [iconWidgetForData] / [universalIconGlyph], niet [Icon].
 const IconData heaterIconData = IconData(0xF001);
 
-/// Hangende terrasheater (plafond): ophanging, paneel, warmte naar beneden.
-/// Warmteslierten animeren als [animate].
+/// Hangende terrasheater: paneel met golvende gloeispiralen en warmte naar beneden.
+/// Spiralen en warmtestrepen bewegen als [animate].
 class HeaterIcon extends StatefulWidget {
   const HeaterIcon({
     super.key,
@@ -125,34 +125,37 @@ class _HeaterIconPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
-    canvas.drawLine(
-      Offset(w * 0.18, h * 0.08),
-      Offset(w * 0.82, h * 0.08),
-      line,
-    );
-    canvas.drawLine(
-      Offset(w * 0.30, h * 0.08),
-      Offset(w * 0.30, h * 0.22),
-      line,
-    );
-    canvas.drawLine(
-      Offset(w * 0.70, h * 0.08),
-      Offset(w * 0.70, h * 0.22),
-      line,
-    );
-
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTRB(w * 0.12, h * 0.22, w * 0.88, h * 0.50),
-        Radius.circular(w * 0.08),
+        Rect.fromLTRB(w * 0.10, h * 0.06, w * 0.90, h * 0.58),
+        Radius.circular(w * 0.1),
       ),
       line,
     );
-    canvas.drawLine(
-      Offset(w * 0.22, h * 0.40),
-      Offset(w * 0.78, h * 0.40),
-      line,
-    );
+
+    final coil = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke * 0.65
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    const rows = <double>[0.18, 0.32, 0.46];
+    for (var i = 0; i < rows.length; i++) {
+      final phase = animate ? t * 2 * math.pi + i * 0.9 : i * 0.6;
+      var pulse = 0.9;
+      if (animate) {
+        pulse = 0.45 + 0.55 * ((math.sin(phase) + 1) / 2);
+      }
+      coil.color = color.withValues(alpha: pulse.clamp(0.4, 1.0));
+      _glowCoil(
+        canvas,
+        coil,
+        y: h * rows[i],
+        left: w * 0.22,
+        right: w * 0.78,
+        amp: h * 0.04,
+        phase: phase,
+      );
+    }
 
     final heat = Paint()
       ..style = PaintingStyle.stroke
@@ -170,12 +173,12 @@ class _HeaterIconPainter extends CustomPainter {
         final phase = t * 2 * math.pi + i * 0.9;
         pulse = 0.35 + 0.65 * ((math.sin(phase) + 1) / 2);
       }
-      final len = h * 0.22 * (animate ? (0.5 + 0.5 * pulse) : 1.0);
+      final len = h * 0.2 * (animate ? (0.5 + 0.5 * pulse) : 1.0);
       heat.color = color.withValues(
         alpha: animate ? pulse.clamp(0.28, 1.0) : 0.8,
       );
       final x = w * xFrac;
-      final top = h * 0.54;
+      final top = h * 0.66;
       final bend = w * 0.045 * bendSign;
       final path = Path()
         ..moveTo(x, top)
@@ -187,6 +190,30 @@ class _HeaterIconPainter extends CustomPainter {
         );
       canvas.drawPath(path, heat);
     }
+  }
+
+  void _glowCoil(
+    Canvas canvas,
+    Paint paint, {
+    required double y,
+    required double left,
+    required double right,
+    required double amp,
+    required double phase,
+  }) {
+    const steps = 18;
+    final path = Path();
+    for (var s = 0; s <= steps; s++) {
+      final u = s / steps;
+      final x = left + (right - left) * u;
+      final yy = y + math.sin(u * math.pi * 5 + phase) * amp;
+      if (s == 0) {
+        path.moveTo(x, yy);
+      } else {
+        path.lineTo(x, yy);
+      }
+    }
+    canvas.drawPath(path, paint);
   }
 
   @override
