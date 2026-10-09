@@ -220,7 +220,8 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
     if (apkWaiting && !apkReady) {
       return _Banner(
         message: _error ??
-            'Server is nieuwer. De app-update wordt klaargezet. '
+            'Server heeft een nieuwere versie. '
+            'Nieuwe app-versie wordt voorbereid. '
             'Dit duurt vaak 10–15 minuten.',
       );
     }

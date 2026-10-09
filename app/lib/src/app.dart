@@ -29,6 +29,7 @@ import 'ui/widgets/media_tile.dart';
 import 'ui/widgets/melding_alert_sound_layer.dart';
 import 'ui/widgets/satel_entry_delay_layer.dart';
 import 'ui/widgets/software_update_banner.dart';
+import 'screen_clean.dart';
 import 'software_version.dart';
 
 class ArchieOsApp extends ConsumerStatefulWidget {
@@ -304,7 +305,7 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
           data: MediaQuery.of(context).copyWith(
             textScaler: TextScaler.linear(phone ? 1.0 : 1.14),
           ),
-          child: themed,
+          child: ScreenCleanLayer(child: themed),
         );
       },
     );
