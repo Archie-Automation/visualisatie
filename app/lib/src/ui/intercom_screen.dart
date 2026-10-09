@@ -197,7 +197,9 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                     ref.watch(configProvider).value?.deviceById(i.id));
             final hPad = phone ? 12.0 : 16.0;
             final stagePad = EdgeInsets.fromLTRB(hPad, 4, hPad, 8);
-            return Column(
+            return IntercomCaptureScope(
+              intercomId: i.id,
+              builder: (context, cap) => Column(
               children: [
                 Expanded(
                   child: Padding(
@@ -247,7 +249,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                               fit: BoxFit.contain,
                               expand: true,
                             ),
-                          IntercomCaptureOverlay(intercomId: i.id),
+                          cap.flash,
                         ],
                       ),
                     ),
@@ -296,33 +298,70 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                                 ),
                           padding: const EdgeInsets.symmetric(
                               horizontal: 20, vertical: 20),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: [
-                              _ActionButton(
-                                icon: Icons.call_end_rounded,
-                                label: 'OPHANGEN',
-                                color: _kCallHangup,
-                                shake: ringing,
-                                onTap: () => _cancel(sip),
-                              ),
-                              if (waiting)
-                                _ActionButton(
-                                  icon: Icons.call_rounded,
-                                  label: 'OPNEMEN',
-                                  color: _kCallAnswer,
-                                  shake: ringing,
-                                  onTap: () => _answer(sip),
-                                ),
-                              if (showRelease)
-                                _ActionButton(
-                                  icon: Icons.lock_open_rounded,
-                                  label: 'DEUR OPEN',
-                                  color: _kCallDoor,
-                                  loading: _releasing,
-                                  onTap: () => _release(i),
-                                ),
-                            ],
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final count = 3 +
+                                  (waiting ? 1 : 0) +
+                                  (showRelease ? 1 : 0);
+                              final diameter =
+                                  ((constraints.maxWidth / count) - 8)
+                                      .clamp(48.0, 72.0);
+                              return Row(
+                                children: [
+                                  Expanded(
+                                    child: _ActionButton(
+                                      icon: Icons.call_end_rounded,
+                                      label: 'OPHANGEN',
+                                      color: _kCallHangup,
+                                      diameter: diameter,
+                                      shake: ringing,
+                                      onTap: () => _cancel(sip),
+                                    ),
+                                  ),
+                                  if (waiting)
+                                    Expanded(
+                                      child: _ActionButton(
+                                        icon: Icons.call_rounded,
+                                        label: 'OPNEMEN',
+                                        color: _kCallAnswer,
+                                        diameter: diameter,
+                                        shake: ringing,
+                                        onTap: () => _answer(sip),
+                                      ),
+                                    ),
+                                  Expanded(
+                                    child: _ActionButton(
+                                      icon: Icons.photo_camera_outlined,
+                                      label: 'FOTO',
+                                      color: _kCallPhoto,
+                                      diameter: diameter,
+                                      loading: cap.busy,
+                                      onTap: cap.takePhoto,
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: _ActionButton(
+                                      icon: Icons.photo_library_outlined,
+                                      label: "FOTO'S",
+                                      color: _kCallPhoto,
+                                      diameter: diameter,
+                                      onTap: cap.openPhotos,
+                                    ),
+                                  ),
+                                  if (showRelease)
+                                    Expanded(
+                                      child: _ActionButton(
+                                        icon: Icons.lock_open_rounded,
+                                        label: 'DEUR OPEN',
+                                        color: _kCallDoor,
+                                        diameter: diameter,
+                                        loading: _releasing,
+                                        onTap: () => _release(i),
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
                           ),
                         ),
                       ),
@@ -330,6 +369,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                   ),
                 ),
               ],
+            ),
             );
           },
         ),
@@ -412,6 +452,7 @@ class _AlarmShakeState extends State<_AlarmShake>
 const _kCallHangup = Color(0xFFB83A3A);
 const _kCallAnswer = Color(0xFF3E6B4F);
 const _kCallDoor = Color(0xFFA67C3D);
+const _kCallPhoto = Color(0xFF3E4550);
 const _kCallOnFill = Color(0xFFF7F4EC);
 
 class _ActionButton extends StatelessWidget {
@@ -420,6 +461,7 @@ class _ActionButton extends StatelessWidget {
     required this.label,
     required this.color,
     required this.onTap,
+    this.diameter = 72,
     this.loading = false,
     this.shake = false,
   });
@@ -427,6 +469,7 @@ class _ActionButton extends StatelessWidget {
   final String label;
   final Color color;
   final VoidCallback onTap;
+  final double diameter;
   final bool loading;
   final bool shake;
 
@@ -435,8 +478,8 @@ class _ActionButton extends StatelessWidget {
     final circle = GestureDetector(
       onTap: loading ? null : onTap,
       child: Container(
-        width: 72,
-        height: 72,
+        width: diameter,
+        height: diameter,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           color: color,
@@ -459,20 +502,25 @@ class _ActionButton extends StatelessWidget {
                   ),
                 ),
               )
-            : Icon(icon, color: _kCallOnFill, size: 30),
+            : Icon(icon, color: _kCallOnFill, size: diameter * 0.42),
       ),
     );
     return Column(
       children: [
         _AlarmShake(enabled: shake && !loading, child: circle),
         const SizedBox(height: 12),
-        Text(label,
-            style: TextStyle(
-              color: color,
-              fontSize: 10,
-              letterSpacing: 2.2,
-              fontWeight: FontWeight.w700,
-            )),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(label,
+              maxLines: 1,
+              softWrap: false,
+              style: TextStyle(
+                color: color,
+                fontSize: 10,
+                letterSpacing: 2.2,
+                fontWeight: FontWeight.w700,
+              )),
+        ),
       ],
     );
   }

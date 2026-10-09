@@ -21,6 +21,7 @@ import '../../theme.dart';
 import '../app_nav.dart';
 import '../responsive.dart';
 import 'camera_snapshot.dart';
+import 'campfire_icon.dart';
 import 'confirm_dialog.dart';
 import 'device_card_scale.dart';
 import 'device_control_panel.dart';
@@ -2800,10 +2801,10 @@ class _FireplaceHeaderGlyph extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final icon = Icon(
-      on ? Icons.local_fire_department : Icons.local_fire_department_outlined,
+    final icon = CampfireIcon(
       size: size,
       color: color,
+      animate: false,
     );
     if (on) return icon;
 
