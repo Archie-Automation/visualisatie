@@ -2,7 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// Oude flikkerende vlam, met twee dikke maar halfdekkende stronken eronder.
+/// Oude flikkerende vlam, met twee lichtere stronken eronder.
+/// Alleen de contour, zodat het hout niet massief ingekleurd is.
 class CampfireIcon extends StatefulWidget {
   const CampfireIcon({
     super.key,
@@ -54,12 +55,12 @@ class _CampfireIconState extends State<CampfireIcon>
                 painter: _CampfireLogsPainter(color: widget.color),
               ),
               Align(
-                alignment: const Alignment(0, -0.28),
+                alignment: const Alignment(0, -0.48),
                 child: Transform.scale(
                   scale: scale,
                   child: Icon(
                     Icons.local_fire_department_rounded,
-                    size: widget.size * 0.72,
+                    size: widget.size * 0.86,
                     color: widget.color,
                   ),
                 ),
@@ -82,21 +83,45 @@ class _CampfireLogsPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
     final logs = Paint()
-      ..color = color.withValues(alpha: 0.48)
+      ..color = color.withValues(alpha: 0.55)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = (w * 0.11).clamp(1.8, 3.0)
-      ..strokeCap = StrokeCap.round;
+      ..strokeWidth = (w * 0.07).clamp(1.15, 1.7)
+      ..strokeJoin = StrokeJoin.round;
 
-    canvas.drawLine(
-      Offset(w * 0.12, h * 0.74),
-      Offset(w * 0.88, h * 0.92),
+    _drawLog(
+      canvas,
       logs,
+      Offset(w * 0.14, h * 0.74),
+      Offset(w * 0.86, h * 0.90),
+      w * 0.22,
     );
-    canvas.drawLine(
-      Offset(w * 0.12, h * 0.92),
-      Offset(w * 0.88, h * 0.74),
+    _drawLog(
+      canvas,
       logs,
+      Offset(w * 0.14, h * 0.90),
+      Offset(w * 0.86, h * 0.74),
+      w * 0.22,
     );
+  }
+
+  void _drawLog(Canvas canvas, Paint paint, Offset a, Offset b, double girth) {
+    final mid = Offset((a.dx + b.dx) / 2, (a.dy + b.dy) / 2);
+    final angle = math.atan2(b.dy - a.dy, b.dx - a.dx);
+    canvas.save();
+    canvas.translate(mid.dx, mid.dy);
+    canvas.rotate(angle);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(
+          center: Offset.zero,
+          width: (b - a).distance,
+          height: girth,
+        ),
+        Radius.circular(girth / 2),
+      ),
+      paint,
+    );
+    canvas.restore();
   }
 
   @override
