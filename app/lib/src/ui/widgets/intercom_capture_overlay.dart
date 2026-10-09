@@ -7,19 +7,38 @@ import '../../api.dart';
 import '../../camera_api.dart';
 import '../../theme.dart';
 
-/// Shutter + recent stills, pinned to the live intercom frame (top-right).
-class IntercomCaptureOverlay extends ConsumerStatefulWidget {
-  const IntercomCaptureOverlay({super.key, required this.intercomId});
+/// Foto-flits op het beeld; de knoppen zelf horen in de belbalk.
+class IntercomCaptureHandle {
+  const IntercomCaptureHandle({
+    required this.busy,
+    required this.flash,
+    required this.takePhoto,
+    required this.openPhotos,
+  });
 
-  final String intercomId;
-
-  @override
-  ConsumerState<IntercomCaptureOverlay> createState() =>
-      _IntercomCaptureOverlayState();
+  final bool busy;
+  final Widget flash;
+  final VoidCallback takePhoto;
+  final VoidCallback openPhotos;
 }
 
-class _IntercomCaptureOverlayState
-    extends ConsumerState<IntercomCaptureOverlay> {
+class IntercomCaptureScope extends ConsumerStatefulWidget {
+  const IntercomCaptureScope({
+    super.key,
+    required this.intercomId,
+    required this.builder,
+  });
+
+  final String intercomId;
+  final Widget Function(BuildContext context, IntercomCaptureHandle handle)
+      builder;
+
+  @override
+  ConsumerState<IntercomCaptureScope> createState() =>
+      _IntercomCaptureScopeState();
+}
+
+class _IntercomCaptureScopeState extends ConsumerState<IntercomCaptureScope> {
   bool _busy = false;
   bool _flash = false;
 
@@ -68,86 +87,18 @@ class _IntercomCaptureOverlayState
         ref.invalidate(intercomCapturesProvider(widget.intercomId));
       });
     });
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        Positioned.fill(
+    return widget.builder(
+      context,
+      IntercomCaptureHandle(
+        busy: _busy,
+        takePhoto: _shutter,
+        openPhotos: _openGallery,
+        flash: Positioned.fill(
           child: IgnorePointer(
             child: AnimatedOpacity(
               duration: const Duration(milliseconds: 90),
               opacity: _flash ? 0.72 : 0,
               child: const ColoredBox(color: Colors.white),
-            ),
-          ),
-        ),
-        Positioned(
-          top: 10,
-          right: 10,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _FrameIconButton(
-                tooltip: 'Recente foto’s',
-                icon: Icons.photo_library_outlined,
-                onTap: _openGallery,
-              ),
-              const SizedBox(width: 8),
-              _FrameIconButton(
-                tooltip: 'Foto maken',
-                icon: Icons.photo_camera_outlined,
-                loading: _busy,
-                onTap: _shutter,
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _FrameIconButton extends StatelessWidget {
-  const _FrameIconButton({
-    required this.icon,
-    required this.onTap,
-    required this.tooltip,
-    this.loading = false,
-  });
-
-  final IconData icon;
-  final VoidCallback onTap;
-  final String tooltip;
-  final bool loading;
-
-  @override
-  Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    final fill = dark ? const Color(0xE61A1A18) : const Color(0xF2F4EFE6);
-    final rim = LuxeBorders.solid(
-      LuxeColors.ink.withValues(alpha: dark ? 0.35 : 0.22),
-    );
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: fill,
-        shape: CircleBorder(side: BorderSide(color: rim)),
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: loading ? null : onTap,
-          child: SizedBox(
-            width: 44,
-            height: 44,
-            child: Center(
-              child: loading
-                  ? SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: LuxeColors.brass,
-                      ),
-                    )
-                  : Icon(icon, size: 22, color: LuxeColors.ink),
             ),
           ),
         ),
