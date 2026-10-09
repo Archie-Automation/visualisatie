@@ -2324,7 +2324,7 @@ class _RoomActivityBadges extends ConsumerWidget {
             tap(_FireBadge(size: glyph + 2, color: color), 'fireplace'),
           if (heaterOn)
             tap(
-              _HeaterBadge(size: glyph + 1, color: color),
+              _HeaterBadge(size: glyph, color: color),
               'universal__${activeHeater.id}',
             ),
           if (acOn)
@@ -2382,7 +2382,7 @@ class _FireBadge extends StatelessWidget {
 
 class _HeaterBadge extends StatelessWidget {
   const _HeaterBadge({
-    this.size = _RoomActivityBadges._glyphSize + 1,
+    this.size = _RoomActivityBadges._glyphSize,
     this.color,
   });
   final double size;

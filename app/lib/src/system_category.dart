@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'models.dart';
 import 'room_control_category.dart';
+import 'ui/widgets/campfire_icon.dart';
 
 /// House-wide system tile (dashboard SYSTEMEN strip).
 class HouseSystem {
@@ -67,7 +68,7 @@ const kHouseSystems = <HouseSystem>[
   HouseSystem(
     slug: 'openhaard',
     name: 'Openhaard',
-    icon: Icons.local_fire_department_outlined,
+    icon: campfireIconData,
     types: [DeviceType.fireplace],
   ),
   HouseSystem(

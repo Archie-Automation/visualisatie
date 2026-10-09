@@ -2,10 +2,12 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'campfire_icon.dart';
+
 /// Sentinel — render via [iconWidgetForData] / [universalIconGlyph], niet [Icon].
 const IconData heaterIconData = IconData(0xF001);
 
-/// Hangende terrasheater: paneel met golvende gloeispiralen en warmte naar beneden.
+/// Hangende terrasheater, even hoog als de airco: twee golvende spiralen en warmte naar beneden.
 /// Spiralen en warmtestrepen bewegen als [animate].
 class HeaterIcon extends StatefulWidget {
   const HeaterIcon({
@@ -99,6 +101,9 @@ Widget? iconWidgetForData(
   required Color color,
 }) {
   if (icon == heaterIconData) return HeaterIcon(size: size, color: color);
+  if (icon == campfireIconData) {
+    return CampfireIcon(size: size, color: color, animate: false);
+  }
   return null;
 }
 
@@ -125,10 +130,13 @@ class _HeaterIconPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
+    // Zelfde kader als de airco: body 0.10–0.52, warmte tot 0.94.
+    final bodyTop = h * 0.10;
+    final bodyBottom = h * 0.52;
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTRB(w * 0.10, h * 0.06, w * 0.90, h * 0.58),
-        Radius.circular(w * 0.1),
+        Rect.fromLTRB(w * 0.08, bodyTop, w * 0.92, bodyBottom),
+        Radius.circular(w * 0.07),
       ),
       line,
     );
@@ -138,7 +146,7 @@ class _HeaterIconPainter extends CustomPainter {
       ..strokeWidth = stroke * 0.65
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
-    const rows = <double>[0.18, 0.32, 0.46];
+    const rows = <double>[0.24, 0.38];
     for (var i = 0; i < rows.length; i++) {
       final phase = animate ? t * 2 * math.pi + i * 0.9 : i * 0.6;
       var pulse = 0.9;
@@ -150,21 +158,23 @@ class _HeaterIconPainter extends CustomPainter {
         canvas,
         coil,
         y: h * rows[i],
-        left: w * 0.22,
-        right: w * 0.78,
-        amp: h * 0.04,
+        left: w * 0.20,
+        right: w * 0.80,
+        amp: h * 0.032,
         phase: phase,
       );
     }
 
+    final airTop = bodyBottom + h * 0.07;
+    final airBottom = h * 0.94;
     final heat = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = stroke * 0.7
       ..strokeCap = StrokeCap.round;
     const slots = <(double, double)>[
-      (0.30, -1),
+      (0.32, -1),
       (0.50, 0),
-      (0.70, 1),
+      (0.68, 1),
     ];
     for (var i = 0; i < slots.length; i++) {
       final (xFrac, bendSign) = slots[i];
@@ -173,20 +183,20 @@ class _HeaterIconPainter extends CustomPainter {
         final phase = t * 2 * math.pi + i * 0.9;
         pulse = 0.35 + 0.65 * ((math.sin(phase) + 1) / 2);
       }
-      final len = h * 0.2 * (animate ? (0.5 + 0.5 * pulse) : 1.0);
+      final length = animate ? (0.55 + 0.45 * pulse) : 1.0;
+      final bottomY = airTop + (airBottom - airTop) * length;
       heat.color = color.withValues(
         alpha: animate ? pulse.clamp(0.28, 1.0) : 0.8,
       );
       final x = w * xFrac;
-      final top = h * 0.66;
-      final bend = w * 0.045 * bendSign;
+      final bend = w * 0.04 * bendSign;
       final path = Path()
-        ..moveTo(x, top)
+        ..moveTo(x, airTop)
         ..quadraticBezierTo(
           x + bend,
-          top + len * 0.55,
-          x + bend * 0.2,
-          top + len,
+          (airTop + bottomY) / 2,
+          x + bend * 0.35,
+          bottomY,
         );
       canvas.drawPath(path, heat);
     }
