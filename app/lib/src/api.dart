@@ -290,6 +290,31 @@ final configProvider = FutureProvider<HouseConfig>((ref) async {
 
 /// ------------------------------- Bus ----------------------------------
 
+/// Of de app de huisserver nu bereikt. [connecting] toont nog geen melding.
+enum ServerLink { connecting, online, offline }
+
+class ServerLinkController extends Notifier<ServerLink> {
+  @override
+  ServerLink build() => ServerLink.connecting;
+
+  void online() {
+    if (state != ServerLink.online) state = ServerLink.online;
+  }
+
+  void offline() {
+    if (state != ServerLink.offline) state = ServerLink.offline;
+  }
+
+  void reset() {
+    if (state != ServerLink.connecting) state = ServerLink.connecting;
+  }
+}
+
+final serverLinkProvider =
+    NotifierProvider<ServerLinkController, ServerLink>(
+  ServerLinkController.new,
+);
+
 class BusState {
   final Map<String, dynamic> values;
   const BusState(this.values);
@@ -300,10 +325,15 @@ class BusController extends Notifier<BusState> {
   WebSocketChannel? _ch;
   StreamSubscription? _sub;
   bool _disposed = false;
+  bool _socketLive = false;
+  bool _connectInFlight = false;
+  int _healthMisses = 0;
   int _retryDelay = 2; // seconds, doubles on each failure up to 30s
   /// Incremented on every `_connect()` call. Stale calls detect they're
   /// outdated and stop without corrupting the connection.
   int _connectGen = 0;
+  Timer? _reconnectTimer;
+  Timer? _healthTimer;
   static const _dimHoldDuration = Duration(milliseconds: 1200);
   static const _batchWindow = Duration(milliseconds: 80);
   final Map<String, ({int percent, DateTime until})> _dimHolds = {};
@@ -373,8 +403,13 @@ class BusController extends Notifier<BusState> {
     ref.onDispose(() {
       _disposed = true;
       _batchTimer?.cancel();
+      _reconnectTimer?.cancel();
+      _healthTimer?.cancel();
       _sub?.cancel();
       _ch?.sink.close();
+    });
+    _healthTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      _probeHealth();
     });
     // Bus starts before auth restore / login finish; reconnect when session is ready.
     ref.listen<AuthState>(authProvider, (prev, next) {
@@ -382,24 +417,77 @@ class BusController extends Notifier<BusState> {
         final wasReady = (prev?.restoreComplete ?? false) && (prev?.isAuthed ?? false);
         if (!wasReady) reconnectNow();
       } else if (prev?.isAuthed == true && !next.isAuthed) {
+        _socketLive = false;
+        _reconnectTimer?.cancel();
         _sub?.cancel();
         _sub = null;
         try {
           _ch?.sink.close();
         } catch (_) {}
         _ch = null;
+        ref.read(serverLinkProvider.notifier).reset();
       }
     });
     Future.microtask(_connect);
     return const BusState({});
   }
 
-  Future<void> _connect() async {
-    final gen = ++_connectGen;
+  Future<bool> _healthOk() async {
+    try {
+      final res = await http
+          .get(Uri.parse('$apiBase/api/health'))
+          .timeout(const Duration(seconds: 2));
+      return res.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Stekker uit de server laat de websocket vaak half-open. Een health-check
+  /// merkt dat sneller dan de TCP-timeout, en haalt de verbinding meteen terug
+  /// zodra de server weer antwoordt.
+  Future<void> _probeHealth() async {
     if (_disposed) return;
     final auth = ref.read(authProvider);
     if (!auth.isAuthed || !auth.restoreComplete) return;
+    final ok = await _healthOk();
+    if (_disposed) return;
+    final still = ref.read(authProvider);
+    if (!still.isAuthed || !still.restoreComplete) return;
+    if (ok) {
+      _healthMisses = 0;
+      if (!_socketLive && !_connectInFlight) {
+        _retryDelay = 2;
+        _connect();
+      }
+      return;
+    }
+    _healthMisses++;
+    if (_healthMisses < 2) return;
+    ref.read(serverLinkProvider.notifier).offline();
+    if (_socketLive && !_connectInFlight) _dropLiveSocket();
+  }
 
+  void _dropLiveSocket() {
+    _socketLive = false;
+    _connectGen++;
+    _sub?.cancel();
+    _sub = null;
+    try {
+      _ch?.sink.close();
+    } catch (_) {}
+    _ch = null;
+    _scheduleReconnect();
+  }
+
+  Future<void> _connect() async {
+    final gen = ++_connectGen;
+    _reconnectTimer?.cancel();
+    if (_disposed) return;
+    final auth = ref.read(authProvider);
+    if (!auth.isAuthed || !auth.restoreComplete) return;
+    _connectInFlight = true;
+    try {
     // Always re-fetch the full state snapshot on (re)connect so we catch
     // any updates that arrived while the WebSocket was down.
     try {
@@ -445,6 +533,9 @@ class BusController extends Notifier<BusState> {
         return;
       }
       _retryDelay = 2; // reset backoff on successful connection
+      _socketLive = true;
+      _healthMisses = 0;
+      ref.read(serverLinkProvider.notifier).online();
 
       _sub = _ch!.stream.listen(
         (raw) {
@@ -532,17 +623,25 @@ class BusController extends Notifier<BusState> {
                   ));
           }
         },
-        onError: (_) => _scheduleReconnect(),
-        onDone: _scheduleReconnect,
+        onError: (_) {
+          if (gen == _connectGen) _scheduleReconnect();
+        },
+        onDone: () {
+          if (gen == _connectGen) _scheduleReconnect();
+        },
         cancelOnError: false,
       );
     } catch (_) {
       if (gen == _connectGen) _scheduleReconnect();
     }
+    } finally {
+      if (gen == _connectGen) _connectInFlight = false;
+    }
   }
 
   void _scheduleReconnect() {
     if (_disposed) return;
+    _socketLive = false;
     final closeCode = _ch?.closeCode;
     _sub?.cancel();
     _sub = null;
@@ -553,16 +652,24 @@ class BusController extends Notifier<BusState> {
       ref.read(authProvider.notifier).logout();
       return;
     }
+    final auth = ref.read(authProvider);
+    if (!auth.isAuthed || !auth.restoreComplete) {
+      ref.read(serverLinkProvider.notifier).reset();
+      return;
+    }
+    ref.read(serverLinkProvider.notifier).offline();
     final delay = _retryDelay;
     _retryDelay = (_retryDelay * 2).clamp(2, 30);
     final jitterMs = math.Random().nextInt(math.min(delay * 250, 3000));
-    Future.delayed(Duration(seconds: delay, milliseconds: jitterMs), () {
+    _reconnectTimer?.cancel();
+    _reconnectTimer = Timer(Duration(seconds: delay, milliseconds: jitterMs), () {
       if (!_disposed) _connect();
     });
   }
 
   /// Reconnect immediately (e.g. after coming back to foreground).
   void reconnectNow() {
+    _socketLive = false;
     _sub?.cancel();
     _sub = null;
     try { _ch?.sink.close(); } catch (_) {}

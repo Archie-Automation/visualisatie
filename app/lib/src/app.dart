@@ -28,6 +28,7 @@ import 'ui/widgets/inactivity_layer.dart';
 import 'ui/widgets/media_tile.dart';
 import 'ui/widgets/melding_alert_sound_layer.dart';
 import 'ui/widgets/satel_entry_delay_layer.dart';
+import 'ui/widgets/server_link_banner.dart';
 import 'ui/widgets/software_update_banner.dart';
 import 'screen_clean.dart';
 import 'software_version.dart';
@@ -288,6 +289,7 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
         );
         final content = Column(
           children: [
+            const ServerLinkBanner(),
             const SoftwareUpdateBanner(),
             Expanded(child: layered),
           ],
