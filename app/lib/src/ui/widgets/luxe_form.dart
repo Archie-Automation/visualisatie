@@ -238,15 +238,15 @@ class LuxeNavRow extends StatelessWidget {
                 ),
               ),
             ),
-            trailing ??
-                Padding(
-                  padding: const EdgeInsets.only(right: 10),
-                  child: Icon(
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: trailing ??
+                  Icon(
                     Icons.chevron_right_rounded,
                     size: 20,
                     color: LuxeColors.inkSoft,
                   ),
-                ),
+            ),
           ],
         ),
       ),
