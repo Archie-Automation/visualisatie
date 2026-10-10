@@ -183,6 +183,7 @@ class _CategoryBody extends ConsumerWidget {
             onBack: onBack,
             title: titleText,
             subtitle: '${room.name} · ${floor.name}',
+            subtitleFontSize: context.isPhone ? 13 : 15,
             trailing: IconButton(
               tooltip: isCatFav
                   ? 'Verwijder deze groep uit favorieten'

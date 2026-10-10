@@ -1293,7 +1293,7 @@ class _VolumeSliderState extends State<_VolumeSlider> {
               color: widget.dark
                   ? Colors.white70
                   : (enabled ? LuxeColors.inkSoft : LuxeColors.inkFaint),
-              size: bigDark ? 32 : (widget.dark ? 26 : (widget.roomy ? 24 : 22)),
+              size: bigDark ? 36 : (widget.dark ? 30 : (widget.roomy ? 28 : 26)),
             ),
           ),
         ),
@@ -1319,7 +1319,7 @@ class _VolumeSliderState extends State<_VolumeSlider> {
         if (widget.dark) ...[
           const SizedBox(width: 10),
           Icon(Icons.volume_up_rounded,
-              color: Colors.white70, size: bigDark ? 28 : 22),
+              color: Colors.white70, size: bigDark ? 32 : 26),
         ],
       ],
     );

@@ -572,7 +572,7 @@ class _FloorReorderSheetState extends ConsumerState<_FloorReorderSheet> {
                     key: ValueKey(floor.id),
                     contentPadding:
                         EdgeInsets.symmetric(horizontal: 8),
-                    leading: ReorderableDelayedDragStartListener(
+                    leading: ReorderableDragStartListener(
                       index: i,
                       child: Padding(
                         padding: EdgeInsets.all(8),
@@ -653,7 +653,7 @@ class _SceneReorderSheetState extends State<_SceneReorderSheet> {
               child: Row(
                 children: [
                   Icon(Icons.sort_rounded,
-                      size: 20, color: LuxeColors.brass),
+                      size: 28, color: LuxeColors.brass),
                   SizedBox(width: 10),
                   Text('Scenes rangschikken',
                       style: Theme.of(context).textTheme.titleLarge),
@@ -690,7 +690,7 @@ class _SceneReorderSheetState extends State<_SceneReorderSheet> {
                     key: ValueKey(scene.id),
                     contentPadding:
                         EdgeInsets.symmetric(horizontal: 8),
-                    leading: ReorderableDelayedDragStartListener(
+                    leading: ReorderableDragStartListener(
                       index: i,
                       child: Padding(
                         padding: EdgeInsets.all(8),
@@ -885,7 +885,7 @@ class _RoomReorderSheetState extends ConsumerState<_RoomReorderSheet> {
                   return ListTile(
                     key: ValueKey(room.id),
                     contentPadding: EdgeInsets.symmetric(horizontal: 8),
-                    leading: ReorderableDelayedDragStartListener(
+                    leading: ReorderableDragStartListener(
                       index: i,
                       child: Padding(
                         padding: EdgeInsets.all(8),
@@ -953,7 +953,7 @@ class _RoomDashboardRow extends ConsumerWidget {
           padding: EdgeInsets.fromLTRB(hp, 16, hp, segments.isEmpty ? 16 : 10),
           child: Row(
             children: [
-              // Drag handle — long-press first so horizontal swipes don't reorder.
+              // Drag handle — pakt meteen, zodat je niet hoeft vast te houden.
               Builder(builder: (context) {
                 Widget handle = MouseRegion(
                   cursor: SystemMouseCursors.grab,
@@ -967,7 +967,7 @@ class _RoomDashboardRow extends ConsumerWidget {
                   ),
                 );
                 if (inlineReorder) {
-                  return ReorderableDelayedDragStartListener(
+                  return ReorderableDragStartListener(
                     index: index,
                     child: handle,
                   );
@@ -1122,7 +1122,9 @@ class _TimeGreetingTextState extends State<_TimeGreetingText>
   Widget build(BuildContext context) {
     return Text(
       _timeGreeting().toUpperCase(),
-      style: Theme.of(context).textTheme.labelLarge,
+      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            fontSize: context.isPhone ? 16 : 15,
+          ),
     );
   }
 }
@@ -1521,7 +1523,7 @@ class _SystemManageSheetState extends ConsumerState<_SystemManageSheet> {
               child: Row(
                 children: [
                   Icon(Icons.tune_rounded,
-                      size: 20, color: LuxeColors.brass),
+                      size: 28, color: LuxeColors.brass),
                   SizedBox(width: 10),
                   Text('Systemen beheren',
                       style: Theme.of(context).textTheme.titleLarge),
@@ -1531,7 +1533,7 @@ class _SystemManageSheetState extends ConsumerState<_SystemManageSheet> {
             Padding(
               padding: const EdgeInsets.fromLTRB(22, 2, 22, 12),
               child: Text(
-                'Sleep om te rangschikken. Vinkje om te tonen of verbergen.',
+                'Sleep om te rangschikken. Knop om te tonen of verbergen.',
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
@@ -1558,7 +1560,7 @@ class _SystemManageSheetState extends ConsumerState<_SystemManageSheet> {
                     key: ValueKey(chip.name),
                     contentPadding:
                         EdgeInsets.symmetric(horizontal: 8),
-                    leading: ReorderableDelayedDragStartListener(
+                    leading: ReorderableDragStartListener(
                       index: i,
                       child: Padding(
                         padding: EdgeInsets.all(8),

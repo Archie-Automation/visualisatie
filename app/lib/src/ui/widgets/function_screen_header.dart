@@ -12,12 +12,14 @@ class FunctionScreenHeader extends StatelessWidget {
     required this.onBack,
     required this.title,
     this.subtitle,
+    this.subtitleFontSize,
     this.trailing,
   });
 
   final VoidCallback onBack;
   final String title;
   final String? subtitle;
+  final double? subtitleFontSize;
   final Widget? trailing;
 
   @override
@@ -49,9 +51,9 @@ class FunctionScreenHeader extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: isPhone ? 10 : 11,
+                          fontSize: subtitleFontSize ?? (isPhone ? 10 : 11),
                           fontWeight: FontWeight.w600,
-                          letterSpacing: 0.9,
+                          letterSpacing: subtitleFontSize == null ? 0.9 : 0.55,
                           color: LuxeColors.inkSoft,
                           height: 1.3,
                         ),
