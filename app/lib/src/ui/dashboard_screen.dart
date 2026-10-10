@@ -24,7 +24,6 @@ import 'widgets/device_tile_shell.dart';
 import 'widgets/glass_card.dart';
 import 'widgets/campfire_icon.dart';
 import 'widgets/heater_icon.dart';
-import 'widgets/light_status_icon.dart';
 import 'widgets/split_unit_icon.dart';
 import 'widgets/room_category_strip.dart';
 import 'widgets/luxe_backdrop.dart';
@@ -451,6 +450,7 @@ class _FloorTabBar extends ConsumerWidget {
                       ),
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
                             height: 1.0,
+                            fontSize: context.isPhone ? 16 : 15,
                             color: selected
                                 ? LuxeColors.ink
                                 : LuxeColors.inkSoft,
@@ -543,7 +543,7 @@ class _FloorReorderSheetState extends ConsumerState<_FloorReorderSheet> {
             Padding(
               padding: const EdgeInsets.fromLTRB(22, 2, 22, 12),
               child: Text(
-                'Houd de handgreep even ingedrukt en sleep om de volgorde te wijzigen.',
+                'Sleep om de volgorde aan te passen.',
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
@@ -663,7 +663,7 @@ class _SceneReorderSheetState extends State<_SceneReorderSheet> {
             Padding(
               padding: const EdgeInsets.fromLTRB(22, 2, 22, 12),
               child: Text(
-                'Houd de handgreep even ingedrukt en sleep om de volgorde te wijzigen.',
+                'Sleep om de volgorde aan te passen.',
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
@@ -856,7 +856,7 @@ class _RoomReorderSheetState extends ConsumerState<_RoomReorderSheet> {
             Padding(
               padding: const EdgeInsets.fromLTRB(22, 2, 22, 12),
               child: Text(
-                'Sleep de handgreep om de volgorde te wijzigen.',
+                'Sleep om de volgorde aan te passen.',
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
@@ -1531,7 +1531,7 @@ class _SystemManageSheetState extends ConsumerState<_SystemManageSheet> {
             Padding(
               padding: const EdgeInsets.fromLTRB(22, 2, 22, 12),
               child: Text(
-                'Sleep om te rangschikken Â· Vinkje om te tonen of verbergen.',
+                'Sleep om te rangschikken. Vinkje om te tonen of verbergen.',
                 style: Theme.of(context)
                     .textTheme
                     .bodySmall
@@ -2141,7 +2141,11 @@ class _HouseActivityHeaderButtons extends ConsumerWidget {
         _GlassStatusButton(
           tooltip: 'Verlichting aan',
           onTap: () => _openSystem(context, 'Verlichting'),
-          child: LightStatusIcon(size: _glyph, color: LuxeColors.ink),
+          child: Icon(
+            Icons.lightbulb_outline_rounded,
+            size: _glyph,
+            color: LuxeColors.ink,
+          ),
         ),
       if (heaterOn)
         _GlassStatusButton(

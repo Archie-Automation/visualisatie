@@ -639,8 +639,12 @@ class _SectionLabel extends StatelessWidget {
       child: Row(
         children: [
           if (icon != null) ...[
-            Icon(icon, size: brass ? 18 : 15, color: color),
-            SizedBox(width: 6),
+            Icon(
+              icon,
+              size: brass ? (context.isPhone ? 22 : 26) : 15,
+              color: color,
+            ),
+            SizedBox(width: 8),
           ],
           Text(label, style: style),
         ],
