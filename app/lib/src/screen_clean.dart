@@ -129,7 +129,8 @@ class _ScreenCleanViewState extends State<ScreenCleanView>
   Widget build(BuildContext context) {
     final side = MediaQuery.sizeOf(context).shortestSide;
     final fontSize = (side * 0.42).clamp(180.0, 420.0);
-    final accent = _cleanAccent();
+    // Zelfde messing als de systeemicoontjes in het donkere thema.
+    final accent = LuxePalette.dark.brass;
     return BackButtonListener(
       onBackButtonPressed: () async => true,
       child: AbsorbPointer(
@@ -162,16 +163,20 @@ class _ScreenCleanViewState extends State<ScreenCleanView>
                             color: accent,
                             fontSize: fontSize,
                             fontWeight: FontWeight.w600,
-                            height: 0.9,
+                            height: 1,
+                            decoration: TextDecoration.none,
                           ),
                         ),
                         const SizedBox(height: 28),
                         Text(
                           'Scherm schoonmaken',
                           style: TextStyle(
-                            color: accent.withValues(alpha: 0.72),
+                            color: accent,
                             fontSize: 28,
                             fontWeight: FontWeight.w500,
+                            height: 1.2,
+                            decoration: TextDecoration.none,
+                            decorationThickness: 0,
                           ),
                         ),
                       ],
@@ -185,14 +190,6 @@ class _ScreenCleanViewState extends State<ScreenCleanView>
       ),
     );
   }
-}
-
-/// Messing uit het thema. Op een zwart vlak is het lichte messing leesbaarder
-/// dan het donkere messing van het lichte thema.
-Color _cleanAccent() {
-  final brass = LuxeColors.brass;
-  if (brass.computeLuminance() < 0.4) return LuxeColors.brassGlow;
-  return brass;
 }
 
 class _BubbleSpec {
@@ -211,21 +208,17 @@ class _BubbleSpec {
   final double wobble;
 }
 
+/// radius en drift zijn een deel van de kortste zijde, zodat ze op een
+/// wandtablet groot genoeg zijn om te zien en toch zacht blijven.
 const _bubbles = <_BubbleSpec>[
-  _BubbleSpec(x: 0.08, radius: 18, phase: 0.02, drift: 14, wobble: 1.1),
-  _BubbleSpec(x: 0.16, radius: 34, phase: 0.41, drift: 22, wobble: 0.7),
-  _BubbleSpec(x: 0.27, radius: 12, phase: 0.18, drift: 10, wobble: 1.4),
-  _BubbleSpec(x: 0.34, radius: 46, phase: 0.73, drift: 18, wobble: 0.6),
-  _BubbleSpec(x: 0.44, radius: 22, phase: 0.55, drift: 16, wobble: 1.0),
-  _BubbleSpec(x: 0.52, radius: 14, phase: 0.09, drift: 12, wobble: 1.3),
-  _BubbleSpec(x: 0.61, radius: 40, phase: 0.86, drift: 24, wobble: 0.8),
-  _BubbleSpec(x: 0.70, radius: 16, phase: 0.33, drift: 11, wobble: 1.2),
-  _BubbleSpec(x: 0.78, radius: 28, phase: 0.62, drift: 20, wobble: 0.9),
-  _BubbleSpec(x: 0.88, radius: 20, phase: 0.24, drift: 15, wobble: 1.1),
-  _BubbleSpec(x: 0.93, radius: 38, phase: 0.48, drift: 18, wobble: 0.65),
-  _BubbleSpec(x: 0.22, radius: 10, phase: 0.91, drift: 8, wobble: 1.6),
-  _BubbleSpec(x: 0.57, radius: 26, phase: 0.15, drift: 17, wobble: 0.85),
-  _BubbleSpec(x: 0.39, radius: 15, phase: 0.67, drift: 13, wobble: 1.25),
+  _BubbleSpec(x: 0.10, radius: 0.045, phase: 0.05, drift: 0.018, wobble: 0.8),
+  _BubbleSpec(x: 0.22, radius: 0.08, phase: 0.38, drift: 0.024, wobble: 0.55),
+  _BubbleSpec(x: 0.36, radius: 0.055, phase: 0.72, drift: 0.02, wobble: 0.7),
+  _BubbleSpec(x: 0.50, radius: 0.034, phase: 0.16, drift: 0.016, wobble: 0.9),
+  _BubbleSpec(x: 0.64, radius: 0.072, phase: 0.84, drift: 0.022, wobble: 0.6),
+  _BubbleSpec(x: 0.78, radius: 0.048, phase: 0.28, drift: 0.02, wobble: 0.75),
+  _BubbleSpec(x: 0.90, radius: 0.09, phase: 0.55, drift: 0.026, wobble: 0.5),
+  _BubbleSpec(x: 0.30, radius: 0.028, phase: 0.93, drift: 0.014, wobble: 1.0),
 ];
 
 class _SoapBubblesPainter extends CustomPainter {
@@ -241,39 +234,41 @@ class _SoapBubblesPainter extends CustomPainter {
       final fade = progress < 0.08
           ? progress / 0.08
           : (progress > 0.9 ? (1 - progress) / 0.1 : 1.0);
+      final radius = size.shortestSide * b.radius;
       final y = size.height * (1.08 - progress * 1.25);
       final x = size.width * b.x +
-          math.sin((t * b.wobble + b.phase) * math.pi * 2) * b.drift;
+          math.sin((t * b.wobble + b.phase) * math.pi * 2) *
+              size.shortestSide *
+              b.drift;
       final center = Offset(x, y);
-      final film = Color.lerp(color, const Color(0xFFFFFFFF), 0.55)!;
 
       canvas.drawCircle(
         center,
-        b.radius,
+        radius,
         Paint()
-          ..color = film.withValues(alpha: 0.07 * fade)
+          ..color = color.withValues(alpha: 0.05 * fade)
           ..style = PaintingStyle.fill,
       );
       canvas.drawCircle(
         center,
-        b.radius,
+        radius,
         Paint()
-          ..color = film.withValues(alpha: 0.55 * fade)
+          ..color = color.withValues(alpha: 0.32 * fade)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.4,
+          ..strokeWidth = (radius * 0.045).clamp(1.2, 2.2),
       );
       canvas.drawArc(
         Rect.fromCircle(
-          center: center.translate(-b.radius * 0.22, -b.radius * 0.28),
-          radius: b.radius * 0.42,
+          center: center.translate(-radius * 0.22, -radius * 0.28),
+          radius: radius * 0.42,
         ),
         math.pi * 1.15,
         math.pi * 0.62,
         false,
         Paint()
-          ..color = const Color(0xFFFFFFFF).withValues(alpha: 0.7 * fade)
+          ..color = color.withValues(alpha: 0.5 * fade)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5
+          ..strokeWidth = (radius * 0.04).clamp(1.1, 2.0)
           ..strokeCap = StrokeCap.round,
       );
     }
