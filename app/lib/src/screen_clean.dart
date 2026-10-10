@@ -50,54 +50,94 @@ class ScreenCleanLayer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (!wallTabletDeviceSettingsApply) return child;
     final seconds = ref.watch(screenCleanProvider);
+    if (!wallTabletDeviceSettingsApply || seconds == null) return child;
     return Stack(
       fit: StackFit.expand,
       children: [
         child,
-        if (seconds != null)
-          const Positioned.fill(child: _ScreenCleanBarrier()),
+        Positioned.fill(child: ScreenCleanView(seconds: seconds)),
       ],
     );
   }
 }
 
-class _ScreenCleanBarrier extends ConsumerWidget {
-  const _ScreenCleanBarrier();
+/// Opent het schoonmaakscherm als eigen route, boven instellingen.
+void openScreenClean(BuildContext context, WidgetRef ref) {
+  if (ref.read(screenCleanProvider) != null) return;
+  ref.read(screenCleanProvider.notifier).start();
+  Navigator.of(context, rootNavigator: true).push(
+    PageRouteBuilder<void>(
+      opaque: true,
+      barrierDismissible: false,
+      transitionDuration: Duration.zero,
+      reverseTransitionDuration: Duration.zero,
+      pageBuilder: (_, __, ___) => const ScreenCleanPage(),
+    ),
+  );
+}
+
+class ScreenCleanPage extends ConsumerWidget {
+  const ScreenCleanPage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen<int?>(screenCleanProvider, (prev, next) {
+      if (next != null || prev == null) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!context.mounted) return;
+        final nav = Navigator.of(context);
+        if (nav.canPop()) nav.pop();
+      });
+    });
     final seconds = ref.watch(screenCleanProvider) ?? 0;
+    return ScreenCleanView(seconds: seconds);
+  }
+}
+
+class ScreenCleanView extends StatelessWidget {
+  const ScreenCleanView({super.key, required this.seconds});
+
+  final int seconds;
+
+  @override
+  Widget build(BuildContext context) {
+    final side = MediaQuery.sizeOf(context).shortestSide;
+    final fontSize = (side * 0.42).clamp(180.0, 420.0);
     return BackButtonListener(
       onBackButtonPressed: () async => true,
       child: AbsorbPointer(
         child: ColoredBox(
-          color: Colors.black,
+          color: const Color(0xFF000000),
           child: SizedBox.expand(
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '$seconds',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 120,
-                      fontWeight: FontWeight.w500,
-                      height: 1,
+            child: MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                textScaler: TextScaler.noScaling,
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '$seconds',
+                      style: TextStyle(
+                        color: const Color(0xFFFFFFFF),
+                        fontSize: fontSize,
+                        fontWeight: FontWeight.w600,
+                        height: 0.9,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Scherm schoonmaken',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w500,
+                    const SizedBox(height: 28),
+                    const Text(
+                      'Scherm schoonmaken',
+                      style: TextStyle(
+                        color: Color(0xB3FFFFFF),
+                        fontSize: 28,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

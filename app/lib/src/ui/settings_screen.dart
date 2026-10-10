@@ -162,8 +162,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                       title: 'Scherm schoonmaken',
                       subtitle: '20 seconden geen reactie op aanraken',
                       showChevron: false,
-                      onTap: () =>
-                          ref.read(screenCleanProvider.notifier).start(),
+                      onTap: () => openScreenClean(context, ref),
                     ),
                     Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
                     _SettingsMenuTile(

@@ -694,8 +694,11 @@ class _SceneReorderSheetState extends State<_SceneReorderSheet> {
                       index: i,
                       child: Padding(
                         padding: EdgeInsets.all(8),
-                        child: Icon(Icons.drag_handle_rounded,
-                            color: LuxeColors.inkSoft),
+                        child: Icon(
+                          Icons.drag_handle_rounded,
+                          size: 34,
+                          color: LuxeColors.inkSoft,
+                        ),
                       ),
                     ),
                     title: Text(scene.name,
@@ -1224,8 +1227,8 @@ Widget _scenes(
                   padding: const EdgeInsets.only(left: 8),
                   child: Icon(
                     Icons.sort_rounded,
-                    size: 22,
-                    color: LuxeColors.inkSoft.withValues(alpha: 0.6),
+                    size: 32,
+                    color: LuxeColors.inkSoft.withValues(alpha: 0.85),
                   ),
                 ),
               ),
@@ -1390,8 +1393,8 @@ class _Systemen extends ConsumerWidget {
                     padding: EdgeInsets.only(left: 8),
                     child: Icon(
                       Icons.tune_rounded,
-                      size: 22,
-                      color: LuxeColors.inkSoft.withValues(alpha: 0.6),
+                      size: 32,
+                      color: LuxeColors.inkSoft.withValues(alpha: 0.85),
                     ),
                   ),
                 ),
@@ -1559,21 +1562,24 @@ class _SystemManageSheetState extends ConsumerState<_SystemManageSheet> {
                       index: i,
                       child: Padding(
                         padding: EdgeInsets.all(8),
-                        child: Icon(Icons.drag_handle_rounded,
-                            color: LuxeColors.inkSoft),
+                        child: Icon(
+                          Icons.drag_handle_rounded,
+                          size: 34,
+                          color: LuxeColors.inkSoft,
+                        ),
                       ),
                     ),
                     title: Row(
                       children: [
                         iconWidgetForData(
                               chip.icon,
-                              size: 18,
+                              size: 26,
                               color: visible
                                   ? (chip.accent ?? LuxeColors.brass)
                                   : LuxeColors.inkSoft.withValues(alpha: 0.4),
                             ) ??
                             Icon(chip.icon,
-                                size: 18,
+                                size: 26,
                                 color: visible
                                     ? (chip.accent ?? LuxeColors.brass)
                                     : LuxeColors.inkSoft.withValues(alpha: 0.4)),
@@ -2023,6 +2029,8 @@ class _GlassIconButton extends StatelessWidget {
   static const double size = 48;
   static const double iconSize = 20;
   static const double radius = 14;
+  static const double statusSize = 58;
+  static const double statusRadius = 16;
 
   @override
   Widget build(BuildContext context) {
@@ -2069,9 +2077,9 @@ class _GlassStatusButton extends StatelessWidget {
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
         child: LuxeRimBox(
-          width: _GlassIconButton.size,
-          height: _GlassIconButton.size,
-          radius: _GlassIconButton.radius,
+          width: _GlassIconButton.statusSize,
+          height: _GlassIconButton.statusSize,
+          radius: _GlassIconButton.statusRadius,
           rimWidth: 1,
           rimColor: LuxeColors.glassRim,
           fillColor: LuxeChipChrome.fill(context, pressed: false),
@@ -2088,7 +2096,7 @@ class _HouseActivityHeaderButtons extends ConsumerWidget {
   const _HouseActivityHeaderButtons({required this.cfg});
   final HouseConfig cfg;
 
-  static const _glyph = 24.0;
+  static const _glyph = 32.0;
 
   void _openSystem(BuildContext context, String sysName) {
     final sys = houseSystemByName(sysName);
@@ -2291,9 +2299,9 @@ class _RoomActivityBadges extends ConsumerWidget {
     // Phone: inkSoft (antraciet, zelfde gewicht als kamernamen).
     // Tablet: ink, gelijk aan de header.
     final phone = context.isPhone;
-    final glyph = phone ? 24.0 : 22.0;
-    final slot = phone ? 44.0 : 40.0;
-    final badge = phone ? 28.0 : 26.0;
+    final glyph = phone ? 30.0 : 28.0;
+    final slot = phone ? 52.0 : 48.0;
+    final badge = phone ? 36.0 : 34.0;
     final color = phone ? LuxeColors.inkSoft : LuxeColors.ink;
 
     Widget tap(Widget child, String categorySlug) => GestureDetector(
