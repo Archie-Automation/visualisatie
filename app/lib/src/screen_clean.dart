@@ -4,32 +4,41 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'display_panel_config.dart';
-import 'theme.dart';
 
 const screenCleanDuration = Duration(seconds: 20);
 
-/// Einde van de schoonmaakperiode, of null als het scherm normaal reageert.
-class ScreenCleanController extends Notifier<DateTime?> {
+/// Seconden die nog lopen, of null als het scherm normaal reageert.
+/// 0 blijft even staan zodat de aftelling zichtbaar eindigt.
+class ScreenCleanController extends Notifier<int?> {
   Timer? _timer;
 
   @override
-  DateTime? build() {
+  int? build() {
     ref.onDispose(() => _timer?.cancel());
     return null;
   }
 
   void start() {
     _timer?.cancel();
-    state = DateTime.now().add(screenCleanDuration);
-    _timer = Timer(screenCleanDuration, () {
-      _timer = null;
-      state = null;
+    var left = screenCleanDuration.inSeconds;
+    state = left;
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      left -= 1;
+      if (left > 0) {
+        state = left;
+        return;
+      }
+      t.cancel();
+      state = 0;
+      _timer = Timer(const Duration(milliseconds: 700), () {
+        _timer = null;
+        state = null;
+      });
     });
   }
 }
 
-final screenCleanProvider =
-    NotifierProvider<ScreenCleanController, DateTime?>(
+final screenCleanProvider = NotifierProvider<ScreenCleanController, int?>(
   ScreenCleanController.new,
 );
 
@@ -42,106 +51,57 @@ class ScreenCleanLayer extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (!wallTabletDeviceSettingsApply) return child;
-    final endsAt = ref.watch(screenCleanProvider);
+    final seconds = ref.watch(screenCleanProvider);
     return Stack(
       fit: StackFit.expand,
       children: [
         child,
-        if (endsAt != null)
-          Positioned.fill(child: _ScreenCleanBarrier(endsAt: endsAt)),
+        if (seconds != null)
+          const Positioned.fill(child: _ScreenCleanBarrier()),
       ],
     );
   }
 }
 
-class _ScreenCleanBarrier extends StatefulWidget {
-  const _ScreenCleanBarrier({required this.endsAt});
-
-  final DateTime endsAt;
+class _ScreenCleanBarrier extends ConsumerWidget {
+  const _ScreenCleanBarrier();
 
   @override
-  State<_ScreenCleanBarrier> createState() => _ScreenCleanBarrierState();
-}
-
-class _ScreenCleanBarrierState extends State<_ScreenCleanBarrier> {
-  Timer? _tick;
-  late int _seconds;
-
-  @override
-  void initState() {
-    super.initState();
-    _seconds = _left();
-    _tick = Timer.periodic(const Duration(milliseconds: 200), (_) {
-      final left = _left();
-      if (!mounted || left == _seconds) return;
-      setState(() => _seconds = left);
-    });
-  }
-
-  @override
-  void didUpdateWidget(_ScreenCleanBarrier oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.endsAt != widget.endsAt) {
-      setState(() => _seconds = _left());
-    }
-  }
-
-  @override
-  void dispose() {
-    _tick?.cancel();
-    super.dispose();
-  }
-
-  int _left() {
-    final ms = widget.endsAt.difference(DateTime.now()).inMilliseconds;
-    if (ms <= 0) return 0;
-    return (ms / 1000).ceil();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+  Widget build(BuildContext context, WidgetRef ref) {
+    final seconds = ref.watch(screenCleanProvider) ?? 0;
     return BackButtonListener(
       onBackButtonPressed: () async => true,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          ModalBarrier(
-            dismissible: false,
-            color: theme.scaffoldBackgroundColor,
-          ),
-          IgnorePointer(
+      child: AbsorbPointer(
+        child: ColoredBox(
+          color: Colors.black,
+          child: SizedBox.expand(
             child: Center(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '$_seconds',
-                    style: theme.textTheme.displayLarge?.copyWith(
+                    '$seconds',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 120,
                       fontWeight: FontWeight.w500,
-                      color: LuxeColors.ink,
                       height: 1,
                     ),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
+                  const SizedBox(height: 16),
+                  const Text(
                     'Scherm schoonmaken',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: LuxeColors.ink,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Aanraken doet niets',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: LuxeColors.inkSoft,
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }

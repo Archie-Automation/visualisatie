@@ -536,27 +536,36 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
         child: LayoutBuilder(
           builder: (context, c) {
             final height = c.maxHeight;
-            final width = c.maxWidth;
-            final artByWidth = (width * 0.75).clamp(180.0, 380.0);
-            final artByHeight = (height * 0.30).clamp(150.0, 380.0);
-            final artSize = math.min(artByWidth, artByHeight);
             final tight = height < 760;
-            final sectionGap = tight ? 16.0 : 28.0;
-            final titleGap = tight ? 20.0 : 32.0;
+            final sectionGap = tight ? 12.0 : 20.0;
+            final titleGap = tight ? 12.0 : 20.0;
 
-            return SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: height),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
+            // Geen verticale scroll over de hoes. De pagina was altijd een
+            // stukje hoger dan het scherm, waardoor op/neer de hoes verschoof
+            // zonder iets te doen. Alleen volume/favorieten scrollen als ze
+            // echt niet passen, en die scroll neemt de hoes niet mee.
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(28, 4, 28, 12),
+              child: Column(
                   children: [
-                    _Artwork(
-                      state: state,
-                      size: artSize,
-                      hero: true,
-                      artOverride: _presetArtUrl(pending),
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (context, artBox) {
+                          final side = math.min(
+                            artBox.maxWidth,
+                            artBox.maxHeight,
+                          );
+                          final artSize = side.clamp(48.0, 380.0);
+                          return Center(
+                            child: _Artwork(
+                              state: state,
+                              size: artSize,
+                              hero: true,
+                              artOverride: _presetArtUrl(pending),
+                            ),
+                          );
+                        },
+                      ),
                     ),
                     SizedBox(height: titleGap),
                     _MediaMetadataGate(
@@ -624,40 +633,50 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                       ],
                     ),
                     SizedBox(height: sectionGap),
-                    if (state.groupRole.isGrouped)
-                      _GroupedPlayerVolumes(
-                        deviceId: deviceId,
-                        state: state,
-                        cfg: cfg,
-                        api: api,
-                        online: state.online,
-                        all: ref.watch(mediaStateProvider),
-                      )
-                    else
-                      _VolumeSlider.dark(
-                        value: (state.volume ?? 0).toDouble(),
-                        muted: state.muted ?? false,
-                        onChanged: state.online
-                            ? (v) => api.setVolume(deviceId, v.round())
-                            : null,
-                        onToggleMute: state.online
-                            ? () => api.setMuted(
-                                  deviceId,
-                                  !(state.muted ?? false),
-                                )
-                            : null,
+                    Flexible(
+                      child: SingleChildScrollView(
+                        physics: const ClampingScrollPhysics(),
+                        primary: false,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (state.groupRole.isGrouped)
+                              _GroupedPlayerVolumes(
+                                deviceId: deviceId,
+                                state: state,
+                                cfg: cfg,
+                                api: api,
+                                online: state.online,
+                                all: ref.watch(mediaStateProvider),
+                              )
+                            else
+                              _VolumeSlider.dark(
+                                value: (state.volume ?? 0).toDouble(),
+                                muted: state.muted ?? false,
+                                onChanged: state.online
+                                    ? (v) =>
+                                        api.setVolume(deviceId, v.round())
+                                    : null,
+                                onToggleMute: state.online
+                                    ? () => api.setMuted(
+                                          deviceId,
+                                          !(state.muted ?? false),
+                                        )
+                                    : null,
+                              ),
+                            if (state.presets.isNotEmpty) ...[
+                              SizedBox(height: sectionGap),
+                              _Presets(
+                                presets: state.presets,
+                                pendingId: pending?.id,
+                                onTap: (p) => _playPreset(p, state),
+                              ),
+                            ],
+                          ],
+                        ),
                       ),
-                    if (state.presets.isNotEmpty) ...[
-                      SizedBox(height: sectionGap),
-                      _Presets(
-                        presets: state.presets,
-                        pendingId: pending?.id,
-                        onTap: (p) => _playPreset(p, state),
-                      ),
-                    ],
-                    SizedBox(height: sectionGap),
+                    ),
                   ],
-                ),
               ),
             );
           },
@@ -1540,6 +1559,8 @@ class _Presets extends StatelessWidget {
             height: 108,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
+              physics: const ClampingScrollPhysics(),
+              primary: false,
               itemCount: presets.length,
               separatorBuilder: (_, __) => const SizedBox(width: 12),
               itemBuilder: (_, i) => _PresetCard(
