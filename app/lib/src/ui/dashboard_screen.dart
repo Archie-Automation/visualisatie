@@ -961,7 +961,7 @@ class _RoomDashboardRow extends ConsumerWidget {
                     padding: EdgeInsets.fromLTRB(2, 6, 12, 6),
                     child: Icon(
                       Icons.drag_indicator_rounded,
-                      size: 22,
+                      size: _RoomActivityBadges.glyphFor(context),
                       color: LuxeColors.inkSoft.withValues(alpha: 0.75),
                     ),
                   ),
@@ -995,13 +995,11 @@ class _RoomDashboardRow extends ConsumerWidget {
                           room.name.toUpperCase(),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          // Same family as scenes/systems; slightly larger for
-                          // list-row context (chips read bigger inside their tile).
                           style: TextStyle(
                             color: LuxeColors.ink,
-                            fontSize: context.isPhone ? 14 : 12,
-                            height: 1.35,
-                            letterSpacing: context.isPhone ? 1.2 : 1.4,
+                            fontSize: context.isPhone ? 18 : 16,
+                            height: 1.2,
+                            letterSpacing: context.isPhone ? 1.0 : 1.15,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -1009,7 +1007,7 @@ class _RoomDashboardRow extends ConsumerWidget {
                       SizedBox(width: 2),
                       Icon(
                         Icons.chevron_right_rounded,
-                        size: context.isPhone ? 20 : 18,
+                        size: context.isPhone ? 24 : 22,
                         color: LuxeColors.inkSoft.withValues(alpha: 0.55),
                       ),
                     ],
@@ -1048,7 +1046,9 @@ class _RoomDashboardRow extends ConsumerWidget {
           Divider(
             height: 1,
             thickness: 0.5,
-            indent: context.hPad + 34,
+            indent: context.hPad +
+                14 +
+                _RoomActivityBadges.glyphFor(context),
             color: LuxeColors.line.withValues(alpha: 0.25),
           ),
       ],
@@ -1206,7 +1206,7 @@ Widget _scenes(
             Text(
               'SCENES',
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    fontSize: context.isPhone ? 14 : null,
+                    fontSize: context.isPhone ? 16 : 15,
                   ),
             ),
             if (cfg.scenes.length > 1) ...[
@@ -1383,7 +1383,7 @@ class _Systemen extends ConsumerWidget {
                 Text(
                   'SYSTEMEN',
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        fontSize: context.isPhone ? 14 : null,
+                        fontSize: context.isPhone ? 16 : 15,
                       ),
                 ),
                 const Spacer(),
@@ -2029,8 +2029,8 @@ class _GlassIconButton extends StatelessWidget {
   static const double size = 48;
   static const double iconSize = 20;
   static const double radius = 14;
-  static const double statusSize = 58;
-  static const double statusRadius = 16;
+  static const double statusSize = 52;
+  static const double statusRadius = 15;
 
   @override
   Widget build(BuildContext context) {
@@ -2096,7 +2096,7 @@ class _HouseActivityHeaderButtons extends ConsumerWidget {
   const _HouseActivityHeaderButtons({required this.cfg});
   final HouseConfig cfg;
 
-  static const _glyph = 32.0;
+  static const _glyph = 26.0;
 
   void _openSystem(BuildContext context, String sysName) {
     final sys = houseSystemByName(sysName);
@@ -2202,6 +2202,10 @@ class _RoomActivityBadges extends ConsumerWidget {
   static const _badgeSize = 22.0;
   static const _glyphSize = 18.0;
 
+  /// Same glyph as the status icons behind a room name.
+  static double glyphFor(BuildContext context) =>
+      context.isPhone ? 30.0 : 28.0;
+
   void _openCategory(BuildContext context, String categorySlug) {
     appOpen(
       context,
@@ -2299,7 +2303,7 @@ class _RoomActivityBadges extends ConsumerWidget {
     // Phone: inkSoft (antraciet, zelfde gewicht als kamernamen).
     // Tablet: ink, gelijk aan de header.
     final phone = context.isPhone;
-    final glyph = phone ? 30.0 : 28.0;
+    final glyph = glyphFor(context);
     final slot = phone ? 52.0 : 48.0;
     final badge = phone ? 36.0 : 34.0;
     final color = phone ? LuxeColors.inkSoft : LuxeColors.ink;
