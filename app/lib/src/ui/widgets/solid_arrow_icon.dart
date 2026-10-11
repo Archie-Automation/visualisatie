@@ -14,6 +14,10 @@ enum DeviceArrowDirection {
   horizontalOpen,
   /// Gordijn dicht: → ← (pijlen naar binnen, lange schacht).
   horizontalClose,
+  /// Lamellen kantelen, tegen de klok in.
+  tiltCounterClockwise,
+  /// Lamellen kantelen, met de klok mee.
+  tiltClockwise,
 }
 
 /// Pijl met dunne schacht en gevuld driehoekpunt — zelfde richtingen als de
@@ -34,13 +38,24 @@ class SolidArrowIcon extends StatelessWidget {
       direction == DeviceArrowDirection.horizontalOpen ||
       direction == DeviceArrowDirection.horizontalClose;
 
+  bool get _isTilt =>
+      direction == DeviceArrowDirection.tiltCounterClockwise ||
+      direction == DeviceArrowDirection.tiltClockwise;
+
   @override
   Widget build(BuildContext context) {
     // Gordijn: twee pijlen naast elkaar — breder canvas voor zichtbare punten.
-    final width = _isHorizontalPair ? size * 1.65 : size;
+    // Kantelen: de cirkel zelf is korter dan de pijlschacht in hetzelfde vak;
+    // groter canvas zodat de ring even hoog oogt als omhoog/omlaag.
+    final width = _isHorizontalPair
+        ? size * 1.65
+        : _isTilt
+            ? size * 1.5
+            : size;
+    final height = _isTilt ? size * 1.5 : size;
     return SizedBox(
       width: width,
-      height: size,
+      height: height,
       child: CustomPaint(
         painter: _SolidArrowPainter(direction: direction, color: color),
       ),
@@ -65,6 +80,10 @@ class _SolidArrowPainter extends CustomPainter {
         _drawHorizontalPair(canvas, size, outward: true);
       case DeviceArrowDirection.horizontalClose:
         _drawHorizontalPair(canvas, size, outward: false);
+      case DeviceArrowDirection.tiltCounterClockwise:
+        _drawTilt(canvas, size, clockwise: false);
+      case DeviceArrowDirection.tiltClockwise:
+        _drawTilt(canvas, size, clockwise: true);
       default:
         final (Offset tip, Offset tail) = _tipAndTail(size);
         _drawArrow(
@@ -201,9 +220,80 @@ class _SolidArrowPainter extends CustomPainter {
           Offset(tailPad, h - tailPad),
         ),
       DeviceArrowDirection.horizontalOpen ||
-      DeviceArrowDirection.horizontalClose =>
+      DeviceArrowDirection.horizontalClose ||
+      DeviceArrowDirection.tiltCounterClockwise ||
+      DeviceArrowDirection.tiltClockwise =>
         (Offset.zero, Offset.zero),
     };
+  }
+
+  /// Cirkelpijl met dezelfde buitenmaat en punt als de verticale pijl.
+  void _drawTilt(Canvas canvas, Size size, {required bool clockwise}) {
+    final side = math.min(size.width, size.height);
+    final ox = (size.width - side) / 2;
+    final oy = (size.height - side) / 2;
+
+    const radius = 22.0;
+    const headLen = 30.0;
+    const headHalf = 22.0;
+    const baseAngle = -math.pi / 2;
+    final dir = clockwise ? 1.0 : -1.0;
+    final radial = Offset(math.cos(baseAngle), math.sin(baseAngle));
+    final tangent = Offset(-radial.dy * dir, radial.dx * dir);
+    final normal = Offset(-tangent.dy, tangent.dx);
+    final base = radial * radius;
+    final tip = base + tangent * headLen;
+    final c1 = base + normal * headHalf;
+    final c2 = base - normal * headHalf;
+
+    final head = Path()
+      ..moveTo(tip.dx, tip.dy)
+      ..lineTo(c1.dx, c1.dy)
+      ..lineTo(c2.dx, c2.dy)
+      ..close();
+
+    const gap = 1.35;
+    final sweep = (math.pi * 2 - gap) * dir;
+    final arc = Path()
+      ..addArc(
+        Rect.fromCircle(center: Offset.zero, radius: radius),
+        baseAngle - sweep,
+        sweep,
+      );
+
+    final bounds = head.getBounds().expandToInclude(arc.getBounds());
+    final targetTop = oy + side * 0.10;
+    final targetHeight = side * 0.76;
+    final targetWidth = side * 0.92;
+    var scale = targetHeight / bounds.height;
+    if (bounds.width * scale > targetWidth) {
+      scale = targetWidth / bounds.width;
+    }
+    final scaledW = bounds.width * scale;
+    final scaledH = bounds.height * scale;
+    final dx = ox + (side - scaledW) / 2 - bounds.left * scale;
+    final dy = targetTop + (targetHeight - scaledH) / 2 - bounds.top * scale;
+
+    canvas.save();
+    canvas.translate(dx, dy);
+    canvas.scale(scale);
+
+    final strokeW = DeviceControlIcons.graphicStrokeFor(side) * 1.15 / scale;
+    canvas.drawPath(
+      arc,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeW
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.drawPath(
+      head,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.fill,
+    );
+    canvas.restore();
   }
 
   @override

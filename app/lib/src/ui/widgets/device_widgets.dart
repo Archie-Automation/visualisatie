@@ -1568,13 +1568,13 @@ class _ShadingTileState extends ConsumerState<ShadingTile> {
 
     final tiltItems = <DeviceControlItem>[
       DeviceControlItem(
-        icon: Icons.rotate_left,
+        arrow: DeviceArrowDirection.tiltCounterClockwise,
         label: 'Tuimel open',
         labelMode: DeviceControlLabelMode.iconOnly,
         onTap: () => nudgeSlat(-5),
       ),
       DeviceControlItem(
-        icon: Icons.rotate_right,
+        arrow: DeviceArrowDirection.tiltClockwise,
         label: 'Tuimel dicht',
         labelMode: DeviceControlLabelMode.iconOnly,
         onTap: () => nudgeSlat(5),
@@ -1628,10 +1628,10 @@ class _ShadingTileState extends ConsumerState<ShadingTile> {
             onTap: openPopup,
             behavior: HitTestBehavior.opaque,
             child: Padding(
-              padding: const EdgeInsets.all(6),
+              padding: const EdgeInsets.all(4),
               child: Icon(
                 Icons.tune_rounded,
-                size: DeviceControlIcons.size,
+                size: 32,
                 color: LuxeColors.ink,
               ),
             ),

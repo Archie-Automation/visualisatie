@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -89,15 +91,6 @@ class SceneStrip extends ConsumerWidget {
     HapticFeedback.mediumImpact();
     try {
       await ref.read(sceneApiProvider).run(scene.id);
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: LuxeColors.ink,
-          shape: const StadiumBorder(),
-          content: Text('${scene.name} gestart'),
-        ),
-      );
     } catch (err) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -157,18 +150,51 @@ class _SceneChip extends StatefulWidget {
   State<_SceneChip> createState() => _SceneChipState();
 }
 
-class _SceneChipState extends State<_SceneChip> {
+class _SceneChipState extends State<_SceneChip>
+    with SingleTickerProviderStateMixin {
   bool _pressed = false;
   bool _running = false;
+  late final AnimationController _ack;
+  Timer? _release;
+
+  @override
+  void initState() {
+    super.initState();
+    _ack = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 380),
+      reverseDuration: const Duration(milliseconds: 720),
+    )..addListener(() {
+        if (mounted) setState(() {});
+      });
+  }
+
+  @override
+  void dispose() {
+    _release?.cancel();
+    _ack.dispose();
+    super.dispose();
+  }
+
+  void _showStarted() {
+    _release?.cancel();
+    _ack.animateTo(1, curve: Curves.easeOutCubic);
+    _release = Timer(const Duration(milliseconds: 1700), () {
+      if (!mounted) return;
+      _ack.animateTo(0, curve: Curves.easeInOutCubic);
+    });
+  }
 
   Future<void> _handleTap() async {
     if (_running) return;
     setState(() => _running = true);
     try {
       await widget.onTap();
+      if (!mounted) return;
+      setState(() => _running = false);
+      _showStarted();
     } catch (_) {
       /* parent already surfaced the error */
-    } finally {
       if (mounted) setState(() => _running = false);
     }
   }
@@ -183,10 +209,12 @@ class _SceneChipState extends State<_SceneChip> {
         ? _parseHex(accentHex) ?? LuxeColors.brass
         : LuxeColors.brass;
 
-    final fillColor = forceDarkChrome
+    final ack = _ack.value;
+    final confirm = _running && ack < 0.4 ? 0.4 : ack;
+    final baseFill = forceDarkChrome
         ? Colors.white.withValues(alpha: _pressed ? 0.12 : 0.06)
         : LuxeChipChrome.fill(context, pressed: _pressed);
-    final borderColor = forceDarkChrome
+    final baseBorder = forceDarkChrome
         ? LuxeBorders.solid(
             _pressed
                 ? accent.withValues(alpha: 0.55)
@@ -194,6 +222,16 @@ class _SceneChipState extends State<_SceneChip> {
             LuxeColors.cream,
           )
         : LuxeChipChrome.border(context, pressed: _pressed, accent: accent);
+    final confirmedFill = Color.alphaBlend(
+      accent.withValues(alpha: forceDarkChrome ? 0.22 : 0.16),
+      baseFill,
+    );
+    final confirmedBorder = forceDarkChrome
+        ? LuxeBorders.solid(accent.withValues(alpha: 0.92), LuxeColors.cream)
+        : LuxeBorders.solid(accent);
+    final fillColor = Color.lerp(baseFill, confirmedFill, confirm)!;
+    final borderColor = Color.lerp(baseBorder, confirmedBorder, confirm)!;
+    final nameColor = Color.lerp(fg, accent, ack * 0.62)!;
     final iconBox = context.chipIconBox;
     final iconSize = context.chipIconSize;
     final iconRadius = context.chipIconRadius;
@@ -212,12 +250,14 @@ class _SceneChipState extends State<_SceneChip> {
         child: LuxeRimBox(
           width: 118,
           radius: 22,
-          rimWidth: _pressed ? 1.3 : 1.0,
+          rimWidth: _pressed ? 1.3 : (1.0 + confirm * 0.45),
           rimColor: borderColor,
           fillColor: fillColor,
           shadows: forceDarkChrome
               ? LuxeShadows.darkLift
-              : LuxeShadows.chip(context),
+              : ack > 0.35
+                  ? LuxeShadows.adapt(context, LuxeShadows.brassGlow)
+                  : LuxeShadows.chip(context),
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -227,10 +267,31 @@ class _SceneChipState extends State<_SceneChip> {
                 size: iconBox,
                 radius: iconRadius,
                 accent: accent,
-                child: Icon(
-                  sceneIconFor(widget.scene.icon),
-                  size: iconSize,
-                  color: accent,
+                fillAlpha: 0.22 + ack * 0.28,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    Opacity(
+                      opacity: 1 - ack,
+                      child: Icon(
+                        sceneIconFor(widget.scene.icon),
+                        size: iconSize,
+                        color: accent,
+                      ),
+                    ),
+                    Opacity(
+                      opacity: ack,
+                      child: Icon(
+                        Icons.check_rounded,
+                        size: iconSize + 2,
+                        color: Color.lerp(
+                          accent,
+                          forceDarkChrome ? Colors.white : LuxeColors.ink,
+                          0.82,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               Text(
@@ -238,7 +299,7 @@ class _SceneChipState extends State<_SceneChip> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: fg,
+                  color: nameColor,
                   fontSize: 11,
                   height: 1.35,
                   letterSpacing: 1.4,

@@ -103,6 +103,7 @@ class LuxeAccentIconWell extends StatelessWidget {
     required this.accent,
     required this.child,
     this.rim = 1.25,
+    this.fillAlpha = 0.22,
   });
 
   final double size;
@@ -110,11 +111,12 @@ class LuxeAccentIconWell extends StatelessWidget {
   final Color accent;
   final Widget child;
   final double rim;
+  final double fillAlpha;
 
   @override
   Widget build(BuildContext context) {
     final fill = Color.alphaBlend(
-      accent.withValues(alpha: 0.22),
+      accent.withValues(alpha: fillAlpha),
       LuxeColors.surface,
     );
     return LuxeRimBox(
