@@ -57,17 +57,28 @@ class SolidArrowIcon extends StatelessWidget {
       width: width,
       height: height,
       child: CustomPaint(
-        painter: _SolidArrowPainter(direction: direction, color: color),
+        painter: _SolidArrowPainter(
+          direction: direction,
+          color: color,
+          // Schacht van omhoog/omlaag; het kantel-canvas is groter.
+          strokeBasis: size,
+        ),
       ),
     );
   }
 }
 
 class _SolidArrowPainter extends CustomPainter {
-  _SolidArrowPainter({required this.direction, required this.color});
+  _SolidArrowPainter({
+    required this.direction,
+    required this.color,
+    required this.strokeBasis,
+  });
 
   final DeviceArrowDirection direction;
   final Color color;
+  /// Maat van de rechte pijl, zodat de lijn even dik blijft op een groter canvas.
+  final double strokeBasis;
 
   bool get _isVertical =>
       direction == DeviceArrowDirection.up ||
@@ -227,60 +238,33 @@ class _SolidArrowPainter extends CustomPainter {
     };
   }
 
-  /// Cirkelpijl met dezelfde buitenmaat en punt als de verticale pijl.
+  /// Cirkelpijl. Schacht en punt gebruiken dezelfde maten als omhoog/omlaag.
   void _drawTilt(Canvas canvas, Size size, {required bool clockwise}) {
-    final side = math.min(size.width, size.height);
-    final ox = (size.width - side) / 2;
-    final oy = (size.height - side) / 2;
+    final s = strokeBasis;
+    final center = Offset(size.width / 2, size.height / 2);
+    final shaftLen = s * 0.76;
+    final radius = shaftLen / 2;
+    final headLen = math.min(s * 0.54, shaftLen * 0.52);
+    final headHalf = headLen * 0.72;
+    final strokeW = DeviceControlIcons.graphicStrokeFor(s) * 1.15;
 
-    const radius = 22.0;
-    const headLen = 30.0;
-    const headHalf = 22.0;
     const baseAngle = -math.pi / 2;
     final dir = clockwise ? 1.0 : -1.0;
     final radial = Offset(math.cos(baseAngle), math.sin(baseAngle));
     final tangent = Offset(-radial.dy * dir, radial.dx * dir);
     final normal = Offset(-tangent.dy, tangent.dx);
-    final base = radial * radius;
+    final base = center + radial * radius;
     final tip = base + tangent * headLen;
     final c1 = base + normal * headHalf;
     final c2 = base - normal * headHalf;
 
-    final head = Path()
-      ..moveTo(tip.dx, tip.dy)
-      ..lineTo(c1.dx, c1.dy)
-      ..lineTo(c2.dx, c2.dy)
-      ..close();
-
-    const gap = 1.35;
+    const gap = 1.05;
     final sweep = (math.pi * 2 - gap) * dir;
-    final arc = Path()
-      ..addArc(
-        Rect.fromCircle(center: Offset.zero, radius: radius),
-        baseAngle - sweep,
-        sweep,
-      );
-
-    final bounds = head.getBounds().expandToInclude(arc.getBounds());
-    final targetTop = oy + side * 0.10;
-    final targetHeight = side * 0.76;
-    final targetWidth = side * 0.92;
-    var scale = targetHeight / bounds.height;
-    if (bounds.width * scale > targetWidth) {
-      scale = targetWidth / bounds.width;
-    }
-    final scaledW = bounds.width * scale;
-    final scaledH = bounds.height * scale;
-    final dx = ox + (side - scaledW) / 2 - bounds.left * scale;
-    final dy = targetTop + (targetHeight - scaledH) / 2 - bounds.top * scale;
-
-    canvas.save();
-    canvas.translate(dx, dy);
-    canvas.scale(scale);
-
-    final strokeW = DeviceControlIcons.graphicStrokeFor(side) * 1.15 / scale;
-    canvas.drawPath(
-      arc,
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      baseAngle - sweep,
+      sweep,
+      false,
       Paint()
         ..color = color
         ..style = PaintingStyle.stroke
@@ -288,15 +272,20 @@ class _SolidArrowPainter extends CustomPainter {
         ..strokeCap = StrokeCap.round,
     );
     canvas.drawPath(
-      head,
+      Path()
+        ..moveTo(tip.dx, tip.dy)
+        ..lineTo(c1.dx, c1.dy)
+        ..lineTo(c2.dx, c2.dy)
+        ..close(),
       Paint()
         ..color = color
         ..style = PaintingStyle.fill,
     );
-    canvas.restore();
   }
 
   @override
   bool shouldRepaint(covariant _SolidArrowPainter oldDelegate) =>
-      oldDelegate.direction != direction || oldDelegate.color != color;
+      oldDelegate.direction != direction ||
+      oldDelegate.color != color ||
+      oldDelegate.strokeBasis != strokeBasis;
 }
