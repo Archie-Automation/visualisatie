@@ -200,6 +200,15 @@ VPS open. Geen poorten op de router, geen VPN-app op de telefoon.
 Later alsnog aanzetten: `cd docker && ./install.sh` opnieuw; de vraag komt
 terug zolang `REMOTE_URL` in `.env` leeg is.
 
+### Telefoon koppelen zonder wachtwoord
+
+Instellingen → **Telefoon koppelen** toont een QR en een code (10 minuten,
+eenmalig). Scannen met de camera opent de app op `/#/pair?code=…` en logt
+meteen in; in de native app kan de code ook getypt worden ("Ik heb een
+koppelcode"). De telefoon krijgt een refresh-token (1 jaar, schuivend) en
+vernieuwt zelf op de achtergrond. Apparaten staan in `docker/data/sessions.json`
+en zijn intrekbaar via `DELETE /api/auth/sessions/:id`.
+
 ## Technisch (naslag)
 
 | Pad op host | Inhoud |

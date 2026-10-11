@@ -17,6 +17,7 @@ import 'ui/dashboard_screen.dart';
 import 'ui/intercom_screen.dart';
 import 'ui/log_screen.dart';
 import 'ui/login_screen.dart';
+import 'ui/pair_screen.dart';
 import 'ui/splash_screen.dart';
 import 'ui/room_category_screen.dart';
 import 'ui/room_screen.dart';
@@ -93,9 +94,12 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
         final loc = state.matchedLocation;
         final onSplash = loc == '/splash';
         final onLogin = loc == '/login';
+        // Koppelen via QR/code mag altijd, ook al is er al een sessie
+        // (ander account op dezelfde telefoon).
+        final onPair = loc == '/pair';
         final installer = loc == '/installer';
         // Splash beheert zijn eigen navigatie; router mag nooit van splash wegsturen.
-        if (onSplash) return null;
+        if (onSplash || onPair) return null;
         // Zolang restore niet klaar is, terug naar splash.
         if (!auth.restoreComplete && !onLogin) return '/splash';
         if (!auth.isAuthed && !onLogin) return '/login';
@@ -107,6 +111,14 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
       routes: [
         GoRoute(path: '/splash', builder: (_, __) => const SplashScreen()),
         GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+        GoRoute(
+          path: '/pair',
+          builder: (_, s) => PairScreen(
+            code: s.uri.queryParameters['code'],
+            localUrl: s.uri.queryParameters['local'],
+            remoteUrl: s.uri.queryParameters['remote'],
+          ),
+        ),
         GoRoute(
           path: '/',
           pageBuilder: (_, __) =>

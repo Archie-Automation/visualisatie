@@ -105,6 +105,15 @@ import {
 } from "./cameraSnapshot";
 import { syncGo2rtcProcessAfterConfigWritten } from "./go2rtcSpawn";
 import { iceBundleFor, remoteUrl, serverId } from "./remoteAccess";
+import {
+  claimPairCode,
+  createPairCode,
+  issueSessionForUser,
+  listSessions,
+  refreshAccess,
+  revokeRefreshToken,
+  revokeSession
+} from "./sessions";
 import { probeCameraStreams } from "./cameraProbe";
 import { parseKnxExport, persistGaCatalog, loadGaCatalog } from "./knxImport";
 import { scheduleAdminProcessRestart } from "./processRestart";
@@ -747,7 +756,97 @@ export function buildRouter(
       return res.status(400).json({ error: "username & password required" });
     const result = await authenticate(username, password);
     if (!result) return res.status(401).json({ error: "invalid credentials" });
-    res.json(result);
+    // Naast het lange login-token ook een refresh-token, zodat de app stil kan
+    // vernieuwen en per apparaat ingetrokken kan worden.
+    const device = String(req.body?.device ?? req.get("user-agent") ?? "app").slice(0, 64);
+    const session = issueSessionForUser(result.user.id, device);
+    res.json({ ...result, refreshToken: session?.refreshToken ?? null });
+  });
+
+  /* ------------------------- Koppelen (QR) en refresh ------------------ */
+
+  /** Koppelcode maken. Zelf, of (staff) voor een andere gebruiker. */
+  r.post("/auth/pair/start", requireAuth, (req: AuthedRequest, res) => {
+    const me = req.user!;
+    const wanted = typeof req.body?.userId === "string" ? req.body.userId.trim() : "";
+    let userId = me.sub;
+    if (wanted && wanted !== me.sub) {
+      if (!isStaffRole(me.role)) return res.status(403).json({ error: "staff only" });
+      const exists = (getConfig().users ?? []).some((u) => u.id === wanted);
+      if (!exists) return res.status(404).json({ error: "unknown user" });
+      userId = wanted;
+    }
+    const { code, expiresAt } = createPairCode(userId, me.username);
+    const localUrl = clientApiBase(req);
+    const remote = remoteUrl();
+    const base = remote ?? localUrl;
+    const qs = new URLSearchParams({ code, local: localUrl });
+    if (remote) qs.set("remote", remote);
+    res.setHeader("cache-control", "no-store");
+    res.json({
+      code,
+      expiresAt,
+      localUrl,
+      remoteUrl: remote,
+      serverId: serverId(),
+      // Flutter web gebruikt hash-routes; dit opent de app en koppelt meteen.
+      qr: `${base}/#/pair?${qs.toString()}`
+    });
+  });
+
+  const pairFails = new Map<string, { n: number; until: number; first: number }>();
+  r.post("/auth/pair/claim", (req, res) => {
+    const ip = req.ip ?? "?";
+    const now = Date.now();
+    const f = pairFails.get(ip) ?? { n: 0, until: 0, first: now };
+    if (f.until > now) return res.status(429).json({ error: "te veel pogingen" });
+    const code = String(req.body?.code ?? "");
+    const device = String(req.body?.device ?? req.get("user-agent") ?? "telefoon").slice(0, 64);
+    const issued = claimPairCode(code, device);
+    if (!issued) {
+      if (now - f.first > 60_000) {
+        f.n = 0;
+        f.first = now;
+      }
+      f.n += 1;
+      if (f.n >= 5) f.until = now + 10 * 60_000;
+      pairFails.set(ip, f);
+      return res.status(400).json({ error: "code ongeldig of verlopen" });
+    }
+    pairFails.delete(ip);
+    res.setHeader("cache-control", "no-store");
+    res.json({
+      token: issued.accessToken,
+      refreshToken: issued.refreshToken,
+      user: issued.user,
+      localUrl: clientApiBase(req),
+      remoteUrl: remoteUrl(),
+      serverId: serverId()
+    });
+  });
+
+  r.post("/auth/refresh", (req, res) => {
+    const out = refreshAccess(String(req.body?.refreshToken ?? ""));
+    if (!out) return res.status(401).json({ error: "refresh invalid" });
+    res.setHeader("cache-control", "no-store");
+    res.json({ token: out.accessToken, user: out.user });
+  });
+
+  r.post("/auth/logout", (req, res) => {
+    const rt = String(req.body?.refreshToken ?? "");
+    res.json({ ok: rt ? revokeRefreshToken(rt) : false });
+  });
+
+  /** Gekoppelde apparaten: eigen lijst; staff ziet alles. */
+  r.get("/auth/sessions", requireAuth, (req: AuthedRequest, res) => {
+    const all = isStaffRole(req.user?.role) && req.query["all"] === "1";
+    res.json({ sessions: listSessions(all ? null : req.user!.sub) });
+  });
+
+  r.delete("/auth/sessions/:id", requireAuth, (req: AuthedRequest, res) => {
+    const staff = isStaffRole(req.user?.role);
+    const ok = revokeSession(req.params.id, staff ? null : req.user!.sub);
+    res.status(ok ? 200 : 404).json({ ok });
   });
 
   r.get("/users", requireAuth, requireStaff, (_req, res) => {

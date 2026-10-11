@@ -163,8 +163,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   ),
                                 ),
                         ),
+                        const SizedBox(height: 14),
+                        TextButton(
+                          onPressed: _busy ? null : () => context.go('/pair'),
+                          child: Text('Ik heb een koppelcode',
+                              style: TextStyle(color: LuxeColors.inkSoft)),
+                        ),
                         if (_err != null) ...[
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 12),
                           Text(_err!,
                               textAlign: TextAlign.center,
                               style:

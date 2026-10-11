@@ -238,24 +238,39 @@ class AuthController extends Notifier<AuthState> {
         'Auth restore: user=$u role=$r isAdmin=${state.isAdmin}',
       );
     }
+    if (t != null) {
+      _scheduleRefreshCheck();
+      unawaited(ensureFresh());
+    }
   }
 
   Future<bool> login(String username, String password) async {
     final res = await http.post(
       Uri.parse('$apiBase/api/auth/login'),
       headers: {'content-type': 'application/json'},
-      body: jsonEncode({'username': username, 'password': password}),
+      body: jsonEncode({
+        'username': username,
+        'password': password,
+        'device': deviceLabel(),
+      }),
     );
     if (res.statusCode != 200) return false;
     final body = jsonDecode(res.body) as Map<String, dynamic>;
+    await applySession(body);
+    return true;
+  }
+
+  /// Sessie uit een login- of koppel-antwoord overnemen:
+  /// `{ token, user: {username, role}, refreshToken? }`.
+  Future<void> applySession(Map<String, dynamic> body) async {
     final token = body['token'] as String;
-    final user = body['user'] as Map<String, dynamic>;
-    final storedUsername = user['username'] as String;
-    var roleStr = user['role'] as String?;
-    roleStr = roleStr?.trim();
+    final user = (body['user'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final storedUsername = (user['username'] as String?) ?? '';
+    var roleStr = (user['role'] as String?)?.trim();
     if (roleStr == null || roleStr.isEmpty) {
       roleStr = _parseJwtRole(token);
     }
+    final refresh = (body['refreshToken'] as String?)?.trim();
     final sp = await SharedPreferences.getInstance();
     await sp.setString('token', token);
     await sp.setString('username', storedUsername);
@@ -264,21 +279,110 @@ class AuthController extends Notifier<AuthState> {
     } else {
       await sp.remove('role');
     }
+    if (refresh != null && refresh.isNotEmpty) {
+      await sp.setString(_kRefreshPrefKey, refresh);
+    }
     state = AuthState(
       token: token,
       username: storedUsername,
       role: roleStr,
       restoreComplete: true,
     );
-    return true;
+    _scheduleRefreshCheck();
+  }
+
+  static const _kRefreshPrefKey = 'refresh_token';
+  Timer? _refreshTimer;
+  bool _refreshing = false;
+
+  /// Nieuw access-token halen op het refresh-token. False = sessie echt weg.
+  Future<bool> tryRefresh() async {
+    if (_refreshing) return state.isAuthed;
+    _refreshing = true;
+    try {
+      final sp = await SharedPreferences.getInstance();
+      final rt = sp.getString(_kRefreshPrefKey);
+      if (rt == null || rt.isEmpty) return false;
+      final res = await http
+          .post(
+            Uri.parse('$apiBase/api/auth/refresh'),
+            headers: {'content-type': 'application/json'},
+            body: jsonEncode({'refreshToken': rt}),
+          )
+          .timeout(const Duration(seconds: 6));
+      if (res.statusCode == 401) {
+        await sp.remove(_kRefreshPrefKey);
+        return false;
+      }
+      if (res.statusCode != 200) return state.isAuthed; // netwerk: later nog eens
+      final body = jsonDecode(res.body) as Map<String, dynamic>;
+      await applySession({...body, 'refreshToken': rt});
+      return true;
+    } catch (_) {
+      return state.isAuthed;
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+  /// Verloopt het token binnen twee uur (of is het al verlopen)? Dan stil vernieuwen.
+  Future<void> ensureFresh() async {
+    final t = state.token;
+    if (t == null) return;
+    final exp = _parseJwtExp(t);
+    if (exp == null) return; // oud token zonder exp: niets doen
+    final soon = DateTime.now().add(const Duration(hours: 2));
+    if (exp.isAfter(soon)) return;
+    await tryRefresh();
+  }
+
+  void _scheduleRefreshCheck() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(const Duration(minutes: 20), (_) {
+      ensureFresh();
+    });
   }
 
   Future<void> logout() async {
+    _refreshTimer?.cancel();
     final sp = await SharedPreferences.getInstance();
+    final rt = sp.getString(_kRefreshPrefKey);
     await sp.remove('token');
     await sp.remove('username');
     await sp.remove('role');
+    await sp.remove(_kRefreshPrefKey);
     state = const AuthState(restoreComplete: true);
+    if (rt != null && rt.isNotEmpty) {
+      // Best effort: apparaat intrekken op de server.
+      unawaited(http
+          .post(
+            Uri.parse('$apiBase/api/auth/logout'),
+            headers: {'content-type': 'application/json'},
+            body: jsonEncode({'refreshToken': rt}),
+          )
+          .timeout(const Duration(seconds: 4))
+          .catchError((_) => http.Response('', 0)));
+    }
+  }
+}
+
+/// Korte apparaatomschrijving voor de sessielijst op de server.
+String deviceLabel() {
+  if (kIsWeb) return 'browser';
+  return defaultTargetPlatform.name;
+}
+
+DateTime? _parseJwtExp(String jwt) {
+  try {
+    final parts = jwt.split('.');
+    if (parts.length != 3) return null;
+    final payload = utf8.decode(base64Url.decode(base64Url.normalize(parts[1])));
+    final map = jsonDecode(payload) as Map<String, dynamic>;
+    final exp = map['exp'];
+    if (exp is! num) return null;
+    return DateTime.fromMillisecondsSinceEpoch(exp.toInt() * 1000);
+  } catch (_) {
+    return null;
   }
 }
 
@@ -555,7 +659,14 @@ class BusController extends Notifier<BusState> {
                 const [];
         ref.read(wtwLogicProvider.notifier).snapshot(wtwLogics);
       } else if (snap.statusCode == 401) {
-        ref.read(authProvider.notifier).logout();
+        // Access-token verlopen? Eerst stil vernieuwen; pas daarna uitloggen.
+        final ok = await ref.read(authProvider.notifier).tryRefresh();
+        if (!ok) {
+          ref.read(authProvider.notifier).logout();
+          return;
+        }
+        if (gen != _connectGen || _disposed) return;
+        _scheduleReconnect();
         return;
       }
     } catch (_) {/* offline — ws will provide state */}

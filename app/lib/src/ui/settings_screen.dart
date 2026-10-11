@@ -23,6 +23,7 @@ import 'app_nav.dart';
 import 'responsive.dart';
 import 'schedule_editor_sheet.dart';
 import 'knx_scene_learn_section.dart';
+import 'pairing_section.dart';
 import 'users_admin_section.dart';
 import 'widgets/confirm_dialog.dart';
 import 'widgets/function_screen_header.dart';
@@ -35,6 +36,7 @@ enum _SettingsTopic {
   appearance,
   doorbell,
   schedules,
+  pairing,
   tablet,
   spotify,
   knxScenes,
@@ -155,6 +157,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     onTap: () =>
                         setState(() => _topic = _SettingsTopic.schedules),
                   ),
+                  Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
+                  _SettingsMenuTile(
+                    icon: Icons.qr_code_2_outlined,
+                    title: 'Telefoon koppelen',
+                    subtitle: 'QR of code, zonder wachtwoord',
+                    onTap: () =>
+                        setState(() => _topic = _SettingsTopic.pairing),
+                  ),
                   if (wallTabletDeviceSettingsApply) ...[
                     Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
                     _SettingsMenuTile(
@@ -240,6 +250,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _SettingsTopic.appearance => 'Weergave',
       _SettingsTopic.doorbell => 'Deurbel',
       _SettingsTopic.schedules => 'Tijdschema\'s',
+      _SettingsTopic.pairing => 'Telefoon koppelen',
       _SettingsTopic.tablet => 'Wandtablet',
       _SettingsTopic.spotify => 'Spotify',
       _SettingsTopic.knxScenes => 'KNX-scenes',
@@ -257,6 +268,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           if (!canEditSchedules)
             'Met dit account mag u geen tijdschema\'s wijzigen. Vraag een beheerder.',
         ].join('\n\n'),
+      _SettingsTopic.pairing =>
+        'Een koppelcode zet een nieuwe telefoon op dit huis met jouw account, '
+            'zonder wachtwoord. Tien minuten geldig, eenmalig.\n\n'
+            'De telefoon blijft daarna ingelogd en wisselt zelf tussen thuis (wifi) '
+            'en onderweg (Archie Cloud, als dat op de server aanstaat).',
       _SettingsTopic.tablet =>
         'Deze instellingen gelden alleen voor dit apparaat. '
             'Op telefoon of in de browser hebben ze geen effect op het wandtablet.\n\n'
@@ -321,6 +337,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     canEditSchedules: canEditSchedules,
                     showTitle: false,
                   ),
+                _SettingsTopic.pairing => const PairingSection(),
                 _SettingsTopic.tablet => Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
