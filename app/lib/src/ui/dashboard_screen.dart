@@ -348,6 +348,7 @@ class _FloorBrowseHeader extends StatelessWidget {
               icon: Icons.arrow_back_ios_new,
               onTap: onBack,
               tooltip: 'Terug',
+              hitSize: 68,
             ),
             Expanded(
               child: _FloorTabBar(

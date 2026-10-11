@@ -15,11 +15,15 @@ class HeaderIconButton extends StatelessWidget {
     required this.icon,
     required this.onTap,
     this.tooltip,
+    this.hitSize,
   });
 
   final IconData icon;
   final VoidCallback onTap;
   final String? tooltip;
+
+  /// Tikvlak groter dan het getekende vak. Het icoon en de rand blijven [size].
+  final double? hitSize;
 
   /// Matches floor-chip height (_FloorTabBar) and header glass buttons.
   static const double size = 48;
@@ -33,30 +37,44 @@ class HeaderIconButton extends StatelessWidget {
     final fillAlpha = isDark ? 0.96 : LuxeChipChrome.lightFill();
     final fill = LuxeColors.surface.withValues(alpha: fillAlpha);
 
+    final visual = LuxeRimBox(
+      width: size,
+      height: size,
+      radius: _headerButtonRadius,
+      rimWidth: 1,
+      rimColor: LuxeBorders.solid(LuxeColors.ink.withValues(alpha: 0.12)),
+      fillColor: fill,
+      shadows: const [
+        BoxShadow(
+          color: Color(0x14000000),
+          blurRadius: 8,
+          offset: Offset(0, 2),
+        ),
+      ],
+      child: Center(
+        child: Icon(icon, size: iconSize, color: LuxeColors.ink),
+      ),
+    );
+
+    final target = hitSize;
+    final box = target == null || target <= size
+        ? visual
+        : SizedBox(
+            width: target,
+            height: target,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: visual,
+            ),
+          );
+
     return Semantics(
       button: true,
       label: tooltip ?? 'Terug',
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: LuxeRimBox(
-          width: size,
-          height: size,
-          radius: _headerButtonRadius,
-          rimWidth: 1,
-          rimColor: LuxeBorders.solid(LuxeColors.ink.withValues(alpha: 0.12)),
-          fillColor: fill,
-          shadows: const [
-            BoxShadow(
-              color: Color(0x14000000),
-              blurRadius: 8,
-              offset: Offset(0, 2),
-            ),
-          ],
-          child: Center(
-            child: Icon(icon, size: iconSize, color: LuxeColors.ink),
-          ),
-        ),
+        child: box,
       ),
     );
   }
@@ -74,6 +92,8 @@ class BackPill extends StatelessWidget {
       icon: Icons.arrow_back_ios_new,
       onTap: onTap,
       tooltip: 'Terug',
+      // Getekende knop blijft 48. Extra tikruimte zit rechts, boven en onder.
+      hitSize: 68,
     );
   }
 }
