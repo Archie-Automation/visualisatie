@@ -18,7 +18,24 @@ ETS laptop  ──wg0────▶ hub ───wg0──▶ NUC :3671  (knxd,
   - `A   enroll.archiecloud.nl  -> <vps-ip>`
   - `A   turn.archiecloud.nl    -> <vps-ip>`
   - `A   *.archiecloud.nl       -> <vps-ip>`
+  - `A   archiecloud.nl         -> <vps-ip>` (hoofddomein: Android haalt daar
+    `/.well-known/assetlinks.json` op zodat een koppellink de app opent)
 - Poorten open op de VPS: 80/tcp, 443/tcp, 3478/udp+tcp, 51820/udp, 49160–49400/udp, SSH.
+
+## Koppellink opent de app (App Links / Universal Links)
+
+De koppellink is `https://<huis>.archiecloud.nl/pair?code=...`. Zonder app
+opent de browser de web-app. Met de app geïnstalleerd opent het OS de app
+direct, mits het domein de app "erkent":
+
+- Android: zet `ANDROID_CERT_SHA256` in `.env` op de SHA256 van het
+  signeer-certificaat van de APK (`keytool -list -v -keystore <jks>`). Caddy
+  serveert dan `assetlinks.json` op het hoofddomein en op elk klantdomein.
+- iOS: zet `APPLE_TEAM_ID` (en `IOS_BUNDLE_ID`). Vereist daarnaast de
+  Associated Domains-entitlement `applinks:*.archiecloud.nl` in de iOS-build.
+
+Na wijzigen: `docker compose up -d enroll` (de enroll-service schrijft de
+Caddyfile opnieuw bij start).
 
 ## Installatie (eenmalig)
 

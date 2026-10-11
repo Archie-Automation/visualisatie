@@ -794,8 +794,10 @@ export function buildRouter(
       localUrl,
       remoteUrl: remote,
       serverId: serverId(),
-      // Flutter web gebruikt hash-routes; dit opent de app en koppelt meteen.
-      qr: `${base}/#/pair?${qs.toString()}`
+      // Pad-URL: op een telefoon met de app geïnstalleerd opent Android/iOS
+      // (App Links) de app direct; in een browser stuurt index.ts door naar
+      // de hash-route `/#/pair?...` van de web-app.
+      qr: `${base}/pair?${qs.toString()}`
     });
   });
 

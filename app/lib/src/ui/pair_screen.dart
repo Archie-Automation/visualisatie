@@ -11,7 +11,8 @@ import 'widgets/glass_card.dart';
 import 'widgets/luxe_backdrop.dart';
 
 /// Telefoon koppelen met een code of gescande link. Geen wachtwoord nodig.
-/// Via QR op web komt dit scherm binnen als `/#/pair?code=…&local=…&remote=…`.
+/// Via de koppellink komt dit scherm binnen als `/pair?code=…&local=…&remote=…`
+/// (native via App Links; op web stuurt de server door naar `/#/pair?…`).
 class PairScreen extends ConsumerStatefulWidget {
   const PairScreen({super.key, this.code, this.localUrl, this.remoteUrl});
 

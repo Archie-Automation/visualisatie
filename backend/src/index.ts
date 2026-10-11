@@ -58,6 +58,17 @@ function main() {
   const webBuildDir = (process.env.WEB_ROOT?.trim() ||
     path.join(process.cwd(), "..", "app", "build", "web")).replace(/\/+$/, "");
   const webIndexHtml = path.join(webBuildDir, "index.html");
+
+  // Koppellink (`/pair?code=...`) in een browser: de web-app gebruikt
+  // hash-routes, dus doorsturen. Met de native app geïnstalleerd komt dit
+  // verzoek nooit aan: het OS opent de app via App Links / Universal Links.
+  app.get("/pair", (req, res) => {
+    const i = req.originalUrl.indexOf("?");
+    const q = i >= 0 ? req.originalUrl.slice(i) : "";
+    res.setHeader("Cache-Control", "no-store");
+    res.redirect(302, `/#/pair${q}`);
+  });
+
   if (fs.existsSync(webBuildDir)) {
     const webNoCache = new Set([
       "index.html",

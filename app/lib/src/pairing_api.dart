@@ -53,7 +53,8 @@ class PairInput {
   final String? remoteUrl;
 
   /// Accepteert `XXXX-XXXX`, of een link als
-  /// `https://huis.archiecloud.nl/#/pair?code=XXXX-XXXX&local=http://...`.
+  /// `https://huis.archiecloud.nl/pair?code=XXXX-XXXX&local=http://...`
+  /// (of de oudere hash-vorm `/#/pair?...`).
   static PairInput? parse(String raw) {
     final s = raw.trim();
     if (s.isEmpty) return null;

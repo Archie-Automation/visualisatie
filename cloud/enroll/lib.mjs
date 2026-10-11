@@ -17,7 +17,12 @@ export const env = {
   caddyfile: process.env.CADDYFILE || "/caddy/Caddyfile",
   acmeEmail: process.env.ACME_EMAIL || "",
   dataDir: process.env.DATA_DIR || "/data",
-  peersConf: "/etc/wireguard/peers.conf"
+  peersConf: "/etc/wireguard/peers.conf",
+  // App Links / Universal Links: koppellink opent de native app.
+  androidPackage: process.env.ANDROID_PACKAGE || "com.example.luxe_knx",
+  androidCertSha256: (process.env.ANDROID_CERT_SHA256 || "").trim(),
+  appleTeamId: (process.env.APPLE_TEAM_ID || "").trim(),
+  iosBundleId: process.env.IOS_BUNDLE_ID || "com.example.luxeKnx"
 };
 
 const registryPath = () => path.join(env.dataDir, "registry.json");
@@ -165,11 +170,59 @@ export function wgRemovePeer(pub) {
 }
 
 // ── Caddy ──────────────────────────────────────────────────────────────────
+/** assetlinks.json / apple-app-site-association, of null als er niets ingesteld is. */
+export function wellKnownFiles() {
+  const files = {};
+  if (env.androidCertSha256) {
+    files["assetlinks.json"] = JSON.stringify([
+      {
+        relation: ["delegate_permission/common.handle_all_urls"],
+        target: {
+          namespace: "android_app",
+          package_name: env.androidPackage,
+          sha256_cert_fingerprints: env.androidCertSha256.split(",").map((s) => s.trim().toUpperCase()).filter(Boolean)
+        }
+      }
+    ]);
+  }
+  if (env.appleTeamId) {
+    files["apple-app-site-association"] = JSON.stringify({
+      applinks: {
+        details: [{ appIDs: [`${env.appleTeamId}.${env.iosBundleId}`], components: [{ "/": "/pair", "?": { code: "?*" } }] }]
+      }
+    });
+  }
+  return Object.keys(files).length ? files : null;
+}
+
 export function buildCaddyfile(r) {
   const out = [];
   out.push("{");
   if (env.acmeEmail) out.push(`\temail ${env.acmeEmail}`);
   out.push("\tadmin 0.0.0.0:2019");
+  out.push("}");
+  out.push("");
+  // Zelfde .well-known op het hoofddomein (Android verifieert *.domein daar)
+  // en op elk klantdomein (iOS haalt het per host op).
+  const wk = wellKnownFiles();
+  const importWk = () => {
+    if (wk) out.push("\timport wellknown");
+  };
+  if (wk) {
+    out.push("(wellknown) {");
+    for (const [name, body] of Object.entries(wk)) {
+      out.push(`\thandle /.well-known/${name} {`);
+      out.push("\t\theader Content-Type application/json");
+      out.push("\t\theader Cache-Control \"public, max-age=3600\"");
+      out.push(`\t\trespond \`${body}\` 200`);
+      out.push("\t}");
+    }
+    out.push("}");
+    out.push("");
+  }
+  out.push(`https://${env.domain} {`);
+  importWk();
+  out.push("\trespond \"Archie Cloud\" 200");
   out.push("}");
   out.push("");
   out.push(`https://enroll.${env.domain} {`);
@@ -180,6 +233,7 @@ export function buildCaddyfile(r) {
     if (s.revoked) continue;
     out.push(`# ${s.label || s.id}`);
     out.push(`https://${s.id}.${env.domain} {`);
+    importWk();
     out.push("\tencode zstd gzip");
     out.push(`\treverse_proxy ${s.wgAddress}:4000 {`);
     out.push("\t\ttransport http {");

@@ -203,11 +203,19 @@ terug zolang `REMOTE_URL` in `.env` leeg is.
 ### Telefoon koppelen zonder wachtwoord
 
 Instellingen → **Telefoon koppelen** toont een QR en een code (10 minuten,
-eenmalig). Scannen met de camera opent de app op `/#/pair?code=…` en logt
-meteen in; in de native app kan de code ook getypt worden ("Ik heb een
-koppelcode"). De telefoon krijgt een refresh-token (1 jaar, schuivend) en
-vernieuwt zelf op de achtergrond. Apparaten staan in `docker/data/sessions.json`
-en zijn intrekbaar via `DELETE /api/auth/sessions/:id`.
+eenmalig). Voor iemand die alleen een telefoon heeft: Gebruikers → persoon →
+**Telefoon koppelen** en de link via sms/WhatsApp/mail sturen. De link is
+`https://<huis>.archiecloud.nl/pair?code=…`: met de app geïnstalleerd opent
+Android die direct (App Links, zie `cloud/README.md`), anders stuurt de
+server door naar de web-app (`/#/pair?…`). De code kan ook getypt worden
+("Ik heb een koppelcode"). De telefoon krijgt een refresh-token (1 jaar,
+schuivend) en vernieuwt zelf op de achtergrond.
+
+Gekoppelde apparaten staan onder Instellingen → Telefoon koppelen (eigen) en
+per gebruiker in Gebruikers; daar kan een apparaat afgemeld worden. Een nieuw
+wachtwoord of een verwijderde/uitgezette gebruiker meldt automatisch alle
+apparaten van die gebruiker af (het eigen toestel van wie zijn wachtwoord
+wijzigt blijft). Opslag: `docker/data/sessions.json`.
 
 ## Technisch (naslag)
 
