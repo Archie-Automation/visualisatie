@@ -124,9 +124,11 @@ Future<void> _learn(_ProbeResult r) async {
   if (r.serverId != null && r.serverId!.isNotEmpty && _serverId == null) {
     await setKnownServerId(r.serverId);
   }
-  // De NUC vertelt zelf zijn cloud-URL; zo hoeft die niet getypt te worden.
-  if (_remoteBase == null && r.remoteUrl != null && r.remoteUrl!.isNotEmpty) {
-    await setRemoteApiBase(r.remoteUrl);
+  // De NUC vertelt zelf zijn cloud-URL; zo hoeft die niet getypt te worden,
+  // en een nieuwe URL na her-enrollment komt vanzelf mee.
+  final advertised = r.remoteUrl == null ? null : normalizeRemoteBase(r.remoteUrl!);
+  if (advertised != null && advertised != _remoteBase) {
+    await setRemoteApiBase(advertised);
   }
 }
 
@@ -168,6 +170,16 @@ Future<RouteKind> _doProbe(String localBase) async {
     await _learn(rem);
     _switchTo(RouteKind.remote);
     return RouteKind.remote;
+  }
+
+  // Het LAN-adres is door de gebruiker ingesteld. Antwoordt dat met een
+  // andere server-id (NUC opnieuw geïnstalleerd), dan wint het ingestelde
+  // adres en leren we de nieuwe id. Zo raakt een telefoon nooit "vast".
+  if (local.ok && !rem.ok) {
+    await setKnownServerId(local.serverId);
+    await _learn(local);
+    _switchTo(RouteKind.local);
+    return RouteKind.local;
   }
 
   // Beide stil of verkeerd huis: route laten staan, reconnect-logica doet de rest.

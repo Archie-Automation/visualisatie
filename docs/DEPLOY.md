@@ -182,6 +182,24 @@ git pull          # of nieuwe ZIP uitpakken over de map (house.json niet wissen)
 
 ---
 
+## Buitenshuis (Archie Cloud)
+
+`installeer.sh` vraagt "Remote toegang via Archie Cloud inschakelen?". Met een
+eenmalige code van de beheerder (zie `cloud/README.md`) krijgt de NUC een eigen
+`https://<id>.archiecloud.nl` en houdt hij zelf een WireGuard-verbinding naar de
+VPS open. Geen poorten op de router, geen VPN-app op de telefoon.
+
+- De app kiest bij starten en bij terugkeren uit de achtergrond zelf tussen het
+  LAN-adres (thuis, <200 ms) en de cloud-URL. De NUC geeft die URL in
+  `/api/health` door, dus na één keer thuis inloggen staat hij op de telefoon.
+- Camera en intercom lopen buitenshuis via de TURN-relay op de VPS
+  (`/api/media/ice` levert tijdelijke credentials). Thuis blijft het direct.
+- ETS op afstand: installateur krijgt een WireGuard-profiel; op de NUC
+  `docker compose --profile knxd up -d` met `KNX_GATEWAY_HOST` in `.env`.
+
+Later alsnog aanzetten: `cd docker && ./install.sh` opnieuw; de vraag komt
+terug zolang `REMOTE_URL` in `.env` leeg is.
+
 ## Technisch (naslag)
 
 | Pad op host | Inhoud |

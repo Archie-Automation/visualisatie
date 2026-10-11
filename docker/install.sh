@@ -135,6 +135,108 @@ else
   fi
 fi
 
+# ── Server-id (app herkent deze NUC via LAN én cloud) ───────────────────────
+set_env_var() {
+  # $1 = KEY, $2 = VALUE; vervangt of voegt toe in .env
+  key="$1"; val="$2"
+  if grep -q "^${key}=" .env 2>/dev/null; then
+    # shellcheck disable=SC2016
+    sed -i.bak "s|^${key}=.*|${key}=${val}|" .env
+  else
+    printf '%s=%s\n' "$key" "$val" >> .env
+  fi
+}
+if ! grep -q '^SERVER_ID=.' .env 2>/dev/null; then
+  set_env_var SERVER_ID "$(random_secret | head -c 8)"
+  ok "SERVER_ID aangemaakt"
+fi
+
+# ── Remote toegang via Archie Cloud (optioneel) ─────────────────────────────
+# Eén eenmalige code van de beheerder; daarna houdt deze NUC zelf een
+# WireGuard-verbinding naar de VPS open. Geen poorten, geen VPN-app.
+ARCHIE_CLOUD_ENROLL="${ARCHIE_CLOUD_ENROLL:-https://enroll.archiecloud.nl}"
+enroll_cloud() {
+  if ! command -v wg >/dev/null 2>&1; then
+    warn "WireGuard ontbreekt — installeren…"
+    if [ "$(id -u)" -eq 0 ]; then
+      apt-get update -y && apt-get install -y wireguard-tools
+    else
+      sudo apt-get update -y && sudo apt-get install -y wireguard-tools
+    fi
+  fi
+  command -v wg >/dev/null 2>&1 || { warn "wireguard-tools niet geïnstalleerd; remote overgeslagen"; return 1; }
+  command -v python3 >/dev/null 2>&1 || { warn "python3 ontbreekt; remote overgeslagen"; return 1; }
+
+  printf 'Enrollment-code (bijv. 7K3M-Q8ZD): '
+  read -r code || code=
+  [ -n "$code" ] || { warn "Geen code; remote overgeslagen"; return 1; }
+
+  umask 077
+  priv="$(wg genkey)"
+  pub="$(printf '%s' "$priv" | wg pubkey)"
+  host="$(hostname 2>/dev/null || echo nuc)"
+  body="$(printf '{"code":"%s","publicKey":"%s","hostname":"%s"}' "$code" "$pub" "$host")"
+  resp="$(curl -fsS --max-time 20 -H 'content-type: application/json' -d "$body" "${ARCHIE_CLOUD_ENROLL}/enroll" 2>&1)" || {
+    warn "Aanmelden mislukt: ${resp}"
+    return 1
+  }
+  # JSON → shell-variabelen
+  eval "$(printf '%s' "$resp" | python3 -c '
+import json, sys, shlex
+d = json.load(sys.stdin)
+if "error" in d:
+    print("ENROLL_ERR=" + shlex.quote(d["error"])); sys.exit(0)
+wg = d["wg"]; turn = d.get("turn", {})
+for k, v in {
+  "E_SERVER_ID": d["serverId"], "E_REMOTE_URL": d["remoteUrl"],
+  "E_WG_ADDR": wg["address"], "E_WG_PUB": wg["serverPublicKey"],
+  "E_WG_EP": wg["endpoint"], "E_WG_ALLOWED": wg["allowedIps"],
+  "E_WG_KA": str(wg.get("persistentKeepalive", 25)),
+  "E_TURN_HOST": turn.get("host", ""), "E_TURN_SECRET": turn.get("secret", ""),
+}.items():
+    print(k + "=" + shlex.quote(str(v)))
+')"
+  if [ -n "${ENROLL_ERR:-}" ]; then
+    warn "Aanmelden geweigerd: ${ENROLL_ERR}"
+    return 1
+  fi
+
+  SUDO=""
+  [ "$(id -u)" -eq 0 ] || SUDO="sudo"
+  $SUDO mkdir -p /etc/wireguard
+  $SUDO sh -c "umask 077; cat > /etc/wireguard/wg0.conf" <<EOF
+[Interface]
+PrivateKey = ${priv}
+Address = ${E_WG_ADDR}
+
+[Peer]
+PublicKey = ${E_WG_PUB}
+Endpoint = ${E_WG_EP}
+AllowedIPs = ${E_WG_ALLOWED}
+PersistentKeepalive = ${E_WG_KA}
+EOF
+  $SUDO systemctl enable --now wg-quick@wg0 >/dev/null 2>&1 || warn "wg-quick@wg0 starten mislukt; controleer /etc/wireguard/wg0.conf"
+  $SUDO systemctl restart wg-quick@wg0 >/dev/null 2>&1 || true
+
+  # SERVER_ID blijft wat hij was: telefoons die deze NUC al kennen, blijven kloppen.
+  set_env_var REMOTE_URL "$E_REMOTE_URL"
+  set_env_var WG_ADDRESS "${E_WG_ADDR%/*}"
+  set_env_var TURN_HOST "$E_TURN_HOST"
+  set_env_var TURN_SECRET "$E_TURN_SECRET"
+  REMOTE_URL_SHOWN="$E_REMOTE_URL"
+  ok "Remote toegang actief: ${E_REMOTE_URL}"
+  return 0
+}
+
+REMOTE_URL_SHOWN="$(grep '^REMOTE_URL=' .env 2>/dev/null | head -n 1 | cut -d= -f2- | tr -d '\r' || true)"
+if [ -z "$REMOTE_URL_SHOWN" ]; then
+  if ask_yn "Remote toegang via Archie Cloud inschakelen? (code van de beheerder nodig)"; then
+    enroll_cloud || true
+  fi
+else
+  ok "Remote toegang al ingesteld: ${REMOTE_URL_SHOWN}"
+fi
+
 # ZIP/USB-install heeft geen .git — dan faalt de tablet-knop. Eenmalig koppelen.
 if command -v git >/dev/null 2>&1 && [ ! -d "$ROOT/.git" ]; then
   git_repo="$(grep '^GITHUB_REPO=' .env 2>/dev/null | head -n 1 | cut -d= -f2- | tr -d '\r' | sed 's/^["'\'']//;s/["'\'']$//;s/[[:space:]]*$//' || true)"
@@ -259,6 +361,12 @@ echo "  Open op telefoon of PC (zelfde wifi als de NUC):"
 echo ""
 echo "      http://${LAN_IP}:4000/"
 echo ""
+if [ -n "${REMOTE_URL_SHOWN:-}" ]; then
+  echo "  Buitenshuis (de app wisselt zelf):"
+  echo ""
+  echo "      ${REMOTE_URL_SHOWN}"
+  echo ""
+fi
 if [ "$NEW_HOUSE" -eq 1 ]; then
   echo "  Eerste login:"
   echo "      gebruiker:  admin"

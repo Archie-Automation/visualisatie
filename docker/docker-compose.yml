@@ -61,3 +61,19 @@ services:
       - ./data/asterisk:/etc/asterisk
       - ./data/certs:/data/certs:ro
 
+  # Optioneel: KNXnet/IP-server voor ETS op afstand (via WireGuard).
+  # Deelt de fysieke IP-interface; ETS verbindt met <WG_ADDRESS>:3671.
+  # Starten:  docker compose --profile knxd up -d
+  # Vereist KNX_GATEWAY_HOST in docker/.env (IP van de KNX IP-interface/router).
+  knxd:
+    image: ghcr.io/knxd/knxd:latest
+    container_name: archie-os-knxd
+    restart: unless-stopped
+    profiles: ["knxd"]
+    network_mode: host
+    command: >
+      knxd --eibaddr=0.0.1 --client-addrs=0.0.2:8
+      --Discovery --Tunnelling --Server
+      --listen-tcp=6720
+      -b ipt:${KNX_GATEWAY_HOST:-192.168.1.10}:3671
+

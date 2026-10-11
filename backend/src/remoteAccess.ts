@@ -125,9 +125,11 @@ export function turnUrls(): string[] {
       .map((s) => s.trim())
       .filter(Boolean);
   }
+  // 443 blijft voor Caddy (HTTPS). TURN-TLS op 5349 pas als coturn een cert heeft
+  // (TURN_URLS overschrijft dan deze lijst).
   return [
     `turn:${host}:3478?transport=udp`,
-    `turns:${host}:443?transport=tcp`
+    `turn:${host}:3478?transport=tcp`
   ];
 }
 

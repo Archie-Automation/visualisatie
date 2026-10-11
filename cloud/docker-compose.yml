@@ -1,0 +1,69 @@
+# Archie Cloud: Caddy (HTTPS per klant), coturn (WebRTC-relay), enrollment-API.
+# WireGuard draait op de host (setup-vps.sh). Zie README.md.
+
+services:
+  caddy:
+    image: caddy:2
+    container_name: archie-cloud-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+      # Admin-API alleen lokaal; enroll herlaadt hiermee de Caddyfile.
+      - "127.0.0.1:2019:2019"
+    environment:
+      - DOMAIN=${DOMAIN}
+      - ACME_EMAIL=${ACME_EMAIL}
+    volumes:
+      - ./data/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy/data:/data
+      - ./data/caddy/config:/config
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  coturn:
+    image: coturn/coturn:4
+    container_name: archie-cloud-coturn
+    restart: unless-stopped
+    network_mode: host
+    command: >
+      -n --log-file=stdout
+      --listening-port=3478
+      --external-ip=${PUBLIC_IP}
+      --realm=${DOMAIN}
+      --use-auth-secret --static-auth-secret=${TURN_SECRET}
+      --min-port=49160 --max-port=49400
+      --fingerprint --no-cli --no-tlsv1 --no-tlsv1_1
+      --no-multicast-peers
+      --denied-peer-ip=0.0.0.0-10.79.255.255
+      --denied-peer-ip=10.81.0.0-255.255.255.255
+      --allowed-peer-ip=10.80.0.0-10.80.255.255
+      --stale-nonce=600 --max-bps=3000000
+
+  enroll:
+    build: ./enroll
+    container_name: archie-cloud-enroll
+    restart: unless-stopped
+    # Host-netwerk + NET_ADMIN: voegt WireGuard-peers toe met `wg set`.
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - PORT=8090
+      - PUBLIC_IP=${PUBLIC_IP}
+      - DOMAIN=${DOMAIN}
+      - TURN_SECRET=${TURN_SECRET}
+      - ENROLL_ADMIN_TOKEN=${ENROLL_ADMIN_TOKEN}
+      - ACME_EMAIL=${ACME_EMAIL:-}
+      - WG_SUBNET=${WG_SUBNET:-10.80.0.0/16}
+      - WG_SERVER_ADDRESS=${WG_SERVER_ADDRESS:-10.80.0.1}
+      - WG_PORT=${WG_PORT:-51820}
+      - WG_INTERFACE=wg0
+      - CADDY_ADMIN=http://127.0.0.1:2019
+      - DATA_DIR=/data
+      - CADDYFILE=/caddy/Caddyfile
+    volumes:
+      - ./data/enroll:/data
+      - ./data/caddy:/caddy
+      - /etc/wireguard:/etc/wireguard
