@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'api.dart';
 import 'call_service.dart';
 import 'kiosk_system_ui.dart';
+import 'server_route.dart';
 import 'theme.dart';
 import 'theme_mode.dart';
 import 'ui/responsive.dart';
@@ -69,8 +70,16 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
   /// On iPhone/Safari the WS often drops while the screen is locked.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-      if (state == AppLifecycleState.resumed) {
-      ref.read(busProvider.notifier).reconnectNow();
+    if (state == AppLifecycleState.resumed) {
+      // Van wifi naar 4G (of terug) terwijl de app sliep: eerst route kiezen.
+      // Een wissel herverbindt zelf; anders gewoon de socket terughalen.
+      final before = activeRoute;
+      chooseServerRoute().then((k) {
+        if (!mounted) return;
+        if (k == RouteKind.none || k == before) {
+          ref.read(busProvider.notifier).reconnectNow();
+        }
+      });
       applyAndroidKioskSystemUi();
       ref.invalidate(softwareVersionStatusProvider);
     }

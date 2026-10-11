@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 
 import '../api.dart';
+import '../server_route.dart';
 import '../theme.dart';
 import 'widgets/luxe_backdrop.dart';
 
@@ -25,6 +26,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   late final AnimationController _rotCtrl;
   late final Animation<double> _rotAnim;
   late final TextEditingController _server;
+  late final TextEditingController _remote;
 
   bool _backendOk = false;
   bool _navigated = false;
@@ -38,7 +40,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   @override
   void initState() {
     super.initState();
-    _server = TextEditingController(text: apiBase);
+    _server = TextEditingController(text: localApiBase);
+    _remote = TextEditingController(text: remoteApiBase ?? '');
 
     _rotCtrl = AnimationController(
       vsync: this,
@@ -55,6 +58,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
   Future<void> _pingOnce() async {
     bool ok = false;
+    // Na een mislukte poging eerst de andere route proberen (LAN <-> cloud).
+    if (_failCount > 0 && !kIsWeb) {
+      await chooseServerRoute();
+      if (!mounted) return;
+    }
     try {
       final res = await http
           .get(Uri.parse('$apiBase/api/health'))
@@ -86,6 +94,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       _server.text,
       auth: ref.read(authProvider.notifier),
     );
+    await setRemoteApiBase(
+      _remote.text.trim().isEmpty ? null : _remote.text,
+    );
+    await chooseServerRoute();
     if (!mounted) return;
     setState(() {
       _savingServer = false;
@@ -112,7 +124,42 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     _retryTimer?.cancel();
     _rotCtrl.dispose();
     _server.dispose();
+    _remote.dispose();
     super.dispose();
+  }
+
+  Widget _serverField(
+    TextEditingController c, {
+    required String label,
+    required String hint,
+  }) {
+    return TextField(
+      controller: c,
+      keyboardType: TextInputType.url,
+      style: TextStyle(fontSize: 15, color: LuxeColors.ink),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        labelStyle: TextStyle(color: LuxeColors.inkSoft),
+        filled: true,
+        fillColor: LuxeColors.surface.withValues(alpha: 0.6),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: LuxeColors.line),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: LuxeColors.line),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide(color: LuxeColors.ink, width: 1.4),
+        ),
+      ),
+      onSubmitted: (_) => _applyServer(),
+    );
   }
 
   @override
@@ -163,35 +210,18 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                             ),
                       ),
                       if (!kIsWeb) ...[
-                      const SizedBox(height: 16),
-                      TextField(
-                        controller: _server,
-                        keyboardType: TextInputType.url,
-                        style: TextStyle(fontSize: 15, color: LuxeColors.ink),
-                        decoration: InputDecoration(
-                          labelText: 'Server',
-                          hintText: 'http://192.168.1.20:4000',
-                          labelStyle: TextStyle(color: LuxeColors.inkSoft),
-                          filled: true,
-                          fillColor: LuxeColors.surface.withValues(alpha: 0.6),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 20, vertical: 18),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide(color: LuxeColors.line),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide(color: LuxeColors.line),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide(
-                                color: LuxeColors.ink, width: 1.4),
-                          ),
+                        const SizedBox(height: 16),
+                        _serverField(
+                          _server,
+                          label: 'Server (thuis)',
+                          hint: 'http://192.168.1.20:4000',
                         ),
-                        onSubmitted: (_) => _applyServer(),
-                      ),
+                        const SizedBox(height: 12),
+                        _serverField(
+                          _remote,
+                          label: 'Adres buitenshuis (optioneel)',
+                          hint: 'https://huis.archiecloud.nl',
+                        ),
                       ],
                       const SizedBox(height: 16),
                       FilledButton(

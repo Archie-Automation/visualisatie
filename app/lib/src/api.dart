@@ -9,6 +9,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import 'media_api.dart';
+import 'server_route.dart';
 import 'hvac_switch_lock.dart';
 import 'fireplace_virtual.dart';
 import 'wtw_logic.dart';
@@ -41,7 +42,8 @@ String normalizeApiBase(String raw) {
   return s;
 }
 
-String get apiBase {
+/// LAN-adres van de NUC (zonder cloud-route). Zie [apiBase] voor de actieve.
+String get localApiBase {
   if (kIsWeb && kReleaseMode) {
     final origin = Uri.base.origin;
     return origin.endsWith('/') ? origin.substring(0, origin.length - 1) : origin;
@@ -49,6 +51,13 @@ String get apiBase {
   final o = _apiBaseOverride;
   if (o != null && o.isNotEmpty) return o;
   return _compileTimeApiBase;
+}
+
+/// Actieve basis-URL: LAN thuis, `https://<klant>.archiecloud.nl` onderweg.
+/// De web-build praat altijd met zijn eigen origin; daar is geen wissel.
+String get apiBase {
+  if (kIsWeb && kReleaseMode) return localApiBase;
+  return activeRemoteBaseOrNull() ?? localApiBase;
 }
 
 /// Load persisted server URL into memory. Call once at app start (native).
@@ -59,17 +68,26 @@ Future<void> loadApiBaseOverride() async {
   if (v != null && v.isNotEmpty) {
     _apiBaseOverride = normalizeApiBase(v);
   }
+  await loadServerRoute();
+}
+
+/// Kies LAN of cloud (max ~1,5 s, meestal <200 ms). Veilig om vaak aan te roepen.
+Future<RouteKind> chooseServerRoute() {
+  if (kIsWeb && kReleaseMode) return Future.value(RouteKind.local);
+  return probeServerRoute(localApiBase);
 }
 
 /// Persist and apply a new server URL. Clears auth if the host changed.
 Future<void> setApiBase(String raw, {AuthController? auth}) async {
   final next = normalizeApiBase(raw);
-  final prev = apiBase;
+  final prev = localApiBase;
   _apiBaseOverride = next;
   final sp = await SharedPreferences.getInstance();
   await sp.setString(_kApiBasePrefKey, next);
-  if (auth != null && next != prev) {
-    await auth.logout();
+  if (next != prev) {
+    // Ander huis: cloud-URL en server-id horen bij de oude NUC.
+    await clearServerRoute();
+    if (auth != null) await auth.logout();
   }
 }
 
@@ -328,6 +346,7 @@ class BusController extends Notifier<BusState> {
   bool _socketLive = false;
   bool _connectInFlight = false;
   int _healthMisses = 0;
+  bool _routeProbeInFlight = false;
   int _retryDelay = 2; // seconds, doubles on each failure up to 30s
   /// Incremented on every `_connect()` call. Stale calls detect they're
   /// outdated and stop without corrupting the connection.
@@ -411,6 +430,13 @@ class BusController extends Notifier<BusState> {
     _healthTimer = Timer.periodic(const Duration(seconds: 3), (_) {
       _probeHealth();
     });
+    // LAN <-> cloud gewisseld: socket en snapshot opnieuw via de nieuwe route.
+    void onRouteSwitch() {
+      if (_disposed) return;
+      reconnectNow();
+    }
+    serverRouteEpoch.addListener(onRouteSwitch);
+    ref.onDispose(() => serverRouteEpoch.removeListener(onRouteSwitch));
     // Bus starts before auth restore / login finish; reconnect when session is ready.
     ref.listen<AuthState>(authProvider, (prev, next) {
       if (next.restoreComplete && next.isAuthed) {
@@ -464,6 +490,22 @@ class BusController extends Notifier<BusState> {
     }
     _healthMisses++;
     if (_healthMisses < 2) return;
+    // Route kwijt (wifi weg, of juist thuisgekomen)? Andere route proberen
+    // vóór we "offline" melden. Een wissel triggert zelf de reconnect.
+    if (!kIsWeb && remoteApiBase != null && !_routeProbeInFlight) {
+      _routeProbeInFlight = true;
+      final before = activeRoute;
+      try {
+        final k = await chooseServerRoute();
+        if (_disposed) return;
+        if (k != RouteKind.none && k != before) {
+          _healthMisses = 0;
+          return;
+        }
+      } finally {
+        _routeProbeInFlight = false;
+      }
+    }
     ref.read(serverLinkProvider.notifier).offline();
     if (_socketLive && !_connectInFlight) _dropLiveSocket();
   }

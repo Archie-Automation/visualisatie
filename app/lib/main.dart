@@ -28,6 +28,8 @@ Future<void> main() async {
 
   await applyAndroidKioskSystemUi();
   await loadApiBaseOverride();
+  // LAN of cloud? Max ~1,5 s, thuis <200 ms. Splash pingt daarna de keuze.
+  await chooseServerRoute();
   try {
     await preloadLuxeFonts();
   } catch (e) {

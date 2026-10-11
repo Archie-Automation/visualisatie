@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:archie_os/l10n/app_localizations.dart';
 
 import '../api.dart';
+import '../server_route.dart';
 import '../theme.dart';
 import 'widgets/glass_card.dart';
 import 'widgets/luxe_backdrop.dart';
@@ -17,7 +18,8 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _server = TextEditingController(text: apiBase);
+  final _server = TextEditingController(text: localApiBase);
+  final _remote = TextEditingController(text: remoteApiBase ?? '');
   final _user = TextEditingController();
   final _pass = TextEditingController();
   bool _busy = false;
@@ -26,6 +28,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   void dispose() {
     _server.dispose();
+    _remote.dispose();
     _user.dispose();
     _pass.dispose();
     super.dispose();
@@ -43,6 +46,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         _server.text,
         auth: ref.read(authProvider.notifier),
       );
+      await setRemoteApiBase(
+        _remote.text.trim().isEmpty ? null : _remote.text,
+      );
+      // Thuis of onderweg: inloggen via de route die nu antwoordt.
+      await chooseServerRoute();
     }
 
     bool ok = false;
@@ -112,8 +120,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         if (showServer) ...[
                           _field(
                             _server,
-                            'Server',
+                            'Server (thuis)',
                             hint: 'http://192.168.1.20:4000',
+                            keyboardType: TextInputType.url,
+                          ),
+                          const SizedBox(height: 14),
+                          _field(
+                            _remote,
+                            'Adres buitenshuis (optioneel)',
+                            hint: 'https://huis.archiecloud.nl',
                             keyboardType: TextInputType.url,
                           ),
                           const SizedBox(height: 22),
