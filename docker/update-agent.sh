@@ -352,6 +352,10 @@ run_update() {
 
   # GitHub is source of truth for code. house.json and docker/.env are restored after.
   restore_secrets
+  # Blijvende kopie voor een handmatige `git pull` die het huis zou wissen.
+  if [ -f "$ROOT/config/house.json" ]; then
+    cp -a "$ROOT/config/house.json" "$DATA/house.json.keep" 2>/dev/null || true
+  fi
   log "code ok branch=$branch"
 
   ST_STATE=running ST_STEP=build ST_MESSAGE="Software bouwen. Meestal 1–3 minuten. Het huis blijft werken tot de herstart aan het eind." write_status

@@ -163,7 +163,7 @@ git pull          # of nieuwe ZIP uitpakken over de map (house.json niet wissen)
 ./installeer.sh
 ```
 
-`config/house.json` en `docker/data/` blijven bewaard.
+`config/house.json` en `docker/data/` blijven bewaard. `house.json` staat niet in git (elk huis is anders); `installeer.sh` bewaart een kopie in `docker/data/house.json.keep` en zet die terug als het bestand na een `git pull` ontbreekt.
 
 ---
 

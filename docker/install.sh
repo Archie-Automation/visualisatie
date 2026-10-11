@@ -146,14 +146,22 @@ if command -v git >/dev/null 2>&1 && [ ! -d "$ROOT/.git" ]; then
 fi
 
 # ── Huisconfig ──────────────────────────────────────────────────────────────
-if ! test -f "$ROOT/config/house.json"; then
+# house.json staat niet in git. Een `git pull` die het bestand ooit uit de
+# index haalde kan het lokaal wissen; daarom altijd een kopie in docker/data.
+HOUSE_KEEP="./data/house.json.keep"
+if test -f "$ROOT/config/house.json"; then
+  cp -a "$ROOT/config/house.json" "$HOUSE_KEEP" 2>/dev/null || true
+  ok "Bestaande house.json behouden (niet overschreven)"
+  NEW_HOUSE=0
+elif test -s "$HOUSE_KEEP"; then
+  cp -a "$HOUSE_KEEP" "$ROOT/config/house.json"
+  ok "house.json teruggezet uit docker/data (was na update verdwenen)"
+  NEW_HOUSE=0
+else
   test -f "$ROOT/config/house.empty.json" || die "config/house.empty.json ontbreekt in de map."
   cp "$ROOT/config/house.empty.json" "$ROOT/config/house.json"
   ok "Leeg huis aangemaakt (nog geen apparaten)"
   NEW_HOUSE=1
-else
-  ok "Bestaande house.json behouden (niet overschreven)"
-  NEW_HOUSE=0
 fi
 
 # ── Start ───────────────────────────────────────────────────────────────────

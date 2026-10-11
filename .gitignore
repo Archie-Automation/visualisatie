@@ -25,12 +25,18 @@ app/pubspec.lock
 backend/.env
 docker/.env
 
+# Per-huis configuratie: nooit in de repo. install.sh maakt house.json uit
+# house.empty.json; go2rtc.yaml wordt door de backend gegenereerd.
+config/house.json
+docker/go2rtc/go2rtc.yaml
+
 # Runtime update-agent files
 docker/data/update-request.json
 docker/data/update-status.json
 docker/data/update-agent.log
 docker/data/update.lock/
 docker/data/*.update-bak
+docker/data/house.json.keep
 docker/data/intercom-captures/
 
 # KNX project exports (contain real customer group addresses / PII)
