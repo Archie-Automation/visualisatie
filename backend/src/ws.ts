@@ -15,6 +15,7 @@ import { fireplaceVirtual, type FireplaceVirtualEntry } from "./fireplaceVirtual
 import { wtwRuntime, type WtwLogicStatus } from "./wtwRuntime";
 import { captureOnIntercomRing } from "./intercomCaptures";
 import { userIdsInVoipGroup } from "./voip/ringTargets";
+import { pushCleared, pushRing } from "./push";
 
 const SECRET = process.env.JWT_SECRET ?? "dev-secret-change-me";
 if (
@@ -171,10 +172,12 @@ export function attachWebSocket(
     const wasHigh = prev === true || prev === 1;
     if (nowHigh && !wasHigh) {
       logger.info({ id: intercom.id, ga: state.ga }, "doorbell ring");
+      const ts = Date.now();
       broadcastAll({
         type: "intercom.ring",
-        payload: { intercomId: intercom.id, name: intercom.name, ts: Date.now() }
+        payload: { intercomId: intercom.id, name: intercom.name, ts }
       });
+      pushRing({ intercomId: intercom.id, name: intercom.name, ts });
       captureOnIntercomRing(intercom.id);
     }
   };
@@ -189,13 +192,15 @@ export function attachWebSocket(
       // a KNX doorbell.ga (e.g. DoorBird webhook / SIP) are also found.
       const found = collectIntercoms(cfg).find((i) => i.id === intercomId);
       if (!found) return;
+      const ts = Date.now();
       const msg: Outgoing = {
         type: "intercom.ring",
-        payload: { intercomId: found.id, name: found.name, ts: Date.now() }
+        payload: { intercomId: found.id, name: found.name, ts }
       };
       const gid = groupId?.trim() ?? "";
       if (!gid) {
         broadcastAll(msg);
+        pushRing({ intercomId: found.id, name: found.name, ts });
       } else {
         const allowed = userIdsInVoipGroup(cfg, gid);
         const data = JSON.stringify(msg);
@@ -204,6 +209,7 @@ export function attachWebSocket(
           const uid = wsUser.get(client);
           if (uid && allowed.has(uid)) client.send(data);
         }
+        pushRing({ intercomId: found.id, name: found.name, ts, userIds: allowed });
       }
       captureOnIntercomRing(found.id);
     },
@@ -212,6 +218,7 @@ export function attachWebSocket(
         type: "intercom.cleared",
         payload: { intercomId }
       });
+      pushCleared(intercomId);
     },
     broadcastConfigChanged(version: number) {
       broadcastAll({ type: "config_changed", payload: { version } });

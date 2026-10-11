@@ -60,6 +60,9 @@ services:
       - ANDROID_CERT_SHA256=${ANDROID_CERT_SHA256:-}
       - APPLE_TEAM_ID=${APPLE_TEAM_ID:-}
       - IOS_BUNDLE_ID=${IOS_BUNDLE_ID:-com.example.luxeKnx}
+      # Push: service-account in ./data/enroll/ (gemount als /data).
+      - FIREBASE_SERVICE_ACCOUNT=${FIREBASE_SERVICE_ACCOUNT:-/data/firebase-service-account.json}
+      - FCM_CLIENT_CONFIG=${FCM_CLIENT_CONFIG:-}
       - WG_SUBNET=${WG_SUBNET:-10.80.0.0/16}
       - WG_SERVER_ADDRESS=${WG_SERVER_ADDRESS:-10.80.0.1}
       - WG_PORT=${WG_PORT:-51820}

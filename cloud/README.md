@@ -37,6 +37,31 @@ direct, mits het domein de app "erkent":
 Na wijzigen: `docker compose up -d enroll` (de enroll-service schrijft de
 Caddyfile opnieuw bij start).
 
+## Deurbel terwijl de app dicht is (push)
+
+De NUC bewaart alleen device-tokens; de Firebase-servicesleutel staat
+uitsluitend hier. Bij een bel POST de NUC via wg0 naar
+`http://10.80.0.1:8090/push/send`; de enroll-service herkent de NUC aan zijn
+WireGuard-adres (geen token nodig, niet bereikbaar van buiten) en stuurt
+FCM-databerichten met hoge prioriteit. De app toont daarop het native
+belscherm; "Opnemen" opent het intercomscherm.
+
+Eenmalig:
+
+1. Firebase-project aanmaken, Android-app toevoegen (package `com.example.luxe_knx`).
+2. Projectinstellingen → Serviceaccounts → nieuwe privésleutel →
+   `cloud/data/enroll/firebase-service-account.json`.
+3. `FCM_CLIENT_CONFIG` in `.env` (apiKey, appId, projectId, messagingSenderId
+   van de Android-app; publiek).
+4. `docker compose up -d enroll`; `curl https://enroll.<domein>/health` toont `"push": true`.
+
+De app haalt de clientconfig van zijn eigen NUC (`/api/push/config`), dus er
+hoeft geen `google-services.json` in de APK. Testen: Instellingen → Deurbel →
+Testbel, app sluiten.
+
+iOS: FCM levert daar alleen stille pushes; een echt belscherm vereist
+PushKit/VoIP-push rechtstreeks via APNs. Nog niet gebouwd.
+
 ## Installatie (eenmalig)
 
 ```bash

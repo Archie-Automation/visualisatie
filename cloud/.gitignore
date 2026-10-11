@@ -1,0 +1,3 @@
+# Runtime-data van de VPS: registry, certificaten, Firebase-servicesleutel.
+.env
+data/

@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../api.dart';
 import '../display_panel_config.dart';
 import '../doorbell_ringer.dart';
+import '../push_service.dart';
 import '../media_api.dart';
 import '../models.dart';
 import '../roles.dart';
@@ -1963,6 +1964,28 @@ class _DoorbellMuteSectionState extends ConsumerState<_DoorbellMuteSection> {
     return t;
   }
 
+  Future<void> _testPush() async {
+    final token = ref.read(authProvider).token;
+    if (token == null) return;
+    setState(() => _busy = true);
+    String? err;
+    try {
+      err = await PushService.sendTest(token);
+    } catch (e) {
+      err = '$e';
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(err == null
+            ? 'Testbel verstuurd. Sluit de app om het belscherm te zien.'
+            : 'Testbel mislukt: $err'),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final me = ref.watch(configProvider).value?.me;
@@ -1998,6 +2021,25 @@ class _DoorbellMuteSectionState extends ConsumerState<_DoorbellMuteSection> {
                       v ? DateTime.now().add(const Duration(hours: 1)) : null,
                     ),
           ),
+          if (PushService.supported) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Bel ook als de app dicht is (via Archie Cloud). '
+                    'Test stuurt alleen naar jouw telefoon.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                OutlinedButton(
+                  onPressed: _busy ? null : _testPush,
+                  child: const Text('Testbel'),
+                ),
+              ],
+            ),
+          ],
           if (DoorbellRinger.supported) ...[
             const SizedBox(height: 14),
             Row(

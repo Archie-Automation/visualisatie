@@ -115,6 +115,7 @@ import {
   revokeRefreshToken,
   revokeSession
 } from "./sessions";
+import { pushClientConfig, pushEnabled, pushRing, registerToken, unregisterToken } from "./push";
 import { probeCameraStreams } from "./cameraProbe";
 import { parseKnxExport, persistGaCatalog, loadGaCatalog } from "./knxImport";
 import { scheduleAdminProcessRestart } from "./processRestart";
@@ -860,6 +861,45 @@ export function buildRouter(
     const staff = isStaffRole(req.user?.role);
     const ok = revokeSession(req.params.id, staff ? null : req.user!.sub);
     res.status(ok ? 200 : 404).json({ ok });
+  });
+
+  /* ------------------------- Push (deurbel bij gesloten app) ----------- */
+
+  /** Firebase-clientconfig + of push op deze server actief is. */
+  r.get("/push/config", requireAuth, async (_req, res) => {
+    res.setHeader("cache-control", "no-store");
+    const firebase = await pushClientConfig();
+    res.json({ enabled: pushEnabled() && firebase != null, firebase });
+  });
+
+  r.post("/push/register", requireAuth, (req: AuthedRequest, res) => {
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    const platform = req.body?.platform === "ios" ? "ios" : req.body?.platform === "android" ? "android" : null;
+    if (!token || token.length < 20 || token.length > 4096 || !platform) {
+      return res.status(400).json({ error: "token en platform (android|ios) vereist" });
+    }
+    const sessionId = typeof req.body?.sessionId === "string" && req.body.sessionId ? req.body.sessionId : undefined;
+    registerToken({ token, platform, userId: req.user!.sub, sessionId });
+    res.json({ ok: true });
+  });
+
+  r.delete("/push/register", requireAuth, (req: AuthedRequest, res) => {
+    const token = typeof req.body?.token === "string" ? req.body.token.trim() : "";
+    if (!token) return res.status(400).json({ error: "token vereist" });
+    res.json({ ok: unregisterToken(token, req.user!.sub) });
+  });
+
+  /** Testbel vanaf de telefoon zelf (Instellingen): alleen naar de eigen gebruiker. */
+  r.post("/push/test", requireAuth, (req: AuthedRequest, res) => {
+    if (!pushEnabled()) return res.status(409).json({ error: "push niet actief (geen Archie Cloud)" });
+    const ic = collectIntercoms(getConfig())[0];
+    pushRing({
+      intercomId: ic?.id ?? "test",
+      name: ic?.name ?? "Testbel",
+      ts: Date.now(),
+      userIds: new Set([req.user!.sub])
+    });
+    res.json({ ok: true });
   });
 
   r.get("/users", requireAuth, requireStaff, (_req, res) => {

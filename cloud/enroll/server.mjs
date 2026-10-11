@@ -6,7 +6,11 @@
 //   GET    /admin/servers
 //   DELETE /admin/servers/:id
 //   POST   /admin/installers     { name }            -> { config }
+//   Push (deurbel bij gesloten app):
+//   GET  /push/config            publieke Firebase-clientconfig voor de app
+//   POST /push/send              alleen vanaf een NUC via wg0: { tokens, data, ttl }
 import http from "node:http";
+import { clientConfig, fcmStatus, sendToTokens } from "./fcm.mjs";
 import {
   enrollServer,
   env,
@@ -85,12 +89,48 @@ function clientIp(req) {
   return req.socket.remoteAddress || "?";
 }
 
+/** Geregistreerde NUC achter dit socket-adres (wg0), of null. Headers tellen hier niet. */
+function serverBySocket(req, r) {
+  const ip = (req.socket.remoteAddress || "").replace(/^::ffff:/, "");
+  if (!ip) return null;
+  return Object.values(r.servers).find((s) => !s.revoked && s.wgAddress === ip) || null;
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", "http://x");
   const p = url.pathname;
   try {
     if (req.method === "GET" && p === "/health") {
-      return json(res, 200, { ok: true, domain: env.domain });
+      return json(res, 200, { ok: true, domain: env.domain, push: fcmStatus().ok });
+    }
+
+    if (req.method === "GET" && p === "/push/config") {
+      const c = clientConfig();
+      if (!c) return json(res, 404, { error: "push niet geconfigureerd" });
+      return json(res, 200, c);
+    }
+
+    if (req.method === "POST" && p === "/push/send") {
+      const r = loadRegistry();
+      const srv = serverBySocket(req, r);
+      if (!srv) return json(res, 403, { error: "alleen vanaf een gekoppelde server via WireGuard" });
+      const st = fcmStatus();
+      if (!st.ok) return json(res, 503, { error: st.error });
+      const body = await readBody(req);
+      const tokens = Array.isArray(body.tokens) ? body.tokens : [];
+      const targets = tokens
+        .filter((t) => t && typeof t.token === "string" && t.token.length >= 20 && t.token.length <= 4096)
+        .slice(0, 200);
+      const data = {};
+      for (const [k, v] of Object.entries(body.data || {})) {
+        if (typeof k === "string" && k.length <= 40 && v != null) data[k] = String(v).slice(0, 512);
+      }
+      data.serverId = srv.id;
+      const ttl = Math.min(120, Math.max(5, Number(body.ttl) || 30));
+      if (targets.length === 0) return json(res, 200, { sent: 0, failed: 0, invalid: [] });
+      const out = await sendToTokens(targets, data, ttl);
+      console.log(`push ${data.type || "?"} van ${srv.id}: ${out.sent} ok, ${out.failed} fout, ${out.invalid.length} ongeldig`);
+      return json(res, 200, out);
     }
 
     if (req.method === "POST" && p === "/enroll") {

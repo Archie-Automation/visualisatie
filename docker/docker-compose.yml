@@ -32,6 +32,9 @@ services:
       - HVAC_LOCK_STORE_PATH=/data/hvac-locks.json
       - SPOTIFY_STORE_PATH=/data/spotify.json
       - SESSIONS_STORE_PATH=/data/sessions.json
+      - PUSH_STORE_PATH=/data/push.json
+      - PUSH_RELAY_URL=${PUSH_RELAY_URL:-}
+      - FCM_CLIENT_CONFIG=${FCM_CLIENT_CONFIG:-}
       - ASTERISK_CONF_DIR=/data/asterisk
       - ASTERISK_AMI_HOST=127.0.0.1
       - GITHUB_REPO=${GITHUB_REPO:-Archie-Automation/visualisatie}

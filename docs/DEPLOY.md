@@ -217,6 +217,14 @@ wachtwoord of een verwijderde/uitgezette gebruiker meldt automatisch alle
 apparaten van die gebruiker af (het eigen toestel van wie zijn wachtwoord
 wijzigt blijft). Opslag: `docker/data/sessions.json`.
 
+### Deurbel bij gesloten app (Android)
+
+Werkt zodra de server aan Archie Cloud hangt en op de VPS Firebase is
+ingesteld (`cloud/README.md`). De NUC stuurt een bel via de WireGuard-hub
+naar de push-relay; de telefoon toont het native belscherm. Tokens staan in
+`docker/data/push.json` en volgen de sessies: apparaat afgemeld = geen push.
+Deurbel stil (per account) geldt ook voor push.
+
 ## Technisch (naslag)
 
 | Pad op host | Inhoud |
