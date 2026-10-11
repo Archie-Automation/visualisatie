@@ -35,6 +35,14 @@ services:
       - ASTERISK_AMI_HOST=127.0.0.1
       - GITHUB_REPO=${GITHUB_REPO:-Archie-Automation/visualisatie}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      # Remote toegang (Archie Cloud); leeg = alleen LAN.
+      - SERVER_ID=${SERVER_ID:-}
+      - REMOTE_URL=${REMOTE_URL:-}
+      - WG_ADDRESS=${WG_ADDRESS:-}
+      - TURN_HOST=${TURN_HOST:-}
+      - TURN_SECRET=${TURN_SECRET:-}
+      - TURN_TTL=${TURN_TTL:-3600}
+      - GO2RTC_RELAY_CANDIDATE=${GO2RTC_RELAY_CANDIDATE:-}
     volumes:
       # Writable: installer saves house.json from the app.
       - ../config:/config

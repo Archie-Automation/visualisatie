@@ -7,6 +7,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:http/http.dart' as http;
 
 import '../../api.dart';
+import '../../media_ice.dart';
 import '../../theme.dart';
 
 /// View-only WebRTC player for surveillance cameras.
@@ -136,10 +137,10 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
         await _renderer.initialize();
         _rendererReady = true;
       }
+      final iceServers =
+          await fetchIceServers(token: ref.read(authProvider).token);
       final pc = await createPeerConnection({
-        'iceServers': [
-          {'urls': 'stun:stun.cloudflare.com:3478'},
-        ],
+        'iceServers': iceServers,
         'sdpSemantics': 'unified-plan',
         'bundlePolicy': 'max-bundle',
       });

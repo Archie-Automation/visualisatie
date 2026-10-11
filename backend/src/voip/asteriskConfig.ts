@@ -3,6 +3,7 @@ import path from "node:path";
 import type { HouseConfig, IntercomDevice, VoipEndpoint } from "../types";
 import { astSafe } from "./secrets";
 import { intercomRingTargets } from "./ringTargets";
+import { localNets, turnCredentials } from "../remoteAccess";
 
 export function asteriskConfDir(): string {
   return (
@@ -193,12 +194,30 @@ console => notice,warning,error
 messages => notice,warning,error
 `;
 
+  // TURN voor Asterisk: één lange REST-credential (coturn use-auth-secret),
+  // vernieuwd bij elke config-write. Zonder TURN_HOST blijft alleen STUN.
+  const turnHost = process.env.TURN_HOST?.trim();
+  const turnCred = turnHost
+    ? turnCredentials("asterisk", 365 * 24 * 3600)
+    : null;
+  const turnLines = turnCred
+    ? `turnaddr=${turnHost}:3478
+turnusername=${turnCred.username}
+turnpassword=${turnCred.credential}
+`
+    : "";
   files["rtp.conf"] = `[general]
 rtpstart=${rtpStart}
 rtpend=${rtpEnd}
 icesupport=true
 stunaddr=stun.l.google.com:19302
-`;
+${turnLines}`;
+
+  // Huis-LAN en WireGuard-hub zijn "lokaal": geen NAT-herschrijving van media.
+  const localNetLines = localNets()
+    .map((n) => `local_net=${n}`)
+    .join("\n");
+  const transportNat = localNetLines ? `${localNetLines}\n` : "";
 
   files["http.conf"] = `[general]
 enabled=yes
@@ -241,17 +260,17 @@ endpoint_identifier_order=username,ip,anonymous
 type=transport
 protocol=udp
 bind=0.0.0.0:${sipPort}
-
+${transportNat}
 [transport-ws]
 type=transport
 protocol=ws
 bind=0.0.0.0:${wsPort}
-
+${transportNat}
 [transport-wss]
 type=transport
 protocol=wss
 bind=0.0.0.0:${wssPort}
-
+${transportNat}
 ${(v.endpoints ?? [])
   .map((ep) =>
     pjsipEndpointBlock({

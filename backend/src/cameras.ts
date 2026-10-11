@@ -4,6 +4,7 @@ import path from "node:path";
 import { walkDevices } from "./config";
 import { intercomSupportsRelease } from "./intercomReleaseMode";
 import { logger } from "./logger";
+import { extraGo2rtcCandidates } from "./remoteAccess";
 import type {
   CameraConfig,
   CameraDevice,
@@ -255,6 +256,8 @@ export function resolveWebRtcCandidates(): string[] {
 
   const lan = detectLanIPv4();
   if (lan) out.add(`${lan}:8555`);
+  // Buitenshuis: WireGuard-adres (ETS-laptop, hub) en VPS-relay naar :8555.
+  for (const c of extraGo2rtcCandidates()) out.add(c);
   return [...out];
 }
 

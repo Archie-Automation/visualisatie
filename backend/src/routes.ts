@@ -104,6 +104,7 @@ import {
   warmGo2rtcProducer
 } from "./cameraSnapshot";
 import { syncGo2rtcProcessAfterConfigWritten } from "./go2rtcSpawn";
+import { iceBundleFor, remoteUrl, serverId } from "./remoteAccess";
 import { probeCameraStreams } from "./cameraProbe";
 import { parseKnxExport, persistGaCatalog, loadGaCatalog } from "./knxImport";
 import { scheduleAdminProcessRestart } from "./processRestart";
@@ -636,9 +637,19 @@ export function buildRouter(
     }
     res.json({
       ok: true,
+      // App-routewissel: herken dezelfde NUC via LAN én via de cloud-URL.
+      serverId: serverId(),
+      remoteUrl: remoteUrl(),
       warnings,
       connectivity
     });
+  });
+
+  /** ICE-servers voor WebRTC (camera + intercom). TURN-credentials zijn
+   *  per gebruiker en tijdelijk; zonder TURN_HOST alleen STUN. */
+  r.get("/media/ice", requireAuth, (req: AuthedRequest, res) => {
+    res.setHeader("cache-control", "no-store");
+    res.json(iceBundleFor(req.user?.username ?? "app"));
   });
 
   /** Proxy for Sonos/Spotify album art.
