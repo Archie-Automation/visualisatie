@@ -83,7 +83,9 @@ class _PairingSectionState extends ConsumerState<PairingSection> {
               'Zet een nieuwe telefoon op dit huis zonder wachtwoord. '
               'Scan de QR met de camera van de telefoon, of typ de code in de app '
               'bij "Ik heb een koppelcode". De telefoon blijft daarna ingelogd, '
-              'thuis én onderweg.',
+              'thuis én onderweg.\n\n'
+              'Iemand anders koppelen die alleen een telefoon heeft? Ga naar '
+              'Gebruikers → die persoon → "Telefoon koppelen" en stuur de link.',
               style: t.bodyMedium,
             ),
             const SizedBox(height: 18),

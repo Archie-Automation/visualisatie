@@ -8,6 +8,7 @@ import '../roles.dart';
 import '../theme.dart';
 import '../user_api.dart';
 import '../user_credentials.dart';
+import 'pair_invite_sheet.dart';
 import 'user_access_editor.dart';
 import 'widgets/back_pill.dart';
 import 'widgets/glass_card.dart';
@@ -675,8 +676,22 @@ class _UserEditor extends StatelessWidget {
                 ),
           ),
         ],
-        if (!isSelf && !lockInstaller) ...[
+        if (user['_new'] != true && (user['id'] as String?)?.isNotEmpty == true) ...[
           const SizedBox(height: 16),
+          OutlinedButton.icon(
+            onPressed: () => showPairInviteSheet(
+              context,
+              userId: user['id'] as String,
+              label: ((user['displayName'] as String?)?.trim().isNotEmpty ?? false)
+                  ? (user['displayName'] as String).trim()
+                  : (user['username'] as String? ?? ''),
+            ),
+            icon: const Icon(Icons.phone_iphone_outlined),
+            label: const Text('Telefoon koppelen (link of QR)'),
+          ),
+        ],
+        if (!isSelf && !lockInstaller) ...[
+          const SizedBox(height: 10),
           OutlinedButton.icon(
             onPressed: onDelete,
             icon: const Icon(Icons.delete_outline),
