@@ -111,6 +111,7 @@ import {
   issueSessionForUser,
   listSessions,
   refreshAccess,
+  revokeAllForUser,
   revokeRefreshToken,
   revokeSession
 } from "./sessions";
@@ -760,7 +761,11 @@ export function buildRouter(
     // vernieuwen en per apparaat ingetrokken kan worden.
     const device = String(req.body?.device ?? req.get("user-agent") ?? "app").slice(0, 64);
     const session = issueSessionForUser(result.user.id, device);
-    res.json({ ...result, refreshToken: session?.refreshToken ?? null });
+    res.json({
+      ...result,
+      refreshToken: session?.refreshToken ?? null,
+      sessionId: session?.sessionId ?? null
+    });
   });
 
   /* ------------------------- Koppelen (QR) en refresh ------------------ */
@@ -818,6 +823,7 @@ export function buildRouter(
     res.json({
       token: issued.accessToken,
       refreshToken: issued.refreshToken,
+      sessionId: issued.sessionId,
       user: issued.user,
       localUrl: clientApiBase(req),
       remoteUrl: remoteUrl(),
@@ -829,7 +835,7 @@ export function buildRouter(
     const out = refreshAccess(String(req.body?.refreshToken ?? ""));
     if (!out) return res.status(401).json({ error: "refresh invalid" });
     res.setHeader("cache-control", "no-store");
-    res.json({ token: out.accessToken, user: out.user });
+    res.json({ token: out.accessToken, user: out.user, sessionId: out.sessionId });
   });
 
   r.post("/auth/logout", (req, res) => {
@@ -837,10 +843,15 @@ export function buildRouter(
     res.json({ ok: rt ? revokeRefreshToken(rt) : false });
   });
 
-  /** Gekoppelde apparaten: eigen lijst; staff ziet alles. */
+  /** Gekoppelde apparaten: eigen lijst; staff ziet alles of één gebruiker (`?userId=`). */
   r.get("/auth/sessions", requireAuth, (req: AuthedRequest, res) => {
-    const all = isStaffRole(req.user?.role) && req.query["all"] === "1";
-    res.json({ sessions: listSessions(all ? null : req.user!.sub) });
+    const staff = isStaffRole(req.user?.role);
+    const wanted = typeof req.query["userId"] === "string" ? String(req.query["userId"]) : "";
+    let scope: string | null = req.user!.sub;
+    if (staff && req.query["all"] === "1") scope = null;
+    else if (staff && wanted) scope = wanted;
+    res.setHeader("cache-control", "no-store");
+    res.json({ sessions: listSessions(scope) });
   });
 
   r.delete("/auth/sessions/:id", requireAuth, (req: AuthedRequest, res) => {
@@ -936,6 +947,25 @@ export function buildRouter(
 
     persistConfig(draft);
     ws.broadcastConfigChanged(getConfigVersion());
+
+    // Apparaten afmelden van wie een nieuw wachtwoord kreeg, uitgezet of
+    // verwijderd is. Het apparaat waarmee de wijziging gedaan wordt blijft
+    // staan als het om het eigen wachtwoord gaat (`keepSessionId`).
+    const keep = typeof req.body?.keepSessionId === "string" ? req.body.keepSessionId : null;
+    const nextById = new Map((draft.users ?? []).map((u) => [u.id, u]));
+    const changedPw = new Set(
+      parsed.data.users.filter((u) => typeof u.password === "string" && u.password.length > 0).map((u) => u.id)
+    );
+    for (const prev of previous.users ?? []) {
+      const next = nextById.get(prev.id);
+      const removed = !next;
+      const disabled = !!next && next.enabled === false && prev.enabled !== false;
+      const hashChanged = !!next && !!prev.passwordHash && next.passwordHash !== prev.passwordHash;
+      if (!removed && !disabled && !hashChanged && !changedPw.has(prev.id)) continue;
+      const n = revokeAllForUser(prev.id, prev.id === actor.id && !removed ? keep : null);
+      if (n > 0) logger.info({ user: prev.username, n, removed, disabled }, "sessies ingetrokken");
+    }
+
     const users = (getConfig().users ?? []).map((u) =>
       stripHash({
         ...u,

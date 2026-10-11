@@ -182,7 +182,9 @@ export function issueSessionForUser(userId: string, device: string): IssuedSessi
 }
 
 /** Nieuw access-token op een geldig refresh-token; verlengt de sessie schuivend. */
-export function refreshAccess(refreshToken: string): { accessToken: string; user: Omit<User, "passwordHash"> } | null {
+export function refreshAccess(
+  refreshToken: string
+): { accessToken: string; user: Omit<User, "passwordHash">; sessionId: string } | null {
   if (!refreshToken || refreshToken.length < 20) return null;
   const store = load();
   const h = sha256(refreshToken);
@@ -195,7 +197,7 @@ export function refreshAccess(refreshToken: string): { accessToken: string; user
   rec.lastUsedAt = now.toISOString();
   rec.expiresAt = new Date(now.getTime() + REFRESH_DAYS * 86_400_000).toISOString();
   save(store);
-  return { accessToken: signAccess(user), user: publicUser(user) };
+  return { accessToken: signAccess(user), user: publicUser(user), sessionId: rec.id };
 }
 
 export function revokeRefreshToken(refreshToken: string): boolean {
@@ -215,6 +217,24 @@ export function revokeSession(sessionId: string, userId: string | null): boolean
   rec.revoked = true;
   save(store);
   return true;
+}
+
+/**
+ * Alle apparaten van een gebruiker afmelden (wachtwoord gewijzigd, gebruiker
+ * verwijderd). [keepSessionId] blijft staan, zodat wie zijn eigen wachtwoord
+ * wijzigt niet van zijn huidige telefoon wordt gegooid.
+ */
+export function revokeAllForUser(userId: string, keepSessionId?: string | null): number {
+  const store = load();
+  let n = 0;
+  for (const s of store.sessions) {
+    if (s.userId !== userId || s.revoked) continue;
+    if (keepSessionId && s.id === keepSessionId) continue;
+    s.revoked = true;
+    n += 1;
+  }
+  if (n > 0) save(store);
+  return n;
 }
 
 export function listSessions(userId: string | null): Array<Omit<SessionRecord, "tokenHash">> {

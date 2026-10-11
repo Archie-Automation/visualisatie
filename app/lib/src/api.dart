@@ -282,6 +282,10 @@ class AuthController extends Notifier<AuthState> {
     if (refresh != null && refresh.isNotEmpty) {
       await sp.setString(_kRefreshPrefKey, refresh);
     }
+    final sid = (body['sessionId'] as String?)?.trim();
+    if (sid != null && sid.isNotEmpty) {
+      await sp.setString(kSessionIdPrefKey, sid);
+    }
     state = AuthState(
       token: token,
       username: storedUsername,
@@ -351,6 +355,7 @@ class AuthController extends Notifier<AuthState> {
     await sp.remove('username');
     await sp.remove('role');
     await sp.remove(_kRefreshPrefKey);
+    await sp.remove(kSessionIdPrefKey);
     state = const AuthState(restoreComplete: true);
     if (rt != null && rt.isNotEmpty) {
       // Best effort: apparaat intrekken op de server.
@@ -364,6 +369,16 @@ class AuthController extends Notifier<AuthState> {
           .catchError((_) => http.Response('', 0)));
     }
   }
+}
+
+/// Pref-sleutel van de server-sessie-id van dit apparaat (zie `/api/auth/sessions`).
+const kSessionIdPrefKey = 'session_id';
+
+/// Sessie-id van dit apparaat op de server, of null (oude login zonder refresh).
+Future<String?> storedSessionId() async {
+  final sp = await SharedPreferences.getInstance();
+  final v = sp.getString(kSessionIdPrefKey);
+  return (v == null || v.isEmpty) ? null : v;
 }
 
 /// Korte apparaatomschrijving voor de sessielijst op de server.

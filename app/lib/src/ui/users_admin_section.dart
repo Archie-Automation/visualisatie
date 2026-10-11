@@ -8,6 +8,7 @@ import '../roles.dart';
 import '../theme.dart';
 import '../user_api.dart';
 import '../user_credentials.dart';
+import 'device_sessions_list.dart';
 import 'pair_invite_sheet.dart';
 import 'user_access_editor.dart';
 import 'widgets/back_pill.dart';
@@ -689,6 +690,13 @@ class _UserEditor extends StatelessWidget {
             icon: const Icon(Icons.phone_iphone_outlined),
             label: const Text('Telefoon koppelen (link of QR)'),
           ),
+          const SizedBox(height: 14),
+          Text(
+            'Gekoppelde apparaten',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
+          const SizedBox(height: 4),
+          DeviceSessionsList(userId: user['id'] as String, compact: true),
         ],
         if (!isSelf && !lockInstaller) ...[
           const SizedBox(height: 10),

@@ -8,6 +8,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../api.dart';
 import '../pairing_api.dart';
 import '../theme.dart';
+import 'device_sessions_list.dart';
 import 'widgets/glass_card.dart';
 
 /// Instellingen → Telefoon koppelen: QR + code voor een nieuwe telefoon van
@@ -185,6 +186,10 @@ class _PairingSectionState extends ConsumerState<PairingSection> {
               const SizedBox(height: 12),
               Text(_err!, style: TextStyle(color: LuxeColors.danger)),
             ],
+            const SizedBox(height: 22),
+            const Divider(height: 1),
+            const SizedBox(height: 14),
+            const DeviceSessionsList(),
           ],
         ),
       ),

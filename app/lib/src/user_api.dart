@@ -22,13 +22,19 @@ Future<List<Map<String, dynamic>>> saveHouseUsers({
   required List<Map<String, dynamic>> users,
   required String token,
 }) async {
+  // Eigen sessie meesturen: bij een nieuw eigen wachtwoord logt de server alle
+  // andere apparaten uit, maar dit apparaat niet.
+  final keep = await storedSessionId();
   final res = await http.put(
     Uri.parse('$apiBase/api/users'),
     headers: {
       'content-type': 'application/json',
       'authorization': 'Bearer $token',
     },
-    body: jsonEncode({'users': users}),
+    body: jsonEncode({
+      'users': users,
+      if (keep != null) 'keepSessionId': keep,
+    }),
   );
   if (res.statusCode != 200) {
     String msg = 'opslaan mislukt (${res.statusCode})';
