@@ -68,10 +68,10 @@ class _CampfireIconState extends State<CampfireIcon>
       children: [
         CustomPaint(painter: _SchouwPainter(color: widget.color)),
         Align(
-          alignment: const Alignment(0, 0.22),
+          alignment: const Alignment(0, 0.02),
           child: Transform.scale(
             scale: scale,
-            alignment: const Alignment(0, 0.7),
+            alignment: Alignment.bottomCenter,
             child: Icon(
               Icons.local_fire_department_outlined,
               size: flame,

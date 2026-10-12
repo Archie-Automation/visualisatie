@@ -122,6 +122,8 @@ class _HeaterIconPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
+    canvas.save();
+    canvas.translate(0, h * 0.11);
     final stroke = (w * 0.045).clamp(1.0, 1.3);
     final line = Paint()
       ..color = color
@@ -167,7 +169,7 @@ class _HeaterIconPainter extends CustomPainter {
     final coilBot = h * 0.54;
     for (var i = 0; i <= turns; i++) {
       final x = coilLeft + (coilRight - coilLeft) * (i / turns);
-      final y = i.isEven ? coilBot : coilTop;
+      final y = i.isEven ? coilTop : coilBot;
       if (i == 0) {
         coilPath.moveTo(x, y);
       } else {
@@ -175,6 +177,7 @@ class _HeaterIconPainter extends CustomPainter {
       }
     }
     canvas.drawPath(coilPath, coilPaint);
+    canvas.restore();
   }
 
   @override
