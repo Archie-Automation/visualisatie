@@ -101,27 +101,28 @@ class _SchouwPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    // Zelfde gewicht als de split-unit.
-    final weight = (w * 0.065).clamp(1.2, 1.85);
+    // Zelfde lijngewicht als de split-unit. De planken en wanden
+    // zijn dunner, zodat de vlam in hetzelfde icoon groter kan.
+    final weight = (w * 0.058).clamp(1.1, 1.65);
     final line = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = weight
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
-    final radius = Radius.circular(w * 0.045);
+    final radius = Radius.circular(w * 0.04);
 
     final mantel = RRect.fromRectAndRadius(
-      Rect.fromLTRB(w * 0.04, h * 0.04, w * 0.96, h * 0.20),
+      Rect.fromLTRB(w * 0.06, h * 0.06, w * 0.94, h * 0.16),
       radius,
     );
     final hearth = RRect.fromRectAndRadius(
-      Rect.fromLTRB(w * 0.04, h * 0.80, w * 0.96, h * 0.96),
+      Rect.fromLTRB(w * 0.06, h * 0.86, w * 0.94, h * 0.96),
       radius,
     );
     final opening = RRect.fromRectAndRadius(
-      Rect.fromLTRB(w * 0.30, h * 0.30, w * 0.70, h * 0.72),
-      Radius.circular(w * 0.03),
+      Rect.fromLTRB(w * 0.24, h * 0.24, w * 0.76, h * 0.80),
+      Radius.circular(w * 0.025),
     );
 
     canvas.drawRRect(mantel, line);
@@ -135,14 +136,14 @@ class _SchouwPainter extends CustomPainter {
       ..strokeCap = StrokeCap.butt;
     final sideTop = mantel.bottom + weight * 0.35;
     final sideBot = hearth.top - weight * 0.35;
-    canvas.drawLine(Offset(w * 0.14, sideTop), Offset(w * 0.14, sideBot), side);
-    canvas.drawLine(Offset(w * 0.86, sideTop), Offset(w * 0.86, sideBot), side);
+    canvas.drawLine(Offset(w * 0.16, sideTop), Offset(w * 0.16, sideBot), side);
+    canvas.drawLine(Offset(w * 0.84, sideTop), Offset(w * 0.84, sideBot), side);
 
-    final box = opening.outerRect.deflate(weight + w * 0.025);
+    final box = opening.outerRect.deflate(weight * 0.5 + w * 0.012);
     final flame = Rect.fromCenter(
       center: box.center,
-      width: box.width * 0.62,
-      height: box.height * 0.78,
+      width: box.width * 0.78,
+      height: box.height * 0.86,
     );
     _flame(canvas, line, flame);
   }

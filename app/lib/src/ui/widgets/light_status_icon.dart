@@ -2,8 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// Statuslamp: de omtrek blijft stil. Alleen de vulling gloeit,
-/// met een lichte schaalbeweging, zodat het lijkt alsof de lamp brandt.
+/// Statuslamp: de omtrek blijft stil. Alleen het gloeidraadje
+/// in de bol beweegt en gloeit.
 class LightStatusIcon extends StatefulWidget {
   const LightStatusIcon({
     super.key,
@@ -27,7 +27,7 @@ class _LightStatusIconState extends State<LightStatusIcon>
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2400),
+      duration: const Duration(milliseconds: 1600),
     )..repeat();
   }
 
@@ -45,24 +45,20 @@ class _LightStatusIconState extends State<LightStatusIcon>
       child: AnimatedBuilder(
         animation: _ctrl,
         builder: (_, __) {
-          final glow = (math.sin(_ctrl.value * 2 * math.pi) + 1) / 2;
-          final alpha = 0.12 + 0.36 * glow;
-          final scale = 0.86 + 0.14 * glow;
           return Stack(
             alignment: Alignment.center,
             children: [
-              Transform.scale(
-                scale: scale,
-                child: Icon(
-                  Icons.lightbulb_rounded,
-                  size: widget.size * 0.70,
-                  color: widget.color.withValues(alpha: alpha),
-                ),
-              ),
               Icon(
                 Icons.lightbulb_outline_rounded,
                 size: widget.size,
                 color: widget.color,
+              ),
+              CustomPaint(
+                size: Size(widget.size, widget.size),
+                painter: _FilamentPainter(
+                  color: widget.color,
+                  t: _ctrl.value,
+                ),
               ),
             ],
           );
@@ -70,4 +66,45 @@ class _LightStatusIconState extends State<LightStatusIcon>
       ),
     );
   }
+}
+
+class _FilamentPainter extends CustomPainter {
+  _FilamentPainter({required this.color, required this.t});
+
+  final Color color;
+  final double t;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final phase = t * math.pi * 2;
+    final sway = math.sin(phase) * w * 0.035;
+    final glow = 0.4 + 0.6 * ((math.sin(phase * 1.7) + 1) / 2);
+    final wire = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = (w * 0.04).clamp(0.85, 1.2)
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..color = color.withValues(alpha: glow);
+
+    final cx = w * 0.50 + sway;
+    final half = w * 0.075;
+    final crown = h * 0.30;
+    final foot = h * 0.46;
+    final path = Path()
+      ..moveTo(cx - half, foot)
+      ..lineTo(cx - half, crown + half)
+      ..arcToPoint(
+        Offset(cx + half, crown + half),
+        radius: Radius.circular(half),
+        clockwise: false,
+      )
+      ..lineTo(cx + half, foot);
+    canvas.drawPath(path, wire);
+  }
+
+  @override
+  bool shouldRepaint(covariant _FilamentPainter oldDelegate) =>
+      oldDelegate.color != color || oldDelegate.t != t;
 }
