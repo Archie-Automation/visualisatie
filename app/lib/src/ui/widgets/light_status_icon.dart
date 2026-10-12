@@ -27,7 +27,7 @@ class _LightStatusIconState extends State<LightStatusIcon>
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1600),
+      duration: const Duration(milliseconds: 2800),
     )..repeat();
   }
 

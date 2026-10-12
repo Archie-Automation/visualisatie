@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 /// Sentinel — render via [iconWidgetForData], niet [Icon].
 const IconData campfireIconData = IconData(0xF002);
 
-/// Eén rechthoekige schouwlijn, zelfde gewicht als de andere statusiconen.
-/// Alleen de vlam flikkert.
+/// Eén schouwlijn in het gewicht van de andere statusiconen.
+/// De vlam is het outline-vlammetje en flikkert alleen op de statusbadge.
 class CampfireIcon extends StatefulWidget {
   const CampfireIcon({
     super.key,
@@ -62,11 +62,24 @@ class _CampfireIconState extends State<CampfireIcon>
   }
 
   Widget _mark(double scale) {
-    return CustomPaint(
-      painter: _SchouwPainter(
-        color: widget.color,
-        flameScale: scale,
-      ),
+    final flame = widget.size * 0.50;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        CustomPaint(painter: _SchouwPainter(color: widget.color)),
+        Align(
+          alignment: const Alignment(0, 0.28),
+          child: Transform.scale(
+            scale: scale,
+            alignment: const Alignment(0, 0.7),
+            child: Icon(
+              Icons.local_fire_department_outlined,
+              size: flame,
+              color: widget.color,
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -91,11 +104,11 @@ class _CampfireIconState extends State<CampfireIcon>
   }
 }
 
+/// Mantel, opening en haard als één lijn. Geen tweede balk.
 class _SchouwPainter extends CustomPainter {
-  _SchouwPainter({required this.color, required this.flameScale});
+  _SchouwPainter({required this.color});
 
   final Color color;
-  final double flameScale;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -109,83 +122,22 @@ class _SchouwPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
-    final frame = RRect.fromRectAndRadius(
-      Rect.fromLTRB(w * 0.10, h * 0.10, w * 0.90, h * 0.90),
-      Radius.circular(w * 0.08),
-    );
-    canvas.drawRRect(frame, line);
-
-    final box = frame.outerRect.deflate(weight + w * 0.06);
-    final flame = Rect.fromCenter(
-      center: box.center,
-      width: box.width * 0.62,
-      height: box.height * 0.72,
-    );
-    _flame(canvas, line, flame);
-  }
-
-  void _flame(Canvas canvas, Paint paint, Rect rect) {
-    final cx = rect.center.dx;
-    final top = rect.top;
-    final bot = rect.bottom;
-    final hw = rect.width / 2;
-    final hh = rect.height;
-
-    canvas.save();
-    canvas.translate(cx, bot);
-    canvas.scale(flameScale.clamp(0.75, 1.0));
-    canvas.translate(-cx, -bot);
-
-    final outer = Path()
-      ..moveTo(cx, top)
-      ..cubicTo(
-        cx + hw * 0.35,
-        top + hh * 0.38,
-        cx + hw * 1.05,
-        top + hh * 0.55,
-        cx + hw * 0.55,
-        bot - hh * 0.02,
-      )
-      ..quadraticBezierTo(cx, bot + hh * 0.04, cx - hw * 0.55, bot - hh * 0.02)
-      ..cubicTo(
-        cx - hw * 1.05,
-        top + hh * 0.55,
-        cx - hw * 0.35,
-        top + hh * 0.38,
-        cx,
-        top,
-      );
-    canvas.drawPath(outer, paint);
-
-    final innerTop = top + hh * 0.42;
-    final innerBot = bot - hh * 0.08;
-    final ih = innerBot - innerTop;
-    final iw = hw * 0.38;
-    if (ih > paint.strokeWidth * 2.4 && iw > paint.strokeWidth) {
-      final inner = Path()
-        ..moveTo(cx, innerTop)
-        ..cubicTo(
-          cx + iw * 0.9,
-          innerTop + ih * 0.45,
-          cx + iw * 0.7,
-          innerBot,
-          cx,
-          innerBot,
-        )
-        ..cubicTo(
-          cx - iw * 0.7,
-          innerBot,
-          cx - iw * 0.9,
-          innerTop + ih * 0.45,
-          cx,
-          innerTop,
-        );
-      canvas.drawPath(inner, paint);
-    }
-    canvas.restore();
+    final path = Path()
+      ..moveTo(w * 0.20, h * 0.30)
+      ..lineTo(w * 0.08, h * 0.30)
+      ..lineTo(w * 0.08, h * 0.14)
+      ..lineTo(w * 0.92, h * 0.14)
+      ..lineTo(w * 0.92, h * 0.30)
+      ..lineTo(w * 0.80, h * 0.30)
+      ..lineTo(w * 0.80, h * 0.82)
+      ..lineTo(w * 0.92, h * 0.82)
+      ..lineTo(w * 0.08, h * 0.82)
+      ..lineTo(w * 0.20, h * 0.82)
+      ..close();
+    canvas.drawPath(path, line);
   }
 
   @override
   bool shouldRepaint(covariant _SchouwPainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.flameScale != flameScale;
+      oldDelegate.color != color;
 }

@@ -7,8 +7,8 @@ import 'campfire_icon.dart';
 /// Sentinel — render via [iconWidgetForData] / [universalIconGlyph], niet [Icon].
 const IconData heaterIconData = IconData(0xF001);
 
-/// Hangende heater: plafondbeugel, gloeispiraal, hittestraaltjes.
-/// De spiraal gloeit en de stralen bewegen als [animate].
+/// Hangende heater: plafondbeugel en gloeispiraal.
+/// De spiraal dooft en komt terug als [animate], net als het lampdraadje.
 class HeaterIcon extends StatefulWidget {
   const HeaterIcon({
     super.key,
@@ -35,7 +35,7 @@ class _HeaterIconState extends State<HeaterIcon>
     if (widget.animate) {
       _ctrl = AnimationController(
         vsync: this,
-        duration: const Duration(milliseconds: 1750),
+        duration: const Duration(milliseconds: 2800),
       )..repeat();
     }
   }
@@ -47,7 +47,7 @@ class _HeaterIconState extends State<HeaterIcon>
       if (widget.animate) {
         _ctrl ??= AnimationController(
           vsync: this,
-          duration: const Duration(milliseconds: 1750),
+          duration: const Duration(milliseconds: 2800),
         )..repeat();
       } else {
         _ctrl?.dispose();
@@ -122,7 +122,7 @@ class _HeaterIconPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final stroke = (w * 0.05).clamp(1.05, 1.45);
+    final stroke = (w * 0.045).clamp(1.0, 1.3);
     final line = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
@@ -132,38 +132,39 @@ class _HeaterIconPainter extends CustomPainter {
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTRB(w * 0.40, h * 0.08, w * 0.60, h * 0.125),
+        Rect.fromLTRB(w * 0.36, h * 0.04, w * 0.64, h * 0.09),
         Radius.circular(w * 0.02),
       ),
       line,
     );
     canvas.drawLine(
-      Offset(w * 0.5, h * 0.125),
-      Offset(w * 0.5, h * 0.20),
+      Offset(w * 0.5, h * 0.09),
+      Offset(w * 0.5, h * 0.16),
       line,
     );
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTRB(w * 0.18, h * 0.20, w * 0.82, h * 0.52),
-        Radius.circular(w * 0.08),
+        Rect.fromLTRB(w * 0.10, h * 0.16, w * 0.90, h * 0.68),
+        Radius.circular(w * 0.1),
       ),
       line,
     );
-    final coilGlow = animate
-        ? (0.35 + 0.65 * ((math.sin(t * math.pi * 2) + 1) / 2))
-        : 1.0;
-    final coil = Paint()
-      ..color = color.withValues(alpha: coilGlow)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
+    final coilPaint = animate
+        ? (Paint()
+          ..color = color.withValues(
+            alpha: (math.sin(t * math.pi * 2) + 1) / 2,
+          )
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = stroke
+          ..strokeCap = StrokeCap.round
+          ..strokeJoin = StrokeJoin.round)
+        : line;
     final coilPath = Path();
     const turns = 4;
-    final coilLeft = w * 0.30;
-    final coilRight = w * 0.70;
-    final coilTop = h * 0.28;
-    final coilBot = h * 0.44;
+    final coilLeft = w * 0.24;
+    final coilRight = w * 0.76;
+    final coilTop = h * 0.30;
+    final coilBot = h * 0.54;
     for (var i = 0; i <= turns; i++) {
       final x = coilLeft + (coilRight - coilLeft) * (i / turns);
       final y = i.isEven ? coilBot : coilTop;
@@ -173,56 +174,7 @@ class _HeaterIconPainter extends CustomPainter {
         coilPath.lineTo(x, y);
       }
     }
-    canvas.drawPath(coilPath, coil);
-
-    final heat = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
-      ..strokeCap = StrokeCap.round;
-    const xs = <double>[0.28, 0.50, 0.72];
-    final top = h * 0.64;
-    final bottom = h * 0.96;
-    for (var i = 0; i < xs.length; i++) {
-      final phase = animate ? t * math.pi * 2 + i * 1.15 : i * 1.4;
-      heat.color = color.withValues(
-        alpha: animate
-            ? (0.4 + 0.6 * ((math.sin(phase * 0.7) + 1) / 2)).clamp(0.35, 1.0)
-            : 0.72,
-      );
-      _heatRay(
-        canvas,
-        heat,
-        x: w * xs[i],
-        top: top,
-        bottom: bottom,
-        amp: w * 0.038,
-        phase: phase,
-      );
-    }
-  }
-
-  void _heatRay(
-    Canvas canvas,
-    Paint paint, {
-    required double x,
-    required double top,
-    required double bottom,
-    required double amp,
-    required double phase,
-  }) {
-    const steps = 14;
-    final path = Path();
-    for (var s = 0; s <= steps; s++) {
-      final u = s / steps;
-      final y = top + (bottom - top) * u;
-      final xx = x + math.sin(u * math.pi * 2 + phase) * amp;
-      if (s == 0) {
-        path.moveTo(xx, y);
-      } else {
-        path.lineTo(xx, y);
-      }
-    }
-    canvas.drawPath(path, paint);
+    canvas.drawPath(coilPath, coilPaint);
   }
 
   @override
