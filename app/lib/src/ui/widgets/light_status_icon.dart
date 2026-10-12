@@ -2,8 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// Statuslamp: de omtrek blijft stil. Alleen het gloeidraadje
-/// in de bol beweegt en gloeit.
+/// Statuslamp: de omtrek blijft stil. Het draadje in de bol
+/// dooft en komt terug.
 class LightStatusIcon extends StatefulWidget {
   const LightStatusIcon({
     super.key,
@@ -79,8 +79,7 @@ class _FilamentPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
     final phase = t * math.pi * 2;
-    final sway = math.sin(phase) * w * 0.035;
-    final glow = 0.4 + 0.6 * ((math.sin(phase * 1.7) + 1) / 2);
+    final glow = ((math.sin(phase) + 1) / 2).clamp(0.0, 1.0);
     final wire = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = (w * 0.04).clamp(0.85, 1.2)
@@ -88,7 +87,7 @@ class _FilamentPainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round
       ..color = color.withValues(alpha: glow);
 
-    final cx = w * 0.50 + sway;
+    final cx = w * 0.50;
     final half = w * 0.075;
     final crown = h * 0.30;
     final foot = h * 0.46;

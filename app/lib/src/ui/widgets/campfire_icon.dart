@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 /// Sentinel — render via [iconWidgetForData], niet [Icon].
 const IconData campfireIconData = IconData(0xF002);
 
-/// Outline-vlam in een schouw. Lijndikte gelijk aan de andere statusiconen.
-/// Alleen de vlam flikkert; de schouw blijft stil.
+/// Eén rechthoekige schouwlijn, zelfde gewicht als de andere statusiconen.
+/// Alleen de vlam flikkert.
 class CampfireIcon extends StatefulWidget {
   const CampfireIcon({
     super.key,
@@ -101,49 +101,25 @@ class _SchouwPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    // Zelfde lijngewicht als de split-unit. De planken en wanden
-    // zijn dunner, zodat de vlam in hetzelfde icoon groter kan.
-    final weight = (w * 0.058).clamp(1.1, 1.65);
+    final weight = (w * 0.065).clamp(1.2, 1.85);
     final line = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = weight
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
-    final radius = Radius.circular(w * 0.04);
 
-    final mantel = RRect.fromRectAndRadius(
-      Rect.fromLTRB(w * 0.06, h * 0.06, w * 0.94, h * 0.16),
-      radius,
+    final frame = RRect.fromRectAndRadius(
+      Rect.fromLTRB(w * 0.10, h * 0.10, w * 0.90, h * 0.90),
+      Radius.circular(w * 0.08),
     );
-    final hearth = RRect.fromRectAndRadius(
-      Rect.fromLTRB(w * 0.06, h * 0.86, w * 0.94, h * 0.96),
-      radius,
-    );
-    final opening = RRect.fromRectAndRadius(
-      Rect.fromLTRB(w * 0.24, h * 0.24, w * 0.76, h * 0.80),
-      Radius.circular(w * 0.025),
-    );
+    canvas.drawRRect(frame, line);
 
-    canvas.drawRRect(mantel, line);
-    canvas.drawRRect(hearth, line);
-    canvas.drawRRect(opening, line);
-
-    final side = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = weight
-      ..strokeCap = StrokeCap.butt;
-    final sideTop = mantel.bottom + weight * 0.35;
-    final sideBot = hearth.top - weight * 0.35;
-    canvas.drawLine(Offset(w * 0.16, sideTop), Offset(w * 0.16, sideBot), side);
-    canvas.drawLine(Offset(w * 0.84, sideTop), Offset(w * 0.84, sideBot), side);
-
-    final box = opening.outerRect.deflate(weight * 0.5 + w * 0.012);
+    final box = frame.outerRect.deflate(weight + w * 0.06);
     final flame = Rect.fromCenter(
       center: box.center,
-      width: box.width * 0.78,
-      height: box.height * 0.86,
+      width: box.width * 0.62,
+      height: box.height * 0.72,
     );
     _flame(canvas, line, flame);
   }

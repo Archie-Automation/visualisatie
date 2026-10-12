@@ -51,7 +51,7 @@ class _EqualizerIconState extends State<EqualizerIcon>
 
   @override
   Widget build(BuildContext context) {
-    final barW = (widget.size * 0.06).clamp(1.15, 1.7);
+    final barW = (widget.size * 0.072).clamp(1.25, 1.9);
     final maxH = widget.size * 0.72;
     final bottomInset = widget.size * 0.08;
     final gap = widget.size * 0.07;
