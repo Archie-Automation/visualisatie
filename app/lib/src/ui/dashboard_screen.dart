@@ -24,6 +24,7 @@ import 'widgets/device_tile_shell.dart';
 import 'widgets/glass_card.dart';
 import 'widgets/campfire_icon.dart';
 import 'widgets/equalizer_icon.dart';
+import 'widgets/light_status_icon.dart';
 import 'widgets/heater_icon.dart';
 import 'widgets/split_unit_icon.dart';
 import 'widgets/room_category_strip.dart';
@@ -2145,11 +2146,7 @@ class _HouseActivityHeaderButtons extends ConsumerWidget {
         _GlassStatusButton(
           tooltip: 'Verlichting aan',
           onTap: () => _openSystem(context, 'Verlichting'),
-          child: Icon(
-            Icons.lightbulb_outline_rounded,
-            size: _glyph,
-            color: LuxeColors.ink,
-          ),
+          child: LightStatusIcon(size: _glyph, color: LuxeColors.ink),
         ),
       if (heaterOn)
         _GlassStatusButton(
@@ -2337,7 +2334,7 @@ class _RoomActivityBadges extends ConsumerWidget {
         children: [
           if (lightsOn)
             tap(
-              Icon(Icons.lightbulb_outline_rounded, size: glyph, color: color),
+              LightStatusIcon(size: glyph, color: color),
               'lighting',
             ),
           if (fireplaceOn)
