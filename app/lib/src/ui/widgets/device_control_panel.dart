@@ -470,9 +470,8 @@ class _DeviceControlGlyph extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = DeviceControlIcons.color(active: active, disabled: disabled);
-    if (item.icon == heaterIconData) {
-      return HeaterIcon(size: glyphSize, color: color);
-    }
+    final custom = iconWidgetForData(item.icon, size: glyphSize, color: color);
+    if (custom != null) return custom;
     if (item.glyph != null) {
       return IconTheme(
         data: IconThemeData(color: color, size: glyphSize),

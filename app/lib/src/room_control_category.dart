@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'models.dart';
+import 'ui/widgets/campfire_icon.dart';
 import 'ui/widgets/heater_icon.dart';
 
 /// Curated icon set for universal device groups.
@@ -68,8 +69,8 @@ const Map<String, IconData> kUniversalIconMap = {
   'radiator': Icons.reorder_outlined,
   /// Vloerverwarming (rooster/vloerpatroon)
   'floor_heat': Icons.grid_4x4_outlined,
-  /// Open haard (vlammen – gevuld, anders dan heating)
-  'fireplace': Icons.local_fire_department,
+  /// Open haard — zelfde kampvuur als de statusiconen.
+  'fireplace': campfireIconData,
   'chimney': Icons.fireplace_outlined,
   /// Terrasverwarmer (stralingselement met warmtestralen alleen naar beneden)
   'terras_heater': Icons.wb_incandescent,
@@ -326,9 +327,9 @@ enum RoomControlCategory {
         RoomControlCategory.climate => Icons.thermostat_rounded,
         RoomControlCategory.shading => Icons.blinds_rounded,
         RoomControlCategory.position => Icons.vertical_split_outlined,
-        RoomControlCategory.audio => Icons.speaker_group_outlined,
+        RoomControlCategory.audio => Icons.music_note_outlined,
         RoomControlCategory.lutron => Icons.home_work_outlined,
-        RoomControlCategory.fireplace => Icons.local_fire_department_outlined,
+        RoomControlCategory.fireplace => campfireIconData,
       };
 
   bool matchesDevice(Device d) {

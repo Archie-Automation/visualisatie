@@ -914,9 +914,7 @@ class _ArtworkState extends State<_Artwork> {
         ),
         child: Center(
           child: Icon(
-            widget.state.brand == MediaBrand.sonos
-                ? Icons.speaker_rounded
-                : Icons.music_note_rounded,
+            Icons.music_note_outlined,
             color: widget.active ? LuxeColors.brass : Colors.white24,
             size: DeviceControlBar.tileGlyphSize,
           ),

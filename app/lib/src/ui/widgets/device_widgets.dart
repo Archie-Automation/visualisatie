@@ -4918,11 +4918,16 @@ class _WtwStatusSquare extends StatelessWidget {
       width: size,
       height: size,
       child: Center(
-        child: Icon(
-          icon,
-          size: DeviceControlBar.glyphSizeFor(context),
-          color: alert ? LuxeColors.danger : LuxeColors.inkSoft,
-        ),
+        child: iconWidgetForData(
+              icon,
+              size: DeviceControlBar.glyphSizeFor(context),
+              color: alert ? LuxeColors.danger : LuxeColors.inkSoft,
+            ) ??
+            Icon(
+              icon,
+              size: DeviceControlBar.glyphSizeFor(context),
+              color: alert ? LuxeColors.danger : LuxeColors.inkSoft,
+            ),
       ),
     );
   }
@@ -5502,7 +5507,8 @@ class _MeldingAlertRow extends ConsumerWidget {
                   child: Row(
                     children: [
                       const SizedBox(width: 4),
-                      Icon(iconData, size: glyph, color: activeColor),
+                      iconWidgetForData(iconData, size: glyph, color: activeColor) ??
+                          Icon(iconData, size: glyph, color: activeColor),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
@@ -5595,7 +5601,8 @@ class _MeldingAlertRow extends ConsumerWidget {
                   child: Row(
                     children: [
                       const SizedBox(width: 4),
-                      Icon(iconData, size: glyph, color: quietInk),
+                      iconWidgetForData(iconData, size: glyph, color: quietInk) ??
+                          Icon(iconData, size: glyph, color: quietInk),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(

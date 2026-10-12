@@ -23,6 +23,7 @@ import 'widgets/back_pill.dart';
 import 'widgets/device_tile_shell.dart';
 import 'widgets/glass_card.dart';
 import 'widgets/campfire_icon.dart';
+import 'widgets/equalizer_icon.dart';
 import 'widgets/heater_icon.dart';
 import 'widgets/split_unit_icon.dart';
 import 'widgets/room_category_strip.dart';
@@ -2175,7 +2176,7 @@ class _HouseActivityHeaderButtons extends ConsumerWidget {
         _GlassStatusButton(
           tooltip: 'Muziek speelt',
           onTap: () => _openSystem(context, 'Audio'),
-          child: _EqualizerBadge(size: _glyph, color: LuxeColors.ink),
+          child: EqualizerIcon(size: _glyph, color: LuxeColors.ink),
         ),
     ];
 
@@ -2370,7 +2371,7 @@ class _RoomActivityBadges extends ConsumerWidget {
               'melding__${meldingGarage.id}',
             ),
           if (mediaPlaying)
-            tap(_EqualizerBadge(size: glyph, color: color), 'audio'),
+            tap(EqualizerIcon(size: glyph, color: color), 'audio'),
         ],
       ),
     );
@@ -2418,83 +2419,4 @@ class _HeaterBadge extends StatelessWidget {
       animate: true,
     );
   }
-}
-
-/* ------------------------------------------------------------------ */
-/*  Animated equalizer icon                                             */
-/* ------------------------------------------------------------------ */
-
-class _EqualizerBadge extends StatefulWidget {
-  const _EqualizerBadge({
-    this.size = _RoomActivityBadges._badgeSize,
-    this.color,
-  });
-  final double size;
-  final Color? color;
-
-  @override
-  State<_EqualizerBadge> createState() => _EqualizerBadgeState();
-}
-
-class _EqualizerBadgeState extends State<_EqualizerBadge>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _ctrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1150),
-    )..repeat();
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final barW = (widget.size * 0.06).clamp(1.15, 1.7);
-    final maxH = widget.size * 0.72;
-    final bottomInset = widget.size * 0.08;
-    final gap = widget.size * 0.07;
-    final color = widget.color ?? LuxeColors.brass;
-    return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (_, __) {
-        final t = _ctrl.value * 2 * pi;
-        final levels = List<double>.generate(4, (i) {
-          return (0.35 + 0.65 * ((sin(t + i * 1.45) + 1) / 2)).clamp(0.15, 1.0);
-        });
-        return SizedBox(
-          width: barW * 4 + gap * 3,
-          height: widget.size,
-          child: Padding(
-            padding: EdgeInsets.only(bottom: bottomInset),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                for (var i = 0; i < levels.length; i++) ...[
-                  if (i > 0) SizedBox(width: gap),
-                  _bar(barW, maxH * levels[i], color),
-                ],
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _bar(double w, double h, Color color) => Container(
-        width: w,
-        height: h,
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(1.5),
-        ),
-      );
 }

@@ -15,6 +15,7 @@ import '../user_favorite_shortcuts.dart';
 import 'app_nav.dart';
 import 'responsive.dart';
 import 'widgets/device_widgets.dart';
+import 'widgets/heater_icon.dart';
 import 'widgets/favorite_device_wrap.dart';
 import 'widgets/function_screen_header.dart';
 import 'widgets/glass_card.dart';
@@ -538,17 +539,18 @@ class _FavoriteShortcutRow extends StatelessWidget {
         ? '${floor.name} · kamer'
         : '${room.name} · ${floor.name}';
 
+    final icon = category == null
+        ? Icons.meeting_room_outlined
+        : category.icon;
+
     return GlassCard(
       radius: 20,
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       onTap: () => appOpen(context, path),
       child: Row(
         children: [
-          Icon(
-            category == null ? Icons.meeting_room_outlined : category.icon,
-            color: LuxeColors.brass,
-            size: 22,
-          ),
+          iconWidgetForData(icon, size: 22, color: LuxeColors.brass) ??
+              Icon(icon, color: LuxeColors.brass, size: 22),
           SizedBox(width: 14),
           Expanded(
             child: Column(
