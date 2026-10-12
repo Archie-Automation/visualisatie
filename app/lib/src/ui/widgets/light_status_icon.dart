@@ -79,7 +79,7 @@ class _FilamentPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
     final phase = t * math.pi * 2;
-    final glow = ((math.sin(phase) + 1) / 2).clamp(0.0, 1.0);
+    final glow = 0.32 + 0.68 * ((math.sin(phase) + 1) / 2);
     final wire = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = (w * 0.04).clamp(0.85, 1.2)

@@ -152,7 +152,7 @@ class _HeaterIconPainter extends CustomPainter {
     final coilPaint = animate
         ? (Paint()
           ..color = color.withValues(
-            alpha: (math.sin(t * math.pi * 2) + 1) / 2,
+            alpha: 0.32 + 0.68 * ((math.sin(t * math.pi * 2) + 1) / 2),
           )
           ..style = PaintingStyle.stroke
           ..strokeWidth = stroke
@@ -160,7 +160,7 @@ class _HeaterIconPainter extends CustomPainter {
           ..strokeJoin = StrokeJoin.round)
         : line;
     final coilPath = Path();
-    const turns = 4;
+    const turns = 6;
     final coilLeft = w * 0.24;
     final coilRight = w * 0.76;
     final coilTop = h * 0.30;

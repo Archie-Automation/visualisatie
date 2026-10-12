@@ -62,13 +62,13 @@ class _CampfireIconState extends State<CampfireIcon>
   }
 
   Widget _mark(double scale) {
-    final flame = widget.size * 0.50;
+    final flame = widget.size * 0.58;
     return Stack(
       fit: StackFit.expand,
       children: [
         CustomPaint(painter: _SchouwPainter(color: widget.color)),
         Align(
-          alignment: const Alignment(0, 0.28),
+          alignment: const Alignment(0, 0.22),
           child: Transform.scale(
             scale: scale,
             alignment: const Alignment(0, 0.7),
