@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -28,6 +29,18 @@ dynamic _deepCastValue(dynamic v) {
   if (v is Map) return _deepCastMap(v);
   if (v is List) return v.map(_deepCastValue).toList();
   return v;
+}
+
+/// Saved house.json from this server, including login hashes and device passwords.
+Future<Uint8List> fetchInstallerHouseBackup(String token) async {
+  final res = await http.get(
+    Uri.parse('$apiBase/api/installer/house/backup'),
+    headers: {'authorization': 'Bearer $token'},
+  );
+  if (res.statusCode != 200) {
+    throw StateError('Backup ophalen mislukt (${res.statusCode})');
+  }
+  return res.bodyBytes;
 }
 
 Future<int> putInstallerHouse(String token, Map<String, dynamic> house) async {

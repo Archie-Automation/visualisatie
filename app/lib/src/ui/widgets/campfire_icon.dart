@@ -68,12 +68,12 @@ class _CampfireIconState extends State<CampfireIcon>
           painter: _CampfireLogsPainter(color: widget.color),
         ),
         Align(
-          alignment: const Alignment(0, -0.48),
+          alignment: const Alignment(0, -0.58),
           child: Transform.scale(
             scale: scale,
             child: Icon(
               Icons.local_fire_department_outlined,
-              size: widget.size * 0.74,
+              size: widget.size * 0.84,
               color: widget.color,
             ),
           ),
@@ -115,17 +115,17 @@ class _CampfireLogsPainter extends CustomPainter {
     final logs = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = (w * 0.065).clamp(1.2, 1.85)
+      ..strokeWidth = (w * 0.05).clamp(1.05, 1.45)
       ..strokeCap = StrokeCap.round;
 
     canvas.drawLine(
-      Offset(w * 0.16, h * 0.76),
-      Offset(w * 0.84, h * 0.92),
+      Offset(w * 0.30, h * 0.84),
+      Offset(w * 0.70, h * 0.93),
       logs,
     );
     canvas.drawLine(
-      Offset(w * 0.16, h * 0.92),
-      Offset(w * 0.84, h * 0.76),
+      Offset(w * 0.30, h * 0.93),
+      Offset(w * 0.70, h * 0.84),
       logs,
     );
   }

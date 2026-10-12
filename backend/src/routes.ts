@@ -32,6 +32,7 @@ import {
   getConfigVersion,
   loadConfig,
   persistConfig,
+  readConfigFileText,
   updateConfig,
   walkDevices
 } from "./config";
@@ -1122,6 +1123,24 @@ export function buildRouter(
 
   r.get("/installer/house", requireAuth, requireInstaller, (_req, res) => {
     res.json(installerHouseForClient(getConfig()));
+  });
+
+  r.get("/installer/house/backup", requireAuth, requireInstaller, (_req, res) => {
+    let raw: string;
+    try {
+      raw = readConfigFileText();
+    } catch (err) {
+      logger.warn({ err }, "house.json backup lezen mislukt");
+      res.status(404).json({ error: "house.json ontbreekt op deze server" });
+      return;
+    }
+    const day = new Date().toISOString().slice(0, 10);
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename="house-${day}.json"`
+    );
+    res.send(raw);
   });
 
   r.put("/installer/house", requireAuth, requireInstaller, async (req, res) => {

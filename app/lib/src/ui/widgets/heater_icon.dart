@@ -122,7 +122,7 @@ class _HeaterIconPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final stroke = (w * 0.065).clamp(1.2, 1.85);
+    final stroke = (w * 0.05).clamp(1.05, 1.45);
     final line = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
@@ -132,27 +132,27 @@ class _HeaterIconPainter extends CustomPainter {
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTRB(w * 0.36, h * 0.035, w * 0.64, h * 0.09),
+        Rect.fromLTRB(w * 0.40, h * 0.08, w * 0.60, h * 0.125),
         Radius.circular(w * 0.02),
       ),
       line,
     );
     canvas.drawLine(
-      Offset(w * 0.5, h * 0.09),
-      Offset(w * 0.5, h * 0.17),
+      Offset(w * 0.5, h * 0.125),
+      Offset(w * 0.5, h * 0.20),
       line,
     );
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTRB(w * 0.08, h * 0.17, w * 0.92, h * 0.56),
+        Rect.fromLTRB(w * 0.18, h * 0.20, w * 0.82, h * 0.52),
         Radius.circular(w * 0.08),
       ),
       line,
     );
-    for (final y in const <double>[0.26, 0.36, 0.46]) {
+    for (final y in const <double>[0.28, 0.36, 0.44]) {
       canvas.drawLine(
-        Offset(w * 0.2, h * y),
-        Offset(w * 0.8, h * y),
+        Offset(w * 0.30, h * y),
+        Offset(w * 0.70, h * y),
         line,
       );
     }
@@ -169,7 +169,7 @@ class _HeaterIconPainter extends CustomPainter {
       heat.color = color.withValues(
         alpha: animate
             ? (0.4 + 0.6 * ((math.sin(phase * 0.7) + 1) / 2)).clamp(0.35, 1.0)
-            : 1,
+            : 0.72,
       );
       _heatRay(
         canvas,

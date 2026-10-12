@@ -2457,32 +2457,30 @@ class _EqualizerBadgeState extends State<_EqualizerBadge>
 
   @override
   Widget build(BuildContext context) {
-    final barW = (widget.size * 0.065).clamp(1.2, 1.85);
+    final barW = (widget.size * 0.06).clamp(1.15, 1.7);
     final maxH = widget.size * 0.72;
     final bottomInset = widget.size * 0.08;
-    final gap = widget.size * 0.1;
+    final gap = widget.size * 0.07;
     final color = widget.color ?? LuxeColors.brass;
     return AnimatedBuilder(
       animation: _ctrl,
       builder: (_, __) {
         final t = _ctrl.value * 2 * pi;
-        // Three bars with different phase offsets
-        final h1 = (0.35 + 0.65 * ((sin(t) + 1) / 2)).clamp(0.15, 1.0);
-        final h2 = (0.35 + 0.65 * ((sin(t + 2.1) + 1) / 2)).clamp(0.15, 1.0);
-        final h3 = (0.35 + 0.65 * ((sin(t + 4.2) + 1) / 2)).clamp(0.15, 1.0);
+        final levels = List<double>.generate(4, (i) {
+          return (0.35 + 0.65 * ((sin(t + i * 1.45) + 1) / 2)).clamp(0.15, 1.0);
+        });
         return SizedBox(
-          width: barW * 3 + gap * 2,
+          width: barW * 4 + gap * 3,
           height: widget.size,
           child: Padding(
             padding: EdgeInsets.only(bottom: bottomInset),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                _bar(barW, maxH * h1, color),
-                SizedBox(width: gap),
-                _bar(barW, maxH * h2, color),
-                SizedBox(width: gap),
-                _bar(barW, maxH * h3, color),
+                for (var i = 0; i < levels.length; i++) ...[
+                  if (i > 0) SizedBox(width: gap),
+                  _bar(barW, maxH * levels[i], color),
+                ],
               ],
             ),
           ),

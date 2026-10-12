@@ -441,6 +441,7 @@ enum _FocusKind {
   users,
   user,
   logs,
+  backup,
   satel,
   floors,
   floor,
@@ -509,6 +510,12 @@ class _Focus {
         ci = null;
   const _Focus.logs()
       : kind = _FocusKind.logs,
+        fi = -1,
+        ri = -1,
+        di = -1,
+        ci = null;
+  const _Focus.backup()
+      : kind = _FocusKind.backup,
         fi = -1,
         ri = -1,
         di = -1,
@@ -590,6 +597,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   bool _mobileShowDetail = false;
   bool _loading = true;
   bool _saving = false;
+  bool _backupBusy = false;
   bool _knxSyncExisting = false;
   String? _loadErr;
   ProviderSubscription<AuthState>? _customerAuthSub;
@@ -2390,6 +2398,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         _FocusKind.users => 'Gebruikers',
         _FocusKind.user => 'Gebruiker',
         _FocusKind.logs => 'Logs / grafieken',
+        _FocusKind.backup => 'Backup',
         _FocusKind.satel => 'Satel alarm',
         _FocusKind.floors => 'Kamergebonden devices',
         _FocusKind.floor => 'Verdieping',
@@ -2701,6 +2710,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               title: 'Logs / grafieken',
               selected: _sel.kind == _FocusKind.logs,
               onTap: () => _selectFocus(const _Focus.logs()),
+            ),
+            LuxeNavRow(
+              icon: Icons.save_alt_outlined,
+              title: 'Backup',
+              selected: _sel.kind == _FocusKind.backup,
+              onTap: () => _selectFocus(const _Focus.backup()),
             ),
           ],
         ),
@@ -3537,6 +3552,68 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     );
   }
 
+  Widget _houseBackupPanel(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(24),
+      children: [
+        Text('Backup', style: Theme.of(context).textTheme.titleLarge),
+        const SizedBox(height: 12),
+        Text(
+          'Dit is het huis zoals het op deze mini-pc is opgeslagen: kamers, '
+          'apparaten, camera-wachtwoorden en inlogcodes. '
+          'Bewaar het bestand op een USB-stick of in een kluis. '
+          'Zet het niet op GitHub. Niet-opgeslagen wijzigingen in dit scherm '
+          'zitten er niet in; gebruik eerst Opslaan.',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: LuxeColors.inkSoft,
+                height: 1.35,
+              ),
+        ),
+        const SizedBox(height: 20),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton.icon(
+            onPressed: _backupBusy ? null : _downloadHouseBackup,
+            icon: _backupBusy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.save_alt_outlined, size: 18),
+            label: const Text('Backup downloaden'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _downloadHouseBackup() async {
+    final token = _currentToken();
+    if (token == null) return;
+    setState(() => _backupBusy = true);
+    try {
+      final bytes = await fetchInstallerHouseBackup(token);
+      final day = DateTime.now().toIso8601String().substring(0, 10);
+      final saved = await FilePicker.saveFile(
+        fileName: 'house-$day.json',
+        bytes: bytes,
+        mimeType: 'application/json',
+      );
+      if (!mounted || saved == null) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Backup opgeslagen.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'.replaceFirst('Bad state: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _backupBusy = false);
+    }
+  }
+
   Widget _buildDetail(BuildContext context) {
     switch (_sel.kind) {
       case _FocusKind.project:
@@ -3617,6 +3694,8 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         return _usersPanel(context);
       case _FocusKind.user:
         return _userEditorPanel(context);
+      case _FocusKind.backup:
+        return _houseBackupPanel(context);
       case _FocusKind.logs:
         return _LogsInstallerPanel(
           logs: _logsList(),

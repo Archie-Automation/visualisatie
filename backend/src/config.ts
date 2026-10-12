@@ -31,6 +31,11 @@ export function loadConfig(): HouseConfig {
   return parsed;
 }
 
+/** On-disk house.json, unchanged. Backup only — not the scrubbed installer view. */
+export function readConfigFileText(): string {
+  return fs.readFileSync(configPath, "utf-8");
+}
+
 export function getConfig(): HouseConfig {
   if (!cached) return loadConfig();
   return cached;
