@@ -33,6 +33,7 @@ import {
   loadConfig,
   persistConfig,
   readConfigFileText,
+  readFactoryHouseJson,
   updateConfig,
   walkDevices
 } from "./config";
@@ -1141,6 +1142,92 @@ export function buildRouter(
       `attachment; filename="house-${day}.json"`
     );
     res.send(raw);
+  });
+
+  /**
+   * Replace house.json with a full backup file. Does not merge secrets from
+   * the house that is currently on disk — the file is the source of truth.
+   */
+  async function replaceHouse(
+    raw: unknown,
+    res: import("express").Response,
+    action: string
+  ): Promise<void> {
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+      res.status(400).json({ error: "geen huisbestand" });
+      return;
+    }
+    await applyPlaintextPasswords(raw);
+    normalizeHouseCamerasRaw(raw);
+    normalizeHouseIntercomsRaw(raw);
+    const parsed = validateHouseJson(raw);
+    if (!parsed.ok) {
+      res.status(400).json({ error: "validation failed", issues: parsed.errors });
+      return;
+    }
+    const next = parsed.data;
+    normalizeVoip(next);
+    const userErr = assertUsersHaveHashes(next);
+    if (userErr) {
+      res.status(400).json({ error: userErr });
+      return;
+    }
+    const issues = [
+      ...validateFireplaceSemantics(next),
+      ...validateIntercomSemantics(next),
+      ...validateVoipSemantics(next),
+      ...validateRgbwWwSemantics(next),
+      ...validateLutronSemantics(next),
+      ...validateLutronLoadOutputSemantics(next)
+    ];
+    if (issues.length > 0) {
+      res.status(400).json({ error: "validation failed", issues });
+      return;
+    }
+    persistConfig(next);
+    syncGo2rtcProcessAfterConfigWritten(writeGo2rtcConfig(getConfig()));
+    void syncVoipFromConfig(getConfig());
+    scheduler.reschedule();
+    logSampler.refresh();
+    media.rebuild(getConfig());
+    lutron.rebuild(getConfig());
+    try {
+      await bus.refreshGroupAddresses(collectAllGAs(getConfig()));
+    } catch (err) {
+      logger.warn({ err }, `KNX GA refresh after ${action} failed`);
+    }
+    const version = getConfigVersion();
+    ws.broadcastConfigChanged(version);
+    logger.warn({ action, version }, "house.json vervangen");
+    res.json({ ok: true, version });
+  }
+
+  r.post("/installer/house/restore", requireAuth, requireInstaller, async (req: AuthedRequest, res) => {
+    logger.warn({ userId: req.user?.sub }, "house restore requested");
+    await replaceHouse(req.body, res, "restore");
+  });
+
+  r.post("/installer/house/factory-reset", requireAuth, requireInstaller, async (req: AuthedRequest, res) => {
+    logger.warn({ userId: req.user?.sub }, "house factory reset requested");
+    let raw: unknown;
+    try {
+      raw = readFactoryHouseJson();
+    } catch (err) {
+      logger.warn({ err }, "factory template unreadable");
+      res.status(500).json({ error: "leeg huisbestand ontbreekt op deze server" });
+      return;
+    }
+    if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+      res.status(500).json({ error: "leeg huisbestand is ongeldig" });
+      return;
+    }
+    const users = getConfig().users ?? [];
+    if (users.length === 0) {
+      res.status(409).json({ error: "geen inlogaccounts om te bewaren" });
+      return;
+    }
+    (raw as { users: unknown }).users = structuredClone(users);
+    await replaceHouse(raw, res, "factory-reset");
   });
 
   r.put("/installer/house", requireAuth, requireInstaller, async (req, res) => {

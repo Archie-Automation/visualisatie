@@ -36,6 +36,12 @@ export function readConfigFileText(): string {
   return fs.readFileSync(configPath, "utf-8");
 }
 
+/** Empty new-install house, next to the live file. Not a login-ready config. */
+export function readFactoryHouseJson(): unknown {
+  const emptyPath = path.join(path.dirname(configPath), "house.empty.json");
+  return JSON.parse(fs.readFileSync(emptyPath, "utf-8")) as unknown;
+}
+
 export function getConfig(): HouseConfig {
   if (!cached) return loadConfig();
   return cached;

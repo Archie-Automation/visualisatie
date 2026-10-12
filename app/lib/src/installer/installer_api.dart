@@ -43,6 +43,55 @@ Future<Uint8List> fetchInstallerHouseBackup(String token) async {
   return res.bodyBytes;
 }
 
+Never _throwInstallerFailure(http.Response res, String fallback) {
+  Map<String, dynamic> body = {};
+  if (res.body.isNotEmpty) {
+    try {
+      final decoded = jsonDecode(res.body);
+      if (decoded is Map) {
+        body = decoded.map((k, v) => MapEntry(k.toString(), v));
+      }
+    } catch (_) {
+      throw StateError('$fallback (${res.statusCode})');
+    }
+  }
+  final err = body['error'] as String?;
+  final issues = body['issues'];
+  if (issues is List) {
+    throw StateError('Validatiefout:\n${issues.join('\n')}');
+  }
+  throw StateError(err ?? '$fallback (${res.statusCode})');
+}
+
+/// Replace the on-disk house with a previously downloaded backup.
+Future<void> restoreInstallerHouse(
+  String token,
+  Map<String, dynamic> house,
+) async {
+  final res = await http.post(
+    Uri.parse('$apiBase/api/installer/house/restore'),
+    headers: {
+      'content-type': 'application/json',
+      'authorization': 'Bearer $token',
+    },
+    body: jsonEncode(house),
+  );
+  if (res.statusCode != 200) {
+    _throwInstallerFailure(res, 'Backup inladen mislukt');
+  }
+}
+
+/// Empty install, keeping the current login accounts.
+Future<void> factoryResetInstallerHouse(String token) async {
+  final res = await http.post(
+    Uri.parse('$apiBase/api/installer/house/factory-reset'),
+    headers: {'authorization': 'Bearer $token'},
+  );
+  if (res.statusCode != 200) {
+    _throwInstallerFailure(res, 'Fabrieksinstellingen mislukt');
+  }
+}
+
 Future<int> putInstallerHouse(String token, Map<String, dynamic> house) async {
   final res = await http.put(
     Uri.parse('$apiBase/api/installer/house'),

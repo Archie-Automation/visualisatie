@@ -3553,10 +3553,15 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   }
 
   Widget _houseBackupPanel(BuildContext context) {
+    final busy = _backupBusy;
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
         Text('Backup', style: Theme.of(context).textTheme.titleLarge),
+        if (busy) ...[
+          const SizedBox(height: 16),
+          const LinearProgressIndicator(),
+        ],
         const SizedBox(height: 12),
         Text(
           'Dit is het huis zoals het op deze mini-pc is opgeslagen: kamers, '
@@ -3573,18 +3578,103 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         Align(
           alignment: Alignment.centerLeft,
           child: FilledButton.icon(
-            onPressed: _backupBusy ? null : _downloadHouseBackup,
-            icon: _backupBusy
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.save_alt_outlined, size: 18),
+            onPressed: busy ? null : _downloadHouseBackup,
+            icon: const Icon(Icons.save_alt_outlined, size: 18),
             label: const Text('Backup downloaden'),
           ),
         ),
+        const SizedBox(height: 36),
+        Text('Backup inladen', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 12),
+        Text(
+          'Kies een eerder gedownload huisbestand. Dat vervangt het huis '
+          'op deze mini-pc, inclusief de inlogcodes uit dat bestand.',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: LuxeColors.inkSoft,
+                height: 1.35,
+              ),
+        ),
+        const SizedBox(height: 20),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: busy ? null : _pickHouseRestore,
+            icon: const Icon(Icons.upload_file_outlined, size: 18),
+            label: const Text('Backup inladen'),
+          ),
+        ),
+        const SizedBox(height: 36),
+        Text(
+          'Fabrieksinstellingen',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Wist kamers, apparaten, camera\'s en koppelingen. '
+          'Inlogaccounts blijven staan, anders kunt u daarna niet meer inloggen.',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: LuxeColors.inkSoft,
+                height: 1.35,
+              ),
+        ),
+        const SizedBox(height: 20),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: busy ? null : _confirmFactoryReset,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: LuxeColors.danger,
+              side: BorderSide(
+                color: LuxeColors.danger.withValues(alpha: 0.7),
+              ),
+            ),
+            icon: const Icon(Icons.restart_alt, size: 18),
+            label: const Text('Terug naar fabrieksinstellingen'),
+          ),
+        ),
       ],
+    );
+  }
+
+  Future<bool> _confirmReplace(
+    String title,
+    String message,
+    String confirm, {
+    bool destructive = false,
+  }) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Annuleren'),
+          ),
+          FilledButton(
+            style: destructive
+                ? FilledButton.styleFrom(
+                    backgroundColor: LuxeColors.danger,
+                    foregroundColor: Colors.white,
+                  )
+                : null,
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(confirm),
+          ),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  Future<void> _reloadReplacedHouse(String done) async {
+    ref.invalidate(configProvider);
+    setState(() => _sel = const _Focus.backup());
+    await _load();
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(done)),
     );
   }
 
@@ -3604,6 +3694,89 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Backup opgeslagen.')),
       );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'.replaceFirst('Bad state: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _backupBusy = false);
+    }
+  }
+
+  Future<void> _pickHouseRestore() async {
+    final token = _currentToken();
+    if (token == null) return;
+    final picked = await FilePicker.pickFile(
+      type: FileType.custom,
+      allowedExtensions: ['json'],
+    );
+    if (picked == null || !mounted) return;
+    Uint8List bytes;
+    try {
+      bytes = await picked.readAsBytes();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kon het bestand niet lezen.')),
+      );
+      return;
+    }
+    Map<String, dynamic> house;
+    try {
+      final decoded = jsonDecode(utf8.decode(bytes));
+      if (decoded is! Map) throw const FormatException('geen object');
+      house = decoded.map((k, v) => MapEntry(k.toString(), v));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Dit is geen huisbestand.')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    final name = picked.name.trim().isEmpty ? 'dit bestand' : picked.name.trim();
+    final ok = await _confirmReplace(
+      'Backup inladen',
+      'Weet u het zeker? Het huis op deze mini-pc wordt vervangen door $name. '
+      'De inlogcodes uit dat bestand gaan gelden. '
+      'Niet-opgeslagen wijzigingen in dit scherm gaan verloren.',
+      'Inladen',
+    );
+    if (!ok || !mounted) return;
+    setState(() => _backupBusy = true);
+    try {
+      await restoreInstallerHouse(token, house);
+      if (!mounted) return;
+      await _reloadReplacedHouse('Backup ingeladen.');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$e'.replaceFirst('Bad state: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _backupBusy = false);
+    }
+  }
+
+  Future<void> _confirmFactoryReset() async {
+    final token = _currentToken();
+    if (token == null) return;
+    final ok = await _confirmReplace(
+      'Terug naar fabrieksinstellingen',
+      'Weet u het zeker? Alle kamers, apparaten, camera\'s en koppelingen '
+      'worden gewist. Uw inlogaccounts blijven staan. '
+      'Niet-opgeslagen wijzigingen gaan verloren. '
+      'Download eerst een backup als u dit huis wilt bewaren.',
+      'Wissen',
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
+    setState(() => _backupBusy = true);
+    try {
+      await factoryResetInstallerHouse(token);
+      if (!mounted) return;
+      await _reloadReplacedHouse('Huis teruggezet naar fabrieksinstellingen.');
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
