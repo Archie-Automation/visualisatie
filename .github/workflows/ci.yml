@@ -113,11 +113,22 @@ jobs:
               exit 1
             }
           fi
-          FP="$(keytool -printcert -jarfile build/app/outputs/flutter-apk/app-release.apk | sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' | head -1 | tr -d '[:space:]' | tr 'a-f' 'A-F')"
-          EXPECT="E0:B9:AB:E9:0B:C7:30:9F:53:0D:1F:FE:DD:B6:74:99:6E:36:72:49:64:60:4A:11:A7:A5:5A:08:D5:73:98:DA"
+          APKSIGNER="$(ls -1 "$SDK"/build-tools/*/apksigner 2>/dev/null | tail -1 || true)"
+          if [ -z "$APKSIGNER" ]; then
+            echo "apksigner ontbreekt in de Android SDK"
+            exit 1
+          fi
+          CERTS="$("$APKSIGNER" verify --print-certs build/app/outputs/flutter-apk/app-release.apk)" || {
+            echo "apksigner kon de APK niet lezen"
+            printf '%s\n' "$CERTS"
+            exit 1
+          }
+          FP="$(printf '%s\n' "$CERTS" | sed -n 's/.*SHA-256 digest:[[:space:]]*//p' | head -1 | tr -d '[:space:]:' | tr 'A-F' 'a-f')"
+          EXPECT="e0b9abe90bc7309f530d1ffeddb674996e36724964604a11a7a55a08d57398da"
           if [ "$FP" != "$EXPECT" ]; then
             echo "APK is niet met het Archie-stempel getekend."
-            echo "Gevonden: ${FP:-geen SHA256}"
+            echo "Gevonden: ${FP:-geen SHA-256}"
+            printf '%s\n' "$CERTS"
             exit 1
           fi
       - name: Publish android-latest
