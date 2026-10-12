@@ -64,7 +64,7 @@ class _SplitUnitIconPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final stroke = (w * 0.078).clamp(1.4, 2.4);
+    final stroke = (w * 0.065).clamp(1.2, 1.85);
 
     final paint = Paint()
       ..color = color

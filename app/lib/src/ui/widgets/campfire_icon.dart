@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 /// Sentinel — render via [iconWidgetForData], niet [Icon].
 const IconData campfireIconData = IconData(0xF002);
 
-/// Oude flikkerende vlam, met twee vol ingekleurde stronken eronder.
+/// Lijnvlam in hetzelfde gewicht als de lamp, met twee dunne stronken eronder.
 class CampfireIcon extends StatefulWidget {
   const CampfireIcon({
     super.key,
@@ -72,8 +72,8 @@ class _CampfireIconState extends State<CampfireIcon>
           child: Transform.scale(
             scale: scale,
             child: Icon(
-              Icons.local_fire_department_rounded,
-              size: widget.size * 0.86,
+              Icons.local_fire_department_outlined,
+              size: widget.size * 0.74,
               color: widget.color,
             ),
           ),
@@ -115,7 +115,7 @@ class _CampfireLogsPainter extends CustomPainter {
     final logs = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = (w * 0.082).clamp(1.45, 2.15)
+      ..strokeWidth = (w * 0.065).clamp(1.2, 1.85)
       ..strokeCap = StrokeCap.round;
 
     canvas.drawLine(

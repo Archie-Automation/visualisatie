@@ -2205,7 +2205,7 @@ class _RoomActivityBadges extends ConsumerWidget {
   final Floor floor;
   final Room room;
 
-  /// Baseline for equalizer scale math (phone badges pass a larger size).
+  /// Fallback size when an equalizer is built without an explicit glyph size.
   static const _badgeSize = 22.0;
   static const _glyphSize = 18.0;
 
@@ -2341,7 +2341,7 @@ class _RoomActivityBadges extends ConsumerWidget {
             ),
           if (fireplaceOn)
             tap(
-              _FireBadge(size: glyph + 2, color: color),
+              _FireBadge(size: glyph, color: color),
               'fireplace',
             ),
           if (heaterOn)
@@ -2370,7 +2370,7 @@ class _RoomActivityBadges extends ConsumerWidget {
               'melding__${meldingGarage.id}',
             ),
           if (mediaPlaying)
-            tap(_EqualizerBadge(size: badge, color: color), 'audio'),
+            tap(_EqualizerBadge(size: glyph, color: color), 'audio'),
         ],
       ),
     );
@@ -2457,11 +2457,10 @@ class _EqualizerBadgeState extends State<_EqualizerBadge>
 
   @override
   Widget build(BuildContext context) {
-    final scale = widget.size / _RoomActivityBadges._badgeSize;
-    final maxH = 17.0 * scale;
-    final bottomInset = 3.0 * scale;
-    final barW = 3.5 * scale;
-    final gap = 2.0 * scale;
+    final barW = (widget.size * 0.065).clamp(1.2, 1.85);
+    final maxH = widget.size * 0.72;
+    final bottomInset = widget.size * 0.08;
+    final gap = widget.size * 0.1;
     final color = widget.color ?? LuxeColors.brass;
     return AnimatedBuilder(
       animation: _ctrl,

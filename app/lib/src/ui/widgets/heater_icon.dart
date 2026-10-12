@@ -122,45 +122,44 @@ class _HeaterIconPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final fill = Paint()
+    final stroke = (w * 0.065).clamp(1.2, 1.85);
+    final line = Paint()
       ..color = color
-      ..style = PaintingStyle.fill;
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
 
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTRB(w * 0.36, h * 0.035, w * 0.64, h * 0.078),
+        Rect.fromLTRB(w * 0.36, h * 0.035, w * 0.64, h * 0.09),
         Radius.circular(w * 0.02),
       ),
-      fill,
+      line,
     );
-    canvas.drawRect(
-      Rect.fromLTRB(w * 0.47, h * 0.072, w * 0.53, h * 0.17),
-      fill,
+    canvas.drawLine(
+      Offset(w * 0.5, h * 0.09),
+      Offset(w * 0.5, h * 0.17),
+      line,
     );
-
-    final body = Path()
-      ..fillType = PathFillType.evenOdd
-      ..addRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTRB(w * 0.06, h * 0.16, w * 0.94, h * 0.56),
-          Radius.circular(w * 0.08),
-        ),
-      );
-    const slotYs = <double>[0.21, 0.32, 0.43];
-    final slotH = h * 0.072;
-    for (final y in slotYs) {
-      body.addRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTRB(w * 0.16, h * y, w * 0.84, h * y + slotH),
-          Radius.circular(slotH / 2),
-        ),
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTRB(w * 0.08, h * 0.17, w * 0.92, h * 0.56),
+        Radius.circular(w * 0.08),
+      ),
+      line,
+    );
+    for (final y in const <double>[0.26, 0.36, 0.46]) {
+      canvas.drawLine(
+        Offset(w * 0.2, h * y),
+        Offset(w * 0.8, h * y),
+        line,
       );
     }
-    canvas.drawPath(body, fill);
 
     final heat = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = (w * 0.055).clamp(1.15, 2.0)
+      ..strokeWidth = stroke
       ..strokeCap = StrokeCap.round;
     const xs = <double>[0.28, 0.50, 0.72];
     final top = h * 0.64;
