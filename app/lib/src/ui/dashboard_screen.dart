@@ -998,7 +998,7 @@ class _RoomDashboardRow extends ConsumerWidget {
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
                             color: LuxeColors.ink,
-                            fontSize: context.isPhone ? 18 : 16,
+                            fontSize: context.isPhone ? 15 : 16,
                             height: 1.2,
                             letterSpacing: context.isPhone ? 1.0 : 1.15,
                             fontWeight: FontWeight.w600,
@@ -1008,7 +1008,7 @@ class _RoomDashboardRow extends ConsumerWidget {
                       SizedBox(width: 2),
                       Icon(
                         Icons.chevron_right_rounded,
-                        size: context.isPhone ? 24 : 22,
+                        size: context.isPhone ? 20 : 22,
                         color: LuxeColors.inkSoft.withValues(alpha: 0.55),
                       ),
                     ],
@@ -1230,7 +1230,7 @@ Widget _scenes(
                   padding: const EdgeInsets.only(left: 8),
                   child: Icon(
                     Icons.sort_rounded,
-                    size: 32,
+                    size: context.isPhone ? 26 : 32,
                     color: LuxeColors.inkSoft.withValues(alpha: 0.85),
                   ),
                 ),
@@ -1396,7 +1396,7 @@ class _Systemen extends ConsumerWidget {
                     padding: EdgeInsets.only(left: 8),
                     child: Icon(
                       Icons.tune_rounded,
-                      size: 32,
+                      size: context.isPhone ? 26 : 32,
                       color: LuxeColors.inkSoft.withValues(alpha: 0.85),
                     ),
                   ),
@@ -2211,7 +2211,7 @@ class _RoomActivityBadges extends ConsumerWidget {
 
   /// Same glyph as the status icons behind a room name.
   static double glyphFor(BuildContext context) =>
-      context.isPhone ? 30.0 : 28.0;
+      context.isPhone ? 24.0 : 28.0;
 
   void _openCategory(BuildContext context, String categorySlug) {
     appOpen(
@@ -2311,8 +2311,8 @@ class _RoomActivityBadges extends ConsumerWidget {
     // Tablet: ink, gelijk aan de header.
     final phone = context.isPhone;
     final glyph = glyphFor(context);
-    final slot = phone ? 52.0 : 48.0;
-    final badge = phone ? 36.0 : 34.0;
+    final slot = phone ? 44.0 : 48.0;
+    final badge = phone ? 28.0 : 34.0;
     final color = phone ? LuxeColors.inkSoft : LuxeColors.ink;
 
     Widget tap(Widget child, String categorySlug) => GestureDetector(
