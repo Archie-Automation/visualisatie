@@ -66,6 +66,35 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      - name: Release keystore from secrets
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ANDROID_STORE_PASSWORD" ] || [ -z "$ANDROID_KEY_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ]; then
+            echo "Android-keystore secrets ontbreken. Verwacht ANDROID_KEYSTORE_BASE64, ANDROID_STORE_PASSWORD, ANDROID_KEY_PASSWORD, ANDROID_KEY_ALIAS."
+            exit 1
+          fi
+          umask 077
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > android/sideload.jks
+          python3 - << 'PY'
+          import os, pathlib, sys
+          p = pathlib.Path("android/sideload.jks")
+          data = p.read_bytes()
+          pkcs12 = len(data) > 4 and data[0] == 0x30 and data[1] == 0x82
+          jks = data.startswith(b"\xfe\xed\xfe\xed")
+          if not (pkcs12 or jks):
+              sys.exit("ANDROID_KEYSTORE_BASE64 is geen keystore. Plak de klembordtekst opnieuw, zonder extra tekst eromheen.")
+          pathlib.Path("android/key.properties").write_text(
+              "storePassword=" + os.environ["ANDROID_STORE_PASSWORD"] + "\n"
+              "keyPassword=" + os.environ["ANDROID_KEY_PASSWORD"] + "\n"
+              "keyAlias=" + os.environ["ANDROID_KEY_ALIAS"] + "\n"
+              "storeFile=sideload.jks\n",
+              encoding="utf-8",
+          )
+          PY
       - name: Release APK
         run: |
           VERSION="$(sed -n 's/^version:[[:space:]]*//p' pubspec.yaml | tr -d '\r')"
@@ -83,6 +112,13 @@ jobs:
               echo "$BADGING" | head -n 5
               exit 1
             }
+          fi
+          FP="$(keytool -printcert -jarfile build/app/outputs/flutter-apk/app-release.apk | sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' | head -1 | tr -d '[:space:]' | tr 'a-f' 'A-F')"
+          EXPECT="E0:B9:AB:E9:0B:C7:30:9F:53:0D:1F:FE:DD:B6:74:99:6E:36:72:49:64:60:4A:11:A7:A5:5A:08:D5:73:98:DA"
+          if [ "$FP" != "$EXPECT" ]; then
+            echo "APK is niet met het Archie-stempel getekend."
+            echo "Gevonden: ${FP:-geen SHA256}"
+            exit 1
           fi
       - name: Publish android-latest
         env:
