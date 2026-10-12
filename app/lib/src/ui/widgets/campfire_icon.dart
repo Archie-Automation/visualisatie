@@ -62,28 +62,11 @@ class _CampfireIconState extends State<CampfireIcon>
   }
 
   Widget _mark(double scale) {
-    // Zelfde verhouding als de outlined Material-vlam (2px op een 24-grid),
-    // zodat schouw en vlam één lijndikte hebben.
-    final flame = widget.size * 0.70;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        CustomPaint(
-          painter: _SchouwPainter(color: widget.color, stroke: flame * 2 / 24),
-        ),
-        Align(
-          alignment: const Alignment(0, 0.42),
-          child: Transform.scale(
-            scale: scale,
-            alignment: const Alignment(0, 0.72),
-            child: Icon(
-              Icons.local_fire_department_outlined,
-              size: flame,
-              color: widget.color,
-            ),
-          ),
-        ),
-      ],
+    return CustomPaint(
+      painter: _SchouwPainter(
+        color: widget.color,
+        flameScale: scale,
+      ),
     );
   }
 
@@ -109,57 +92,123 @@ class _CampfireIconState extends State<CampfireIcon>
 }
 
 class _SchouwPainter extends CustomPainter {
-  _SchouwPainter({required this.color, required this.stroke});
+  _SchouwPainter({required this.color, required this.flameScale});
 
   final Color color;
-  final double stroke;
+  final double flameScale;
 
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final weight = stroke.clamp(1.15, 2.2);
+    // Zelfde gewicht als de split-unit.
+    final weight = (w * 0.065).clamp(1.2, 1.85);
     final line = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = weight
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
+    final radius = Radius.circular(w * 0.045);
 
-    final yShelf = h * 0.13;
-    final yLip = h * 0.27;
-    final yHearth = h * 0.86;
-    final xOutL = w * 0.07;
-    final xOutR = w * 0.93;
-    final xInL = w * 0.26;
-    final xInR = w * 0.74;
+    final mantel = RRect.fromRectAndRadius(
+      Rect.fromLTRB(w * 0.04, h * 0.04, w * 0.96, h * 0.20),
+      radius,
+    );
+    final hearth = RRect.fromRectAndRadius(
+      Rect.fromLTRB(w * 0.04, h * 0.80, w * 0.96, h * 0.96),
+      radius,
+    );
+    final opening = RRect.fromRectAndRadius(
+      Rect.fromLTRB(w * 0.30, h * 0.30, w * 0.70, h * 0.72),
+      Radius.circular(w * 0.03),
+    );
 
-    final mantel = Path()
-      ..moveTo(xOutL, yLip)
-      ..lineTo(xOutL, yShelf)
-      ..lineTo(xOutR, yShelf)
-      ..lineTo(xOutR, yLip);
-    canvas.drawPath(mantel, line);
+    canvas.drawRRect(mantel, line);
+    canvas.drawRRect(hearth, line);
+    canvas.drawRRect(opening, line);
 
-    final jamb = Paint()
+    final side = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = weight
       ..strokeCap = StrokeCap.butt;
-    canvas.drawLine(
-      Offset(xInL, yLip),
-      Offset(xInL, yHearth - weight / 2),
-      jamb,
+    final sideTop = mantel.bottom + weight * 0.35;
+    final sideBot = hearth.top - weight * 0.35;
+    canvas.drawLine(Offset(w * 0.14, sideTop), Offset(w * 0.14, sideBot), side);
+    canvas.drawLine(Offset(w * 0.86, sideTop), Offset(w * 0.86, sideBot), side);
+
+    final box = opening.outerRect.deflate(weight + w * 0.025);
+    final flame = Rect.fromCenter(
+      center: box.center,
+      width: box.width * 0.62,
+      height: box.height * 0.78,
     );
-    canvas.drawLine(
-      Offset(xInR, yLip),
-      Offset(xInR, yHearth - weight / 2),
-      jamb,
-    );
-    canvas.drawLine(Offset(xOutL, yHearth), Offset(xOutR, yHearth), line);
+    _flame(canvas, line, flame);
+  }
+
+  void _flame(Canvas canvas, Paint paint, Rect rect) {
+    final cx = rect.center.dx;
+    final top = rect.top;
+    final bot = rect.bottom;
+    final hw = rect.width / 2;
+    final hh = rect.height;
+
+    canvas.save();
+    canvas.translate(cx, bot);
+    canvas.scale(flameScale.clamp(0.75, 1.0));
+    canvas.translate(-cx, -bot);
+
+    final outer = Path()
+      ..moveTo(cx, top)
+      ..cubicTo(
+        cx + hw * 0.35,
+        top + hh * 0.38,
+        cx + hw * 1.05,
+        top + hh * 0.55,
+        cx + hw * 0.55,
+        bot - hh * 0.02,
+      )
+      ..quadraticBezierTo(cx, bot + hh * 0.04, cx - hw * 0.55, bot - hh * 0.02)
+      ..cubicTo(
+        cx - hw * 1.05,
+        top + hh * 0.55,
+        cx - hw * 0.35,
+        top + hh * 0.38,
+        cx,
+        top,
+      );
+    canvas.drawPath(outer, paint);
+
+    final innerTop = top + hh * 0.42;
+    final innerBot = bot - hh * 0.08;
+    final ih = innerBot - innerTop;
+    final iw = hw * 0.38;
+    if (ih > paint.strokeWidth * 2.4 && iw > paint.strokeWidth) {
+      final inner = Path()
+        ..moveTo(cx, innerTop)
+        ..cubicTo(
+          cx + iw * 0.9,
+          innerTop + ih * 0.45,
+          cx + iw * 0.7,
+          innerBot,
+          cx,
+          innerBot,
+        )
+        ..cubicTo(
+          cx - iw * 0.7,
+          innerBot,
+          cx - iw * 0.9,
+          innerTop + ih * 0.45,
+          cx,
+          innerTop,
+        );
+      canvas.drawPath(inner, paint);
+    }
+    canvas.restore();
   }
 
   @override
   bool shouldRepaint(covariant _SchouwPainter oldDelegate) =>
-      oldDelegate.color != color || oldDelegate.stroke != stroke;
+      oldDelegate.color != color || oldDelegate.flameScale != flameScale;
 }

@@ -2,8 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// Statuslamp: het outline-lampje, heel licht op en neer.
-/// De beweging is de gloed — geen opacity-puls.
+/// Statuslamp: de omtrek blijft stil. Alleen de vulling gloeit,
+/// met een lichte schaalbeweging, zodat het lijkt alsof de lamp brandt.
 class LightStatusIcon extends StatefulWidget {
   const LightStatusIcon({
     super.key,
@@ -45,15 +45,26 @@ class _LightStatusIconState extends State<LightStatusIcon>
       child: AnimatedBuilder(
         animation: _ctrl,
         builder: (_, __) {
-          final dy =
-              math.sin(_ctrl.value * 2 * math.pi) * widget.size * 0.045;
-          return Transform.translate(
-            offset: Offset(0, dy),
-            child: Icon(
-              Icons.lightbulb_outline_rounded,
-              size: widget.size,
-              color: widget.color,
-            ),
+          final glow = (math.sin(_ctrl.value * 2 * math.pi) + 1) / 2;
+          final alpha = 0.12 + 0.36 * glow;
+          final scale = 0.86 + 0.14 * glow;
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              Transform.scale(
+                scale: scale,
+                child: Icon(
+                  Icons.lightbulb_rounded,
+                  size: widget.size * 0.70,
+                  color: widget.color.withValues(alpha: alpha),
+                ),
+              ),
+              Icon(
+                Icons.lightbulb_outline_rounded,
+                size: widget.size,
+                color: widget.color,
+              ),
+            ],
           );
         },
       ),
