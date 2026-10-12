@@ -7,8 +7,8 @@ import 'campfire_icon.dart';
 /// Sentinel — render via [iconWidgetForData] / [universalIconGlyph], niet [Icon].
 const IconData heaterIconData = IconData(0xF001);
 
-/// Hangende heater: plafondbeugel, rooster, hittestraaltjes.
-/// Alleen de stralen bewegen als [animate].
+/// Hangende heater: plafondbeugel, gloeispiraal, hittestraaltjes.
+/// De spiraal gloeit en de stralen bewegen als [animate].
 class HeaterIcon extends StatefulWidget {
   const HeaterIcon({
     super.key,
@@ -149,13 +149,31 @@ class _HeaterIconPainter extends CustomPainter {
       ),
       line,
     );
-    for (final y in const <double>[0.28, 0.36, 0.44]) {
-      canvas.drawLine(
-        Offset(w * 0.30, h * y),
-        Offset(w * 0.70, h * y),
-        line,
-      );
+    final coilGlow = animate
+        ? (0.35 + 0.65 * ((math.sin(t * math.pi * 2) + 1) / 2))
+        : 1.0;
+    final coil = Paint()
+      ..color = color.withValues(alpha: coilGlow)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final coilPath = Path();
+    const turns = 4;
+    final coilLeft = w * 0.30;
+    final coilRight = w * 0.70;
+    final coilTop = h * 0.28;
+    final coilBot = h * 0.44;
+    for (var i = 0; i <= turns; i++) {
+      final x = coilLeft + (coilRight - coilLeft) * (i / turns);
+      final y = i.isEven ? coilBot : coilTop;
+      if (i == 0) {
+        coilPath.moveTo(x, y);
+      } else {
+        coilPath.lineTo(x, y);
+      }
     }
+    canvas.drawPath(coilPath, coil);
 
     final heat = Paint()
       ..style = PaintingStyle.stroke
