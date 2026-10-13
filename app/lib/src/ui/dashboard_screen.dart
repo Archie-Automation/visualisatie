@@ -2061,7 +2061,7 @@ class _GlassIconButton extends StatelessWidget {
   }
 }
 
-/// Same shell as [_GlassIconButton] — neutrale chrome, brass blijft op het glyph.
+/// Zelfde vak als het icoon op een systeem- of kamertegel: messing rand en vulling.
 class _GlassStatusButton extends StatelessWidget {
   const _GlassStatusButton({
     required this.child,
@@ -2081,15 +2081,11 @@ class _GlassStatusButton extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: LuxeRimBox(
-          width: _GlassIconButton.statusSize,
-          height: _GlassIconButton.statusSize,
+        child: LuxeAccentIconWell(
+          size: _GlassIconButton.statusSize,
           radius: _GlassIconButton.statusRadius,
-          rimWidth: 1,
-          rimColor: LuxeColors.glassRim,
-          fillColor: LuxeChipChrome.fill(context, pressed: false),
-          shadows: LuxeShadows.soft,
-          child: Center(child: child),
+          accent: LuxeColors.brass,
+          child: child,
         ),
       ),
     );
@@ -2304,12 +2300,14 @@ class _RoomActivityBadges extends ConsumerWidget {
 
     if (!any) return const SizedBox.shrink();
 
-    // Kale glyphs — geen glass/wells. Kleur is het messing van systeem- en kamericonen.
+    // Kale glyphs — geen glass/wells.
+    // Phone: inkSoft (antraciet, zelfde gewicht als kamernamen).
+    // Tablet: ink. Het messing vak hoort alleen bij de header.
     final phone = context.isPhone;
     final glyph = glyphFor(context);
     final slot = phone ? 44.0 : 48.0;
     final badge = phone ? 28.0 : 34.0;
-    final color = LuxeColors.brass;
+    final color = phone ? LuxeColors.inkSoft : LuxeColors.ink;
 
     Widget tap(Widget child, String categorySlug) => GestureDetector(
           behavior: HitTestBehavior.opaque,
