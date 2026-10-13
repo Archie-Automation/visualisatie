@@ -2061,7 +2061,7 @@ class _GlassIconButton extends StatelessWidget {
   }
 }
 
-/// Zelfde vak als het icoon op een systeem- of kamertegel: messing rand en vulling.
+/// Same shell as [_GlassIconButton] — neutrale chrome, glyph in antraciet.
 class _GlassStatusButton extends StatelessWidget {
   const _GlassStatusButton({
     required this.child,
@@ -2081,11 +2081,15 @@ class _GlassStatusButton extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
-        child: LuxeAccentIconWell(
-          size: _GlassIconButton.statusSize,
+        child: LuxeRimBox(
+          width: _GlassIconButton.statusSize,
+          height: _GlassIconButton.statusSize,
           radius: _GlassIconButton.statusRadius,
-          accent: LuxeColors.brass,
-          child: child,
+          rimWidth: 1,
+          rimColor: LuxeColors.glassRim,
+          fillColor: LuxeChipChrome.fill(context, pressed: false),
+          shadows: LuxeShadows.soft,
+          child: Center(child: child),
         ),
       ),
     );
@@ -2142,7 +2146,7 @@ class _HouseActivityHeaderButtons extends ConsumerWidget {
         _GlassStatusButton(
           tooltip: 'Verlichting aan',
           onTap: () => _openSystem(context, 'Verlichting'),
-          child: LightStatusIcon(size: _glyph, color: LuxeColors.brass),
+          child: LightStatusIcon(size: _glyph, color: LuxeColors.ink),
         ),
       if (heaterOn)
         _GlassStatusButton(
@@ -2151,25 +2155,25 @@ class _HouseActivityHeaderButtons extends ConsumerWidget {
             context,
             '/system/$kHeatersActivitySlug?active=1',
           ),
-          child: _HeaterBadge(size: _glyph, color: LuxeColors.brass),
+          child: _HeaterBadge(size: _glyph, color: LuxeColors.ink),
         ),
       if (fireplaceOn)
         _GlassStatusButton(
           tooltip: 'Openhaard aan',
           onTap: () => _openSystem(context, 'Openhaard'),
-          child: _FireBadge(size: _glyph, color: LuxeColors.brass),
+          child: _FireBadge(size: _glyph, color: LuxeColors.ink),
         ),
       if (acOn)
         _GlassStatusButton(
           tooltip: 'Airco aan',
           onTap: () => _openSystem(context, 'Klimaat'),
-          child: SplitUnitIcon(size: _glyph, color: LuxeColors.brass),
+          child: SplitUnitIcon(size: _glyph, color: LuxeColors.ink),
         ),
       if (mediaPlaying)
         _GlassStatusButton(
           tooltip: 'Muziek speelt',
           onTap: () => _openSystem(context, 'Audio'),
-          child: EqualizerIcon(size: _glyph, color: LuxeColors.brass),
+          child: EqualizerIcon(size: _glyph, color: LuxeColors.ink),
         ),
     ];
 
