@@ -95,7 +95,7 @@ const Map<String, IconData> kUniversalIconMap = {
   /// Raam dicht (pijlen naar binnen = gesloten)
   'window_closed': Icons.close_fullscreen,
   'skylight': Icons.wb_iridescent_outlined,
-  /// Terrasverwarmer: afgerond vierkant met verwarmingsspiraal.
+  /// Terrasverwarmer: liggende rechthoek met twee horizontale spiralen.
   'heater': heaterIconData,
 
   // ── Beveiliging & Detectie ────────────────────────────────────────────────

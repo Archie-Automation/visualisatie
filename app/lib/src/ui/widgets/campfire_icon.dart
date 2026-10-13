@@ -104,7 +104,7 @@ class _CampfireIconState extends State<CampfireIcon>
   }
 }
 
-/// Mantel en poten, zonder vloer. Losse boog over de vlam.
+/// Mantel en poten, zonder vloer. Dun balkje op de staanders, boven de vlam.
 class _SchouwPainter extends CustomPainter {
   _SchouwPainter({required this.color});
 
@@ -135,17 +135,17 @@ class _SchouwPainter extends CustomPainter {
       ..lineTo(w * 0.92, h * 0.82);
     canvas.drawPath(path, line);
 
-    // Halve boog tussen de poten, boven de vlam.
-    canvas.drawArc(
-      Rect.fromCenter(
-        center: Offset(w * 0.50, h * 0.52),
-        width: w * 0.58,
-        height: h * 0.36,
-      ),
-      math.pi,
-      math.pi,
-      false,
-      line,
+    // Dun recht balkje op de twee staanders, boven de vlam.
+    final beam = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = (weight * 0.55).clamp(0.7, 1.05)
+      ..strokeCap = StrokeCap.butt;
+    final beamY = h * 0.36;
+    canvas.drawLine(
+      Offset(w * 0.20, beamY),
+      Offset(w * 0.80, beamY),
+      beam,
     );
   }
 

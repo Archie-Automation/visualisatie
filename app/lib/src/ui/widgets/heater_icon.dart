@@ -7,7 +7,7 @@ import 'campfire_icon.dart';
 /// Sentinel — render via [iconWidgetForData] / [universalIconGlyph], niet [Icon].
 const IconData heaterIconData = IconData(0xF001);
 
-/// Terrasheater: afgerond vierkant met de ronde verwarmingsspiraal.
+/// Terrasheater: liggende rechthoek met twee horizontale spiralen.
 /// Op het statusicoon dooft de spiraal en komt terug, zonder helemaal te verdwijnen.
 class HeaterIcon extends StatefulWidget {
   const HeaterIcon({
@@ -131,12 +131,14 @@ class _HeaterIconPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
-    final inset = stroke / 2 + s * 0.04;
+    // Liggende rechthoek, zelfde lijngewicht als de schouw.
+    final frame = Rect.fromCenter(
+      center: Offset(s / 2, s / 2),
+      width: s * 0.88,
+      height: s * 0.56,
+    );
     canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTRB(inset, inset, s - inset, s - inset),
-        Radius.circular(s * 0.18),
-      ),
+      RRect.fromRectAndRadius(frame, Radius.circular(s * 0.06)),
       line,
     );
 
@@ -151,21 +153,25 @@ class _HeaterIconPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
-    final pad = s * 0.16;
-    final inner = Rect.fromLTRB(pad, pad, s - pad, s - pad);
-    const columns = 3;
+    final inner = Rect.fromLTRB(
+      frame.left + s * 0.07,
+      frame.top + s * 0.06,
+      frame.right - s * 0.07,
+      frame.bottom - s * 0.06,
+    );
+    const rows = 2;
     const intervals = 4;
-    final gap = stroke * 1.7;
-    final colW = (inner.width - gap * (columns - 1)) / columns;
-    final pitch = inner.height / intervals;
-    for (var c = 0; c < columns; c++) {
-      final left = inner.left + c * (colW + gap);
+    final gap = stroke * 1.55;
+    final rowH = (inner.height - gap) / rows;
+    final pitch = inner.width / intervals;
+    for (var row = 0; row < rows; row++) {
+      final top = inner.top + row * (rowH + gap);
       canvas.drawPath(
         _heatingCoil(
-          left: left,
-          right: left + colW,
-          top: inner.top,
-          bottom: inner.bottom,
+          left: inner.left,
+          right: inner.right,
+          top: top,
+          bottom: top + rowH,
           pitch: pitch,
         ),
         coilPaint,
@@ -173,7 +179,7 @@ class _HeaterIconPainter extends CustomPainter {
     }
   }
 
-  /// Verticale spiraal met ronde U-bochten, dezelfde vorm als het voorbeeld.
+  /// Horizontale spiraal: aaneengesloten halve cirkels, boven en onder om de beurt.
   Path _heatingCoil({
     required double left,
     required double right,
@@ -181,38 +187,21 @@ class _HeaterIconPainter extends CustomPainter {
     required double bottom,
     required double pitch,
   }) {
-    final r = math.min(right - left, pitch) / 2;
-    final extra = math.max(0.0, (right - left) - r * 2);
-    final xL = left + extra / 2 + r;
-    final xR = right - extra / 2 - r;
-    final path = Path();
-    final cap = math.max(0.0, xR - xL) * 0.45;
-    path.moveTo(xL + cap, top);
-
-    final intervals = ((bottom - top) / pitch).round();
-    for (var i = 0; i < intervals; i++) {
-      final y = top + i * pitch;
-      final y2 = y + pitch;
-      final midY = (y + y2) / 2;
-      if (i.isEven) {
-        path.lineTo(xR, y);
-        path.arcTo(
-          Rect.fromCircle(center: Offset(xR, midY), radius: r),
-          -math.pi / 2,
-          math.pi,
-          false,
-        );
-      } else {
-        path.lineTo(xL, y);
-        path.arcTo(
-          Rect.fromCircle(center: Offset(xL, midY), radius: r),
-          -math.pi / 2,
-          -math.pi,
-          false,
-        );
-      }
+    final band = bottom - top;
+    final waves = (pitch <= 0 ? 4 : (right - left) / pitch).round().clamp(3, 5);
+    final step = (right - left) / waves;
+    final r = math.min(step / 2, band / 2);
+    final cy = (top + bottom) / 2;
+    final path = Path()..moveTo(left, cy);
+    for (var i = 0; i < waves; i++) {
+      final x = left + i * step;
+      path.arcTo(
+        Rect.fromCircle(center: Offset(x + step / 2, cy), radius: r),
+        math.pi,
+        i.isEven ? math.pi : -math.pi,
+        false,
+      );
     }
-    path.lineTo(xR - cap, top + intervals * pitch);
     return path;
   }
 
