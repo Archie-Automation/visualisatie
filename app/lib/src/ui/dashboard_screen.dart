@@ -2392,6 +2392,7 @@ class _FireBadge extends StatelessWidget {
     return CampfireIcon(
       size: size,
       color: color ?? LuxeColors.brass,
+      status: true,
     );
   }
 }
@@ -2414,6 +2415,7 @@ class _HeaterBadge extends StatelessWidget {
       size: size,
       color: color ?? LuxeColors.brass,
       animate: true,
+      status: true,
     );
   }
 }

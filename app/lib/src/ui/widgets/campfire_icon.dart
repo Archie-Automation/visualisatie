@@ -9,6 +9,11 @@ const IconData campfireIconData = IconData(0xF002);
 /// ventilatie): 2 px op een icoon van 24 px, en verder lineair met de maat.
 double materialOutlineStroke(double size) => size * 2 / 24;
 
+/// Statusrij (header en naast een ruimte). Haard en heater tekenen veel meer
+/// lijn in hetzelfde vak dan de lamp en de audiobalken; deze schaal trekt de
+/// inktmassa daarnaartoe. De tegel-iconen blijven op volle maat.
+const double statusIconFit = 0.73;
+
 /// Eén schouwlijn in het gewicht van de andere statusiconen.
 /// De vlam is het outline-vlammetje en flikkert alleen op de statusbadge.
 class CampfireIcon extends StatefulWidget {
@@ -17,6 +22,7 @@ class CampfireIcon extends StatefulWidget {
     required this.size,
     required this.color,
     this.animate = true,
+    this.status = false,
   });
 
   final double size;
@@ -24,6 +30,9 @@ class CampfireIcon extends StatefulWidget {
 
   /// Statusbadge flikkert. Op een bedieningsknop blijft de vlam stil.
   final bool animate;
+
+  /// Header en ruimte-rij: zelfde optische gewicht als lamp en audio.
+  final bool status;
 
   @override
   State<CampfireIcon> createState() => _CampfireIconState();
@@ -90,7 +99,7 @@ class _CampfireIconState extends State<CampfireIcon>
   @override
   Widget build(BuildContext context) {
     final ctrl = _ctrl;
-    return SizedBox(
+    final glyph = SizedBox(
       width: widget.size,
       height: widget.size,
       child: ctrl == null
@@ -105,6 +114,8 @@ class _CampfireIconState extends State<CampfireIcon>
               },
             ),
     );
+    if (!widget.status) return glyph;
+    return Transform.scale(scale: statusIconFit, child: glyph);
   }
 }
 

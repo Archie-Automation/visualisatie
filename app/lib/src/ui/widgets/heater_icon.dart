@@ -15,11 +15,15 @@ class HeaterIcon extends StatefulWidget {
     required this.size,
     required this.color,
     this.animate = false,
+    this.status = false,
   });
 
   final double size;
   final Color color;
   final bool animate;
+
+  /// Header en ruimte-rij: spiralen blijven lichter, icoon iets kleiner.
+  final bool status;
 
   @override
   State<HeaterIcon> createState() => _HeaterIconState();
@@ -69,10 +73,12 @@ class _HeaterIconState extends State<HeaterIcon>
             color: widget.color,
             t: t,
             animate: widget.animate,
+            status: widget.status,
           ),
+          size: Size(widget.size, widget.size),
         );
 
-    return SizedBox(
+    final glyph = SizedBox(
       width: widget.size,
       height: widget.size,
       child: _ctrl == null
@@ -82,6 +88,8 @@ class _HeaterIconState extends State<HeaterIcon>
               builder: (_, __) => paint(_ctrl!.value),
             ),
     );
+    if (!widget.status) return glyph;
+    return Transform.scale(scale: statusIconFit, child: glyph);
   }
 }
 
@@ -112,11 +120,13 @@ class _HeaterIconPainter extends CustomPainter {
     required this.color,
     required this.t,
     required this.animate,
+    required this.status,
   });
 
   final Color color;
   final double t;
   final bool animate;
+  final bool status;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -140,10 +150,11 @@ class _HeaterIconPainter extends CustomPainter {
       line,
     );
 
-    // Vloert op ~0.42: de spiraal dooft, maar blijft zichtbaar.
-    final pulse = animate
-        ? 0.42 + 0.58 * ((math.sin(t * math.pi * 2) + 1) / 2)
-        : 1.0;
+    // Op de statusrij piekt de spiraal lager, anders vult het vak zich.
+    final wave = (math.sin(t * math.pi * 2) + 1) / 2;
+    final pulse = status
+        ? (animate ? 0.38 + 0.32 * wave : 0.55)
+        : (animate ? 0.42 + 0.58 * wave : 1.0);
     final coilPaint = Paint()
       ..color = color.withValues(alpha: color.a * pulse)
       ..style = PaintingStyle.stroke
@@ -208,5 +219,6 @@ class _HeaterIconPainter extends CustomPainter {
   bool shouldRepaint(covariant _HeaterIconPainter oldDelegate) =>
       oldDelegate.color != color ||
       oldDelegate.t != t ||
-      oldDelegate.animate != animate;
+      oldDelegate.animate != animate ||
+      oldDelegate.status != status;
 }
