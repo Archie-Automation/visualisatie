@@ -3564,11 +3564,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         ],
         const SizedBox(height: 12),
         Text(
-          'Dit is het huis zoals het op deze mini-pc is opgeslagen: kamers, '
-          'apparaten, camera-wachtwoorden en inlogcodes. '
-          'Bewaar het bestand op een USB-stick of in een kluis. '
-          'Zet het niet op GitHub. Niet-opgeslagen wijzigingen in dit scherm '
-          'zitten er niet in; gebruik eerst Opslaan.',
+          'Sla eerst alle wijzigingen op voordat u de backup maakt.',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: LuxeColors.inkSoft,
                 height: 1.35,
@@ -3587,8 +3583,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         Text('Backup inladen', style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 12),
         Text(
-          'Kies een eerder gedownload huisbestand. Dat vervangt het huis '
-          'op deze mini-pc, inclusief de inlogcodes uit dat bestand.',
+          'Zet een eerder opgeslagen configuratie terug.',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: LuxeColors.inkSoft,
                 height: 1.35,
@@ -3738,7 +3733,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     final name = picked.name.trim().isEmpty ? 'dit bestand' : picked.name.trim();
     final ok = await _confirmReplace(
       'Backup inladen',
-      'Weet u het zeker? Het huis op deze mini-pc wordt vervangen door $name. '
+      'Weet u het zeker? De huidige configuratie wordt vervangen door $name. '
       'De inlogcodes uit dat bestand gaan gelden. '
       'Niet-opgeslagen wijzigingen in dit scherm gaan verloren.',
       'Inladen',

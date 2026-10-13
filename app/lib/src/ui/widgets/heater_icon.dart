@@ -7,8 +7,8 @@ import 'campfire_icon.dart';
 /// Sentinel — render via [iconWidgetForData] / [universalIconGlyph], niet [Icon].
 const IconData heaterIconData = IconData(0xF001);
 
-/// Hangende heater: plafondbeugel en gloeispiraal.
-/// De spiraal dooft en komt terug als [animate], net als het lampdraadje.
+/// Terrasheater: afgerond vierkant met de ronde verwarmingsspiraal.
+/// Op het statusicoon dooft de spiraal en komt terug, zonder helemaal te verdwijnen.
 class HeaterIcon extends StatefulWidget {
   const HeaterIcon({
     super.key,
@@ -120,11 +120,10 @@ class _HeaterIconPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    canvas.save();
-    canvas.translate(0, h * 0.11);
-    final stroke = (w * 0.045).clamp(1.0, 1.3);
+    final s = size.shortestSide;
+    // Zelfde lijngewicht als de andere statusiconen, iets dikker op grote maten
+    // zodat de bocht open blijft.
+    final stroke = (s * 0.055).clamp(1.05, 1.7);
     final line = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
@@ -132,52 +131,89 @@ class _HeaterIconPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
+    final inset = stroke / 2 + s * 0.04;
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTRB(w * 0.36, h * 0.04, w * 0.64, h * 0.09),
-        Radius.circular(w * 0.02),
+        Rect.fromLTRB(inset, inset, s - inset, s - inset),
+        Radius.circular(s * 0.18),
       ),
       line,
     );
-    canvas.drawLine(
-      Offset(w * 0.5, h * 0.09),
-      Offset(w * 0.5, h * 0.16),
-      line,
-    );
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        Rect.fromLTRB(w * 0.10, h * 0.16, w * 0.90, h * 0.68),
-        Radius.circular(w * 0.1),
-      ),
-      line,
-    );
-    final coilPaint = animate
-        ? (Paint()
-          ..color = color.withValues(
-            alpha: 0.32 + 0.68 * ((math.sin(t * math.pi * 2) + 1) / 2),
-          )
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = stroke
-          ..strokeCap = StrokeCap.round
-          ..strokeJoin = StrokeJoin.round)
-        : line;
-    final coilPath = Path();
-    const turns = 6;
-    final coilLeft = w * 0.24;
-    final coilRight = w * 0.76;
-    final coilTop = h * 0.30;
-    final coilBot = h * 0.54;
-    for (var i = 0; i <= turns; i++) {
-      final x = coilLeft + (coilRight - coilLeft) * (i / turns);
-      final y = i.isEven ? coilTop : coilBot;
-      if (i == 0) {
-        coilPath.moveTo(x, y);
+
+    // Vloert op ~0.42: de spiraal dooft, maar blijft zichtbaar.
+    final pulse = animate
+        ? 0.42 + 0.58 * ((math.sin(t * math.pi * 2) + 1) / 2)
+        : 1.0;
+    final coilPaint = Paint()
+      ..color = color.withValues(alpha: color.a * pulse)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final pad = s * 0.16;
+    final inner = Rect.fromLTRB(pad, pad, s - pad, s - pad);
+    const columns = 3;
+    const intervals = 4;
+    final gap = stroke * 1.7;
+    final colW = (inner.width - gap * (columns - 1)) / columns;
+    final pitch = inner.height / intervals;
+    for (var c = 0; c < columns; c++) {
+      final left = inner.left + c * (colW + gap);
+      canvas.drawPath(
+        _heatingCoil(
+          left: left,
+          right: left + colW,
+          top: inner.top,
+          bottom: inner.bottom,
+          pitch: pitch,
+        ),
+        coilPaint,
+      );
+    }
+  }
+
+  /// Verticale spiraal met ronde U-bochten, dezelfde vorm als het voorbeeld.
+  Path _heatingCoil({
+    required double left,
+    required double right,
+    required double top,
+    required double bottom,
+    required double pitch,
+  }) {
+    final r = math.min(right - left, pitch) / 2;
+    final extra = math.max(0.0, (right - left) - r * 2);
+    final xL = left + extra / 2 + r;
+    final xR = right - extra / 2 - r;
+    final path = Path();
+    final cap = math.max(0.0, xR - xL) * 0.45;
+    path.moveTo(xL + cap, top);
+
+    final intervals = ((bottom - top) / pitch).round();
+    for (var i = 0; i < intervals; i++) {
+      final y = top + i * pitch;
+      final y2 = y + pitch;
+      final midY = (y + y2) / 2;
+      if (i.isEven) {
+        path.lineTo(xR, y);
+        path.arcTo(
+          Rect.fromCircle(center: Offset(xR, midY), radius: r),
+          -math.pi / 2,
+          math.pi,
+          false,
+        );
       } else {
-        coilPath.lineTo(x, y);
+        path.lineTo(xL, y);
+        path.arcTo(
+          Rect.fromCircle(center: Offset(xL, midY), radius: r),
+          -math.pi / 2,
+          -math.pi,
+          false,
+        );
       }
     }
-    canvas.drawPath(coilPath, coilPaint);
-    canvas.restore();
+    path.lineTo(xR - cap, top + intervals * pitch);
+    return path;
   }
 
   @override

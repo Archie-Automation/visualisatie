@@ -68,7 +68,7 @@ class _CampfireIconState extends State<CampfireIcon>
       children: [
         CustomPaint(painter: _SchouwPainter(color: widget.color)),
         Align(
-          alignment: const Alignment(0, 0.02),
+          alignment: const Alignment(0, 0.68),
           child: Transform.scale(
             scale: scale,
             alignment: Alignment.bottomCenter,
@@ -104,7 +104,7 @@ class _CampfireIconState extends State<CampfireIcon>
   }
 }
 
-/// Mantel, opening en haard als één lijn. Geen tweede balk.
+/// Mantel en poten, zonder vloer. Losse boog over de vlam.
 class _SchouwPainter extends CustomPainter {
   _SchouwPainter({required this.color});
 
@@ -123,18 +123,30 @@ class _SchouwPainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round;
 
     final path = Path()
-      ..moveTo(w * 0.20, h * 0.30)
+      ..moveTo(w * 0.08, h * 0.82)
+      ..lineTo(w * 0.20, h * 0.82)
+      ..lineTo(w * 0.20, h * 0.30)
       ..lineTo(w * 0.08, h * 0.30)
       ..lineTo(w * 0.08, h * 0.14)
       ..lineTo(w * 0.92, h * 0.14)
       ..lineTo(w * 0.92, h * 0.30)
       ..lineTo(w * 0.80, h * 0.30)
       ..lineTo(w * 0.80, h * 0.82)
-      ..lineTo(w * 0.92, h * 0.82)
-      ..lineTo(w * 0.08, h * 0.82)
-      ..lineTo(w * 0.20, h * 0.82)
-      ..close();
+      ..lineTo(w * 0.92, h * 0.82);
     canvas.drawPath(path, line);
+
+    // Halve boog tussen de poten, boven de vlam.
+    canvas.drawArc(
+      Rect.fromCenter(
+        center: Offset(w * 0.50, h * 0.52),
+        width: w * 0.58,
+        height: h * 0.36,
+      ),
+      math.pi,
+      math.pi,
+      false,
+      line,
+    );
   }
 
   @override
