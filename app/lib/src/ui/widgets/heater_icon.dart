@@ -153,11 +153,12 @@ class _HeaterIconPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
+    final padY = stroke * 0.5 + s * 0.09;
     final inner = Rect.fromLTRB(
       frame.left + s * 0.07,
-      frame.top + s * 0.06,
+      frame.top + padY,
       frame.right - s * 0.07,
-      frame.bottom - s * 0.06,
+      frame.bottom - padY,
     );
     const rows = 2;
     const intervals = 4;

@@ -141,7 +141,8 @@ class _SchouwPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = (weight * 0.55).clamp(0.7, 1.05)
       ..strokeCap = StrokeCap.butt;
-    final beamY = h * 0.36;
+    // Zelfde hoogte als het hoekje onder de schouwplaat.
+    final beamY = h * 0.30;
     canvas.drawLine(
       Offset(w * 0.20, beamY),
       Offset(w * 0.80, beamY),
