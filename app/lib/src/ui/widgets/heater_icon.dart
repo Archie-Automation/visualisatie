@@ -22,7 +22,7 @@ class HeaterIcon extends StatefulWidget {
   final Color color;
   final bool animate;
 
-  /// Header en ruimte-rij: spiralen blijven lichter, icoon iets kleiner.
+  /// Header en ruimte-rij: spiralen blijven lichter.
   final bool status;
 
   @override
@@ -88,8 +88,7 @@ class _HeaterIconState extends State<HeaterIcon>
               builder: (_, __) => paint(_ctrl!.value),
             ),
     );
-    if (!widget.status) return glyph;
-    return Transform.scale(scale: statusIconFit, child: glyph);
+    return glyph;
   }
 }
 
