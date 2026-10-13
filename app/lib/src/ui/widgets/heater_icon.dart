@@ -131,10 +131,11 @@ class _HeaterIconPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final s = size.shortestSide;
     final stroke = materialOutlineStroke(s);
+    final frameStroke = status ? statusOutlineStroke(s) : stroke;
     final line = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
+      ..strokeWidth = frameStroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 

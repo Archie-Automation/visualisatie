@@ -9,6 +9,9 @@ const IconData campfireIconData = IconData(0xF002);
 /// ventilatie): 2 px op een icoon van 24 px, en verder lineair met de maat.
 double materialOutlineStroke(double size) => size * 2 / 24;
 
+/// Status-omlijning van heater en haard: een fractie onder die Material-pen.
+double statusOutlineStroke(double size) => materialOutlineStroke(size) * 0.85;
+
 /// Eén schouwlijn in het gewicht van de andere statusiconen.
 /// De vlam is het outline-vlammetje en flikkert alleen op de statusbadge.
 class CampfireIcon extends StatefulWidget {
@@ -130,7 +133,8 @@ class _SchouwPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final weight = materialOutlineStroke(w);
+    final weight =
+        status ? statusOutlineStroke(w) : materialOutlineStroke(w);
     final line = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
