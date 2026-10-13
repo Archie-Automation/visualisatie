@@ -185,6 +185,7 @@ export function collectAllGAs(cfg: HouseConfig): GA[] {
         add(b.actionLong?.ga);
         add(b.statusGa);
       }
+      add(d.universal.level?.ga);
     }
     if (d.type === "wtw") {
       if (d.wtw.model === "zehnder_comfoConnect" && d.wtw.zehnder) {
@@ -368,6 +369,7 @@ export function buildGAIndex(cfg: HouseConfig): Map<GA, GARole[]> {
           pushGA(index, b.statusGa, b.action.role, d.id, d.type);
         }
       }
+      pushGA(index, d.universal.level?.ga, "percent", d.id, d.type);
     }
     if (d.type === "wtw") {
       if (d.wtw.model === "zehnder_comfoConnect" && d.wtw.zehnder) {

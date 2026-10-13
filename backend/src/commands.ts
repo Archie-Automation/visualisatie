@@ -213,6 +213,12 @@ export const CommandSchema = z.discriminatedUnion("kind", [
     /** Long press: `actionLong`, or DPT18 store when `sceneStoreOnLong`. */
     long: z.boolean().optional()
   }),
+  z.object({
+    kind: z.literal("universal.level"),
+    deviceId: z.string(),
+    /** Standnummer 1..N, zelfde contract als fireplace.flame. */
+    value: z.number()
+  }),
 
   /* ----------------------------- WTW ------------------------------ */
   z.object({
@@ -752,6 +758,23 @@ export async function dispatch(
         }
       }
       await writeUniversalAction(withShared(action), bus);
+      const level = device.universal.level;
+      if (cmd.on === true && level?.ga && level.onPercent != null) {
+        const pct = Math.max(0, Math.min(100, Math.round(Number(level.onPercent))));
+        await new Promise<void>((r) => setTimeout(r, 200));
+        await bus.write(level.ga, "percent", pct);
+      }
+      return;
+    }
+    case "universal.level": {
+      if (device.type !== "universal") throw new Error("not a universal panel");
+      const level = device.universal.level;
+      if (!level?.ga) throw new Error("no heater level");
+      const ranges = level.stepRanges;
+      if (!ranges || ranges.length === 0) throw new Error("no heater stands");
+      const step = resolveFlameStep1Based(ranges, cmd.value);
+      const pct = flameWritePercentForStep(ranges, step);
+      await bus.write(level.ga, "percent", pct);
       return;
     }
 

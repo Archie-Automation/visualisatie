@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
 
 import '../ac_mode_config.dart';
+import '../fireplace_step_ranges.dart';
 import '../room_control_category.dart';
 import '../theme.dart';
 import '../ui/widgets/back_pill.dart';
@@ -677,6 +678,8 @@ class _UniversalPanelInstallerSectionState
             _notify();
           },
         ),
+        if (currentIcon == 'heater')
+          _HeaterLevelSection(levelOwner: uni, onChanged: _notify),
         _InstallerDropdown(
           label: 'Weergave',
           value: layout,
@@ -732,6 +735,281 @@ class _UniversalPanelInstallerSectionState
             onTap: () => _addButton(buttons),
           ),
       ],
+    );
+  }
+}
+
+List<Map<String, dynamic>> _heaterLevelRanges(String scale, int count) {
+  if (scale == 'volt_1_10') {
+    if (count == 4) {
+      return [
+        {'min': 10, 'max': 32, 'write': 20, 'label': 'Laag'},
+        {'min': 33, 'max': 55, 'write': 44, 'label': 'Midden'},
+        {'min': 56, 'max': 77, 'write': 66, 'label': 'Hoog'},
+        {'min': 78, 'max': 100, 'write': 90, 'label': 'Max'},
+      ];
+    }
+    return [
+      {'min': 10, 'max': 40, 'write': 25, 'label': 'Laag'},
+      {'min': 41, 'max': 70, 'write': 55, 'label': 'Midden'},
+      {'min': 71, 'max': 100, 'write': 85, 'label': 'Hoog'},
+    ];
+  }
+  if (count == 4) {
+    return [
+      {'min': 1, 'max': 25, 'write': 20, 'label': 'Laag'},
+      {'min': 26, 'max': 50, 'write': 40, 'label': 'Midden'},
+      {'min': 51, 'max': 75, 'write': 60, 'label': 'Hoog'},
+      {'min': 76, 'max': 100, 'write': 90, 'label': 'Max'},
+    ];
+  }
+  return [
+    {'min': 1, 'max': 33, 'write': 20, 'label': 'Laag'},
+    {'min': 34, 'max': 66, 'write': 50, 'label': 'Midden'},
+    {'min': 67, 'max': 100, 'write': 80, 'label': 'Hoog'},
+  ];
+}
+
+Map<String, dynamic> _newHeaterLevel(String scale) => {
+      'scale': scale,
+      'ga': '',
+      'onPercent': scale == 'volt_1_10' ? 25 : 20,
+      'steps': 3,
+      'stepRanges': _heaterLevelRanges(scale, 3),
+    };
+
+/// Terrasheater: optionele 0–10 V / 1–10 V standen, zelfde knoppen als de haard.
+class _HeaterLevelSection extends StatelessWidget {
+  const _HeaterLevelSection({
+    required this.levelOwner,
+    required this.onChanged,
+  });
+
+  final Map<String, dynamic> levelOwner;
+  final VoidCallback onChanged;
+
+  Map<String, dynamic>? get _level {
+    final raw = levelOwner['level'];
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) {
+      final copy = Map<String, dynamic>.from(
+        raw.map((k, v) => MapEntry(k.toString(), v)),
+      );
+      levelOwner['level'] = copy;
+      return copy;
+    }
+    return null;
+  }
+
+  List<Map<String, dynamic>> _rows(Map<String, dynamic> level) {
+    final raw = level['stepRanges'];
+    if (raw is! List || raw.isEmpty) {
+      final scale = level['scale'] as String? ?? 'volt_0_10';
+      level['stepRanges'] = _heaterLevelRanges(scale, 3);
+      level['steps'] = 3;
+    }
+    final list = level['stepRanges'] as List;
+    for (var i = 0; i < list.length; i++) {
+      final e = list[i];
+      if (e is Map && e is! Map<String, dynamic>) {
+        list[i] = Map<String, dynamic>.from(
+          e.map((k, v) => MapEntry(k.toString(), v)),
+        );
+      }
+    }
+    return list.cast<Map<String, dynamic>>();
+  }
+
+  void _setCount(Map<String, dynamic> level, int n) {
+    final scale = level['scale'] as String? ?? 'volt_0_10';
+    level['steps'] = n;
+    level['stepRanges'] = _heaterLevelRanges(scale, n);
+    onChanged();
+  }
+
+  String? _heaterLevelError(
+    List<Map<String, dynamic>> rows,
+    String scale,
+    Map<String, dynamic>? level,
+  ) {
+    final base = validateFireplaceStepRanges(rows);
+    if (base != null) return base;
+    if (scale != 'volt_1_10') return null;
+    for (var i = 0; i < rows.length; i++) {
+      final a = (rows[i]['min'] as num?)?.round();
+      if (a != null && a < 10) {
+        return '1–10 V begint bij 10 % (1 V). Stand ${i + 1} heeft min $a.';
+      }
+    }
+    final onPct = (level?['onPercent'] as num?)?.round();
+    if (onPct != null && onPct < 10) {
+      return '1–10 V: percentage bij aanzetten moet minstens 10 zijn (1 V).';
+    }
+    return null;
+  }
+
+  void _setNum(Map<String, dynamic> row, String key, String raw,
+      {bool optional = false}) {
+    final t = raw.trim();
+    if (t.isEmpty) {
+      if (optional) row.remove(key);
+      onChanged();
+      return;
+    }
+    final n = int.tryParse(t);
+    if (n == null) return;
+    row[key] = n.clamp(0, 100).round();
+    onChanged();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final level = _level;
+    final enabled = level != null;
+    final theme = Theme.of(context);
+    final rows = enabled ? _rows(level) : const <Map<String, dynamic>>[];
+    final scale = (level?['scale'] as String?) == 'volt_1_10'
+        ? 'volt_1_10'
+        : 'volt_0_10';
+    final err = enabled ? _heaterLevelError(rows, scale, level) : null;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LuxeSwitchRow(
+            title: 'Standen via 0–10 V of 1–10 V',
+            subtitle:
+                'Zelfde standknoppen als bij de openhaard. Uit = alleen aan/uit.',
+            value: enabled,
+            onChanged: (on) {
+              if (on) {
+                levelOwner['level'] = _newHeaterLevel('volt_0_10');
+              } else {
+                levelOwner.remove('level');
+              }
+              onChanged();
+            },
+          ),
+          if (enabled && level != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'De bus blijft 0–100 % (DPT5). Bij 0–10 V is 0 % = 0 V. '
+              'Bij 1–10 V is 10 % = 1 V en 100 % = 10 V. Per stand: min–max % '
+              'voor de terugmelding en het schrijf-% van de knop.',
+              style: theme.textTheme.bodySmall?.copyWith(fontSize: 11),
+            ),
+            const SizedBox(height: 8),
+            _InstallerDropdown(
+              label: 'Bereik',
+              value: scale,
+              options: const ['volt_0_10', 'volt_1_10'],
+              optionLabels: const {
+                'volt_0_10': '0–10 V',
+                'volt_1_10': '1–10 V',
+              },
+              onChanged: (v) {
+                if (v == scale) return;
+                level['scale'] = v;
+                final n = rows.length == 4 ? 4 : 3;
+                level['steps'] = n;
+                level['stepRanges'] = _heaterLevelRanges(v, n);
+                final onPct = (level['onPercent'] as num?)?.round() ?? 0;
+                if (v == 'volt_1_10' && onPct < 10) level['onPercent'] = 25;
+                onChanged();
+              },
+            ),
+            _InstallerStrField(
+              label: 'Groepsadres (byte 0–100 %)',
+              value: level['ga'] as String? ?? '',
+              hint: 'bijv. 6/2/1',
+              gaDptHint: 'DPT 5.001',
+              onChanged: (v) {
+                level['ga'] = v.trim();
+                onChanged();
+              },
+            ),
+            _InstallerStrField(
+              label: 'Percentage bij aanzetten (0–100)',
+              value: '${level['onPercent'] ?? ''}',
+              number: true,
+              integer: true,
+              min: 0,
+              max: 100,
+              hint: scale == 'volt_1_10' ? 'minstens 10' : 'bijv. 20',
+              onChanged: (v) => _setNum(level, 'onPercent', v),
+            ),
+            Row(
+              children: [
+                Text('Aantal standen', style: theme.textTheme.bodyMedium),
+                const SizedBox(width: 12),
+                DropdownButton<int>(
+                  value: rows.length == 4 ? 4 : 3,
+                  items: const [
+                    DropdownMenuItem(value: 3, child: Text('3 knoppen')),
+                    DropdownMenuItem(value: 4, child: Text('4 knoppen')),
+                  ],
+                  onChanged: (n) {
+                    if (n == null) return;
+                    _setCount(level, n);
+                  },
+                ),
+              ],
+            ),
+            for (var i = 0; i < rows.length; i++) ...[
+              Text('Stap ${i + 1}', style: theme.textTheme.titleSmall),
+              const SizedBox(height: 6),
+              _InstallerStrField(
+                key: ValueKey('ht-lbl-$i-${rows.length}-$scale'),
+                label: 'Naam van de stand',
+                value: rows[i]['label'] as String? ?? '',
+                onChanged: (v) {
+                  final t = v.trim();
+                  if (t.isEmpty) {
+                    rows[i].remove('label');
+                  } else {
+                    rows[i]['label'] = t;
+                  }
+                  onChanged();
+                },
+              ),
+              _InstallerStrField(
+                key: ValueKey('ht-min-$i-${rows.length}-$scale'),
+                label: 'Minimum % (bus)',
+                value: '${rows[i]['min'] ?? ''}',
+                number: true,
+                integer: true,
+                min: 0,
+                max: 100,
+                onChanged: (v) => _setNum(rows[i], 'min', v),
+              ),
+              _InstallerStrField(
+                key: ValueKey('ht-max-$i-${rows.length}-$scale'),
+                label: 'Maximum % (bus)',
+                value: '${rows[i]['max'] ?? ''}',
+                number: true,
+                integer: true,
+                min: 0,
+                max: 100,
+                onChanged: (v) => _setNum(rows[i], 'max', v),
+              ),
+              _InstallerStrField(
+                key: ValueKey('ht-wr-$i-${rows.length}-$scale'),
+                label: 'Schrijf-% (optioneel)',
+                value: rows[i]['write'] == null ? '' : '${rows[i]['write']}',
+                number: true,
+                integer: true,
+                min: 0,
+                max: 100,
+                onChanged: (v) => _setNum(rows[i], 'write', v, optional: true),
+              ),
+            ],
+            if (err != null)
+              Text(err, style: TextStyle(color: theme.colorScheme.error, fontSize: 12)),
+          ],
+        ],
+      ),
     );
   }
 }

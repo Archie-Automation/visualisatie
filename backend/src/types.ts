@@ -820,11 +820,24 @@ export interface UniversalButton {
   confirmLong?: ConfirmPrompt;
 }
 
+/** Optional analog stand for a terrace heater. Bus value stays DPT5 0–100 %. */
+export interface HeaterLevelConfig {
+  /** volt_0_10: 0 % = 0 V. volt_1_10: 10 % = 1 V, 100 % = 10 V. */
+  scale: "volt_0_10" | "volt_1_10";
+  ga: GA;
+  /** Written to `ga` after the on-bit, same role as fireplace `onPercent`. */
+  onPercent?: number;
+  steps?: number;
+  stepRanges?: { min: number; max: number; write?: number; label?: string }[];
+}
+
 export interface UniversalConfig {
   columns?: number; // default 2
   /** Icon name shown in the group chip and tile header (e.g. "bolt", "home"). */
   icon?: string;
   buttons: UniversalButton[];
+  /** Terrace heater: optional 0–10 V / 1–10 V stand buttons. Absent = off. */
+  level?: HeaterLevelConfig;
 }
 
 export interface UniversalDevice extends DeviceBase {

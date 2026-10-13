@@ -2668,8 +2668,10 @@ class _FireplaceFlameBar extends StatelessWidget {
     required this.activeStep,
     required this.onStep,
     this.enabled = true,
+    this.title = 'VLAMSTAND',
   });
 
+  final String title;
   final List<Map<String, dynamic>>? stepRanges;
   final int? legacySteps;
   final int activeStep;
@@ -2720,7 +2722,7 @@ class _FireplaceFlameBar extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'VLAMSTAND',
+          title,
           style: DeviceControlBar.sectionTitleStyle(context),
         ),
         SizedBox(height: DeviceControlBar.sectionTitleGap),
@@ -3570,6 +3572,56 @@ class UniversalTile extends ConsumerWidget {
         );
     final bus = ref.watch(busProvider);
     final layout = universalPanelLayout(cfg);
+    final levelRaw = cfg['level'];
+    final level = levelRaw is Map
+        ? Map<String, dynamic>.from(
+            levelRaw.map((k, v) => MapEntry(k.toString(), v)),
+          )
+        : null;
+    final levelRanges = parseFireplaceStepRanges(level);
+    final levelGa = (level?['ga'] as String?)?.trim() ?? '';
+
+    bool standsEnabled(List<Map<String, dynamic>> buttons) {
+      final watched = [
+        for (final b in buttons)
+          if ((b['statusGa'] as String?)?.trim().isNotEmpty == true) b,
+      ];
+      if (watched.isEmpty) return true;
+      return watched.any((b) => _isButtonOn(b, bus));
+    }
+
+    Widget standBar(bool enabled) {
+      final ranges = levelRanges;
+      if (ranges == null || ranges.length < 3 || levelGa.isEmpty) {
+        return const SizedBox.shrink();
+      }
+      final raw = bus.values[levelGa];
+      final pct = raw is num ? raw.round().clamp(0, 100) : 0;
+      final step = busPercentToFlameStep(ranges, pct);
+      return Padding(
+        padding: EdgeInsets.only(top: DeviceControlBar.sectionSpacing(context)),
+        child: Opacity(
+          opacity: enabled ? 1 : 0.45,
+          child: _FireplaceFlameBar(
+            title: 'STAND',
+            stepRanges: ranges,
+            legacySteps: null,
+            activeStep: step.clamp(1, ranges.length),
+            enabled: enabled,
+            onStep: (stepNo) async {
+              final write = writePercentForFlameStep(ranges, stepNo);
+              final notifier = ref.read(busProvider.notifier);
+              notifier.patchDimPercent(levelGa, write);
+              await notifier.send({
+                'kind': 'universal.level',
+                'deviceId': device.id,
+                'value': stepNo,
+              });
+            },
+          ),
+        ),
+      );
+    }
 
     Future<void> press(Map<String, dynamic> b, {bool? on, bool long = false}) async {
       final id = b['id'] as String;
@@ -3646,31 +3698,37 @@ class UniversalTile extends ConsumerWidget {
             );
         return DeviceTileShell(
           glow: on,
-          child: DeviceTileLayout.headerRow(
-            context: context,
-            leading: DeviceTileIconBadge(
-              icon: leadingGlyph == null ? leadingIcon : null,
-              glyph: leadingGlyph,
-              active: on,
-              onTap: () => press(b, on: !on),
-            ),
-            content: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(device.name,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700)),
-                const SizedBox(height: DeviceTileLayout.titleStatusGap),
-                Text(on ? 'AAN' : 'UIT',
-                    style: Theme.of(context).textTheme.bodyMedium),
-              ],
-            ),
-            trailing: DeviceTileLayout.trailingSwitch(
-              context: context,
-              value: on,
-              onChanged: (want) => press(b, on: want),
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DeviceTileLayout.headerRow(
+                context: context,
+                leading: DeviceTileIconBadge(
+                  icon: leadingGlyph == null ? leadingIcon : null,
+                  glyph: leadingGlyph,
+                  active: on,
+                  onTap: () => press(b, on: !on),
+                ),
+                content: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(device.name,
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700)),
+                    const SizedBox(height: DeviceTileLayout.titleStatusGap),
+                    Text(on ? 'AAN' : 'UIT',
+                        style: Theme.of(context).textTheme.bodyMedium),
+                  ],
+                ),
+                trailing: DeviceTileLayout.trailingSwitch(
+                  context: context,
+                  value: on,
+                  onChanged: (want) => press(b, on: want),
+                ),
+              ),
+              standBar(on),
+            ],
           ),
         );
       }
@@ -3723,6 +3781,7 @@ class UniversalTile extends ConsumerWidget {
                     ],
                   ),
                 ),
+            standBar(standsEnabled(shown)),
           ],
         ),
       );
@@ -3758,6 +3817,7 @@ class UniversalTile extends ConsumerWidget {
                     ?.copyWith(color: LuxeColors.inkSoft),
               ),
             ),
+          standBar(standsEnabled(shown)),
         ],
       ),
     );

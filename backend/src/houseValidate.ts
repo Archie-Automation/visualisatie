@@ -7,6 +7,7 @@ import type {
   HouseConfig,
   LutronButtonToKnxMapping,
   LutronHomeworksDevice,
+  UniversalDevice,
   User
 } from "./types";
 import { effectiveIntercomReleaseMode } from "./intercomReleaseMode";
@@ -125,10 +126,14 @@ export function assertUsersHaveHashes(cfg: HouseConfig): string | null {
   return null;
 }
 
-/** Extra regels na JSON-schema (o.a. openhaard stap-banden zonder overlap). */
+/** Extra regels na JSON-schema (openhaard- en heater-standen zonder overlap). */
 export function validateFireplaceSemantics(cfg: HouseConfig): string[] {
   const issues: string[] = [];
   walkDevices(cfg, (d) => {
+    if (d.type === "universal") {
+      validateHeaterLevel(d, issues);
+      return;
+    }
     if (d.type !== "fireplace") return;
     const flame = d.fireplace.flame;
     const sr = flame?.stepRanges;
@@ -184,6 +189,67 @@ export function validateFireplaceSemantics(cfg: HouseConfig): string[] {
     }
   });
   return issues;
+}
+
+function validateHeaterLevel(d: UniversalDevice, issues: string[]): void {
+  const level = d.universal.level;
+  if (!level) return;
+  const sr = level.stepRanges;
+  if (!sr || sr.length < 3 || sr.length > 4) {
+    issues.push(
+      `Apparaat "${d.name}" (${d.id}): heater-standen moeten 3 of 4 zijn.`
+    );
+    return;
+  }
+  if (level.steps != null && level.steps !== sr.length) {
+    issues.push(
+      `Apparaat "${d.name}" (${d.id}): level.steps (${level.steps}) moet gelijk zijn aan het aantal standen (${sr.length}).`
+    );
+  }
+  for (let i = 0; i < sr.length; i++) {
+    const r = sr[i];
+    const a = Math.round(Number(r.min));
+    const b = Math.round(Number(r.max));
+    if (!Number.isFinite(a) || !Number.isFinite(b) || a < 0 || a > 100 || b < 0 || b > 100 || a > b) {
+      issues.push(
+        `Apparaat "${d.name}" (${d.id}): heater-stand ${i + 1}: min/max moeten 0–100 zijn en min ≤ max.`
+      );
+      return;
+    }
+    if (r.write !== undefined && r.write !== null) {
+      const w = Math.round(Number(r.write));
+      if (!Number.isFinite(w) || w < 0 || w > 100) {
+        issues.push(
+          `Apparaat "${d.name}" (${d.id}): heater-stand ${i + 1}: write moet 0–100 zijn.`
+        );
+        return;
+      }
+    }
+    if (level.scale === "volt_1_10" && a < 10) {
+      issues.push(
+        `Apparaat "${d.name}" (${d.id}): 1–10 V begint bij 10 % (1 V). Stand ${i + 1} heeft min ${a}.`
+      );
+      return;
+    }
+  }
+  if (level.scale === "volt_1_10" && level.onPercent != null) {
+    const onPct = Math.round(Number(level.onPercent));
+    if (!Number.isFinite(onPct) || onPct < 10 || onPct > 100) {
+      issues.push(
+        `Apparaat "${d.name}" (${d.id}): 1–10 V: percentage bij aanzetten moet 10–100 zijn.`
+      );
+    }
+  }
+  for (let i = 0; i < sr.length - 1; i++) {
+    const maxI = Math.round(Number(sr[i].max));
+    const minN = Math.round(Number(sr[i + 1].min));
+    if (maxI >= minN) {
+      issues.push(
+        `Apparaat "${d.name}" (${d.id}): heater-stand ${i + 1} en ${i + 2} overlappen.`
+      );
+      return;
+    }
+  }
 }
 
 export function validateRgbwWwSemantics(cfg: HouseConfig): string[] {

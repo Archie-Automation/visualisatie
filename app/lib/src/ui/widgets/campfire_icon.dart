@@ -5,6 +5,10 @@ import 'package:flutter/material.dart';
 /// Sentinel — render via [iconWidgetForData], niet [Icon].
 const IconData campfireIconData = IconData(0xF002);
 
+/// Lijngewicht van de Material-outlined iconen (zonwering, camera, intercom,
+/// ventilatie): 2 px op een icoon van 24 px, en verder lineair met de maat.
+double materialOutlineStroke(double size) => size * 2 / 24;
+
 /// Eén schouwlijn in het gewicht van de andere statusiconen.
 /// De vlam is het outline-vlammetje en flikkert alleen op de statusbadge.
 class CampfireIcon extends StatefulWidget {
@@ -114,7 +118,7 @@ class _SchouwPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final weight = (w * 0.065).clamp(1.2, 1.85);
+    final weight = materialOutlineStroke(w);
     final line = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
@@ -135,11 +139,11 @@ class _SchouwPainter extends CustomPainter {
       ..lineTo(w * 0.92, h * 0.82);
     canvas.drawPath(path, line);
 
-    // Dun recht balkje op de twee staanders, boven de vlam.
+    // Zelfde pen als de schouw, anders oogt het balkje als een andere serie.
     final beam = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = (weight * 0.55).clamp(0.7, 1.05)
+      ..strokeWidth = weight
       ..strokeCap = StrokeCap.butt;
     // Zelfde hoogte als het hoekje onder de schouwplaat.
     final beamY = h * 0.30;

@@ -884,6 +884,32 @@
               "type": "array",
               "items": { "$ref": "#/definitions/universalButton" },
               "maxItems": 8
+            },
+            "level": {
+              "type": "object",
+              "description": "Terrasheater: optionele standen op DPT5 (0–100 %). Afwezig = alleen aan/uit. volt_0_10: 0 % = 0 V. volt_1_10: 10 % = 1 V, 100 % = 10 V.",
+              "required": ["scale", "ga", "stepRanges"],
+              "properties": {
+                "scale": { "type": "string", "enum": ["volt_0_10", "volt_1_10"] },
+                "ga": { "$ref": "#/definitions/gaPattern" },
+                "onPercent": { "type": "integer", "minimum": 0, "maximum": 100 },
+                "steps": { "type": "integer", "minimum": 3, "maximum": 4 },
+                "stepRanges": {
+                  "type": "array",
+                  "minItems": 3,
+                  "maxItems": 4,
+                  "items": {
+                    "type": "object",
+                    "required": ["min", "max"],
+                    "properties": {
+                      "min": { "type": "integer", "minimum": 0, "maximum": 100 },
+                      "max": { "type": "integer", "minimum": 0, "maximum": 100 },
+                      "write": { "type": "integer", "minimum": 0, "maximum": 100 },
+                      "label": { "type": "string" }
+                    }
+                  }
+                }
+              }
             }
           }
         },

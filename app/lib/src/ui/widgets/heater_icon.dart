@@ -121,9 +121,7 @@ class _HeaterIconPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final s = size.shortestSide;
-    // Zelfde lijngewicht als de andere statusiconen, iets dikker op grote maten
-    // zodat de bocht open blijft.
-    final stroke = (s * 0.055).clamp(1.05, 1.7);
+    final stroke = materialOutlineStroke(s);
     final line = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
@@ -131,14 +129,14 @@ class _HeaterIconPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
-    // Liggende rechthoek, zelfde lijngewicht als de schouw.
+    // Iets hoger dan voorheen, anders vult de dikkere spiraal zichzelf.
     final frame = Rect.fromCenter(
       center: Offset(s / 2, s / 2),
       width: s * 0.88,
-      height: s * 0.56,
+      height: s * 0.66,
     );
     canvas.drawRRect(
-      RRect.fromRectAndRadius(frame, Radius.circular(s * 0.06)),
+      RRect.fromRectAndRadius(frame, Radius.circular(s * 0.08)),
       line,
     );
 
@@ -153,16 +151,16 @@ class _HeaterIconPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
-    final padY = stroke * 0.5 + s * 0.09;
+    final padY = stroke * 0.55 + s * 0.045;
     final inner = Rect.fromLTRB(
-      frame.left + s * 0.07,
+      frame.left + s * 0.055,
       frame.top + padY,
-      frame.right - s * 0.07,
+      frame.right - s * 0.055,
       frame.bottom - padY,
     );
     const rows = 2;
     const intervals = 4;
-    final gap = stroke * 1.55;
+    final gap = stroke * 1.15;
     final rowH = (inner.height - gap) / rows;
     final pitch = inner.width / intervals;
     for (var row = 0; row < rows; row++) {
