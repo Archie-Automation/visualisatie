@@ -139,10 +139,11 @@ class _HeaterIconPainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round;
 
     // Iets hoger dan voorheen, anders vult de dikkere spiraal zichzelf.
+    // Statusrij: dezelfde boven- en onderkant als het lampje. Tegel blijft lager.
     final frame = Rect.fromCenter(
       center: Offset(s / 2, s / 2),
       width: s * 0.88,
-      height: s * 0.66,
+      height: s * (status ? 0.748 : 0.66),
     );
     canvas.drawRRect(
       RRect.fromRectAndRadius(frame, Radius.circular(s * 0.08)),

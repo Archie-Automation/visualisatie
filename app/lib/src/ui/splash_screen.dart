@@ -14,6 +14,26 @@ import 'widgets/luxe_backdrop.dart';
 const Duration _kPingInterval = Duration(seconds: 2);
 const Duration _kPingTimeout = Duration(seconds: 3);
 
+/// Splash-adres dat [uri] na het laden weer opent.
+String splashLocationPreserving(Uri uri) {
+  final path = uri.path.isEmpty ? '/' : uri.path;
+  final current = uri.hasQuery ? '$path?${uri.query}' : path;
+  return '/splash?next=${Uri.encodeComponent(current)}';
+}
+
+/// Alleen een pad in deze app. Geen schema, host of splash-lus.
+String? resumeLocationAfterSplash(String? next) {
+  if (next == null || next.isEmpty) return null;
+  final uri = Uri.tryParse(next);
+  if (uri == null || uri.hasScheme || uri.host.isNotEmpty) return null;
+  var path = uri.path;
+  if (path.isEmpty) path = '/';
+  if (!path.startsWith('/') || path.startsWith('//')) return null;
+  if (path == '/splash' || path == '/login' || path == '/pair') return null;
+  if (uri.query.isEmpty) return path;
+  return '$path?${uri.query}';
+}
+
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
@@ -116,7 +136,10 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
     _navigated = true;
     _rotCtrl.stop();
-    context.go(auth.isAuthed ? '/' : '/login');
+    final next = resumeLocationAfterSplash(
+      GoRouterState.of(context).uri.queryParameters['next'],
+    );
+    context.go(auth.isAuthed ? (next ?? '/') : '/login');
   }
 
   @override

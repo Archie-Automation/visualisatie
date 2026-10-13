@@ -998,13 +998,13 @@ class _RoomDashboardRow extends ConsumerWidget {
                           room.name.toUpperCase(),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: LuxeColors.ink,
-                            fontSize: context.isPhone ? 15 : 16,
-                            height: 1.2,
-                            letterSpacing: context.isPhone ? 1.0 : 1.15,
-                            fontWeight: FontWeight.w600,
-                          ),
+                          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                color: LuxeColors.ink,
+                                fontSize: context.isPhone ? 15 : 16,
+                                height: 1.2,
+                                letterSpacing: context.isPhone ? 1.0 : 1.15,
+                                fontWeight: FontWeight.w600,
+                              ),
                         ),
                       ),
                       SizedBox(width: 2),
@@ -2146,7 +2146,7 @@ class _HouseActivityHeaderButtons extends ConsumerWidget {
         _GlassStatusButton(
           tooltip: 'Verlichting aan',
           onTap: () => _openSystem(context, 'Verlichting'),
-          child: LightStatusIcon(size: _glyph, color: LuxeColors.ink),
+          child: LightStatusIcon(size: _glyph, color: LuxeColors.brass),
         ),
       if (heaterOn)
         _GlassStatusButton(
@@ -2155,25 +2155,25 @@ class _HouseActivityHeaderButtons extends ConsumerWidget {
             context,
             '/system/$kHeatersActivitySlug?active=1',
           ),
-          child: _HeaterBadge(size: _glyph, color: LuxeColors.ink),
+          child: _HeaterBadge(size: _glyph, color: LuxeColors.brass),
         ),
       if (fireplaceOn)
         _GlassStatusButton(
           tooltip: 'Openhaard aan',
           onTap: () => _openSystem(context, 'Openhaard'),
-          child: _FireBadge(size: _glyph, color: LuxeColors.ink),
+          child: _FireBadge(size: _glyph, color: LuxeColors.brass),
         ),
       if (acOn)
         _GlassStatusButton(
           tooltip: 'Airco aan',
           onTap: () => _openSystem(context, 'Klimaat'),
-          child: SplitUnitIcon(size: _glyph, color: LuxeColors.ink),
+          child: SplitUnitIcon(size: _glyph, color: LuxeColors.brass),
         ),
       if (mediaPlaying)
         _GlassStatusButton(
           tooltip: 'Muziek speelt',
           onTap: () => _openSystem(context, 'Audio'),
-          child: EqualizerIcon(size: _glyph, color: LuxeColors.ink),
+          child: EqualizerIcon(size: _glyph, color: LuxeColors.brass),
         ),
     ];
 
@@ -2304,14 +2304,12 @@ class _RoomActivityBadges extends ConsumerWidget {
 
     if (!any) return const SizedBox.shrink();
 
-    // Kale glyphs — geen glass/wells.
-    // Phone: inkSoft (antraciet, zelfde gewicht als kamernamen).
-    // Tablet: ink, gelijk aan de header.
+    // Kale glyphs — geen glass/wells. Kleur is het messing van systeem- en kamericonen.
     final phone = context.isPhone;
     final glyph = glyphFor(context);
     final slot = phone ? 44.0 : 48.0;
     final badge = phone ? 28.0 : 34.0;
-    final color = phone ? LuxeColors.inkSoft : LuxeColors.ink;
+    final color = LuxeColors.brass;
 
     Widget tap(Widget child, String categorySlug) => GestureDetector(
           behavior: HitTestBehavior.opaque,
@@ -2392,6 +2390,7 @@ class _FireBadge extends StatelessWidget {
     return CampfireIcon(
       size: size,
       color: color ?? LuxeColors.brass,
+      status: true,
     );
   }
 }

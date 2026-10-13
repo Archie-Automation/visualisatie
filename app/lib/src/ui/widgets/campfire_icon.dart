@@ -17,6 +17,7 @@ class CampfireIcon extends StatefulWidget {
     required this.size,
     required this.color,
     this.animate = true,
+    this.status = false,
   });
 
   final double size;
@@ -24,6 +25,9 @@ class CampfireIcon extends StatefulWidget {
 
   /// Statusbadge flikkert. Op een bedieningsknop blijft de vlam stil.
   final bool animate;
+
+  /// Header en ruimte-rij: boven- en onderkant op de lamp-keyline.
+  final bool status;
 
   @override
   State<CampfireIcon> createState() => _CampfireIconState();
@@ -70,7 +74,12 @@ class _CampfireIconState extends State<CampfireIcon>
     return Stack(
       fit: StackFit.expand,
       children: [
-        CustomPaint(painter: _SchouwPainter(color: widget.color)),
+        CustomPaint(
+          painter: _SchouwPainter(
+            color: widget.color,
+            status: widget.status,
+          ),
+        ),
         Align(
           alignment: const Alignment(0, 0.68),
           child: Transform.scale(
@@ -110,9 +119,12 @@ class _CampfireIconState extends State<CampfireIcon>
 
 /// Mantel en poten, zonder vloer. Dun balkje op de staanders, boven de vlam.
 class _SchouwPainter extends CustomPainter {
-  _SchouwPainter({required this.color});
+  _SchouwPainter({required this.color, required this.status});
 
   final Color color;
+
+  /// Statusrij deelt de verticale keyline van het lampje (y 0.084–0.916).
+  final bool status;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -126,17 +138,22 @@ class _SchouwPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
+    // Tegel houdt de compacte schouw. Statusrij: zelfde vorm, opgerekt tot
+    // de lijn van het lampje (boven 0.084, onder 0.916, halve pen eraf).
+    final top = status ? 0.126 : 0.14;
+    final lip = status ? 0.302 : 0.30;
+    final foot = status ? 0.874 : 0.82;
     final path = Path()
-      ..moveTo(w * 0.08, h * 0.82)
-      ..lineTo(w * 0.20, h * 0.82)
-      ..lineTo(w * 0.20, h * 0.30)
-      ..lineTo(w * 0.08, h * 0.30)
-      ..lineTo(w * 0.08, h * 0.14)
-      ..lineTo(w * 0.92, h * 0.14)
-      ..lineTo(w * 0.92, h * 0.30)
-      ..lineTo(w * 0.80, h * 0.30)
-      ..lineTo(w * 0.80, h * 0.82)
-      ..lineTo(w * 0.92, h * 0.82);
+      ..moveTo(w * 0.08, h * foot)
+      ..lineTo(w * 0.20, h * foot)
+      ..lineTo(w * 0.20, h * lip)
+      ..lineTo(w * 0.08, h * lip)
+      ..lineTo(w * 0.08, h * top)
+      ..lineTo(w * 0.92, h * top)
+      ..lineTo(w * 0.92, h * lip)
+      ..lineTo(w * 0.80, h * lip)
+      ..lineTo(w * 0.80, h * foot)
+      ..lineTo(w * 0.92, h * foot);
     canvas.drawPath(path, line);
 
     // Zelfde pen als de schouw, anders oogt het balkje als een andere serie.
@@ -146,7 +163,7 @@ class _SchouwPainter extends CustomPainter {
       ..strokeWidth = weight
       ..strokeCap = StrokeCap.butt;
     // Zelfde hoogte als het hoekje onder de schouwplaat.
-    final beamY = h * 0.30;
+    final beamY = h * lip;
     canvas.drawLine(
       Offset(w * 0.20, beamY),
       Offset(w * 0.80, beamY),
@@ -156,5 +173,5 @@ class _SchouwPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _SchouwPainter oldDelegate) =>
-      oldDelegate.color != color;
+      oldDelegate.color != color || oldDelegate.status != status;
 }

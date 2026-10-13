@@ -101,7 +101,11 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
         // Splash beheert zijn eigen navigatie; router mag nooit van splash wegsturen.
         if (onSplash || onPair) return null;
         // Zolang restore niet klaar is, terug naar splash.
-        if (!auth.restoreComplete && !onLogin) return '/splash';
+        // Bewaar het adres: anders valt ?floor= weg en zijn de ruimtenamen
+        // na F5 weg tot je de verdieping opnieuw opent.
+        if (!auth.restoreComplete && !onLogin) {
+          return splashLocationPreserving(state.uri);
+        }
         if (!auth.isAuthed && !onLogin) return '/login';
         if (auth.isAuthed && onLogin) return '/';
         if (installer && auth.isAuthed && !auth.isInstaller) return '/';
