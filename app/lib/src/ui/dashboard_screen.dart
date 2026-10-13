@@ -2096,6 +2096,9 @@ class _GlassStatusButton extends StatelessWidget {
   }
 }
 
+/// Zelfde donkergrijs als het icoon bij Systemen beheren.
+Color _statusGlyphColor() => LuxeColors.inkSoft.withValues(alpha: 0.85);
+
 /// House-wide activity: lights / heater / fireplace / ac / music → system pages.
 class _HouseActivityHeaderButtons extends ConsumerWidget {
   const _HouseActivityHeaderButtons({required this.cfg});
@@ -2141,12 +2144,13 @@ class _HouseActivityHeaderButtons extends ConsumerWidget {
       if (lightsOn && heaterOn && fireplaceOn && acOn && mediaPlaying) break;
     }
 
+    final glyphColor = _statusGlyphColor();
     final buttons = <Widget>[
       if (lightsOn)
         _GlassStatusButton(
           tooltip: 'Verlichting aan',
           onTap: () => _openSystem(context, 'Verlichting'),
-          child: LightStatusIcon(size: _glyph, color: LuxeColors.ink),
+          child: LightStatusIcon(size: _glyph, color: glyphColor),
         ),
       if (heaterOn)
         _GlassStatusButton(
@@ -2155,25 +2159,25 @@ class _HouseActivityHeaderButtons extends ConsumerWidget {
             context,
             '/system/$kHeatersActivitySlug?active=1',
           ),
-          child: _HeaterBadge(size: _glyph, color: LuxeColors.ink),
+          child: _HeaterBadge(size: _glyph, color: glyphColor),
         ),
       if (fireplaceOn)
         _GlassStatusButton(
           tooltip: 'Openhaard aan',
           onTap: () => _openSystem(context, 'Openhaard'),
-          child: _FireBadge(size: _glyph, color: LuxeColors.ink),
+          child: _FireBadge(size: _glyph, color: glyphColor),
         ),
       if (acOn)
         _GlassStatusButton(
           tooltip: 'Airco aan',
           onTap: () => _openSystem(context, 'Klimaat'),
-          child: SplitUnitIcon(size: _glyph, color: LuxeColors.ink),
+          child: SplitUnitIcon(size: _glyph, color: glyphColor),
         ),
       if (mediaPlaying)
         _GlassStatusButton(
           tooltip: 'Muziek speelt',
           onTap: () => _openSystem(context, 'Audio'),
-          child: EqualizerIcon(size: _glyph, color: LuxeColors.ink),
+          child: EqualizerIcon(size: _glyph, color: glyphColor),
         ),
     ];
 
@@ -2304,14 +2308,12 @@ class _RoomActivityBadges extends ConsumerWidget {
 
     if (!any) return const SizedBox.shrink();
 
-    // Kale glyphs — geen glass/wells.
-    // Phone: inkSoft (antraciet, zelfde gewicht als kamernamen).
-    // Tablet: ink. Het messing vak hoort alleen bij de header.
+    // Kale glyphs — geen glass/wells. Zelfde donkergrijs als Systemen beheren.
     final phone = context.isPhone;
     final glyph = glyphFor(context);
     final slot = phone ? 44.0 : 48.0;
     final badge = phone ? 28.0 : 34.0;
-    final color = phone ? LuxeColors.inkSoft : LuxeColors.ink;
+    final color = _statusGlyphColor();
 
     Widget tap(Widget child, String categorySlug) => GestureDetector(
           behavior: HitTestBehavior.opaque,
