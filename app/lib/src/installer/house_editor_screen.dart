@@ -599,6 +599,8 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   static const _uuid = Uuid();
   Map<String, dynamic>? _house;
   _Focus _sel = const _Focus.project();
+  /// Gebouw dat in Visualisatie open staat. Leeg = nog geen keuze.
+  String? _vizBuildingId;
   Map<String, dynamic>? _copiedDevice;
   /// Whether the mobile detail panel is in view (vs. the menu list).
   bool _mobileShowDetail = false;
@@ -631,6 +633,27 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       _sel.kind == _FocusKind.floor ||
       _sel.kind == _FocusKind.room ||
       _sel.kind == _FocusKind.device;
+
+  bool get _isVizFocus => switch (_sel.kind) {
+        _FocusKind.buildings ||
+        _FocusKind.houseSystems ||
+        _FocusKind.globalDevices ||
+        _FocusKind.globalDevice ||
+        _FocusKind.floors ||
+        _FocusKind.floor ||
+        _FocusKind.room ||
+        _FocusKind.device =>
+          true,
+        _ => false,
+      };
+
+  void _selectVizBuilding(String id) {
+    setState(() {
+      _vizBuildingId = id;
+      _sel = const _Focus.buildings();
+      if (!_isInstallerWide()) _mobileShowDetail = true;
+    });
+  }
 
   @override
   void initState() {
@@ -902,13 +925,13 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   }
 
   void _addFloor() {
-    final buildings = _buildingsSorted();
+    final scope = _activeVizBuildingId;
     _floors().add({
       'id': 'fl-${_uuid.v4()}',
       'name': 'Nieuwe verdieping',
       'order': _floors().length,
       'rooms': <Map<String, dynamic>>[],
-      if (buildings.isNotEmpty) 'buildingId': buildings.first['id'],
+      if (scope != null) 'buildingId': scope,
     });
     _selectFocus(_Focus.floor(_floors().length - 1));
   }
@@ -1473,11 +1496,13 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       n++;
       id = 'tegel-$n';
     }
+    final scope = _activeVizBuildingId;
     list.add(<String, dynamic>{
       'id': id,
       'name': 'Nieuwe tegel',
       'icon': 'grid',
       'deviceIds': <dynamic>[],
+      if (scope != null) 'buildingId': scope,
     });
     setState(() {});
   }
@@ -1614,7 +1639,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
 
   void _addGlobalDevice(DeviceTypePick pick) {
     final id = 'dev-${_uuid.v4()}';
-    _globalDeviceList().add(_defaultDevice(pick.type, id, bus: pick.bus));
+    final device = _defaultDevice(pick.type, id, bus: pick.bus);
+    final scope = _activeVizBuildingId;
+    if (scope != null) device['buildingId'] = scope;
+    _globalDeviceList().add(device);
     _selectFocus(_Focus.globalDevice(_globalDeviceList().length - 1));
   }
 
@@ -2312,6 +2340,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       return;
     }
     final clone = _cloneDeviceJson(_copiedDevice!, _uuid);
+    final scope = _activeVizBuildingId;
+    if (scope != null && identical(list, _globalDeviceList())) {
+      clone['buildingId'] = scope;
+    }
     final insertAt =
         afterIndex == null ? list.length : (afterIndex + 1).clamp(0, list.length);
     list.insert(insertAt, clone);
@@ -2414,7 +2446,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         _FocusKind.room => 'Kamer',
         _FocusKind.device => 'Apparaat',
         _FocusKind.houseSystems => 'Custom systeemtegels',
-        _FocusKind.buildings => 'Gebouwen',
+        _FocusKind.buildings => _activeBuildingName(),
         _FocusKind.globalDevices => 'Algemene devices',
         _FocusKind.globalDevice => 'Apparaat',
       };
@@ -2433,6 +2465,16 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         return true;
       case _FocusKind.globalDevice:
         _selectFocus(const _Focus.globalDevices());
+        return true;
+      case _FocusKind.houseSystems:
+      case _FocusKind.globalDevices:
+      case _FocusKind.floors:
+        final buildingId = _activeVizBuildingId;
+        if (buildingId != null) {
+          _selectVizBuilding(buildingId);
+          return true;
+        }
+        setState(() => _mobileShowDetail = false);
         return true;
       default:
         setState(() => _mobileShowDetail = false);
@@ -2690,36 +2732,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         ),
         _navChapterCard(
           chapter: 'Visualisatie',
-          rows: [
-            LuxeNavRow(
-              icon: Icons.apartment_outlined,
-              title: 'Gebouwen',
-              subtitle: _buildingsList().isEmpty
-                  ? 'Eén woning'
-                  : _countLabel(_buildingsList().length, 'gebouw', 'gebouwen'),
-              selected: _sel.kind == _FocusKind.buildings,
-              onTap: () => _selectFocus(const _Focus.buildings()),
-            ),
-            LuxeNavRow(
-              icon: Icons.dashboard_outlined,
-              title: 'Custom systeemtegels',
-              selected: _sel.kind == _FocusKind.houseSystems,
-              onTap: () => _selectFocus(const _Focus.houseSystems()),
-            ),
-            LuxeNavRow(
-              icon: Icons.devices_other_outlined,
-              title: 'Algemene devices',
-              selected: _sel.kind == _FocusKind.globalDevices ||
-                  _sel.kind == _FocusKind.globalDevice,
-              onTap: () => _selectFocus(const _Focus.globalDevices()),
-            ),
-            LuxeNavRow(
-              icon: Icons.layers_outlined,
-              title: 'Kamergebonden devices',
-              selected: _isBuildingFocus,
-              onTap: () => _selectFocus(const _Focus.floors()),
-            ),
-          ],
+          rows: _visualizationNavRows(),
         ),
         _navChapterCard(
           chapter: 'Diagnose',
@@ -2744,6 +2757,59 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
 
   String _countLabel(int n, String one, String many) =>
       n == 1 ? '1 $one' : '$n $many';
+
+  List<Widget> _visualizationNavRows() {
+    final buildings = _buildingsSorted();
+    if (buildings.isEmpty) {
+      return [
+        ..._vizSectionRows(),
+        LuxeAddRow(
+          label: 'Gebouw toevoegen',
+          onTap: _addBuilding,
+        ),
+      ];
+    }
+    return [
+      for (final building in buildings)
+        LuxeNavRow(
+          icon: Icons.apartment_outlined,
+          title: _namedOr(building, 'Gebouw'),
+          selected: building['id'] == _vizBuildingId && _isVizFocus,
+          onTap: () {
+            final id = building['id'] as String? ?? '';
+            if (id.isNotEmpty) _selectVizBuilding(id);
+          },
+        ),
+      LuxeAddRow(
+        label: 'Gebouw toevoegen',
+        onTap: _addBuilding,
+      ),
+    ];
+  }
+
+  List<Widget> _vizSectionRows() {
+    return [
+      LuxeNavRow(
+        icon: Icons.dashboard_outlined,
+        title: 'Custom systeemtegels',
+        selected: _sel.kind == _FocusKind.houseSystems,
+        onTap: () => _selectFocus(const _Focus.houseSystems()),
+      ),
+      LuxeNavRow(
+        icon: Icons.devices_other_outlined,
+        title: 'Algemene devices',
+        selected: _sel.kind == _FocusKind.globalDevices ||
+            _sel.kind == _FocusKind.globalDevice,
+        onTap: () => _selectFocus(const _Focus.globalDevices()),
+      ),
+      LuxeNavRow(
+        icon: Icons.layers_outlined,
+        title: 'Kamergebonden devices',
+        selected: _isBuildingFocus,
+        onTap: () => _selectFocus(const _Focus.floors()),
+      ),
+    ];
+  }
 
   String _deviceRowSubtitle(Map<String, dynamic> d) {
     final type = d['type'] as String? ?? '';
@@ -2857,20 +2923,21 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
 
   Widget _millerFloorsColumn(BuildContext context) {
     final floors = _floors();
+    final visible = <int>[
+      for (var i = 0; i < floors.length; i++)
+        if (_onActiveBuilding(floors[i])) i,
+    ];
     return _millerColumn(
       context: context,
       title: 'Verdieping',
       icon: Icons.layers_outlined,
-      emptyText: floors.isEmpty ? 'Nog geen verdieping' : null,
+      emptyText: visible.isEmpty ? _emptyFloorLabel() : null,
       children: [
-        for (var i = 0; i < floors.length; i++)
+        for (final i in visible)
           LuxeNavRow(
             icon: Icons.layers_outlined,
             title: _namedOr(floors[i], 'Verdieping'),
-            subtitle: [
-              _countLabel(_roomList(i).length, 'kamer', 'kamers'),
-              if (_buildingsList().length >= 2) _floorBuildingLabel(floors[i]),
-            ].join(' · '),
+            subtitle: _countLabel(_roomList(i).length, 'kamer', 'kamers'),
             selectedTextMatchesIcon: true,
             selected: _sel.fi == i &&
                 (_sel.kind == _FocusKind.floor ||
@@ -3107,6 +3174,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
 
   Widget _floorsInstallerPanel(BuildContext context) {
     final floors = _floors();
+    final visible = <int>[
+      for (var i = 0; i < floors.length; i++)
+        if (_onActiveBuilding(floors[i])) i,
+    ];
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
       children: [
@@ -3122,22 +3193,21 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   trailing: LuxeInfoIconButton(
                     title: 'Kamergebonden devices',
                     body:
-                        'Apparaten die bij een kamer horen: eerst een verdieping, '
-                        'daarna kamers, daarna de apparaten in die kamer. '
-                        'Op de telefoon: tik door en gebruik terug om in één scherm te blijven.',
+                        'Eerst een verdieping, daarna een kamer, daarna het apparaat.',
                   ),
                 ),
               ),
-              if (floors.isEmpty)
+              if (visible.isEmpty)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
                   child: Text(
-                    'Nog geen verdieping',
+                    _emptyFloorLabel(),
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
-              for (var i = 0; i < floors.length; i++) ...[
-                if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+              for (final i in visible) ...[
+                if (i != visible.first)
+                  Divider(height: 1, color: LuxeColors.lineSoft),
                 LuxeNavRow(
                   icon: Icons.layers_outlined,
                   title: _namedOr(floors[i], 'Verdieping'),
@@ -3152,7 +3222,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   onTap: () => _selectFocus(_Focus.floor(i)),
                 ),
               ],
-              if (floors.isNotEmpty)
+              if (visible.isNotEmpty)
                 Divider(height: 1, color: LuxeColors.lineSoft),
               LuxeAddRow(
                 label: 'Verdieping toevoegen',
@@ -3185,6 +3255,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
 
   Widget _houseSystemsEditorCard(BuildContext context) {
     final tiles = _houseSystemsList();
+    final visibleTiles = <int>[
+      for (var i = 0; i < tiles.length; i++)
+        if (_onActiveBuilding(tiles[i])) i,
+    ];
     final iconKeys = kUniversalIconMap.keys.toList()..sort();
     return LuxeListCard(
       padding: EdgeInsets.zero,
@@ -3204,17 +3278,20 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               ),
             ),
           ),
-          if (tiles.isEmpty)
+          if (visibleTiles.isEmpty)
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
               child: Text(
-                'Nog geen extra tegel. Vaste tegels (verlichting, ventilatie, …) '
-                'verschijnen vanzelf als er apparaten van dat type zijn.',
+                _activeVizBuildingId == null
+                    ? 'Nog geen extra tegel. Vaste tegels (verlichting, ventilatie, …) '
+                        'verschijnen vanzelf als er apparaten van dat type zijn.'
+                    : 'Nog geen tegel in dit gebouw.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
-          for (var i = 0; i < tiles.length; i++) ...[
-            if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+          for (final i in visibleTiles) ...[
+            if (i != visibleTiles.first)
+              Divider(height: 1, color: LuxeColors.lineSoft),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 8, 8, 0),
               child: Row(
@@ -3310,7 +3387,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               ),
             ),
           ],
-          if (tiles.isNotEmpty)
+          if (visibleTiles.isNotEmpty)
             Divider(height: 1, color: LuxeColors.lineSoft),
           LuxeAddRow(
             label: 'Tegel toevoegen',
@@ -3332,6 +3409,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
 
   Widget _globalDevicesInstallerPanel(BuildContext context) {
     final list = _globalDeviceList();
+    final visible = <int>[
+      for (var i = 0; i < list.length; i++)
+        if (_onActiveBuilding(list[i])) i,
+    ];
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
       children: [
@@ -3347,21 +3428,23 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   trailing: LuxeInfoIconButton(
                     title: 'Algemene devices',
                     body:
-                        'Apparaten die bij het hele huis horen, niet bij één kamer. '
-                        'Kies per apparaat op welke systeemtegel het komt.',
+                        'Apparaten zonder kamer. Kies per apparaat de systeemtegel.',
                   ),
                 ),
               ),
-              if (list.isEmpty)
+              if (visible.isEmpty)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
                   child: Text(
-                    'Nog geen algemeen apparaat',
+                    _activeVizBuildingId == null
+                        ? 'Nog geen algemeen apparaat'
+                        : 'Nog geen apparaat in dit gebouw.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
-              for (var i = 0; i < list.length; i++) ...[
-                if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+              for (final i in visible) ...[
+                if (i != visible.first)
+                  Divider(height: 1, color: LuxeColors.lineSoft),
                 LuxeNavRow(
                   icon: Icons.devices_other_outlined,
                   title: _namedOr(list[i], 'Apparaat'),
@@ -3375,7 +3458,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   onTap: () => _selectFocus(_Focus.globalDevice(i)),
                 ),
               ],
-              if (list.isNotEmpty)
+              if (visible.isNotEmpty)
                 Divider(height: 1, color: LuxeColors.lineSoft),
               LuxeAddRow(
                 label: 'Toevoegen',
@@ -3998,24 +4081,61 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     return list;
   }
 
-  String _floorBuildingLabel(Map<String, dynamic> floor) {
-    final id = floor['buildingId'] as String?;
+  String? get _activeVizBuildingId {
+    final id = _vizBuildingId;
+    if (id == null || id.isEmpty) return null;
+    for (final b in _buildingsSorted()) {
+      if (b['id'] == id) return id;
+    }
+    return null;
+  }
+
+  String _activeBuildingName() {
+    final id = _activeVizBuildingId;
+    if (id == null) return 'Gebouw';
     for (final b in _buildingsSorted()) {
       if (b['id'] == id) return _namedOr(b, 'Gebouw');
     }
-    final list = _buildingsSorted();
-    if (list.isEmpty) return '';
-    return '${_namedOr(list.first, 'Gebouw')} (standaard)';
+    return 'Gebouw';
   }
+
+  Map<String, dynamic>? _activeBuildingMap() {
+    final id = _activeVizBuildingId;
+    if (id == null) return null;
+    for (final b in _buildingsSorted()) {
+      if (b['id'] == id) return b;
+    }
+    return null;
+  }
+
+  /// Leeg of onbekend gebouw hoort bij het eerste gebouw.
+  bool _onActiveBuilding(Map<String, dynamic> entity) {
+    final scope = _activeVizBuildingId;
+    if (scope == null) return true;
+    final buildings = _buildingsSorted();
+    final ids = <String>{
+      for (final b in buildings)
+        if (b['id'] is String && (b['id'] as String).isNotEmpty)
+          b['id'] as String,
+    };
+    final raw = (entity['buildingId'] as String?)?.trim() ?? '';
+    if (raw.isNotEmpty && ids.contains(raw)) return raw == scope;
+    return buildings.isNotEmpty && buildings.first['id'] == scope;
+  }
+
+  String _emptyFloorLabel() => _activeVizBuildingId == null
+      ? 'Nog geen verdieping'
+      : 'Nog geen verdieping in dit gebouw.';
 
   void _addBuilding() {
     final list = _ensureBuildings();
+    final id = 'bld-${_uuid.v4()}';
     list.add({
-      'id': 'bld-${_uuid.v4()}',
+      'id': id,
       'name': 'Nieuw gebouw',
       'order': list.length,
     });
-    setState(() {});
+    _selectVizBuilding(id);
   }
 
   void _deleteBuildingAt(int index) {
@@ -4024,6 +4144,16 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     final id = list[index]['id'];
     list.removeAt(index);
     if (id is String && id.isNotEmpty) _stripBuildingId(id);
+    if (id == _vizBuildingId) {
+      final rest = _buildingsSorted();
+      if (rest.isEmpty) {
+        _vizBuildingId = null;
+        _sel = const _Focus.floors();
+      } else {
+        _vizBuildingId = rest.first['id'] as String?;
+        _sel = const _Focus.buildings();
+      }
+    }
     setState(() {});
   }
 
@@ -4131,68 +4261,54 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   }
 
   Widget _buildingsInstallerPanel(BuildContext context) {
-    final buildings = _buildingsSorted();
+    final building = _activeBuildingMap();
+    if (building == null) {
+      return ListView(
+        padding: const EdgeInsets.only(bottom: 36),
+        children: const [
+          Padding(
+            padding: EdgeInsets.fromLTRB(28, 24, 28, 8),
+            child: Text('Kies een gebouw links, of voeg er een toe.'),
+          ),
+        ],
+      );
+    }
+    final id = building['id'] as String? ?? '';
+    final sections = _vizSectionRows();
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
-          child: Text(
-            'Een bijgebouw, zoals een gastenverblijf of zwembadhuis, is een eigen gebouw. '
-            'Vanaf twee gebouwen kiest de bewoner bovenaan, boven de verdiepingen. '
-            'Elke verdieping hoort bij één gebouw. '
-            'Scenes, systemen en de statusiconen zijn van dat gebouw. '
-            'Een scene kan voor meerdere gebouwen aangevinkt worden en verschijnt dan in elk daarvan. '
-            'Met nul of één gebouw blijft alles samen zichtbaar.\n\n'
-            'Camera\'s en apparaten zonder kamer zonder gebouw horen bij het eerste gebouw in deze lijst. '
-            'Alarm en grafieken blijven op elk gebouw zichtbaar.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: LuxeColors.inkSoft,
-                ),
-          ),
-        ),
         LuxeListCard(
           padding: EdgeInsets.zero,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (buildings.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
-                  child: Text(
-                    'Nog geen gebouw. De woning is dan één geheel.',
-                    style: Theme.of(context).textTheme.bodyMedium,
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 4, 0),
+                child: LuxeSectionTitle(
+                  icon: Icons.apartment_outlined,
+                  title: 'Gebouw',
+                  trailing: _rowTrash(
+                    tooltip: 'Gebouw verwijderen',
+                    onPressed: () => _deleteBuildingId(id),
                   ),
                 ),
-              for (var i = 0; i < buildings.length; i++) ...[
-                if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: _BoundStrField(
-                          'name',
-                          buildings[i],
-                          () => setState(() {}),
-                          key: ValueKey('bld-name-${buildings[i]['id']}'),
-                          labelOverride: 'Naam',
-                        ),
-                      ),
-                      _rowTrash(
-                        tooltip: 'Gebouw verwijderen',
-                        onPressed: () => _deleteBuildingId(
-                          buildings[i]['id'] as String? ?? '',
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-              LuxeAddRow(
-                label: 'Gebouw toevoegen',
-                onTap: _addBuilding,
               ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                child: _BoundStrField(
+                  'name',
+                  building,
+                  () => setState(() {}),
+                  key: ValueKey('bld-name-$id'),
+                  labelOverride: 'Naam',
+                ),
+              ),
+              Divider(height: 1, color: LuxeColors.lineSoft),
+              for (var i = 0; i < sections.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+                sections[i],
+              ],
             ],
           ),
         ),
