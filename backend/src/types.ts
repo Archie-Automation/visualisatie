@@ -124,6 +124,8 @@ export interface DeviceBase {
   favorite?: boolean;
   /** Vaste of extra systeemtegel op het startscherm. */
   systemId?: string;
+  /** Gebouw voor een apparaat zonder kamer. Kamerapparaten erven de verdieping. */
+  buildingId?: string;
   /** Ask the user to confirm potentially disruptive commands. */
   confirm?: DeviceConfirm;
 }
@@ -1400,6 +1402,10 @@ export interface Scene {
   /** Optional accent colour, used purely for UI rendering. Hex string,
    *  e.g. "#B08A4E". */
   color?: string;
+  /** Oud enkelvoudig gebouw. Zelfde als buildingIds met één id. */
+  buildingId?: string;
+  /** Gebouwen waar de scene zichtbaar is. Meerdere = in elk daarvan. */
+  buildingIds?: string[];
   actions: SceneAction[];
   /** Optional Sonos/Bluesound commands executed after/between KNX actions. */
   mediaActions?: SceneMediaAction[];
@@ -1426,11 +1432,20 @@ export interface Room {
   scenes?: Scene[];
 }
 
+export interface Building {
+  id: string;
+  name: string;
+  order?: number;
+  icon?: string;
+}
+
 export interface Floor {
   id: string;
   name: string;
   order?: number;
   icon?: string;
+  /** Verdieping hoort bij dit gebouw. Weglaten = het eerste gebouw. */
+  buildingId?: string;
   rooms: Room[];
 }
 
@@ -1508,7 +1523,11 @@ export interface HouseConfig {
     icon?: string;
     /** Extra devices on this tile (any type, including room-bound universal). */
     deviceIds?: string[];
+    /** Alleen deze tegel op dit gebouw. Weglaten = volgen waar de apparaten staan. */
+    buildingId?: string;
   }>;
+  /** Bijgebouwen. Leeg of één stuk = geen gebouwkiezer in de app. */
+  buildings?: Building[];
   floors: Floor[];
   /**
    * KNX / Lutron devices that are NOT placed in a specific room.

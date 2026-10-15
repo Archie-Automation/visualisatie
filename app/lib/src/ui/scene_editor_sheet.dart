@@ -28,6 +28,7 @@ class SceneEditorSheet extends ConsumerStatefulWidget {
     this.roomId,
     this.initiallySelectedId,
     this.createNew = false,
+    this.buildingId,
   });
 
   final List<Scene> scenes;
@@ -36,6 +37,8 @@ class SceneEditorSheet extends ConsumerStatefulWidget {
   final String? roomId;
   final String? initiallySelectedId;
   final bool createNew;
+  /// Zet nieuwe en bewaarde dashboard-scenes op dit gebouw.
+  final String? buildingId;
 
   @override
   ConsumerState<SceneEditorSheet> createState() => _SceneEditorSheetState();
@@ -44,6 +47,7 @@ class SceneEditorSheet extends ConsumerStatefulWidget {
 class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
   late SceneDraft _draft;
   late String _id;
+  final Set<String> _sceneBuildings = {};
   bool _saving = false;
   _EditPane _pane = _EditPane.overview;
   SceneDraft? _paneSnapshot;
@@ -54,6 +58,7 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
     if (widget.createNew) {
       _id = 'scn-${DateTime.now().millisecondsSinceEpoch}';
       _draft = SceneDraft(name: 'Nieuwe Scene', icon: 'star', entries: []);
+      _seedSceneBuildings(null);
       return;
     }
     Scene? match;
@@ -70,10 +75,37 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
     if (match == null) {
       _id = 'scn-${DateTime.now().millisecondsSinceEpoch}';
       _draft = SceneDraft(name: 'Nieuwe Scene', icon: 'star', entries: []);
+      _seedSceneBuildings(null);
       return;
     }
     _id = match.id;
     _draft = SceneDraft.fromScene(match, widget.config);
+    _seedSceneBuildings(match);
+  }
+
+  void _seedSceneBuildings(Scene? match) {
+    _sceneBuildings.clear();
+    if (match != null) {
+      for (final id in match.effectiveBuildingIds) {
+        if (widget.config.buildings.any((b) => b.id == id)) {
+          _sceneBuildings.add(id);
+        }
+      }
+    }
+    if (_sceneBuildings.isNotEmpty) return;
+    final fallback = widget.config.scopedBuildingId(widget.buildingId) ??
+        widget.config.defaultBuildingId;
+    if (fallback != null) _sceneBuildings.add(fallback);
+  }
+
+  void _toggleSceneBuilding(String id, bool on) {
+    setState(() {
+      if (on) {
+        _sceneBuildings.add(id);
+      } else if (_sceneBuildings.length > 1) {
+        _sceneBuildings.remove(id);
+      }
+    });
   }
 
   bool get _atSheetRoot => _pane == _EditPane.overview;
@@ -206,11 +238,41 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
   Future<void> _persist(List<Scene> out) async {
     final api = ref.read(sceneApiProvider);
     if (widget.scope == SceneScope.global) {
-      await api.saveGlobal(out);
+      await api.saveGlobal(_mergeGlobalScenes(out));
     } else if (widget.roomId != null) {
       await api.saveRoom(widget.roomId!, out);
     }
     ref.invalidate(configProvider);
+  }
+
+  /// Bewaart scenes van andere gebouwen. De editor ziet alleen dit gebouw.
+  List<Scene> _mergeGlobalScenes(List<Scene> edited) {
+    if (!widget.config.usesBuildings) return edited;
+    final chosen = [
+      for (final id in _sceneBuildings)
+        if (widget.config.buildings.any((b) => b.id == id)) id,
+    ];
+    final stamped = [
+      for (final s in edited)
+        if (s.id == _id && chosen.isNotEmpty)
+          s.copyWith(buildingIds: chosen)
+        else
+          s,
+    ];
+    final editedById = {for (final s in stamped) s.id: s};
+    final originalIds = {for (final s in widget.scenes) s.id};
+    final merged = <Scene>[];
+    for (final s in widget.config.scenes) {
+      final replacement = editedById.remove(s.id);
+      if (replacement != null) {
+        merged.add(replacement);
+        continue;
+      }
+      if (originalIds.contains(s.id)) continue;
+      merged.add(s);
+    }
+    merged.addAll(editedById.values);
+    return merged;
   }
 
   void _showSaveError(Object err) {
@@ -386,6 +448,37 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
             ],
           ),
         ),
+        if (widget.scope == SceneScope.global &&
+            widget.config.usesBuildings) ...[
+          const SizedBox(height: 12),
+          GlassCard(
+            radius: 16,
+            padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(8, 0, 8, 4),
+                  child: Text('Gebouwen'),
+                ),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(8, 0, 8, 4),
+                  child: Text(
+                    'De scene verschijnt in elk aangevinkt gebouw.',
+                  ),
+                ),
+                for (final b in widget.config.buildings)
+                  CheckboxListTile(
+                    value: _sceneBuildings.contains(b.id),
+                    title: Text(b.name),
+                    controlAffinity: ListTileControlAffinity.leading,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    onChanged: (on) => _toggleSceneBuilding(b.id, on == true),
+                  ),
+              ],
+            ),
+          ),
+        ],
         if (!widget.createNew) ...[
           const SizedBox(height: 12),
           TextButton.icon(

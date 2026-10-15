@@ -68,6 +68,11 @@
         }
       }
     },
+    "buildings": {
+      "type": "array",
+      "description": "Bijgebouwen (gastenverblijf, zwembadhuis). Vanaf twee gebouwen kiest de bewoner een gebouw boven de verdiepingen. Leeg of één gebouw = alles samen, zoals voorheen.",
+      "items": { "$ref": "#/definitions/building" }
+    },
     "floors": {
       "type": "array",
       "items": { "$ref": "#/definitions/floor" }
@@ -247,6 +252,16 @@
         }
       }
     },
+    "building": {
+      "type": "object",
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "order": { "type": "integer" },
+        "icon": { "type": "string" }
+      }
+    },
     "floor": {
       "type": "object",
       "required": ["id", "name", "rooms"],
@@ -255,6 +270,10 @@
         "name": { "type": "string" },
         "order": { "type": "integer" },
         "icon": { "type": "string" },
+        "buildingId": {
+          "type": "string",
+          "description": "Gebouw waar deze verdieping bij hoort. Weglaten = het eerste gebouw."
+        },
         "rooms": {
           "type": "array",
           "items": { "$ref": "#/definitions/room" }
@@ -290,6 +309,10 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "Apparaten die extra op deze tegel staan (ook universeel / uit een kamer)."
+        },
+        "buildingId": {
+          "type": "string",
+          "description": "Alleen tonen bij dit gebouw. Weglaten = tonen in elk gebouw dat minstens één van de apparaten bevat."
         }
       }
     },
@@ -325,6 +348,10 @@
         "systemId": {
           "type": "string",
           "description": "Systeemtegel op het startscherm (slug van een vaste tegel of houseSystems.id)."
+        },
+        "buildingId": {
+          "type": "string",
+          "description": "Gebouw voor een apparaat zonder kamer (algemeen, camera, intercom). Weglaten = het eerste gebouw. Kamerapparaten erven het gebouw van de verdieping."
         },
         "subtype": {
           "type": "string",
@@ -1474,6 +1501,16 @@
         "name": { "type": "string" },
         "icon": { "type": "string" },
         "color": { "type": "string" },
+        "buildingId": {
+          "type": "string",
+          "description": "Oud enkelvoudig gebouw. Zelfde betekenis als buildingIds met één id."
+        },
+        "buildingIds": {
+          "type": "array",
+          "items": { "type": "string" },
+          "maxItems": 32,
+          "description": "Gebouwen waar deze scene zichtbaar is. Meerdere ids = in elk van die gebouwen. Weglaten = het eerste gebouw."
+        },
         "actions": {
           "type": "array",
           "items": { "$ref": "#/definitions/sceneAction" },

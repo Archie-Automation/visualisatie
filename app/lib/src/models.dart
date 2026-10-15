@@ -292,6 +292,7 @@ class CustomHouseSystem {
     required this.name,
     this.icon = 'grid',
     this.deviceIds = const [],
+    this.buildingId,
   });
 
   final String id;
@@ -315,8 +316,12 @@ class CustomHouseSystem {
       name: (j['name'] as String? ?? '').trim(),
       icon: icon.isEmpty ? 'grid' : icon,
       deviceIds: ids,
+      buildingId: _nonEmpty(j['buildingId']),
     );
   }
+
+  /// Zet de tegel alleen op dit gebouw. Leeg = volgen waar de apparaten staan.
+  final String? buildingId;
 }
 
 /* --------------------------------------------------------------------- */
@@ -548,6 +553,10 @@ class Scene {
   final String? knxSwitchName;
   final String? knxButtonName;
   final List<String> members;
+  /// Gebouwen waar deze dashboard-scene zichtbaar is. Leeg = het eerste gebouw.
+  final List<String> buildingIds;
+  /// Oud enkelvoudig veld. Lezen blijft werken; opslaan gebruikt [buildingIds].
+  final String? buildingId;
 
   const Scene({
     required this.id,
@@ -562,7 +571,17 @@ class Scene {
     this.knxSwitchName,
     this.knxButtonName,
     this.members = const [],
+    this.buildingIds = const [],
+    this.buildingId,
   });
+
+  /// `buildingIds` wint. Anders het oude enkele `buildingId`.
+  List<String> get effectiveBuildingIds {
+    if (buildingIds.isNotEmpty) return buildingIds;
+    final one = buildingId;
+    if (one != null && one.isNotEmpty) return [one];
+    return const [];
+  }
 
   bool get isKnxHardware => knxGa != null && knxNumber != null;
 
@@ -584,6 +603,8 @@ class Scene {
       knxSrc: knx is Map ? (knx['src'] as String?)?.trim() : null,
       knxSwitchName: knx is Map ? (knx['switchName'] as String?)?.trim() : null,
       knxButtonName: knx is Map ? (knx['buttonName'] as String?)?.trim() : null,
+      buildingIds: _stringList(j['buildingIds']),
+      buildingId: _nonEmpty(j['buildingId']),
       members: ((j['members'] as List?) ?? const [])
           .map((e) => '$e')
           .where((e) => e.isNotEmpty)
@@ -606,9 +627,13 @@ class Scene {
             if (knxSrc != null && knxSrc!.isNotEmpty) 'src': knxSrc,
             if (knxSwitchName != null && knxSwitchName!.isNotEmpty)
               'switchName': knxSwitchName,
-            if (knxButtonName != null && knxButtonName!.isNotEmpty)
-              'buttonName': knxButtonName,
+        if (knxButtonName != null && knxButtonName!.isNotEmpty)
+          'buttonName': knxButtonName,
           },
+        if (effectiveBuildingIds.isNotEmpty)
+          'buildingIds': effectiveBuildingIds,
+        if (effectiveBuildingIds.length == 1)
+          'buildingId': effectiveBuildingIds.first,
         if (members.isNotEmpty) 'members': members,
       };
 
@@ -624,6 +649,8 @@ class Scene {
     String? knxSwitchName,
     String? knxButtonName,
     List<String>? members,
+    List<String>? buildingIds,
+    String? buildingId,
   }) =>
       Scene(
         id: id,
@@ -638,7 +665,25 @@ class Scene {
         knxSwitchName: knxSwitchName ?? this.knxSwitchName,
         knxButtonName: knxButtonName ?? this.knxButtonName,
         members: members ?? this.members,
+        buildingIds: buildingIds ?? this.buildingIds,
+        buildingId: buildingIds != null ? null : (buildingId ?? this.buildingId),
       );
+}
+
+String? _nonEmpty(Object? v) {
+  if (v is! String) return null;
+  final t = v.trim();
+  return t.isEmpty ? null : t;
+}
+
+List<String> _stringList(Object? raw) {
+  if (raw is! List) return const [];
+  final out = <String>[];
+  for (final e in raw) {
+    final id = _nonEmpty(e);
+    if (id != null && !out.contains(id)) out.add(id);
+  }
+  return out;
 }
 
 /* --------------------------------------------------------------------- */
@@ -676,11 +721,37 @@ class Room {
       );
 }
 
+class Building {
+  final String id;
+  final String name;
+  final int order;
+  final String? icon;
+
+  const Building({
+    required this.id,
+    required this.name,
+    required this.order,
+    this.icon,
+  });
+
+  factory Building.fromJson(Map<String, dynamic> j) {
+    final name = (j['name'] as String?)?.trim();
+    return Building(
+      id: (j['id'] as String? ?? '').trim(),
+      name: (name == null || name.isEmpty) ? 'Gebouw' : name,
+      order: (j['order'] as int?) ?? 0,
+      icon: j['icon'] as String?,
+    );
+  }
+}
+
 class Floor {
   final String id;
   final String name;
   final int order;
   final String? icon;
+  /// Leeg = het eerste gebouw, zodra er meerdere gebouwen zijn.
+  final String? buildingId;
   final List<Room> rooms;
 
   const Floor({
@@ -689,6 +760,7 @@ class Floor {
     required this.order,
     required this.rooms,
     this.icon,
+    this.buildingId,
   });
 
   factory Floor.fromJson(Map<String, dynamic> j) => Floor(
@@ -696,6 +768,7 @@ class Floor {
         name: j['name'] as String,
         order: (j['order'] as int?) ?? 0,
         icon: j['icon'] as String?,
+        buildingId: _nonEmpty(j['buildingId']),
         rooms: ((j['rooms'] as List?) ?? const [])
             .map((r) => Room.fromJson(r as Map<String, dynamic>))
             .toList(),
@@ -829,6 +902,7 @@ class HouseConfig {
   /// Project geo for sunrise/sunset (`project.location`).
   final double? locationLat;
   final double? locationLon;
+  final List<Building> buildings;
   final List<Floor> floors;
   /// KNX/Lutron devices NOT placed in any room. Visible in Systemen and
   /// favourites, but not in the room navigator.
@@ -854,6 +928,7 @@ class HouseConfig {
     this.timezone = 'Europe/Amsterdam',
     this.locationLat,
     this.locationLon,
+    this.buildings = const [],
     required this.floors,
     this.globalDevices = const [],
     this.customHouseSystems = const [],
@@ -880,6 +955,12 @@ class HouseConfig {
       timezone: (project['timezone'] as String?) ?? 'Europe/Amsterdam',
       locationLat: (loc?['lat'] as num?)?.toDouble(),
       locationLon: (loc?['lon'] as num?)?.toDouble(),
+      buildings: ((j['buildings'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((b) => Building.fromJson(Map<String, dynamic>.from(b)))
+          .where((b) => b.id.isNotEmpty)
+          .toList()
+        ..sort((a, b) => a.order.compareTo(b.order)),
       floors: ((j['floors'] as List?) ?? const [])
           .map((f) => Floor.fromJson(f as Map<String, dynamic>))
           .toList()
@@ -907,6 +988,75 @@ class HouseConfig {
       knxSceneLearnAddresses:
           _parseKnxSceneLearnAddresses(j['knxSceneLearn'] as Map?),
     );
+  }
+
+  /// Vanaf twee gebouwen filtert het startscherm op het gekozen gebouw.
+  bool get usesBuildings => buildings.length >= 2;
+
+  /// Gebouw met de laagste `order`. Ongekoppelde verdiepingen en scenes horen hierbij.
+  String? get defaultBuildingId =>
+      buildings.isEmpty ? null : buildings.first.id;
+
+  /// Bekend id blijft staan. Leeg of onbekend valt terug op [defaultBuildingId].
+  /// Zonder meerdere gebouwen is het antwoord `null` (geen filter).
+  String? resolveBuildingId(String? id) {
+    if (!usesBuildings) return null;
+    final trimmed = id?.trim() ?? '';
+    if (trimmed.isNotEmpty) {
+      for (final b in buildings) {
+        if (b.id == trimmed) return b.id;
+      }
+    }
+    return defaultBuildingId;
+  }
+
+  /// Query-parameter alleen als die een bestaand gebouw is én de kiezer aan staat.
+  String? scopedBuildingId(String? id) {
+    if (!usesBuildings) return null;
+    final trimmed = id?.trim() ?? '';
+    if (trimmed.isEmpty) return null;
+    for (final b in buildings) {
+      if (b.id == trimmed) return b.id;
+    }
+    return null;
+  }
+
+  List<Floor> floorsIn(String? buildingId) {
+    final scope = scopedBuildingId(buildingId);
+    if (scope == null) return floors;
+    return [
+      for (final f in floors)
+        if (resolveBuildingId(f.buildingId) == scope) f,
+    ];
+  }
+
+  List<Scene> scenesIn(String? buildingId) {
+    final scope = scopedBuildingId(buildingId);
+    if (scope == null) return scenes;
+    return [
+      for (final s in scenes)
+        if (sceneShowsIn(s, scope)) s,
+    ];
+  }
+
+  /// Lege gebouwenlijst = alleen het eerste gebouw. Meerdere ids = in elk daarvan.
+  bool sceneShowsIn(Scene scene, String scope) {
+    final known = {for (final b in buildings) b.id};
+    final ids = [
+      for (final id in scene.effectiveBuildingIds)
+        if (known.contains(id)) id,
+    ];
+    if (ids.isEmpty) return defaultBuildingId == scope;
+    return ids.contains(scope);
+  }
+
+  /// Kamerapparaten volgen de verdieping. De rest gebruikt `buildingId` op het apparaat.
+  bool deviceInBuilding(Device d, String? buildingId) {
+    final scope = scopedBuildingId(buildingId);
+    if (scope == null) return true;
+    final floor = floorForDevice(d.id);
+    final stored = floor != null ? floor.buildingId : _nonEmpty(d.raw['buildingId']);
+    return resolveBuildingId(stored) == scope;
   }
 
   /// True als er minstens één scene-GA is ingevuld (Instellingen-tegel).

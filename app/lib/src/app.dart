@@ -173,6 +173,7 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
             child: SystemScreen(
               slug: s.pathParameters['slug']!,
               activeOnly: s.uri.queryParameters['active'] == '1',
+              buildingId: s.uri.queryParameters['building'],
             ),
             transitionDuration: const Duration(milliseconds: 300),
             reverseTransitionDuration: const Duration(milliseconds: 240),

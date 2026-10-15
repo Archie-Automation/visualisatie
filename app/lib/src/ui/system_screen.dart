@@ -26,12 +26,16 @@ class SystemScreen extends ConsumerWidget {
     super.key,
     required this.slug,
     this.activeOnly = false,
+    this.buildingId,
   });
 
   final String slug;
 
   /// From dashboard header status icons: only devices that are currently on.
   final bool activeOnly;
+
+  /// Beperkt apparaten tot dit gebouw. Leeg = het hele huis.
+  final String? buildingId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -44,18 +48,26 @@ class SystemScreen extends ConsumerWidget {
           error: (e, _) => Center(child: Text('$e')),
           data: (cfg) {
             if (slug == kFavorietenSlug) {
-              return _FavorietenBody(cfg: cfg, onBack: () => appBack(context));
+              return _FavorietenBody(
+                cfg: cfg,
+                buildingId: cfg.scopedBuildingId(buildingId),
+                onBack: () => appBack(context),
+              );
             }
             if (slug == kGrafiekenSlug) {
               return _GrafiekenBody(onBack: () => appBack(context));
             }
+            final scope = cfg.scopedBuildingId(buildingId);
             if (slug == kHeatersActivitySlug) {
               return _SystemDevicesBody(
                 cfg: cfg,
                 slug: slug,
                 title: 'Heater',
                 icon: Icons.wb_incandescent_outlined,
-                devices: heaterDevicesOf(cfg.allDevices),
+                devices: [
+                  for (final d in heaterDevicesOf(cfg.allDevices))
+                    if (cfg.deviceInBuilding(d, scope)) d,
+                ],
                 activeOnly: activeOnly,
                 onBack: () => appBack(context),
               );
@@ -64,7 +76,7 @@ class SystemScreen extends ConsumerWidget {
             if (system == null) {
               return _InvalidBody(onBack: () => appBack(context));
             }
-            final devices = devicesForHouseSystem(cfg, system);
+            final devices = devicesForHouseSystem(cfg, system, buildingId: scope);
             if (system.slug == 'intercom' && devices.length == 1) {
               return _RedirectToIntercom(intercomId: devices.first.id);
             }
@@ -288,10 +300,15 @@ class _SystemDevicesBody extends ConsumerWidget {
 }
 
 class _FavorietenBody extends ConsumerWidget {
-  const _FavorietenBody({required this.cfg, required this.onBack});
+  const _FavorietenBody({
+    required this.cfg,
+    required this.onBack,
+    this.buildingId,
+  });
 
   final HouseConfig cfg;
   final VoidCallback onBack;
+  final String? buildingId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -302,6 +319,7 @@ class _FavorietenBody extends ConsumerWidget {
     final seenFavIds = <String>{};
     final favDevices = <Device>[];
     for (final d in [...cfg.allDevices, ...cfg.camerasOverview, ...cfg.intercoms]) {
+      if (!cfg.deviceInBuilding(d, buildingId)) continue;
       if (effectiveDeviceFav(userDevFavsAsync, d)) {
         if (seenFavIds.add(d.id)) favDevices.add(d);
       }
@@ -317,6 +335,10 @@ class _FavorietenBody extends ConsumerWidget {
         }
       }
       if (fl == null) continue;
+      final scope = cfg.scopedBuildingId(buildingId);
+      if (scope != null && cfg.resolveBuildingId(fl.buildingId) != scope) {
+        continue;
+      }
       Room? rm;
       for (final r in fl.rooms) {
         if (r.id == s.roomId) {

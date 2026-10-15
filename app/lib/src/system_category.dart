@@ -159,11 +159,40 @@ String? systemSlugForDevice(Device d, [HouseConfig? cfg]) {
   return defaultSystemSlugForType(d.type);
 }
 
+/// Pad plus `building`, zodat een systeempagina dezelfde set apparaten toont.
+String pathWithBuilding(String path, String? buildingId) {
+  if (buildingId == null || buildingId.isEmpty) return path;
+  final uri = Uri.parse(path);
+  return uri.replace(queryParameters: {
+    ...uri.queryParameters,
+    'building': buildingId,
+  }).toString();
+}
+
 /// Devices belonging to a house-wide system (includes cameras from [cfg.camerasOverview]).
-List<Device> devicesForHouseSystem(HouseConfig cfg, HouseSystem system) {
+/// [buildingId] beperkt de lijst tot één gebouw; `null` is het hele huis.
+List<Device> devicesForHouseSystem(
+  HouseConfig cfg,
+  HouseSystem system, {
+  String? buildingId,
+}) {
+  final scope = cfg.scopedBuildingId(buildingId);
+  for (final custom in cfg.customHouseSystems) {
+    if (custom.id != system.slug) continue;
+    final explicit = custom.buildingId?.trim() ?? '';
+    if (scope != null &&
+        explicit.isNotEmpty &&
+        cfg.resolveBuildingId(explicit) != scope) {
+      return const [];
+    }
+    break;
+  }
+
+  bool keep(Device d) => cfg.deviceInBuilding(d, scope);
+
   final devices = [
     for (final d in cfg.allDevices)
-      if (systemSlugForDevice(d, cfg) == system.slug) d,
+      if (systemSlugForDevice(d, cfg) == system.slug && keep(d)) d,
   ];
   for (final custom in cfg.customHouseSystems) {
     if (custom.id != system.slug) continue;
@@ -178,15 +207,15 @@ List<Device> devicesForHouseSystem(HouseConfig cfg, HouseSystem system) {
     }
     _addUniqueDevices(devices, [
       for (final id in custom.deviceIds)
-        if (byId[id] != null) byId[id]!,
+        if (byId[id] != null && keep(byId[id]!)) byId[id]!,
     ]);
     break;
   }
   if (system.slug == 'cameras') {
-    _addUniqueDevices(devices, cfg.camerasOverview);
+    _addUniqueDevices(devices, cfg.camerasOverview.where(keep));
   }
   if (system.slug == 'intercom') {
-    _addUniqueDevices(devices, cfg.intercoms);
+    _addUniqueDevices(devices, cfg.intercoms.where(keep));
   }
   return devices;
 }

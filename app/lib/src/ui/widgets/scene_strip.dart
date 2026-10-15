@@ -25,6 +25,7 @@ class SceneStrip extends ConsumerWidget {
     this.roomId,
     this.dark = false,
     this.scrollController,
+    this.buildingId,
   });
 
   /// Current scenes to display.
@@ -39,6 +40,9 @@ class SceneStrip extends ConsumerWidget {
   /// When non-null we're rendering room-scoped scenes – editor saves
   /// to `PUT /rooms/:id/scenes`. When null, the editor saves globally.
   final String? roomId;
+
+  /// Dashboard-scene wordt op dit gebouw gezet. Kamerscenes laten dit leeg.
+  final String? buildingId;
 
   /// Use light foreground on dark ambient backgrounds (intercom etc.).
   final bool dark;
@@ -125,6 +129,7 @@ class SceneStrip extends ConsumerWidget {
         createNew: initial == null,
         scope: roomId == null ? SceneScope.global : SceneScope.room,
         roomId: roomId,
+        buildingId: buildingId,
       ),
     );
     if (next != null) onEdited(next);

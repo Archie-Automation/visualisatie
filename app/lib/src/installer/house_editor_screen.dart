@@ -448,6 +448,7 @@ enum _FocusKind {
   room,
   device,
   houseSystems,
+  buildings,
   globalDevices,
   /// A device that is NOT placed in any room.
   globalDevice,
@@ -534,6 +535,12 @@ class _Focus {
         ci = null;
   const _Focus.houseSystems()
       : kind = _FocusKind.houseSystems,
+        fi = -1,
+        ri = -1,
+        di = -1,
+        ci = null;
+  const _Focus.buildings()
+      : kind = _FocusKind.buildings,
         fi = -1,
         ri = -1,
         di = -1,
@@ -895,11 +902,13 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   }
 
   void _addFloor() {
+    final buildings = _buildingsSorted();
     _floors().add({
       'id': 'fl-${_uuid.v4()}',
       'name': 'Nieuwe verdieping',
       'order': _floors().length,
       'rooms': <Map<String, dynamic>>[],
+      if (buildings.isNotEmpty) 'buildingId': buildings.first['id'],
     });
     _selectFocus(_Focus.floor(_floors().length - 1));
   }
@@ -2405,6 +2414,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         _FocusKind.room => 'Kamer',
         _FocusKind.device => 'Apparaat',
         _FocusKind.houseSystems => 'Custom systeemtegels',
+        _FocusKind.buildings => 'Gebouwen',
         _FocusKind.globalDevices => 'Algemene devices',
         _FocusKind.globalDevice => 'Apparaat',
       };
@@ -2682,6 +2692,15 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           chapter: 'Visualisatie',
           rows: [
             LuxeNavRow(
+              icon: Icons.apartment_outlined,
+              title: 'Gebouwen',
+              subtitle: _buildingsList().isEmpty
+                  ? 'Eén woning'
+                  : _countLabel(_buildingsList().length, 'gebouw', 'gebouwen'),
+              selected: _sel.kind == _FocusKind.buildings,
+              onTap: () => _selectFocus(const _Focus.buildings()),
+            ),
+            LuxeNavRow(
               icon: Icons.dashboard_outlined,
               title: 'Custom systeemtegels',
               selected: _sel.kind == _FocusKind.houseSystems,
@@ -2848,7 +2867,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           LuxeNavRow(
             icon: Icons.layers_outlined,
             title: _namedOr(floors[i], 'Verdieping'),
-            subtitle: _countLabel(_roomList(i).length, 'kamer', 'kamers'),
+            subtitle: [
+              _countLabel(_roomList(i).length, 'kamer', 'kamers'),
+              if (_buildingsList().length >= 2) _floorBuildingLabel(floors[i]),
+            ].join(' · '),
             selectedTextMatchesIcon: true,
             selected: _sel.fi == i &&
                 (_sel.kind == _FocusKind.floor ||
@@ -3241,6 +3263,14 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                 labelOverride: 'Naam',
               ),
             ),
+            if (_buildingsList().isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
+                child: _buildingDropdown(
+                  tiles[i],
+                  emptyLabel: 'Bij de apparaten van elk gebouw',
+                ),
+              ),
             for (final rawId in List<dynamic>.from(_tileDeviceIds(tiles[i])))
               Builder(
                 builder: (context) {
@@ -3451,11 +3481,19 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             title: 'Verdieping',
             trailing: LuxeInfoIconButton(
               title: 'Verdieping',
-              body: 'Naam zoals in de app.',
+              body: 'Naam zoals in de app. Elke verdieping hoort bij één gebouw.',
             ),
           ),
           _BoundStrField('name', floor, () => setState(() {}),
               labelOverride: 'Naam'),
+          if (_buildingsList().isNotEmpty) ...[
+            const SizedBox(height: 12),
+            _buildingDropdown(
+              floor,
+              emptyLabel: 'Eerste gebouw',
+              allowEmpty: false,
+            ),
+          ],
         ],
       ),
     );
@@ -3835,6 +3873,9 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             }
             return ref.read(installerAuthProvider).token;
           },
+          leading: [
+            _looseDeviceBuildingCard(_cameras()[_sel.ci!]),
+          ],
         );
       case _FocusKind.audio:
         return _audioInstallerPanel(context);
@@ -3857,6 +3898,9 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             }
             return ref.read(installerAuthProvider).token;
           },
+          leading: [
+            _looseDeviceBuildingCard(_intercoms()[_sel.ci!]),
+          ],
         );
       case _FocusKind.users:
         return _usersPanel(context);
@@ -3876,6 +3920,8 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         return _floorsInstallerPanel(context);
       case _FocusKind.houseSystems:
         return _houseSystemsInstallerPanel(context);
+      case _FocusKind.buildings:
+        return _buildingsInstallerPanel(context);
       case _FocusKind.globalDevices:
         return _globalDevicesInstallerPanel(context);
       case _FocusKind.floor:
@@ -3921,8 +3967,237 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             return ref.read(installerAuthProvider).token;
           },
           showSystemTile: true,
+          leading: [
+            _looseDeviceBuildingCard(_globalDeviceList()[_sel.di]),
+          ],
         );
     }
+  }
+
+  List<Map<String, dynamic>> _buildingsList() {
+    final h = _house;
+    if (h == null) return const [];
+    final raw = h['buildings'];
+    if (raw is! List) return const [];
+    return raw.cast<Map<String, dynamic>>();
+  }
+
+  List<Map<String, dynamic>> _ensureBuildings() {
+    final h = _house;
+    if (h == null) return [];
+    if (h['buildings'] is! List) {
+      h['buildings'] = <Map<String, dynamic>>[];
+    }
+    return (h['buildings'] as List).cast<Map<String, dynamic>>();
+  }
+
+  List<Map<String, dynamic>> _buildingsSorted() {
+    final list = [..._buildingsList()];
+    list.sort((a, b) =>
+        ((a['order'] as int?) ?? 0).compareTo((b['order'] as int?) ?? 0));
+    return list;
+  }
+
+  String _floorBuildingLabel(Map<String, dynamic> floor) {
+    final id = floor['buildingId'] as String?;
+    for (final b in _buildingsSorted()) {
+      if (b['id'] == id) return _namedOr(b, 'Gebouw');
+    }
+    final list = _buildingsSorted();
+    if (list.isEmpty) return '';
+    return '${_namedOr(list.first, 'Gebouw')} (standaard)';
+  }
+
+  void _addBuilding() {
+    final list = _ensureBuildings();
+    list.add({
+      'id': 'bld-${_uuid.v4()}',
+      'name': 'Nieuw gebouw',
+      'order': list.length,
+    });
+    setState(() {});
+  }
+
+  void _deleteBuildingAt(int index) {
+    final list = _buildingsList();
+    if (index < 0 || index >= list.length) return;
+    final id = list[index]['id'];
+    list.removeAt(index);
+    if (id is String && id.isNotEmpty) _stripBuildingId(id);
+    setState(() {});
+  }
+
+  void _deleteBuildingId(String id) {
+    final index = _buildingsList().indexWhere((b) => b['id'] == id);
+    if (index < 0) return;
+    _deleteBuildingAt(index);
+  }
+
+  void _stripBuildingId(String id) {
+    void walk(Object? node) {
+      if (node is Map) {
+        if (node['buildingId'] == id) node.remove('buildingId');
+        for (final v in node.values) {
+          walk(v);
+        }
+      } else if (node is List) {
+        for (final v in node) {
+          walk(v);
+        }
+      }
+    }
+
+    final h = _house;
+    if (h == null) return;
+    for (final key in const [
+      'floors',
+      'devices',
+      'cameras',
+      'intercoms',
+      'houseSystems',
+      'scenes',
+    ]) {
+      walk(h[key]);
+    }
+  }
+
+  Widget _buildingDropdown(
+    Map<String, dynamic> target, {
+    required String emptyLabel,
+    bool allowEmpty = true,
+  }) {
+    final buildings = _buildingsSorted();
+    if (buildings.isEmpty) return const SizedBox.shrink();
+    final ids = <String>[
+      for (final b in buildings)
+        if ((b['id'] as String?)?.isNotEmpty == true) b['id'] as String,
+    ];
+    if (ids.isEmpty) return const SizedBox.shrink();
+    final current = target['buildingId'] as String?;
+    var value = current != null && ids.contains(current) ? current : '';
+    if (!allowEmpty && !ids.contains(value)) {
+      value = ids.first;
+      target['buildingId'] = value;
+    }
+    return DropdownButtonFormField<String>(
+      key: ValueKey('bld-${target['id']}-$value-${ids.join(',')}'),
+      initialValue: value,
+      isExpanded: true,
+      decoration: luxeFilledDecoration(hint: 'Gebouw'),
+      items: [
+        if (allowEmpty) DropdownMenuItem(value: '', child: Text(emptyLabel)),
+        for (final b in buildings)
+          if ((b['id'] as String?)?.isNotEmpty == true)
+            DropdownMenuItem(
+              value: b['id'] as String,
+              child: Text(_namedOr(b, 'Gebouw')),
+            ),
+      ],
+      onChanged: (v) {
+        if (v == null || (v.isEmpty && allowEmpty)) {
+          target.remove('buildingId');
+        } else if (v.isNotEmpty) {
+          target['buildingId'] = v;
+        }
+        setState(() {});
+      },
+    );
+  }
+
+  Widget _looseDeviceBuildingCard(Map<String, dynamic> device) {
+    if (_buildingsList().isEmpty) return const SizedBox.shrink();
+    return LuxeListCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const LuxeSectionTitle(
+            icon: Icons.apartment_outlined,
+            title: 'Gebouw',
+            trailing: LuxeInfoIconButton(
+              title: 'Gebouw',
+              body:
+                  'Camera\'s, intercoms en apparaten zonder kamer horen '
+                  'bij het gekozen gebouw. Leeg = het eerste gebouw. '
+                  'Apparaten in een kamer volgen de verdieping.',
+            ),
+          ),
+          _buildingDropdown(
+            device,
+            emptyLabel: 'Eerste gebouw (standaard)',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildingsInstallerPanel(BuildContext context) {
+    final buildings = _buildingsSorted();
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 36),
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
+          child: Text(
+            'Een bijgebouw, zoals een gastenverblijf of zwembadhuis, is een eigen gebouw. '
+            'Vanaf twee gebouwen kiest de bewoner bovenaan, boven de verdiepingen. '
+            'Elke verdieping hoort bij één gebouw. '
+            'Scenes, systemen en de statusiconen zijn van dat gebouw. '
+            'Een scene kan voor meerdere gebouwen aangevinkt worden en verschijnt dan in elk daarvan. '
+            'Met nul of één gebouw blijft alles samen zichtbaar.\n\n'
+            'Camera\'s en apparaten zonder kamer zonder gebouw horen bij het eerste gebouw in deze lijst. '
+            'Alarm en grafieken blijven op elk gebouw zichtbaar.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: LuxeColors.inkSoft,
+                ),
+          ),
+        ),
+        LuxeListCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              if (buildings.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 8),
+                  child: Text(
+                    'Nog geen gebouw. De woning is dan één geheel.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ),
+              for (var i = 0; i < buildings.length; i++) ...[
+                if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 4, 0),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: _BoundStrField(
+                          'name',
+                          buildings[i],
+                          () => setState(() {}),
+                          key: ValueKey('bld-name-${buildings[i]['id']}'),
+                          labelOverride: 'Naam',
+                        ),
+                      ),
+                      _rowTrash(
+                        tooltip: 'Gebouw verwijderen',
+                        onPressed: () => _deleteBuildingId(
+                          buildings[i]['id'] as String? ?? '',
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              LuxeAddRow(
+                label: 'Gebouw toevoegen',
+                onTap: _addBuilding,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _usersPanel(BuildContext context) {

@@ -1964,6 +1964,8 @@ export function buildRouter(
     name: z.string().min(1).max(60),
     icon: z.string().max(40).optional(),
     color: z.string().max(10).optional(),
+    buildingId: z.string().min(1).max(64).optional(),
+    buildingIds: z.array(z.string().min(1).max(64)).max(32).optional(),
     actions: z.array(SceneActionSchema).max(64),
     mediaActions: z.array(SceneMediaActionSchema).max(16).optional(),
     knx: z

@@ -31,6 +31,7 @@ import 'widgets/room_category_strip.dart';
 import 'widgets/luxe_backdrop.dart';
 import 'widgets/scene_strip.dart';
 import '../floor_order.dart';
+import '../building_order.dart';
 import '../room_order.dart';
 import '../scene_order.dart';
 import '../system_order.dart';
@@ -111,10 +112,12 @@ class _DashboardBody extends ConsumerStatefulWidget {
 }
 
 class _DashboardBodyState extends ConsumerState<_DashboardBody> {
+  int _buildingIndex = 0;
   int _floorIndex = 0;
   /// Tablet/desktop: false = startscherm (geen kamers); true = verdieping open.
   bool _floorBrowsing = false;
   late final ScrollController _mainScroll;
+  late final ScrollController _buildingScroll;
   late final ScrollController _floorScroll;
   late final ScrollController _systemScroll;
   late final ScrollController _sceneScroll;
@@ -124,6 +127,7 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
   void initState() {
     super.initState();
     _mainScroll = ScrollController();
+    _buildingScroll = ScrollController();
     _floorScroll = ScrollController();
     _systemScroll = ScrollController();
     _sceneScroll = ScrollController();
@@ -133,6 +137,7 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
   @override
   void dispose() {
     _mainScroll.dispose();
+    _buildingScroll.dispose();
     _floorScroll.dispose();
     _systemScroll.dispose();
     _sceneScroll.dispose();
@@ -142,51 +147,109 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
 
   void _resetIdleScrollState() {
     if (_mainScroll.hasClients) _mainScroll.jumpTo(0);
+    if (_buildingScroll.hasClients) _buildingScroll.jumpTo(0);
     if (_floorScroll.hasClients) _floorScroll.jumpTo(0);
     if (_systemScroll.hasClients) _systemScroll.jumpTo(0);
     if (_sceneScroll.hasClients) _sceneScroll.jumpTo(0);
     if (_roomsScroll.hasClients) _roomsScroll.jumpTo(0);
-    if (_floorIndex != 0 || _floorBrowsing) {
+    if (_buildingIndex != 0 || _floorIndex != 0 || _floorBrowsing) {
       setState(() {
+        _buildingIndex = 0;
         _floorIndex = 0;
         _floorBrowsing = false;
       });
     }
-    final floorQ = _routeFloorId(context);
+    final floorQ = _routeQuery(context, 'floor');
     if (floorQ != null && floorQ.isNotEmpty) {
       context.go('/');
     }
   }
 
-  String? _routeFloorId(BuildContext context) {
+  String? _routeQuery(BuildContext context, String key) {
     try {
-      return GoRouterState.of(context).uri.queryParameters['floor'];
+      return GoRouterState.of(context).uri.queryParameters[key];
     } catch (_) {
       return null;
     }
   }
 
-  void _openFloor(List<Floor> floors, int i) {
+  List<Building> _orderedBuildings(List<String> order) {
+    final list = [...widget.cfg.buildings]
+      ..sort((a, b) => a.order.compareTo(b.order));
+    return applyBuildingOrder(order, list);
+  }
+
+  List<Floor> _orderedFloors(List<String> order, String? buildingId) {
+    final list = [...widget.cfg.floors]
+      ..sort((a, b) => a.order.compareTo(b.order));
+    final ordered = applyFloorOrder(order, list);
+    final scope = widget.cfg.scopedBuildingId(buildingId);
+    if (scope == null) return ordered;
+    return [
+      for (final f in ordered)
+        if (widget.cfg.resolveBuildingId(f.buildingId) == scope) f,
+    ];
+  }
+
+  void _selectBuilding(List<Building> buildings, int i) {
+    if (i < 0 || i >= buildings.length) return;
+    final id = buildings[i].id;
+    final floors = _orderedFloors(ref.read(floorOrderProvider), id);
+    final stayBrowsing = _floorBrowsing && floors.isNotEmpty;
+    setState(() {
+      _buildingIndex = i;
+      _floorIndex = 0;
+      _floorBrowsing = stayBrowsing;
+      if (_floorScroll.hasClients) _floorScroll.jumpTo(0);
+      if (_roomsScroll.hasClients) _roomsScroll.jumpTo(0);
+      if (_sceneScroll.hasClients) _sceneScroll.jumpTo(0);
+      if (_systemScroll.hasClients) _systemScroll.jumpTo(0);
+    });
+    if (stayBrowsing) {
+      context.replace(
+        '/?building=${Uri.encodeComponent(id)}'
+        '&floor=${Uri.encodeComponent(floors.first.id)}',
+      );
+    } else {
+      context.replace('/?building=${Uri.encodeComponent(id)}');
+    }
+  }
+
+  void _openFloor(List<Floor> floors, int i, String? buildingId) {
     if (i < 0 || i >= floors.length) return;
     setState(() {
       _floorIndex = i;
       _floorBrowsing = true;
       if (_roomsScroll.hasClients) _roomsScroll.jumpTo(0);
     });
-    context.replace('/?floor=${Uri.encodeComponent(floors[i].id)}');
+    final q = <String, String>{
+      if (buildingId != null && buildingId.isNotEmpty) 'building': buildingId,
+      'floor': floors[i].id,
+    };
+    context.replace(Uri(path: '/', queryParameters: q).toString());
   }
 
-  void _closeFloorBrowse() {
+  void _closeFloorBrowse(String? buildingId) {
     setState(() => _floorBrowsing = false);
-    context.replace('/');
+    if (buildingId != null && buildingId.isNotEmpty) {
+      context.replace('/?building=${Uri.encodeComponent(buildingId)}');
+    } else {
+      context.replace('/');
+    }
   }
 
   @override
   void didUpdateWidget(covariant _DashboardBody oldWidget) {
     super.didUpdateWidget(oldWidget);
+    final bCount = widget.cfg.buildings.length;
     final n = widget.cfg.floors.length;
-    if (n > 0 && _floorIndex >= n) {
-      setState(() => _floorIndex = n - 1);
+    if ((bCount > 0 && _buildingIndex >= bCount) || (n > 0 && _floorIndex >= n)) {
+      setState(() {
+        if (bCount > 0 && _buildingIndex >= bCount) {
+          _buildingIndex = bCount - 1;
+        }
+        if (n > 0 && _floorIndex >= n) _floorIndex = n - 1;
+      });
     }
   }
 
@@ -216,14 +279,26 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
     final cfg = widget.cfg;
     final auth = ref.watch(authProvider);
     final canEdit = canEditScenesInApp(auth, cfg);
+    final buildingOrder = ref.watch(buildingOrderProvider);
     final floorOrder = ref.watch(floorOrderProvider);
-    final floors = applyFloorOrder(
-      floorOrder,
-      [...cfg.floors]..sort((a, b) => a.order.compareTo(b.order)),
-    );
+    final buildings = _orderedBuildings(buildingOrder);
+    final showBuildings = buildings.length >= 2;
+    final buildingSafe = buildings.isEmpty
+        ? 0
+        : _buildingIndex.clamp(0, buildings.length - 1);
+    var selectedBuildingIndex = buildingSafe;
+    final routeBuildingId = _routeQuery(context, 'building');
+    if (routeBuildingId != null && buildings.isNotEmpty) {
+      final idx = buildings.indexWhere((b) => b.id == routeBuildingId);
+      if (idx >= 0) selectedBuildingIndex = idx;
+    }
+    final selectedBuilding =
+        showBuildings ? buildings[selectedBuildingIndex] : null;
+    final buildingId = selectedBuilding?.id;
+    final floors = _orderedFloors(floorOrder, buildingId);
     final safeIndex =
         floors.isEmpty ? 0 : _floorIndex.clamp(0, floors.length - 1);
-    final routeFloorId = _routeFloorId(context);
+    final routeFloorId = _routeQuery(context, 'floor');
     var selectedIndex = safeIndex;
     if (routeFloorId != null && floors.isNotEmpty) {
       final idx = floors.indexWhere((f) => f.id == routeFloorId);
@@ -240,11 +315,15 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _FloorBrowseHeader(
+            buildings: showBuildings ? buildings : const [],
+            selectedBuildingIndex: selectedBuildingIndex,
+            buildingScrollController: _buildingScroll,
+            onSelectBuilding: (i) => _selectBuilding(buildings, i),
             floors: floors,
             selectedIndex: selectedIndex,
             scrollController: _floorScroll,
-            onBack: _closeFloorBrowse,
-            onSelect: (i) => _openFloor(floors, i),
+            onBack: () => _closeFloorBrowse(buildingId),
+            onSelect: (i) => _openFloor(floors, i, buildingId),
           ),
           Expanded(
             child: ListView(
@@ -274,39 +353,71 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
       physics: const ClampingScrollPhysics(
           parent: AlwaysScrollableScrollPhysics()),
       slivers: [
-        SliverToBoxAdapter(child: _header(context, cfg, auth, ref)),
         SliverToBoxAdapter(
-            child: _scenes(context, cfg, canEdit, ref,
-                scrollController: _sceneScroll)),
+          child: _header(context, cfg, auth, ref, buildingId: buildingId),
+        ),
         SliverToBoxAdapter(
-            child: _Systemen(cfg: cfg, scrollController: _systemScroll)),
-        if (floors.isNotEmpty && isPanel)
+            child: _scenes(
+          context,
+          cfg,
+          canEdit,
+          ref,
+          scrollController: _sceneScroll,
+          buildingId: buildingId,
+        )),
+        SliverToBoxAdapter(
+            child: _Systemen(
+          cfg: cfg,
+          buildingId: buildingId,
+          scrollController: _systemScroll,
+        )),
+        if ((showBuildings || floors.isNotEmpty) && isPanel)
           SliverFillRemaining(
             hasScrollBody: false,
             child: _FloorsHomeBand(
+              buildings: showBuildings ? buildings : const [],
+              selectedBuildingIndex: selectedBuildingIndex,
+              buildingScrollController: _buildingScroll,
+              onSelectBuilding: (i) => _selectBuilding(buildings, i),
               floors: floors,
               scrollController: _floorScroll,
-              onSelect: (i) => _openFloor(floors, i),
+              onSelect: (i) => _openFloor(floors, i, buildingId),
             ),
           )
-        else if (floors.isNotEmpty) ...[
-          SliverToBoxAdapter(
-            child: _FloorTabBar(
-              floors: floors,
-              selectedIndex: selectedIndex,
-              scrollController: _floorScroll,
-              onSelect: (i) => setState(() => _floorIndex = i),
-            ),
-          ),
-          if (selectedFloor != null)
+        else if (showBuildings || floors.isNotEmpty) ...[
+          if (showBuildings)
             SliverToBoxAdapter(
-              child: _FloorRoomsBlock(
-                floor: selectedFloor,
-                onOpenRoom: (room) =>
-                    appOpen(
-                      context,
-                      '/floor/${selectedFloor.id}/room/${room.id}',
-                    ),
+              child: _BuildingTabBar(
+                buildings: buildings,
+                selectedIndex: selectedBuildingIndex,
+                scrollController: _buildingScroll,
+                onSelect: (i) => _selectBuilding(buildings, i),
+              ),
+            ),
+          if (floors.isNotEmpty) ...[
+            SliverToBoxAdapter(
+              child: _FloorTabBar(
+                floors: floors,
+                selectedIndex: selectedIndex,
+                scrollController: _floorScroll,
+                onSelect: (i) => setState(() => _floorIndex = i),
+              ),
+            ),
+            if (selectedFloor != null)
+              SliverToBoxAdapter(
+                child: _FloorRoomsBlock(
+                  floor: selectedFloor,
+                  onOpenRoom: (room) => appOpen(
+                        context,
+                        '/floor/${selectedFloor.id}/room/${room.id}',
+                      ),
+                ),
+              ),
+          ] else
+            const SliverToBoxAdapter(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(28, 8, 28, 24),
+                child: Text('Geen verdiepingen in dit gebouw'),
               ),
             ),
           const SliverToBoxAdapter(child: SizedBox(height: 64)),
@@ -316,7 +427,7 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
   }
 }
 
-/// Sticky header bij kamer-browse: zelfde hoogte als systemen, terug + verdiepingen.
+/// Sticky header bij kamer-browse: terug + gebouw boven de verdiepingen.
 class _FloorBrowseHeader extends StatelessWidget {
   const _FloorBrowseHeader({
     required this.floors,
@@ -324,6 +435,10 @@ class _FloorBrowseHeader extends StatelessWidget {
     required this.onSelect,
     required this.onBack,
     this.scrollController,
+    this.buildings = const [],
+    this.selectedBuildingIndex = 0,
+    this.onSelectBuilding,
+    this.buildingScrollController,
   });
 
   final List<Floor> floors;
@@ -331,11 +446,17 @@ class _FloorBrowseHeader extends StatelessWidget {
   final ValueChanged<int> onSelect;
   final VoidCallback onBack;
   final ScrollController? scrollController;
+  final List<Building> buildings;
+  final int selectedBuildingIndex;
+  final ValueChanged<int>? onSelectBuilding;
+  final ScrollController? buildingScrollController;
 
   @override
   Widget build(BuildContext context) {
+    final showBuildings = buildings.length >= 2 && onSelectBuilding != null;
+    final buildingExtra = showBuildings ? HeaderIconButton.size + 8 : 0.0;
     return StickyHeaderSurface(
-      height: context.roomStickyHeaderExtent,
+      height: context.roomStickyHeaderExtent + buildingExtra,
       child: Padding(
         padding: EdgeInsets.fromLTRB(
           context.hPad - 4,
@@ -343,25 +464,234 @@ class _FloorBrowseHeader extends StatelessWidget {
           8,
           14,
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+        child: Column(
           children: [
-            HeaderIconButton(
-              icon: Icons.arrow_back_ios_new,
-              onTap: onBack,
-              tooltip: 'Terug',
-              hitSize: 68,
-            ),
-            Expanded(
-              child: _FloorTabBar(
-                floors: floors,
-                selectedIndex: selectedIndex,
-                scrollController: scrollController,
-                onSelect: onSelect,
-                bottomPadding: 0,
+            if (showBuildings)
+              _BuildingTabBar(
+                buildings: buildings,
+                selectedIndex: selectedBuildingIndex,
+                scrollController: buildingScrollController,
+                onSelect: onSelectBuilding!,
+                bottomPadding: 8,
                 listPadding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
               ),
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  HeaderIconButton(
+                    icon: Icons.arrow_back_ios_new,
+                    onTap: onBack,
+                    tooltip: 'Terug',
+                    hitSize: 68,
+                  ),
+                  Expanded(
+                    child: _FloorTabBar(
+                      floors: floors,
+                      selectedIndex: selectedIndex,
+                      scrollController: scrollController,
+                      onSelect: onSelect,
+                      bottomPadding: 0,
+                      listPadding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+                    ),
+                  ),
+                ],
+              ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Horizontale gebouwkiezer. Zelfde chips als verdiepingen, erboven.
+class _BuildingTabBar extends ConsumerWidget {
+  const _BuildingTabBar({
+    required this.buildings,
+    required this.selectedIndex,
+    required this.onSelect,
+    this.scrollController,
+    this.bottomPadding = 0,
+    this.listPadding,
+  });
+
+  final List<Building> buildings;
+  final int selectedIndex;
+  final ValueChanged<int> onSelect;
+  final ScrollController? scrollController;
+  final double bottomPadding;
+  final EdgeInsetsGeometry? listPadding;
+
+  void _openReorderSheet(BuildContext context, WidgetRef ref) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => _BuildingReorderSheet(buildings: buildings),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    const chipH = HeaderIconButton.size;
+    final pad = listPadding ??
+        EdgeInsets.fromLTRB(context.hPad, 8, context.hPad, 8);
+    final vPadTotal = pad is EdgeInsets ? pad.vertical : 16.0;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomPadding),
+      child: SizedBox(
+        height: chipH + vPadTotal,
+        child: ListView.separated(
+          controller: scrollController,
+          scrollDirection: Axis.horizontal,
+          primary: false,
+          clipBehavior: context.stripClip,
+          physics: const ClampingScrollPhysics(),
+          padding: pad,
+          addRepaintBoundaries: false,
+          addAutomaticKeepAlives: false,
+          itemCount: buildings.length,
+          separatorBuilder: (_, __) => const SizedBox(width: 10),
+          itemBuilder: (context, i) {
+            final building = buildings[i];
+            final selected = i == selectedIndex;
+            return Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () => onSelect(i),
+                onLongPress: () => _openReorderSheet(context, ref),
+                borderRadius: BorderRadius.circular(12),
+                child: LuxeRimBox(
+                  height: chipH,
+                  radius: 12,
+                  rimWidth: selected ? 2 : 1,
+                  rimColor: selected
+                      ? LuxeBorders.solid(LuxeColors.brass)
+                      : LuxeColors.glassRim,
+                  fillColor: LuxeChipChrome.fill(
+                    context,
+                    pressed: selected,
+                  ),
+                  shadows: selected ? LuxeShadows.soft : null,
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  child: Center(
+                    child: Text(
+                      building.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      textHeightBehavior: const TextHeightBehavior(
+                        applyHeightToFirstAscent: false,
+                        applyHeightToLastDescent: false,
+                      ),
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            height: 1.0,
+                            fontSize: context.isPhone ? 16 : 15,
+                            color: selected
+                                ? LuxeColors.ink
+                                : LuxeColors.inkSoft,
+                            fontWeight: selected
+                                ? FontWeight.w600
+                                : FontWeight.w500,
+                          ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+class _BuildingReorderSheet extends ConsumerStatefulWidget {
+  const _BuildingReorderSheet({required this.buildings});
+  final List<Building> buildings;
+
+  @override
+  ConsumerState<_BuildingReorderSheet> createState() =>
+      _BuildingReorderSheetState();
+}
+
+class _BuildingReorderSheetState extends ConsumerState<_BuildingReorderSheet> {
+  late List<Building> _buildings;
+
+  @override
+  void initState() {
+    super.initState();
+    _buildings = List.of(widget.buildings);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+      child: Container(
+        color: LuxeColors.cream,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 10),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 10, 22, 4),
+              child: Row(
+                children: [
+                  Icon(Icons.apartment_outlined,
+                      size: 20, color: LuxeColors.brass),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Gebouwen rangschikken',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(22, 2, 22, 12),
+              child: Text(
+                'Sleep om de volgorde aan te passen. Verdiepingen zonder gebouw blijven bij het eerste gebouw uit de configuratie.',
+                style: Theme.of(context)
+                    .textTheme
+                    .bodySmall
+                    ?.copyWith(color: LuxeColors.inkSoft),
+              ),
+            ),
+            SizedBox(
+              height: (_buildings.length * 64.0).clamp(0, 360),
+              child: ReorderableListView.builder(
+                itemCount: _buildings.length,
+                buildDefaultDragHandles: false,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                onReorder: (oldIndex, newIndex) {
+                  if (newIndex > oldIndex) newIndex--;
+                  setState(() {
+                    final item = _buildings.removeAt(oldIndex);
+                    _buildings.insert(newIndex, item);
+                  });
+                  ref.read(buildingOrderProvider.notifier).reorder(
+                        _buildings.map((b) => b.id).toList(),
+                      );
+                },
+                itemBuilder: (_, i) {
+                  final building = _buildings[i];
+                  return ListTile(
+                    key: ValueKey(building.id),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                    leading: ReorderableDragStartListener(
+                      index: i,
+                      child: const Icon(Icons.drag_handle),
+                    ),
+                    title: Text(building.name),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
           ],
         ),
       ),
@@ -473,27 +803,60 @@ class _FloorTabBar extends ConsumerWidget {
   }
 }
 
-/// Tablet startscherm: verdiepingen verticaal gecentreerd (geen lijn onder systemen).
+/// Tablet startscherm: gebouw boven verdiepingen, verticaal gecentreerd.
 class _FloorsHomeBand extends StatelessWidget {
   const _FloorsHomeBand({
     required this.floors,
     required this.onSelect,
     this.scrollController,
+    this.buildings = const [],
+    this.selectedBuildingIndex = 0,
+    this.onSelectBuilding,
+    this.buildingScrollController,
   });
 
   final List<Floor> floors;
   final ValueChanged<int> onSelect;
   final ScrollController? scrollController;
+  final List<Building> buildings;
+  final int selectedBuildingIndex;
+  final ValueChanged<int>? onSelectBuilding;
+  final ScrollController? buildingScrollController;
 
   @override
   Widget build(BuildContext context) {
+    final showBuildings = buildings.length >= 2 && onSelectBuilding != null;
     return Center(
-      child: _FloorTabBar(
-        floors: floors,
-        selectedIndex: -1,
-        scrollController: scrollController,
-        onSelect: onSelect,
-        bottomPadding: 0,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (showBuildings)
+            _BuildingTabBar(
+              buildings: buildings,
+              selectedIndex: selectedBuildingIndex,
+              scrollController: buildingScrollController,
+              onSelect: onSelectBuilding!,
+              bottomPadding: 8,
+            ),
+          if (floors.isNotEmpty)
+            _FloorTabBar(
+              floors: floors,
+              selectedIndex: -1,
+              scrollController: scrollController,
+              onSelect: onSelect,
+              bottomPadding: 0,
+            )
+          else if (showBuildings)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                'Geen verdiepingen in dit gebouw',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: LuxeColors.inkSoft,
+                    ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -565,9 +928,13 @@ class _FloorReorderSheetState extends ConsumerState<_FloorReorderSheet> {
                     final item = _floors.removeAt(oldIndex);
                     _floors.insert(newIndex, item);
                   });
-                  ref
-                      .read(floorOrderProvider.notifier)
-                      .reorder(_floors.map((f) => f.id).toList());
+                  final visible = _floors.map((f) => f.id).toList();
+                  ref.read(floorOrderProvider.notifier).reorder(
+                        mergeVisibleOrder(
+                          ref.read(floorOrderProvider),
+                          visible,
+                        ),
+                      );
                 },
                 itemBuilder: (_, i) {
                   final floor = _floors[i];
@@ -1136,8 +1503,9 @@ Widget _header(
   BuildContext context,
   HouseConfig cfg,
   AuthState auth,
-  WidgetRef ref,
-) {
+  WidgetRef ref, {
+  String? buildingId,
+}) {
   final hp = context.hPad;
   final phone = context.isPhone;
   return Padding(
@@ -1163,7 +1531,9 @@ Widget _header(
           ),
         ),
         const SizedBox(width: 12),
-        RepaintBoundary(child: _HouseActivityHeaderButtons(cfg: cfg)),
+        RepaintBoundary(
+          child: _HouseActivityHeaderButtons(cfg: cfg, buildingId: buildingId),
+        ),
         // On narrow phones collapse installer icon into a single menu
         if (auth.isInstaller) ...[
           _GlassIconButton(
@@ -1196,11 +1566,13 @@ Widget _scenes(
   bool canEdit,
   WidgetRef ref, {
   ScrollController? scrollController,
+  String? buildingId,
 }) {
-  if (cfg.scenes.isEmpty && !canEdit) return const SizedBox.shrink();
+  final scenes = cfg.scenesIn(buildingId);
+  if (scenes.isEmpty && !canEdit) return const SizedBox.shrink();
   final hp = context.hPad;
   final order = ref.watch(sceneOrderProvider);
-  final ordered = applySceneOrder(order, cfg.scenes);
+  final ordered = applySceneOrder(order, scenes);
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
@@ -1214,7 +1586,7 @@ Widget _scenes(
                     fontSize: context.isPhone ? 16 : 15,
                   ),
             ),
-            if (cfg.scenes.length > 1) ...[
+            if (scenes.length > 1) ...[
               const Spacer(),
               GestureDetector(
                 onTap: () => showModalBottomSheet<void>(
@@ -1225,7 +1597,12 @@ Widget _scenes(
                   builder: (_) => _SceneReorderSheet(
                     scenes: ordered,
                     onReordered: (ids) =>
-                        ref.read(sceneOrderProvider.notifier).reorder(ids),
+                        ref.read(sceneOrderProvider.notifier).reorder(
+                              mergeVisibleOrder(
+                                ref.read(sceneOrderProvider),
+                                ids,
+                              ),
+                            ),
                   ),
                 ),
                 child: Padding(
@@ -1245,6 +1622,7 @@ Widget _scenes(
         scenes: ordered,
         canEdit: canEdit,
         scrollController: scrollController,
+        buildingId: buildingId,
         onEdited: (_) => ref.invalidate(configProvider),
       ),
       const SizedBox(height: 24),
@@ -1257,15 +1635,35 @@ Widget _scenes(
 // ---------------------------------------------------------------------------
 
 class _Systemen extends ConsumerWidget {
-  const _Systemen({required this.cfg, this.scrollController});
+  const _Systemen({
+    required this.cfg,
+    this.scrollController,
+    this.buildingId,
+  });
   final HouseConfig cfg;
   final ScrollController? scrollController;
+  final String? buildingId;
+
+  String _chipKey(_SystemChipData c) {
+    final id = cfg.scopedBuildingId(buildingId);
+    if (id == null) return c.name;
+    return '$id::${c.name}';
+  }
+
+  /// Oude volgorde (alleen de naam) blijft gelden tot dit gebouw zelf gerangschikt is.
+  String _lookupKey(_SystemChipData c, List<String> order) {
+    final id = cfg.scopedBuildingId(buildingId);
+    if (id == null) return c.name;
+    if (order.any((k) => k.startsWith('$id::'))) return _chipKey(c);
+    return c.name;
+  }
 
   void _openManageSheet(
     BuildContext context,
     WidgetRef ref,
     List<_SystemChipData> allChips,
     Set<String> hidden,
+    String Function(_SystemChipData) keyOf,
   ) {
     showModalBottomSheet<void>(
       context: context,
@@ -1276,6 +1674,7 @@ class _Systemen extends ConsumerWidget {
         allChips: allChips,
         hidden: hidden,
         ref: ref,
+        keyOf: keyOf,
       ),
     );
   }
@@ -1297,10 +1696,12 @@ class _Systemen extends ConsumerWidget {
     final seenFavIds = <String>{};
     final favDevices = <Device>[];
     for (final d in [...allDevices, ...allCameras, ...cfg.intercoms]) {
+      if (!cfg.deviceInBuilding(d, buildingId)) continue;
       if (effectiveDeviceFav(userDevFavsAsync, d)) {
         if (seenFavIds.add(d.id)) favDevices.add(d);
       }
     }
+    final scope = cfg.scopedBuildingId(buildingId);
     final validShortcuts = <FavoriteShortcut>[];
     for (final s in shortcuts) {
       Floor? fl;
@@ -1308,6 +1709,9 @@ class _Systemen extends ConsumerWidget {
         if (f.id == s.floorId) { fl = f; break; }
       }
       if (fl == null) continue;
+      if (scope != null && cfg.resolveBuildingId(fl.buildingId) != scope) {
+        continue;
+      }
       Room? rm;
       for (final r in fl.rooms) {
         if (r.id == s.roomId) { rm = r; break; }
@@ -1328,7 +1732,7 @@ class _Systemen extends ConsumerWidget {
 
     // Overige systemen (vaste tegels + extra tegels uit de configuratie).
     for (final sys in allHouseSystems(cfg)) {
-      final devices = devicesForHouseSystem(cfg, sys);
+      final devices = devicesForHouseSystem(cfg, sys, buildingId: buildingId);
       if (devices.isEmpty) continue;
       chips.add(_SystemChipData(
         slug: sys.slug,
@@ -1367,7 +1771,8 @@ class _Systemen extends ConsumerWidget {
     // Pas volgorde en zichtbaarheid toe.
     final sysOrder = ref.watch(systemOrderProvider);
     final sysHidden = ref.watch(systemHiddenProvider);
-    final allOrderedChips = applySystemOrder(sysOrder, chips, (c) => c.name);
+    final allOrderedChips =
+        applySystemOrder(sysOrder, chips, (c) => _lookupKey(c, sysOrder));
     final orderedChips =
         allOrderedChips.where((c) => !sysHidden.contains(c.name)).toList();
 
@@ -1393,7 +1798,13 @@ class _Systemen extends ConsumerWidget {
                 ),
                 const Spacer(),
                 GestureDetector(
-                  onTap: () => _openManageSheet(context, ref, allOrderedChips, sysHidden),
+                  onTap: () => _openManageSheet(
+                    context,
+                    ref,
+                    allOrderedChips,
+                    sysHidden,
+                    _chipKey,
+                  ),
                   child: Padding(
                     padding: EdgeInsets.only(left: 8),
                     child: Icon(
@@ -1430,9 +1841,12 @@ class _Systemen extends ConsumerWidget {
                 final reordered = List.of(orderedChips);
                 final item = reordered.removeAt(oldIndex);
                 reordered.insert(newIndex, item);
-                ref
-                    .read(systemOrderProvider.notifier)
-                    .reorder(reordered.map((c) => c.name).toList());
+                ref.read(systemOrderProvider.notifier).reorder(
+                      mergeVisibleOrder(
+                        ref.read(systemOrderProvider),
+                        reordered.map(_chipKey).toList(),
+                      ),
+                    );
               },
               itemCount: orderedChips.length,
               itemBuilder: (ctx, i) {
@@ -1444,7 +1858,11 @@ class _Systemen extends ConsumerWidget {
                     padding: EdgeInsets.only(
                         right: i < orderedChips.length - 1 ? 14 : 0),
                     child: RepaintBoundary(
-                      child: _SystemChip(data: chip, cfg: cfg),
+                      child: _SystemChip(
+                        data: chip,
+                        cfg: cfg,
+                        buildingId: buildingId,
+                      ),
                     ),
                   ),
                 );
@@ -1464,7 +1882,11 @@ class _Systemen extends ConsumerWidget {
                     separatorBuilder: (_, __) => const SizedBox(width: 14),
                     itemBuilder: (ctx, i) {
                       final chip = orderedChips[i];
-                      return _SystemChip(data: chip, cfg: cfg);
+                      return _SystemChip(
+                        data: chip,
+                        cfg: cfg,
+                        buildingId: buildingId,
+                      );
                     },
                   ),
           ),
@@ -1483,10 +1905,12 @@ class _SystemManageSheet extends ConsumerStatefulWidget {
     required this.allChips,
     required this.hidden,
     required this.ref,
+    required this.keyOf,
   });
   final List<_SystemChipData> allChips;
   final Set<String> hidden;
   final WidgetRef ref;
+  final String Function(_SystemChipData) keyOf;
 
   @override
   ConsumerState<_SystemManageSheet> createState() => _SystemManageSheetState();
@@ -1504,9 +1928,12 @@ class _SystemManageSheetState extends ConsumerState<_SystemManageSheet> {
   }
 
   void _save() {
-    ref
-        .read(systemOrderProvider.notifier)
-        .reorder(_chips.map((c) => c.name).toList());
+    ref.read(systemOrderProvider.notifier).reorder(
+          mergeVisibleOrder(
+            ref.read(systemOrderProvider),
+            _chips.map(widget.keyOf).toList(),
+          ),
+        );
     ref.read(systemHiddenProvider.notifier).setHidden(_hidden);
     Navigator.of(context).pop();
   }
@@ -1664,9 +2091,14 @@ class _SystemChipData {
 }
 
 class _SystemChip extends ConsumerStatefulWidget {
-  const _SystemChip({required this.data, required this.cfg});
+  const _SystemChip({
+    required this.data,
+    required this.cfg,
+    this.buildingId,
+  });
   final _SystemChipData data;
   final HouseConfig cfg;
+  final String? buildingId;
 
   @override
   ConsumerState<_SystemChip> createState() => _SystemChipState();
@@ -1758,7 +2190,10 @@ class _SystemChipState extends ConsumerState<_SystemChip>
   void _open(BuildContext context) {
     final data = widget.data;
     if (data.name == 'Favorieten') {
-      appOpen(context, '/system/$kFavorietenSlug');
+      appOpen(
+        context,
+        pathWithBuilding('/system/$kFavorietenSlug', widget.buildingId),
+      );
       return;
     }
     if (data.name == 'Grafieken') {
@@ -1773,7 +2208,13 @@ class _SystemChipState extends ConsumerState<_SystemChip>
     if (slug == null || slug.isEmpty) return;
     final sys = houseSystemBySlug(slug, widget.cfg);
     if (sys == null) return;
-    appOpen(context, houseSystemOpenPath(sys, data.devices));
+    appOpen(
+      context,
+      pathWithBuilding(
+        houseSystemOpenPath(sys, data.devices),
+        widget.buildingId,
+      ),
+    );
   }
 
   /// Returns the count + worst urgency for active melding alerts.
@@ -2101,15 +2542,18 @@ Color _statusGlyphColor() => LuxeColors.inkSoft.withValues(alpha: 0.85);
 
 /// House-wide activity: lights / heater / fireplace / ac / music → system pages.
 class _HouseActivityHeaderButtons extends ConsumerWidget {
-  const _HouseActivityHeaderButtons({required this.cfg});
+  const _HouseActivityHeaderButtons({required this.cfg, this.buildingId});
   final HouseConfig cfg;
+  final String? buildingId;
 
   static const _glyph = 26.0;
 
   void _openSystem(BuildContext context, String sysName) {
-    final sys = houseSystemByName(sysName);
+    final sys = houseSystemByName(sysName, cfg);
     final route = sys?.routePath;
-    if (route != null) appOpen(context, '$route?active=1');
+    if (route != null) {
+      appOpen(context, pathWithBuilding('$route?active=1', buildingId));
+    }
   }
 
   @override
@@ -2129,6 +2573,7 @@ class _HouseActivityHeaderButtons extends ConsumerWidget {
     var mediaPlaying = false;
 
     for (final d in cfg.allDevices) {
+      if (!cfg.deviceInBuilding(d, buildingId)) continue;
       if (!lightsOn && deviceLightIsOn(d, bus.values)) lightsOn = true;
       if (!heaterOn && deviceHeaterIsActive(d, bus.values)) {
         heaterOn = true;
@@ -2157,7 +2602,10 @@ class _HouseActivityHeaderButtons extends ConsumerWidget {
           tooltip: 'Heater aan',
           onTap: () => appOpen(
             context,
-            '/system/$kHeatersActivitySlug?active=1',
+            pathWithBuilding(
+              '/system/$kHeatersActivitySlug?active=1',
+              buildingId,
+            ),
           ),
           child: _HeaterBadge(size: _glyph, color: glyphColor),
         ),
