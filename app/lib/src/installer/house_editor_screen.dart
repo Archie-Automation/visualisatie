@@ -539,12 +539,6 @@ class _Focus {
         ri = -1,
         di = -1,
         ci = null;
-  const _Focus.buildings()
-      : kind = _FocusKind.buildings,
-        fi = -1,
-        ri = -1,
-        di = -1,
-        ci = null;
   const _Focus.globalDevices()
       : kind = _FocusKind.globalDevices,
         fi = -1,
@@ -599,8 +593,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   static const _uuid = Uuid();
   Map<String, dynamic>? _house;
   _Focus _sel = const _Focus.project();
-  /// Gebouw dat in Visualisatie open staat. Leeg = nog geen keuze.
+  /// Gebouw dat in Visualisatie gekozen is. Leeg = eerste gebouw, of één woning.
   String? _vizBuildingId;
+  int _vizMenuEpoch = 0;
+  static const _vizAddBuilding = '__viz_add_building__';
+  static const _vizRenameBuilding = '__viz_rename_building__';
+  static const _vizDeleteBuilding = '__viz_delete_building__';
   Map<String, dynamic>? _copiedDevice;
   /// Whether the mobile detail panel is in view (vs. the menu list).
   bool _mobileShowDetail = false;
@@ -634,25 +632,36 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       _sel.kind == _FocusKind.room ||
       _sel.kind == _FocusKind.device;
 
-  bool get _isVizFocus => switch (_sel.kind) {
-        _FocusKind.buildings ||
-        _FocusKind.houseSystems ||
-        _FocusKind.globalDevices ||
-        _FocusKind.globalDevice ||
-        _FocusKind.floors ||
-        _FocusKind.floor ||
-        _FocusKind.room ||
-        _FocusKind.device =>
-          true,
-        _ => false,
-      };
-
-  void _selectVizBuilding(String id) {
+  void _setVizBuilding(String id) {
     setState(() {
       _vizBuildingId = id;
-      _sel = const _Focus.buildings();
-      if (!_isInstallerWide()) _mobileShowDetail = true;
+      _vizMenuEpoch++;
+      _clampVizFocus();
     });
+  }
+
+  /// Verlaat een verdieping of apparaat dat niet bij het gekozen gebouw hoort.
+  void _clampVizFocus() {
+    switch (_sel.kind) {
+      case _FocusKind.buildings:
+        _sel = const _Focus.floors();
+      case _FocusKind.floor:
+      case _FocusKind.room:
+      case _FocusKind.device:
+        final floors = _floors();
+        final fi = _sel.fi;
+        if (fi < 0 || fi >= floors.length || !_onActiveBuilding(floors[fi])) {
+          _sel = const _Focus.floors();
+        }
+      case _FocusKind.globalDevice:
+        final list = _globalDeviceList();
+        final di = _sel.di;
+        if (di < 0 || di >= list.length || !_onActiveBuilding(list[di])) {
+          _sel = const _Focus.globalDevices();
+        }
+      default:
+        break;
+    }
   }
 
   @override
@@ -2469,11 +2478,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       case _FocusKind.houseSystems:
       case _FocusKind.globalDevices:
       case _FocusKind.floors:
-        final buildingId = _activeVizBuildingId;
-        if (buildingId != null) {
-          _selectVizBuilding(buildingId);
-          return true;
-        }
+      case _FocusKind.buildings:
         setState(() => _mobileShowDetail = false);
         return true;
       default:
@@ -2759,32 +2764,91 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       n == 1 ? '1 $one' : '$n $many';
 
   List<Widget> _visualizationNavRows() {
-    final buildings = _buildingsSorted();
-    if (buildings.isEmpty) {
-      return [
-        ..._vizSectionRows(),
-        LuxeAddRow(
-          label: 'Gebouw toevoegen',
-          onTap: _addBuilding,
-        ),
-      ];
-    }
     return [
-      for (final building in buildings)
-        LuxeNavRow(
-          icon: Icons.apartment_outlined,
-          title: _namedOr(building, 'Gebouw'),
-          selected: building['id'] == _vizBuildingId && _isVizFocus,
-          onTap: () {
-            final id = building['id'] as String? ?? '';
-            if (id.isNotEmpty) _selectVizBuilding(id);
-          },
-        ),
-      LuxeAddRow(
-        label: 'Gebouw toevoegen',
-        onTap: _addBuilding,
-      ),
+      _vizBuildingMenu(),
+      ..._vizSectionRows(),
     ];
+  }
+
+  Widget _vizBuildingMenu() {
+    final buildings = _buildingsSorted();
+    final ids = <String>[
+      for (final b in buildings)
+        if ((b['id'] as String?)?.isNotEmpty == true) b['id'] as String,
+    ];
+    final selected = _activeVizBuildingId;
+    final hasBuilding = ids.isNotEmpty;
+    final value = (selected != null && ids.contains(selected))
+        ? selected
+        : (ids.isEmpty ? '' : ids.first);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+      child: DropdownButtonFormField<String>(
+        key: ValueKey('viz-bld-$value-$_vizMenuEpoch'),
+        initialValue: value,
+        isExpanded: true,
+        decoration: luxeFilledDecoration(),
+        items: [
+          if (!hasBuilding)
+            const DropdownMenuItem(
+              value: '',
+              child: Text('Eén woning'),
+            ),
+          for (final b in buildings)
+            if ((b['id'] as String?)?.isNotEmpty == true)
+              DropdownMenuItem(
+                value: b['id'] as String,
+                child: Text(
+                  _namedOr(b, 'Gebouw'),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          DropdownMenuItem(
+            value: _vizAddBuilding,
+            child: Text(
+              'Gebouw toevoegen',
+              style: TextStyle(color: LuxeColors.brassDeep),
+            ),
+          ),
+          if (hasBuilding) ...[
+            DropdownMenuItem(
+              value: _vizRenameBuilding,
+              child: Text(
+                'Naam wijzigen',
+                style: TextStyle(color: LuxeColors.inkSoft),
+              ),
+            ),
+            DropdownMenuItem(
+              value: _vizDeleteBuilding,
+              child: Text(
+                'Gebouw verwijderen',
+                style: TextStyle(color: LuxeColors.danger),
+              ),
+            ),
+          ],
+        ],
+        onChanged: (v) {
+          if (v == null || v == value) return;
+          if (v == _vizAddBuilding) {
+            setState(() => _vizMenuEpoch++);
+            _addBuilding();
+            return;
+          }
+          if (v == _vizRenameBuilding) {
+            setState(() => _vizMenuEpoch++);
+            _renameActiveBuilding();
+            return;
+          }
+          if (v == _vizDeleteBuilding) {
+            setState(() => _vizMenuEpoch++);
+            _confirmDeleteActiveBuilding();
+            return;
+          }
+          if (v.isEmpty) return;
+          _setVizBuilding(v);
+        },
+      ),
+    );
   }
 
   List<Widget> _vizSectionRows() {
@@ -3340,14 +3404,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                 labelOverride: 'Naam',
               ),
             ),
-            if (_buildingsList().isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-                child: _buildingDropdown(
-                  tiles[i],
-                  emptyLabel: 'Bij de apparaten van elk gebouw',
-                ),
-              ),
             for (final rawId in List<dynamic>.from(_tileDeviceIds(tiles[i])))
               Builder(
                 builder: (context) {
@@ -3564,19 +3620,11 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             title: 'Verdieping',
             trailing: LuxeInfoIconButton(
               title: 'Verdieping',
-              body: 'Naam zoals in de app. Elke verdieping hoort bij één gebouw.',
+              body: 'Naam zoals in de app.',
             ),
           ),
           _BoundStrField('name', floor, () => setState(() {}),
               labelOverride: 'Naam'),
-          if (_buildingsList().isNotEmpty) ...[
-            const SizedBox(height: 12),
-            _buildingDropdown(
-              floor,
-              emptyLabel: 'Eerste gebouw',
-              allowEmpty: false,
-            ),
-          ],
         ],
       ),
     );
@@ -4004,7 +4052,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       case _FocusKind.houseSystems:
         return _houseSystemsInstallerPanel(context);
       case _FocusKind.buildings:
-        return _buildingsInstallerPanel(context);
+        return _floorsInstallerPanel(context);
       case _FocusKind.globalDevices:
         return _globalDevicesInstallerPanel(context);
       case _FocusKind.floor:
@@ -4050,9 +4098,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             return ref.read(installerAuthProvider).token;
           },
           showSystemTile: true,
-          leading: [
-            _looseDeviceBuildingCard(_globalDeviceList()[_sel.di]),
-          ],
         );
     }
   }
@@ -4082,10 +4127,17 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   }
 
   String? get _activeVizBuildingId {
+    final buildings = _buildingsSorted();
+    if (buildings.isEmpty) return null;
     final id = _vizBuildingId;
-    if (id == null || id.isEmpty) return null;
-    for (final b in _buildingsSorted()) {
-      if (b['id'] == id) return id;
+    if (id != null && id.isNotEmpty) {
+      for (final b in buildings) {
+        if (b['id'] == id) return id;
+      }
+    }
+    for (final b in buildings) {
+      final candidate = b['id'];
+      if (candidate is String && candidate.isNotEmpty) return candidate;
     }
     return null;
   }
@@ -4135,7 +4187,60 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       'name': 'Nieuw gebouw',
       'order': list.length,
     });
-    _selectVizBuilding(id);
+    _vizBuildingId = id;
+    _clampVizFocus();
+    setState(() => _vizMenuEpoch++);
+  }
+
+  Future<void> _renameActiveBuilding() async {
+    final building = _activeBuildingMap();
+    if (building == null || !mounted) return;
+    final raw = (building['name'] as String?)?.trim() ?? '';
+    final controller = TextEditingController(text: raw);
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Gebouw'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: luxeFilledDecoration(hint: 'Naam'),
+          onSubmitted: (v) => Navigator.pop(ctx, v),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annuleren'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Opslaan'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (!mounted || name == null) return;
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return;
+    building['name'] = trimmed;
+    setState(() => _vizMenuEpoch++);
+  }
+
+  Future<void> _confirmDeleteActiveBuilding() async {
+    final building = _activeBuildingMap();
+    if (building == null || !mounted) return;
+    final id = building['id'] as String? ?? '';
+    if (id.isEmpty) return;
+    final name = _namedOr(building, 'dit gebouw');
+    final ok = await _confirmReplace(
+      'Gebouw verwijderen',
+      '$name verdwijnt uit de lijst. Verdiepingen, tegels en apparaten blijven staan.',
+      'Verwijderen',
+      destructive: true,
+    );
+    if (!ok || !mounted) return;
+    _deleteBuildingId(id);
   }
 
   void _deleteBuildingAt(int index) {
@@ -4143,18 +4248,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     if (index < 0 || index >= list.length) return;
     final id = list[index]['id'];
     list.removeAt(index);
-    if (id is String && id.isNotEmpty) _stripBuildingId(id);
-    if (id == _vizBuildingId) {
-      final rest = _buildingsSorted();
-      if (rest.isEmpty) {
-        _vizBuildingId = null;
-        _sel = const _Focus.floors();
-      } else {
-        _vizBuildingId = rest.first['id'] as String?;
-        _sel = const _Focus.buildings();
-      }
+    if (id is String && id.isNotEmpty) {
+      _stripBuildingId(id);
+      if (_vizBuildingId == id) _vizBuildingId = null;
     }
-    setState(() {});
+    _clampVizFocus();
+    setState(() => _vizMenuEpoch++);
   }
 
   void _deleteBuildingId(String id) {
@@ -4246,9 +4345,8 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             trailing: LuxeInfoIconButton(
               title: 'Gebouw',
               body:
-                  'Camera\'s, intercoms en apparaten zonder kamer horen '
-                  'bij het gekozen gebouw. Leeg = het eerste gebouw. '
-                  'Apparaten in een kamer volgen de verdieping.',
+                  'Camera\'s en intercoms horen bij het gekozen gebouw. '
+                  'Leeg = het eerste gebouw.',
             ),
           ),
           _buildingDropdown(
@@ -4257,62 +4355,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildingsInstallerPanel(BuildContext context) {
-    final building = _activeBuildingMap();
-    if (building == null) {
-      return ListView(
-        padding: const EdgeInsets.only(bottom: 36),
-        children: const [
-          Padding(
-            padding: EdgeInsets.fromLTRB(28, 24, 28, 8),
-            child: Text('Kies een gebouw links, of voeg er een toe.'),
-          ),
-        ],
-      );
-    }
-    final id = building['id'] as String? ?? '';
-    final sections = _vizSectionRows();
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 36),
-      children: [
-        LuxeListCard(
-          padding: EdgeInsets.zero,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 4, 0),
-                child: LuxeSectionTitle(
-                  icon: Icons.apartment_outlined,
-                  title: 'Gebouw',
-                  trailing: _rowTrash(
-                    tooltip: 'Gebouw verwijderen',
-                    onPressed: () => _deleteBuildingId(id),
-                  ),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-                child: _BoundStrField(
-                  'name',
-                  building,
-                  () => setState(() {}),
-                  key: ValueKey('bld-name-$id'),
-                  labelOverride: 'Naam',
-                ),
-              ),
-              Divider(height: 1, color: LuxeColors.lineSoft),
-              for (var i = 0; i < sections.length; i++) ...[
-                if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
-                sections[i],
-              ],
-            ],
-          ),
-        ),
-      ],
     );
   }
 
