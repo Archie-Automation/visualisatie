@@ -623,6 +623,7 @@ class DeviceControlSetpointRow extends StatelessWidget {
     this.enabled = true,
     this.decimals = 1,
     this.unit = '°',
+    this.display,
   });
 
   final double value;
@@ -631,6 +632,9 @@ class DeviceControlSetpointRow extends StatelessWidget {
   final bool enabled;
   final int decimals;
   final String unit;
+
+  /// Volledige weergave, inclusief teken en eenheid. Vervangt `value` + `unit`.
+  final String? display;
 
   @override
   Widget build(BuildContext context) {
@@ -652,7 +656,7 @@ class DeviceControlSetpointRow extends StatelessWidget {
             child: FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
-                '${value.toStringAsFixed(decimals)}$unit',
+                display ?? '${value.toStringAsFixed(decimals)}$unit',
                 textAlign: TextAlign.center,
                 // Zelfde familie als gemeten temp (Inter), niet display-serif.
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(

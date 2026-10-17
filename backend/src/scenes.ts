@@ -1,5 +1,13 @@
 import { logger } from "./logger";
 import { dispatch } from "./commands";
+import { getConfig } from "./config";
+import {
+  findClimateBySetpointGa,
+  roundTenth,
+  setpointControlOf,
+  setpointLimits,
+  setpointWriteRole
+} from "./climateSetpoint";
 import type { KnxBus } from "./knxBus";
 import type { MediaManager } from "./media/manager";
 import type { HouseConfig, Scene, SceneAction, SceneMediaAction } from "./types";
@@ -40,7 +48,7 @@ export async function runScene(
       await delay(action.delayMs);
     }
     try {
-      await writeSceneAction(action, bus);
+      await writeSceneAction(action, bus, cfg ?? getConfig());
     } catch (err) {
       logger.warn({ err, action }, "scene action failed");
     }
@@ -105,7 +113,11 @@ async function writeSceneMediaAction(
   }
 }
 
-async function writeSceneAction(a: SceneAction, bus: KnxBus): Promise<void> {
+async function writeSceneAction(
+  a: SceneAction,
+  bus: KnxBus,
+  cfg: HouseConfig
+): Promise<void> {
   if (a.role === "pulse") {
     await pulseKnxGa(bus, a.ga, a.pulseMs);
     syncFireplaceVirtualForDiscreteGa(a.ga);
@@ -122,9 +134,18 @@ async function writeSceneAction(a: SceneAction, bus: KnxBus): Promise<void> {
     await bus.write(a.ga, "rgb232", triplet);
     return;
   }
-  const busRole = sceneRoleToBusRole(a.role);
-  const value = coerceValue(a);
+  const busRole = sceneBusRole(a, cfg);
+  const value = coerceValue(a, cfg);
   await bus.write(a.ga, busRole, value);
+}
+
+/** Scene-acties blijven rol "setpoint"; het busformaat volgt de thermostaat. */
+function sceneBusRole(a: SceneAction, cfg: HouseConfig): string {
+  const base = sceneRoleToBusRole(a.role);
+  if (a.role !== "setpoint") return base;
+  const climate = findClimateBySetpointGa(cfg, a.ga);
+  if (!climate) return base;
+  return setpointWriteRole(setpointControlOf(climate));
 }
 
 function parseRgb232Value(
@@ -175,7 +196,7 @@ function sceneRoleToBusRole(role: SceneAction["role"]): string {
   }
 }
 
-function coerceValue(a: SceneAction): number | boolean {
+function coerceValue(a: SceneAction, cfg: HouseConfig): number | boolean {
   const v = a.value;
   if (Array.isArray(v) || (typeof v === "object" && v !== null)) {
     throw new Error("coerceValue: expected scalar value");
@@ -194,7 +215,15 @@ function coerceValue(a: SceneAction): number | boolean {
   if (a.role === "byte") {
     return clamp(Math.round(v), 0, 255);
   }
-  if (a.role === "temperature" || a.role === "setpoint") {
+  if (a.role === "temperature") {
+    return clamp(v, 5, 35);
+  }
+  if (a.role === "setpoint") {
+    const climate = findClimateBySetpointGa(cfg, a.ga);
+    if (climate && setpointControlOf(climate) !== "absolute") {
+      const limits = setpointLimits(climate);
+      return roundTenth(clamp(v, limits.min, limits.max));
+    }
     return clamp(v, 5, 35);
   }
   return v;

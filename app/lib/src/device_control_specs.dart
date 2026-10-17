@@ -6,13 +6,25 @@ class SetpointSpec {
     required this.min,
     required this.max,
     required this.step,
+    this.relative = false,
   });
 
   final double min;
   final double max;
   final double step;
 
+  /// Relatieve setpointverschuiving (K) in plaats van een absolute temperatuur.
+  final bool relative;
+
+  bool get signed => relative;
+
+  /// Tile suffix. Absoluut blijft `°`, relatief is ` K`.
+  String get tileSuffix => relative ? ' K' : '°';
+
   int get decimals => step < 1 ? 1 : 0;
+
+  /// Waarde als de bus nog niets heeft teruggemeld.
+  double get fallback => relative ? 0.0 : 21.0;
 
   double snap(num value) {
     final v = value.toDouble().clamp(min, max);
@@ -21,17 +33,67 @@ class SetpointSpec {
     return double.parse((min + n * step).toStringAsFixed(decimals));
   }
 
+  /// Grote cijfers op de tegel, zonder extra afronden naar de stap.
+  String tileText(double value) => _text(value, tileSuffix);
+
+  /// Scène-schuif: waarde op de stap, met eenheid.
   String format(double value) =>
-      '${snap(value).toStringAsFixed(decimals)} °C';
+      _text(snap(value), relative ? ' K' : ' °C');
+
+  String _text(double value, String suffix) {
+    var body = value.toStringAsFixed(decimals);
+    final parsed = double.tryParse(body);
+    if (parsed != null && parsed == 0 && body.startsWith('-')) {
+      body = body.substring(1);
+    }
+    final magnitude = parsed ?? value;
+    final shown = signed && magnitude > 0 ? '+$body' : body;
+    return '$shown$suffix';
+  }
+}
+
+/// `absolute`, `relative_6.010` of `relative_9.002`. Onbekend = absoluut.
+String climateSetpointControl(Map<String, dynamic>? cfg) {
+  final v = cfg?['setpointControl'] as String?;
+  if (v == 'relative_6.010' || v == 'relative_9.002') return v!;
+  return 'absolute';
 }
 
 SetpointSpec climateSetpointSpec(Device device) {
   final cfg = device.raw['climate'] as Map<String, dynamic>?;
-  return SetpointSpec(
-    min: (cfg?['minTemp'] as num?)?.toDouble() ?? 5.0,
-    max: (cfg?['maxTemp'] as num?)?.toDouble() ?? 35.0,
-    step: (cfg?['tempStep'] as num?)?.toDouble() ?? 0.5,
-  );
+  return climateSetpointSpecFromConfig(cfg);
+}
+
+SetpointSpec climateSetpointSpecFromConfig(Map<String, dynamic>? cfg) {
+  final step = (cfg?['tempStep'] as num?)?.toDouble() ?? 0.5;
+  final control = climateSetpointControl(cfg);
+  if (control == 'absolute') {
+    final min = (cfg?['minTemp'] as num?)?.toDouble() ?? 5.0;
+    final max = (cfg?['maxTemp'] as num?)?.toDouble() ?? 35.0;
+    if (min < max) {
+      return SetpointSpec(min: min, max: max, step: step);
+    }
+    return SetpointSpec(min: 5, max: 35, step: step);
+  }
+  final hardMin = control == 'relative_6.010' ? -12.8 : -50.0;
+  final hardMax = control == 'relative_6.010' ? 12.7 : 50.0;
+  var min = (cfg?['minTemp'] as num?)?.toDouble() ?? -5.0;
+  var max = (cfg?['maxTemp'] as num?)?.toDouble() ?? 5.0;
+  if (!(min < max)) {
+    min = -5;
+    max = 5;
+  }
+  min = min.clamp(hardMin, hardMax).toDouble();
+  max = max.clamp(hardMin, hardMax).toDouble();
+  if (!(min < max)) {
+    return SetpointSpec(
+      min: hardMin,
+      max: hardMax,
+      step: step,
+      relative: true,
+    );
+  }
+  return SetpointSpec(min: min, max: max, step: step, relative: true);
 }
 
 SetpointSpec acSetpointSpec(Device device) {

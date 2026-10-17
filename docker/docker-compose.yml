@@ -52,6 +52,8 @@ services:
       - ../config:/config
       - ./go2rtc:/media
       - ./data:/data
+      # Zodat een SIP-intercom de Asterisk-container kan starten.
+      - /var/run/docker.sock:/var/run/docker.sock
 
   asterisk:
     build:

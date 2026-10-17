@@ -2,6 +2,7 @@ import { EventEmitter } from "node:events";
 import { buildGAIndex, collectAllGAs, getConfig } from "./config";
 import type { GARole } from "./config";
 import { logger } from "./logger";
+import { decodeShift6, encodeShift6, isShift6Role } from "./climateSetpoint";
 import type { GA, GAState, HouseConfig, Rgb232Triplet } from "./types";
 
 /**
@@ -29,6 +30,12 @@ export const ROLE_DPT: Record<string, string> = {
   actual_temp: "DPT9.001",
   setpoint: "DPT9.001",
   setpoint_status: "DPT9.001",
+  /** Relatieve setpointverschuiving, 1 byte, 0,1 K. Cache bewaart kelvin, niet de ruwe byte. */
+  setpoint_shift_6: "DPT6.010",
+  setpoint_shift_6_status: "DPT6.010",
+  /** Relatieve setpointverschuiving, 2-byte float in K (zelfde codering als DPT 9.001). */
+  setpoint_shift_9: "DPT9.002",
+  setpoint_shift_9_status: "DPT9.002",
   mode: "DPT20.102",
   mode_status: "DPT20.102",
 
@@ -100,6 +107,10 @@ const READ_PRIORITY_ROLES = new Set([
   "actual_temp",
   "setpoint_status",
   "setpoint",
+  "setpoint_shift_6",
+  "setpoint_shift_6_status",
+  "setpoint_shift_9",
+  "setpoint_shift_9_status",
   "switch_status",
   "dim_status",
   "position_status",
@@ -576,6 +587,9 @@ export class KnxBus extends EventEmitter {
       const nibble = dimObjectToNibble(value);
       decoded = nibble ?? String(value ?? "");
     }
+    if (typeof decoded === "number") {
+      decoded = this.engineeringValue(dest, decoded, dptId);
+    }
     this.updateCache(dest, decoded, dptId);
   }
 
@@ -683,16 +697,33 @@ export class KnxBus extends EventEmitter {
    * Write a value onto the bus. The `role` argument selects the DPT.
    * For DPT 232.600 pass an `{ red, green, blue }` object (0–255).
    */
+  /**
+   * DPT 6.010 arrives as a raw signed byte. The rest of the app speaks kelvin.
+   */
+  private engineeringValue(ga: GA, value: number, dptId: string): number {
+    if (dptId !== "DPT6.010") return value;
+    const roles = this.gaRoles.get(ga) ?? [];
+    if (!roles.some((r) => isShift6Role(r.role))) return value;
+    return decodeShift6(value);
+  }
+
   async write(
     ga: GA,
     role: string,
     value: number | boolean | Rgb232Triplet
   ): Promise<void> {
     const dpt = ROLE_DPT[role] ?? "DPT1.001";
+    let wire = value;
+    let cached = value;
+    if (typeof value === "number" && isShift6Role(role)) {
+      const raw = encodeShift6(value);
+      wire = raw;
+      cached = decodeShift6(raw);
+    }
 
     if (this.simulate) {
       this.noteSelfWrite(ga);
-      this.updateCache(ga, value, dpt);
+      this.updateCache(ga, cached, dpt);
       return;
     }
 
@@ -700,8 +731,8 @@ export class KnxBus extends EventEmitter {
     const knx = await loadKnxModule();
     const dp = new knx.Datapoint({ ga, dpt }, this.connection as never);
     this.noteSelfWrite(ga);
-    dp.write(value);
-    this.updateCache(ga, value, dpt);
+    dp.write(wire);
+    this.updateCache(ga, cached, dpt);
   }
 
   /**

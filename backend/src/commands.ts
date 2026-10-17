@@ -5,6 +5,12 @@ import type { MediaManager } from "./media/manager";
 import type { LutronIntegrationManager } from "./lutron/manager";
 import { resolveLutronLoadOutput } from "./lutron/resolve";
 import { findDevice, walkDevices, wtwDptToRoleConfig } from "./config";
+import {
+  roundTenth,
+  setpointControlOf,
+  setpointLimits,
+  setpointWriteRole
+} from "./climateSetpoint";
 import { hvacSwitchLock } from "./hvacSwitchLock";
 import { fireplaceVirtual } from "./fireplaceVirtual";
 import { fireplaceIsPlanika, pulseKnxGa } from "./fireplacePulse";
@@ -119,7 +125,8 @@ export const CommandSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("climate.setpoint"),
     deviceId: z.string(),
-    celsius: z.number().min(5).max(35)
+    /** Absoluut: °C. Relatief: verschuiving in K. */
+    celsius: z.number().min(-50).max(50)
   }),
   z.object({
     kind: z.literal("climate.mode"),
@@ -476,7 +483,12 @@ export async function dispatch(
     }
     case "climate.setpoint": {
       if (device.type !== "climate") throw new Error("device not a climate");
-      await bus.write(device.ga.setpoint, "setpoint", cmd.celsius);
+      const control = setpointControlOf(device);
+      const limits = setpointLimits(device);
+      const value = roundTenth(
+        Math.max(limits.min, Math.min(limits.max, cmd.celsius))
+      );
+      await bus.write(device.ga.setpoint, setpointWriteRole(control), value);
       return;
     }
     case "climate.mode": {

@@ -616,7 +616,8 @@ function classifyClimate(rest: string): string | null {
   )
     return "heat_demand";
   if (/koelmelding|cool.?demand|k[uü]hl.?anforder/.test(t)) return "cool_demand";
-  // setpointverschuiving, regelwaarde, terugkoppeling/klep, etc: not user-facing.
+  // Setpointverschuiving (DPT 6.010 of 9.002) kiest de programmeur in de
+  // thermostaat. De objectnaam zegt niet welk van de twee formaten het is.
   return null;
 }
 

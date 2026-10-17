@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../ac_mode_config.dart';
+import '../../device_control_specs.dart';
 import '../../api.dart';
 import '../../camera_api.dart';
 import '../../fireplace_status.dart';
@@ -2046,12 +2047,12 @@ class _ClimateTileState extends ConsumerState<ClimateTile> {
     super.dispose();
   }
 
-  void _adjustSetpoint(double delta, double min, double max) {
+  void _adjustSetpoint(double delta, SetpointSpec spec) {
     final bus = ref.read(busProvider);
     final d = widget.device;
     final spV = bus.values[d.ga['setpoint_status'] ?? d.ga['setpoint']];
-    final current = _pending ?? (spV is num ? spV.toDouble() : 21.0);
-    final next = (current + delta).clamp(min, max);
+    final current = _pending ?? (spV is num ? spV.toDouble() : spec.fallback);
+    final next = (current + delta).clamp(spec.min, spec.max);
     final rounded = double.parse(next.toStringAsFixed(1));
     _pendingTimer?.cancel();
     setState(() => _pending = rounded);
@@ -2076,20 +2077,17 @@ class _ClimateTileState extends ConsumerState<ClimateTile> {
     final actualV  = bus.values[d.ga['actual_temp']];
     final spV      = bus.values[d.ga['setpoint_status'] ?? d.ga['setpoint']];
     final actual   = actualV is num ? actualV.toDouble() : null;
-    final setpoint = _pending ?? (spV is num ? spV.toDouble() : 21.0);
 
     // Capabilities + limits from installer config
     final climateCfg    = d.raw['climate'] as Map<String, dynamic>?;
+    final spec          = climateSetpointSpecFromConfig(climateCfg);
+    final setpoint = _pending ?? (spV is num ? spV.toDouble() : spec.fallback);
     final canHeat       = climateCfg?['canHeat'] as bool? ?? true;
     final canCool       = climateCfg?['canCool'] as bool? ?? false;
     final userCanSwitch = climateCfg?['userCanSwitchMode'] as bool? ?? false;
     final hvacLockDuration =
         HvacSwitchLockDuration.fromClimateConfig(climateCfg);
     final hasHvacControl = canHeat && canCool;
-    final minTemp = (climateCfg?['minTemp'] as num?)?.toDouble() ?? 5.0;
-    final maxTemp = (climateCfg?['maxTemp'] as num?)?.toDouble() ?? 35.0;
-    final stepRaw = climateCfg?['tempStep'];
-    final step    = stepRaw is num ? stepRaw.toDouble() : 0.5;
 
     // Operating modes (DPT 20.102: 1=Comfort 2=Standby 3=Economy 4=BuildingProtection)
     final modesMap = climateCfg?['modes'] as Map<String, dynamic>?;
@@ -2268,11 +2266,19 @@ class _ClimateTileState extends ConsumerState<ClimateTile> {
           ],
 
           SizedBox(height: DeviceControlBar.sectionSpacing(context)),
+          if (spec.relative) ...[
+            Text(
+              'VERSCHUIVING',
+              style: DeviceControlBar.sectionTitleStyle(context),
+            ),
+            SizedBox(height: DeviceControlBar.sectionTitleGap),
+          ],
           DeviceControlSetpointRow(
             value: setpoint,
-            onDecrease: () => _adjustSetpoint(-step, minTemp, maxTemp),
-            onIncrease: () => _adjustSetpoint(step, minTemp, maxTemp),
-            decimals: step < 1 ? 1 : 0,
+            display: spec.tileText(setpoint),
+            onDecrease: () => _adjustSetpoint(-spec.step, spec),
+            onIncrease: () => _adjustSetpoint(spec.step, spec),
+            decimals: spec.decimals,
           ),
 
           if (showModes && opModes.isNotEmpty) ...[

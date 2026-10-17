@@ -6,6 +6,7 @@
 // only understands group-address telegrams.
 
 import 'api.dart';
+import 'device_control_specs.dart';
 import 'fireplace_status.dart';
 import 'media_api.dart';
 import 'models.dart';
@@ -380,7 +381,10 @@ class ClimateEntry extends SceneEntry {
 
   @override
   String summary() {
-    final base = '${setpoint.toStringAsFixed(1)} °C';
+    final spec = climateSetpointSpec(device);
+    final base = spec.relative
+        ? spec.tileText(setpoint)
+        : '${setpoint.toStringAsFixed(1)} °C';
     final d = formatSceneDelay(delayMs);
     return d.isEmpty ? base : '$base · na $d';
   }
@@ -1040,7 +1044,10 @@ extension SceneEntryFactory on Device {
           slats: ga['slat'] != null ? 50 : null,
         );
       case DeviceType.climate:
-        return ClimateEntry(device: this, setpoint: 21.0);
+        return ClimateEntry(
+          device: this,
+          setpoint: climateSetpointSpec(this).fallback,
+        );
       case DeviceType.fireplace:
         final fp = raw['fireplace'] as Map?;
         final sr = parseFireplaceStepRanges(fp?['flame'] as Map<String, dynamic>?);
@@ -1136,7 +1143,10 @@ SceneEntry? tryParseEntry(Device device, List<SceneAction> actions) {
     case DeviceType.climate:
       final sp = pick(device.ga['setpoint']);
       if (sp == null) return null;
-      return ClimateEntry(device: device, setpoint: asNum(sp) ?? 21.0);
+      return ClimateEntry(
+        device: device,
+        setpoint: asNum(sp) ?? climateSetpointSpec(device).fallback,
+      );
     case DeviceType.fireplace:
       final cfg = (device.raw['fireplace'] as Map?)?.cast<String, dynamic>();
       final discrete =

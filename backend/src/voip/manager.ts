@@ -1,5 +1,5 @@
 import { collectIntercoms } from "../cameras";
-import { getConfig } from "../config";
+import { getConfig, persistConfig } from "../config";
 import { releaseDoor } from "../intercoms";
 import type { KnxBus } from "../knxBus";
 import { logger } from "../logger";
@@ -7,6 +7,7 @@ import type { HouseConfig, VoipEndpoint } from "../types";
 import type { WsHub } from "../ws";
 import { AmiClient, type AmiFields } from "./ami";
 import { doorContextName, groupDial, writeAsteriskConfig } from "./asteriskConfig";
+import { ensureAsteriskContainer } from "./asteriskDocker";
 import { normalizeVoip } from "./normalize";
 import { intercomRingTargets } from "./ringTargets";
 import { astSafe } from "./secrets";
@@ -170,7 +171,11 @@ export function resolveUserEndpoint(
 }
 
 export async function syncVoipFromConfig(cfg: HouseConfig): Promise<void> {
+  const wasEnabled = cfg.voip?.enabled === true;
   normalizeVoip(cfg);
+  if (!wasEnabled && cfg.voip?.enabled === true) {
+    persistConfig(cfg);
+  }
   const dir = writeAsteriskConfig(cfg);
   logger.info({ dir, enabled: cfg.voip?.enabled === true }, "Asterisk-config geschreven");
   if (!cfg.voip?.enabled) {
@@ -178,15 +183,25 @@ export async function syncVoipFromConfig(cfg: HouseConfig): Promise<void> {
     ami = null;
     return;
   }
-  await amiReload();
+  const state = await ensureAsteriskContainer();
+  // Net gestarte container heeft een paar seconden nodig voor poort 5038.
+  await amiReload(state === "started" ? 12 : 1);
 }
 
-async function amiReload(): Promise<void> {
-  try {
-    await ensureAmi();
-    await ami?.command("core reload");
-  } catch (err) {
-    logger.warn({ err }, "Asterisk reload mislukt (PBX nog niet draaiend?)");
+async function amiReload(attempts = 1): Promise<void> {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      await ensureAmi();
+      await ami?.command("core reload");
+      return;
+    } catch (err) {
+      ami?.close();
+      ami = null;
+      logger.warn({ err, attempt }, "Asterisk reload mislukt (PBX nog niet draaiend?)");
+      if (attempt < attempts) {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
   }
 }
 

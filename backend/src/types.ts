@@ -72,9 +72,12 @@ export type ShadingSubtype =
 export interface ClimateGA {
   /** DPT 9.001 - gemeten temperatuur (lezen). */
   actual_temp: GA;
-  /** DPT 9.001 - gewenste temperatuur (schrijven). */
+  /**
+   * Schrijven. Absoluut: DPT 9.001 (°C).
+   * Relatief (`climate.setpointControl`): verschuiving, DPT 6.010 of 9.002 (K).
+   */
   setpoint: GA;
-  /** DPT 9.001 - gewenste temperatuur status (lezen, optioneel). */
+  /** Zelfde DPT als `setpoint`. Optioneel: terugmelding van de thermostaat. */
   setpoint_status?: GA;
   /** DPT 20.102 - HVAC-modus (schrijven). */
   mode?: GA;
@@ -293,6 +296,12 @@ export interface ClimateConfig {
   maxTemp?: number;
   /** Stapgrootte voor setpoint aanpassing (0.1, 0.5 of 1.0, standaard 0.5). */
   tempStep?: 0.1 | 0.5 | 1.0;
+  /**
+   * Hoe de app het setpoint schrijft. Ontbreekt = absoluut (DPT 9.001, °C).
+   * - `relative_6.010`: verschuiving, 1 byte, resolutie 0,1 K (−12,8…12,7)
+   * - `relative_9.002`: verschuiving, 2 byte float, temperatuurverschil in K
+   */
+  setpointControl?: "absolute" | "relative_6.010" | "relative_9.002";
   /** Per bedrijfsmodus aan/uit (DPT 20.102). false = niet zichtbaar in app. */
   modes?: ClimateModeVisibility;
 }

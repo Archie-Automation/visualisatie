@@ -696,7 +696,7 @@ class _ClimateControls extends StatelessWidget {
   Widget build(BuildContext context) {
     final spec = climateSetpointSpec(entry.device);
     return _SetpointAdjuster(
-      label: 'SETPOINT',
+      label: spec.relative ? 'VERSCHUIVING' : 'SETPOINT',
       value: entry.setpoint,
       spec: spec,
       onChanged: (v) => onChanged(ClimateEntry(

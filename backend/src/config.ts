@@ -5,6 +5,7 @@ import { normalizeHouseCameras } from "./houseCameras";
 import { normalizeHouseIntercoms } from "./houseIntercoms";
 import { effectiveIntercomReleaseMode } from "./intercomReleaseMode";
 import { logger } from "./logger";
+import { climateBusRole } from "./climateSetpoint";
 import type { Device, HouseConfig, GA } from "./types";
 import { catalogSceneAddresses, configuredSceneAddresses } from "./knxScene";
 import { normalizeVoip } from "./voip/normalize";
@@ -283,8 +284,9 @@ export function buildGAIndex(cfg: HouseConfig): Map<GA, GARole[]> {
   walkDevices(cfg, (d) => {
     const ga = (d as { ga?: Record<string, string> }).ga;
     if (ga) {
-      for (const [role, address] of Object.entries(ga)) {
+      for (const [key, address] of Object.entries(ga)) {
         if (!address) continue;
+        const role = d.type === "climate" ? climateBusRole(d, key) : key;
         pushGA(index, address, role, d.id, d.type);
       }
     }

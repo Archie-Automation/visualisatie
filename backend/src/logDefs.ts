@@ -9,6 +9,7 @@
 // Shared by the sampler (to know which GAs to record) and the API (to list
 // logs and resolve a log id to its series).
 
+import { setpointControlOf } from "./climateSetpoint";
 import { walkDevices } from "./config";
 import { isStaffRole } from "./roles";
 import type { GA, HouseConfig, User } from "./types";
@@ -43,7 +44,11 @@ export function listLogDefs(cfg: HouseConfig): LogDefResolved[] {
     if (d.type !== "climate") return;
     const ga = d.ga;
     const actual = ga.actual_temp;
-    const setpoint = ga.setpoint_status ?? ga.setpoint;
+    // Een verschuiving in K hoort niet op de °C-as van de thermostaatgrafiek.
+    const setpoint =
+      setpointControlOf(d) === "absolute"
+        ? ga.setpoint_status ?? ga.setpoint
+        : undefined;
     const mode = ga.hvac_mode_status ?? ga.hvac_mode;
     const series: LogSeriesDef[] = [];
     if (actual) {

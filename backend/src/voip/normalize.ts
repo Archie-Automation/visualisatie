@@ -29,9 +29,21 @@ function nextExt(used: Set<string>, start: number): string {
  * Indoor SIP is 1:1 with a house user. No shared "app" identity, no
  * auto-SIP for every login. Orphan endpoints (no valid user) are dropped.
  */
+/** Deurstation met SIP-login: Asterisk moet aan, ook als voip.enabled nog niet gezet is. */
+export function hasConfiguredSipIntercom(cfg: HouseConfig): boolean {
+  return (cfg.intercoms ?? []).some((ic) => {
+    const ext = ic.intercom.sipExt?.trim() ?? "";
+    const pw = ic.intercom.sipPassword?.trim() ?? "";
+    return ext.length > 0 && pw.length > 0;
+  });
+}
+
 export function normalizeVoip(cfg: HouseConfig): void {
   if (!cfg.voip) cfg.voip = { enabled: false };
   const v = cfg.voip;
+  if (v.enabled !== true && hasConfiguredSipIntercom(cfg)) {
+    v.enabled = true;
+  }
   if (v.enabled !== true) return;
   if (!v.endpoints) v.endpoints = [];
   if (!v.groups) v.groups = [];

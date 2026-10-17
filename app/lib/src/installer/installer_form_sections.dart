@@ -1686,6 +1686,17 @@ class _ClimateInstallerSectionState extends State<ClimateInstallerSection> {
     final userCanSwitch    = cfg['userCanSwitchMode'] as bool? ?? false;
     final lockDurationRaw  = cfg['hvacSwitchLockDuration'] as String? ?? '4:00';
     final showSwitchLock   = userCanSwitch && canHeat && canCool;
+    final controlRaw       = cfg['setpointControl'] as String?;
+    final control          = controlRaw == 'relative_6.010' ||
+            controlRaw == 'relative_9.002'
+        ? controlRaw!
+        : 'absolute';
+    final relative         = control != 'absolute';
+    final setpointDpt      = switch (control) {
+      'relative_6.010' => 'DPT6.010',
+      'relative_9.002' => 'DPT9.002',
+      _ => 'DPT9.001',
+    };
 
     String gaVal(String key) => ga[key] as String? ?? '';
     void setGa(String key, String v) {
@@ -1697,12 +1708,55 @@ class _ClimateInstallerSectionState extends State<ClimateInstallerSection> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const _InstallerInfoTitle(
-          title: 'Temperatuur',
+          title: 'Setpoint',
           body:
-              'Gemeten temperatuur en setpoint: DPT 9.001. '
-              'Setpoint-status is optioneel: als die er is, toont de app '
-              'wat de thermostaat terugmeldt.',
+              'Absoluut schrijft de gewenste temperatuur in °C (DPT 9.001). '
+              'Relatief schrijft een verschuiving in kelvin. '
+              'Kies het DPT dat in ETS op dat object staat.\n'
+              'DPT 6.010: 1 byte, stappen van 0,1 K, bereik −12,8 tot 12,7 K.\n'
+              'DPT 9.002: 2 byte float, temperatuurverschil in K.\n'
+              'De gemeten temperatuur blijft DPT 9.001. '
+              'Bij relatief toont de temperatuurlog alleen die meting; '
+              'de verschuiving is geen ruimtetemperatuur.',
         ),
+        DropdownButtonFormField<String>(
+          key: ValueKey('cl-${widget.device['id']}-spmode'),
+          value: control,
+          decoration: const InputDecoration(
+            labelText: 'Setpoint',
+            isDense: true,
+          ),
+          items: const [
+            DropdownMenuItem(
+              value: 'absolute',
+              child: Text('Absoluut (DPT 9.001)'),
+            ),
+            DropdownMenuItem(
+              value: 'relative_6.010',
+              child: Text('Relatief (DPT 6.010, 1 byte)'),
+            ),
+            DropdownMenuItem(
+              value: 'relative_9.002',
+              child: Text('Relatief (DPT 9.002, 2 byte)'),
+            ),
+          ],
+          onChanged: (v) {
+            if (v == null || v == control) return;
+            final wasRelative = control != 'absolute';
+            final nowRelative = v != 'absolute';
+            if (v == 'absolute') {
+              cfg.remove('setpointControl');
+            } else {
+              cfg['setpointControl'] = v;
+            }
+            if (wasRelative != nowRelative) {
+              cfg.remove('minTemp');
+              cfg.remove('maxTemp');
+            }
+            _notify();
+          },
+        ),
+        const SizedBox(height: 10),
         _InstallerStrField(
           key: ValueKey('cl-${widget.device['id']}-at'),
           label: 'Gemeten temperatuur',
@@ -1713,19 +1767,21 @@ class _ClimateInstallerSectionState extends State<ClimateInstallerSection> {
         ),
         _InstallerStrField(
           key: ValueKey('cl-${widget.device['id']}-sp'),
-          label: 'Setpoint',
+          label: relative ? 'Setpointverschuiving (schrijven)' : 'Setpoint',
           value: gaVal('setpoint'),
           onChanged: (v) => setGa('setpoint', v),
           gaSearch: true,
-          gaDptHint: 'DPT9.001',
+          gaDptHint: setpointDpt,
         ),
         _InstallerStrField(
           key: ValueKey('cl-${widget.device['id']}-ss'),
-          label: 'Setpoint status (lezen)',
+          label: relative
+              ? 'Verschuiving status (lezen)'
+              : 'Setpoint status (lezen)',
           value: gaVal('setpoint_status'),
           onChanged: (v) => setGa('setpoint_status', v),
           gaSearch: true,
-          gaDptHint: 'DPT9.001',
+          gaDptHint: setpointDpt,
         ),
         const SizedBox(height: 12),
         const _InstallerInfoTitle(
@@ -1830,39 +1886,44 @@ class _ClimateInstallerSectionState extends State<ClimateInstallerSection> {
           );
         }),
         const SizedBox(height: 12),
-        const _InstallerInfoTitle(
-          title: 'Setpoint in de app',
-          body:
-              'Grenzen van de plus/min-knoppen. Leeg = 5 tot 35 °C. '
-              'Stapgrootte is hoeveel de temperatuur per tik verandert.',
+        _InstallerInfoTitle(
+          title: relative ? 'Verschuiving in de app' : 'Setpoint in de app',
+          body: relative
+              ? 'Grenzen van de plus/min-knoppen, in kelvin. '
+                  'Leeg = −5 tot 5 K. '
+                  'Bij DPT 6.010 kan de bus niet verder dan −12,8 tot 12,7 K.'
+              : 'Grenzen van de plus/min-knoppen. Leeg = 5 tot 35 °C. '
+                  'Stapgrootte is hoeveel de temperatuur per tik verandert.',
         ),
         Row(
           children: [
             Expanded(
               child: _InstallerStrField(
                 key: ValueKey('cl-${widget.device['id']}-mint'),
-                label: 'Min °C',
+                label: relative ? 'Min K' : 'Min °C',
                 value: (cfg['minTemp'] as num?)?.toString() ?? '',
                 onChanged: (v) {
-                  final n = double.tryParse(v);
+                  final n = double.tryParse(v.replaceAll(',', '.'));
                   if (n != null) cfg['minTemp'] = n; else cfg.remove('minTemp');
                   _notify();
                 },
                 number: true,
+                min: relative ? -50 : null,
               ),
             ),
             const SizedBox(width: 10),
             Expanded(
               child: _InstallerStrField(
                 key: ValueKey('cl-${widget.device['id']}-maxt'),
-                label: 'Max °C',
+                label: relative ? 'Max K' : 'Max °C',
                 value: (cfg['maxTemp'] as num?)?.toString() ?? '',
                 onChanged: (v) {
-                  final n = double.tryParse(v);
+                  final n = double.tryParse(v.replaceAll(',', '.'));
                   if (n != null) cfg['maxTemp'] = n; else cfg.remove('maxTemp');
                   _notify();
                 },
                 number: true,
+                min: relative ? -50 : null,
               ),
             ),
           ],
@@ -1873,10 +1934,19 @@ class _ClimateInstallerSectionState extends State<ClimateInstallerSection> {
             value: (cfg['tempStep'] as num?)?.toDouble() ?? 0.5,
             decoration: const InputDecoration(
                 labelText: 'Stapgrootte', isDense: true),
-            items: const [
-              DropdownMenuItem(value: 0.1, child: Text('0.1 °C')),
-              DropdownMenuItem(value: 0.5, child: Text('0.5 °C')),
-              DropdownMenuItem(value: 1.0, child: Text('1 °C')),
+            items: [
+              DropdownMenuItem(
+                value: 0.1,
+                child: Text(relative ? '0.1 K' : '0.1 °C'),
+              ),
+              DropdownMenuItem(
+                value: 0.5,
+                child: Text(relative ? '0.5 K' : '0.5 °C'),
+              ),
+              DropdownMenuItem(
+                value: 1.0,
+                child: Text(relative ? '1 K' : '1 °C'),
+              ),
             ],
             onChanged: (v) {
               if (v != null) cfg['tempStep'] = v;
