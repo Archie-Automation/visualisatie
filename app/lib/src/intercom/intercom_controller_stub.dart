@@ -55,6 +55,8 @@ class IntercomController extends ChangeNotifier {
 
   void toggleMute() {}
 
+  bool sendDtmf(String digit) => false;
+
   @override
   void dispose() {
     registrationInFlight = false;

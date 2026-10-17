@@ -156,6 +156,8 @@ class IntercomController extends ChangeNotifier {
     notifyListeners();
   }
 
+  bool sendDtmf(String digit) => false;
+
   void _resetCall() {
     _elsewhereTimer?.cancel();
     _elsewhereTimer = null;

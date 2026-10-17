@@ -1,38 +1,57 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:archie_os/src/models.dart';
-import 'package:archie_os/src/ui/intercom_screen.dart';
+import 'package:archie_os/src/intercom/intercom_release_ui.dart';
 
 void main() {
   test('hides door button without a release target', () {
-    const device = Device(
-      id: 'ic-1',
-      name: 'Voordeur',
-      type: DeviceType.intercom,
-      favorite: false,
-      ga: {},
-      raw: {
-        'intercom': {'kind': 'sip'},
-      },
+    expect(
+      intercomShowsDoorButton(
+        canRelease: false,
+        sipInCall: false,
+        intercomRaw: {'kind': 'sip'},
+      ),
+      isFalse,
     );
-    expect(intercomHasReleaseTarget(device), isFalse);
-    expect(intercomHasReleaseTarget(null), isFalse);
+    expect(
+      intercomShowsDoorButton(
+        canRelease: false,
+        sipInCall: false,
+        intercomRaw: null,
+      ),
+      isFalse,
+    );
   });
 
-  test('shows door button when a KNX GA is configured', () {
-    const device = Device(
-      id: 'ic-1',
-      name: 'Voordeur',
-      type: DeviceType.intercom,
-      favorite: false,
-      ga: {},
-      raw: {
-        'intercom': {
-          'releaseMode': 'knx',
-          'release': {'ga': '1/2/3'},
-        },
-      },
+  test('shows door button when the server allows release', () {
+    expect(
+      intercomShowsDoorButton(
+        canRelease: true,
+        sipInCall: false,
+        intercomRaw: {'kind': 'sip'},
+      ),
+      isTrue,
     );
-    expect(intercomHasReleaseTarget(device), isTrue);
+  });
+
+  test('shows door button for a configured DoorBird without a call', () {
+    expect(
+      intercomShowsDoorButton(
+        canRelease: false,
+        sipInCall: false,
+        intercomRaw: {'kind': 'doorbird'},
+      ),
+      isTrue,
+    );
+    expect(
+      intercomShowsDoorButton(
+        canRelease: false,
+        sipInCall: false,
+        intercomRaw: {
+          'kind': 'other',
+          'doorbird': {'host': '192.168.1.172'},
+        },
+      ),
+      isTrue,
+    );
   });
 }

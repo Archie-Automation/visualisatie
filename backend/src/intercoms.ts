@@ -4,9 +4,10 @@ import { effectiveIntercomReleaseMode } from "./intercomReleaseMode";
 import { logger } from "./logger";
 import type { HouseConfig, IntercomDevice } from "./types";
 import type { KnxBus } from "./knxBus";
+import { releaseDoorViaDtmf } from "./voip/dtmfRelease";
 import { releaseDoorViaHttp } from "./voip/httpRelease";
 
-/** KNX-puls, DoorBird LAN, of generieke HTTP. */
+/** KNX-puls, DoorBird LAN, HTTP, of DTMF tijdens het SIP-gesprek. */
 export async function releaseDoor(
   ic: IntercomDevice,
   bus: KnxBus
@@ -18,6 +19,10 @@ export async function releaseDoor(
   }
   if (mode === "http") {
     await releaseDoorViaHttp(ic);
+    return;
+  }
+  if (mode === "dtmf") {
+    await releaseDoorViaDtmf(ic);
     return;
   }
 

@@ -6,7 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api.dart';
 import '../camera_api.dart';
+import '../installer/intercom_sip_config.dart';
 import '../intercom/intercom_controller.dart';
+import '../intercom/intercom_release_ui.dart';
 import '../intercom/intercom_sip_providers.dart';
 import '../intercom/intercom_sip_types.dart';
 import '../theme.dart';
@@ -55,9 +57,8 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
   Future<void> _answer(IntercomController sip) async {
     if (_inConversation) return;
     setState(() => _inConversation = true);
-    if (sip.phase == IntercomSipPhase.ringing) {
-      await sip.answerCall();
-    }
+    debugPrint('[SIP] UI opnemen fase=${sip.phase.name}');
+    await sip.answerCall();
     ref.read(intercomRingProvider.notifier).clear();
   }
 
@@ -100,7 +101,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
         );
   }
 
-  Future<void> _release(IntercomInfo i) async {
+  Future<void> _release(IntercomInfo i, IntercomController sip) async {
     if (_releasing) return;
 
     // Surface an "are you sure?" prompt if the config requests one.
@@ -115,8 +116,19 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
       _releaseFeedback = null;
     });
     try {
-      final auth = ref.read(authProvider);
-      await releaseIntercomDoor(intercomId: i.id, token: auth.token);
+      final raw = device?.raw['intercom'];
+      final digit = raw is Map
+          ? ((raw['dtmfDigit'] as String?)?.trim().isNotEmpty == true
+              ? (raw['dtmfDigit'] as String).trim()
+              : defaultDtmfDigit)
+          : defaultDtmfDigit;
+      final viaSip = sip.sendDtmf(digit);
+      try {
+        final auth = ref.read(authProvider);
+        await releaseIntercomDoor(intercomId: i.id, token: auth.token);
+      } catch (e) {
+        if (!viaSip) rethrow;
+      }
       if (!mounted) return;
       setState(() => _releaseFeedback = 'Deur geopend');
     } catch (e) {
@@ -191,11 +203,18 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
               });
             }
             final phone = context.isPhone;
-            // De server rekent canRelease uit met de echte wachtwoorden; de
-            // app-config heeft die niet (DoorBird-wachtwoord is leeg).
-            final showRelease = i.canRelease;
-            // SIP-gesprek actief: geluid via Asterisk, go2rtc alleen beeld.
-            final sipCall = sip.phase == IntercomSipPhase.inCall;
+            final icRaw = ref.read(configProvider).value?.deviceById(i.id)?.raw['intercom'];
+            final showRelease = intercomShowsDoorButton(
+              canRelease: i.canRelease,
+              sipInCall: sip.phase == IntercomSipPhase.inCall,
+              intercomRaw: icRaw is Map
+                  ? Map<String, dynamic>.from(icRaw)
+                  : null,
+            );
+            // SIP-gesprek (bellen of opgenomen): geluid via Asterisk,
+            // go2rtc alleen beeld. Anders claimt de UI "spreken" zonder mic.
+            final sipLive = sip.phase == IntercomSipPhase.ringing ||
+                sip.phase == IntercomSipPhase.inCall;
             final hPad = phone ? 12.0 : 16.0;
             final stagePad = EdgeInsets.fromLTRB(hPad, 4, hPad, 8);
             return IntercomCaptureScope(
@@ -211,7 +230,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          if (waiting || sipCall) ...[
+                          if (waiting || sipLive) ...[
                             if (!_previewLive)
                               CameraSnapshot(
                                 cameraId: i.id,
@@ -357,7 +376,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                                         color: _kCallDoor,
                                         diameter: diameter,
                                         loading: _releasing,
-                                        onTap: () => _release(i),
+                                        onTap: () => _release(i, sip),
                                       ),
                                     ),
                                 ],

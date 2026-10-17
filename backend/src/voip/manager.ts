@@ -1,5 +1,6 @@
 import { collectIntercoms } from "../cameras";
 import { getConfig, persistConfig } from "../config";
+import { effectiveIntercomReleaseMode } from "../intercomReleaseMode";
 import { releaseDoor } from "../intercoms";
 import type { KnxBus } from "../knxBus";
 import { logger } from "../logger";
@@ -11,6 +12,11 @@ import { removeLegacyAsteriskContainer } from "./asteriskDocker";
 import { ensureAsteriskProcess, stopAsteriskProcess } from "./asteriskProcess";
 import { normalizeVoip } from "./normalize";
 import { intercomRingTargets } from "./ringTargets";
+import {
+  clearDoorChannel,
+  recordDoorChannel,
+  setDtmfAmiGetter
+} from "./dtmfRelease";
 import { astSafe } from "./secrets";
 
 let hub: WsHub | null = null;
@@ -200,6 +206,7 @@ export async function syncVoipFromConfig(cfg: HouseConfig): Promise<void> {
   if (!cfg.voip?.enabled) {
     ami?.close();
     ami = null;
+    setDtmfAmiGetter(() => null);
     stopAsteriskProcess();
     return;
   }
@@ -243,6 +250,7 @@ async function ensureAmi(): Promise<void> {
   try {
     await client.connect("archie", secret);
     ami = client;
+    setDtmfAmiGetter(() => ami);
     logger.info({ host, port }, "AMI verbonden");
     void syncRegisteredContacts(client);
   } catch (err) {
@@ -277,6 +285,7 @@ function onAmiEvent(ev: AmiFields): void {
     if (kind === "ring") {
       lastRingIntercomId = id;
       answeredBroadcastFor = null;
+      if (ev.Channel) recordDoorChannel(id, ev.Channel);
       hub?.broadcastIntercomRing(id, ev.GroupId);
     }
     if (kind === "answered") {
@@ -310,6 +319,7 @@ function onAmiEvent(ev: AmiFields): void {
     if (ic && uid) channelIntercom.set(uid, ic);
     const linked = ev.Linkedid;
     if (ic && linked) channelIntercom.set(linked, ic);
+    if (ic && ev.Channel) recordDoorChannel(ic, ev.Channel);
     return;
   }
   if (event === "DialEnd") {
@@ -335,7 +345,10 @@ function onAmiEvent(ev: AmiFields): void {
     const ic = uid ? channelIntercom.get(uid) : (linked ? channelIntercom.get(linked) : undefined);
     if (uid) channelIntercom.delete(uid);
     if (linked) channelIntercom.delete(linked);
-    if (ic) hub?.broadcastIntercomCleared(ic);
+    if (ic) {
+      clearDoorChannel(ic, ev.Channel);
+      hub?.broadcastIntercomCleared(ic);
+    }
     return;
   }
   if (event === "DTMFEnd" || event === "DTMFBegin") {
@@ -348,6 +361,8 @@ function onAmiEvent(ev: AmiFields): void {
     if (!ic) return;
     const want = (ic.intercom.dtmfDigit ?? "#").trim();
     if (!want || digit !== want) return;
+    // Eigen PlayDTMF naar de deur niet opnieuw als KNX/HTTP-deuropen.
+    if (effectiveIntercomReleaseMode(ic) === "dtmf") return;
     if (!bus) return;
     void releaseDoor(ic, bus).catch((err) => {
       logger.warn({ err, id: icId }, "DTMF deuropen mislukt");

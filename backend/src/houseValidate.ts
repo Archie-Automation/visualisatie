@@ -10,7 +10,10 @@ import type {
   UniversalDevice,
   User
 } from "./types";
-import { effectiveIntercomReleaseMode } from "./intercomReleaseMode";
+import {
+  effectiveIntercomReleaseMode,
+  resolvedDoorbird
+} from "./intercomReleaseMode";
 import { walkDevices } from "./config";
 
 const schemaPath = path.join(__dirname, "..", "..", "config", "house.schema.json");
@@ -349,18 +352,10 @@ export function validateIntercomSemantics(cfg: HouseConfig): string[] {
       continue;
     }
     if (effectiveIntercomReleaseMode(d) !== "doorbird") continue;
-    const db = d.intercom.doorbird;
-    if (!db?.host?.trim()) {
-      issues.push(`Intercom "${d.name}" (${d.id}): DoorBird IP/hostname ontbreekt.`);
-    }
-    if (!db?.username?.trim()) {
-      issues.push(
-        `Intercom "${d.name}" (${d.id}): DoorBird-gebruikersnaam ontbreekt.`
-      );
-    }
-    if (db?.password == null || String(db.password).length === 0) {
-      issues.push(`Intercom "${d.name}" (${d.id}): DoorBird-wachtwoord ontbreekt.`);
-    }
+    if (resolvedDoorbird(d)) continue;
+    issues.push(
+      `Intercom "${d.name}" (${d.id}): DoorBird-login ontbreekt (IP + gebruiker + wachtwoord, of in de RTSP-URL).`
+    );
   }
   return issues;
 }

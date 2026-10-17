@@ -54,6 +54,7 @@ type=endpoint
 context=${context}
 disallow=all
 allow=ulaw,alaw,opus,h264
+dtmf_mode=rfc4733
 ${media}auth=${ext}
 aors=${ext}
 callerid="${name}" <${ext}>

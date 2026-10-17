@@ -4633,6 +4633,27 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
                     ),
                 ],
               ),
+              const SizedBox(height: 8),
+              LuxeSwitchRow(
+                title: 'Mag deur openen',
+                subtitle:
+                    'Toont de knop Deur open op dit account. Uit = nooit, ook niet tijdens een gesprek via de server.',
+                value: () {
+                  final a = u['access'];
+                  if (a is! Map) return false;
+                  final v = a['canRelease'];
+                  if (v == '*') return true;
+                  if (v is List && v.isNotEmpty) return true;
+                  return sipEndpointForUser(widget.house, u) != null &&
+                      v == null;
+                }(),
+                onChanged: (on) {
+                  final a = _ensureAccess();
+                  a['canRelease'] = on ? '*' : <String>[];
+                  widget.onChanged();
+                  setState(() {});
+                },
+              ),
             ],
           ),
         ),
@@ -7839,6 +7860,14 @@ class _IntercomKnxExtras extends StatelessWidget {
           onChanged: (v) {
             if (v == null) return;
             o['kind'] = v;
+            if (v == 'doorbird') {
+              final rel = o['release'];
+              final hasGa = rel is Map &&
+                  (rel['ga'] as String?)?.trim().isNotEmpty == true;
+              if (!hasGa && o['releaseMode'] != 'http') {
+                o['releaseMode'] = 'doorbird';
+              }
+            }
             onChanged();
           },
         ),

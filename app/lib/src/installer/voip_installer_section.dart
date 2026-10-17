@@ -326,6 +326,25 @@ Map<String, dynamic>? sipEndpointForUser(
   return null;
 }
 
+/// Paneel dat overgaat mag de deur openen, tenzij de installer dat al uitzette.
+void grantDoorReleaseIfUnset(Map<String, dynamic> user) {
+  final a = user['access'];
+  if (a is Map) {
+    if (a['canRelease'] != null) return;
+    a['canRelease'] = '*';
+    return;
+  }
+  user['access'] = <String, dynamic>{
+    'floors': '*',
+    'rooms': '*',
+    'functions': '*',
+    'devices': '*',
+    'scenes': '*',
+    'canRelease': '*',
+    'editScenes': true,
+  };
+}
+
 void bindSipToUser(
   Map<String, dynamic> house,
   Map<String, dynamic> user,
@@ -334,6 +353,7 @@ void bindSipToUser(
   if (existing != null) {
     user['sipEndpointId'] = existing['id'];
     existing['userId'] = user['id'];
+    grantDoorReleaseIfUnset(user);
     return;
   }
   final uid = '${user['id']}';
@@ -352,6 +372,7 @@ void bindSipToUser(
   };
   endpoints.add(ep);
   user['sipEndpointId'] = id;
+  grantDoorReleaseIfUnset(user);
   final groups = voipGroupMaps(house);
   if (groups.isNotEmpty) {
     final m = groups.first['memberIds'];

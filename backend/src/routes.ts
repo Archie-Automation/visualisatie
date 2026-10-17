@@ -1514,7 +1514,9 @@ export function buildRouter(
             ? "Vul het KNX-schrijfadres voor deur open in."
             : mode === "http"
               ? "Vul de HTTP-URL in."
-              : "Vul IP, gebruikersnaam en wachtwoord van de DoorBird in.";
+              : mode === "dtmf"
+                ? "DTMF werkt tijdens een gesprek. Of vul KNX / DoorBird-HTTP in."
+                : "Vul IP, gebruikersnaam en wachtwoord van de DoorBird in.";
         return res.status(400).json({ error: hint, mode });
       }
       try {

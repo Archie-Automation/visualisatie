@@ -65,7 +65,12 @@ class _IncomingCallScreenState extends ConsumerState<IncomingCallScreen> {
     final auth = ref.read(authProvider);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await releaseIntercomDoor(intercomId: id, token: auth.token);
+      final sipOk = widget.controller.sendDtmf('#');
+      try {
+        await releaseIntercomDoor(intercomId: id, token: auth.token);
+      } catch (e) {
+        if (!sipOk) rethrow;
+      }
       if (!mounted) return;
       messenger.showSnackBar(
         const SnackBar(

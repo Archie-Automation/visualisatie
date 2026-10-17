@@ -1,5 +1,6 @@
 import http from "node:http";
 import https from "node:https";
+import { resolvedDoorbird } from "./intercomReleaseMode";
 import { logger } from "./logger";
 import type { IntercomDevice } from "./types";
 
@@ -8,12 +9,8 @@ import type { IntercomDevice } from "./types";
  * query parameters as documented for third-party integrations (DoorBird LAN API).
  */
 export async function releaseDoorViaDoorbird(ic: IntercomDevice): Promise<void> {
-  const db = ic.intercom.doorbird;
-  if (!db?.host?.trim()) throw new Error("DoorBird: host ontbreekt");
-  if (!db.username?.trim()) throw new Error("DoorBird: gebruikersnaam ontbreekt");
-  if (db.password == null || String(db.password).length === 0) {
-    throw new Error("DoorBird: wachtwoord ontbreekt");
-  }
+  const db = resolvedDoorbird(ic);
+  if (!db) throw new Error("DoorBird: host, gebruiker of wachtwoord ontbreekt");
 
   const useTls = db.useTls === true;
   const port = db.port ?? (useTls ? 443 : 80);

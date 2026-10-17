@@ -137,7 +137,13 @@ export function canReleaseIntercom(
   const acl = u.access?.canRelease;
   if (acl === "*") return true;
   if (Array.isArray(acl)) return acl.includes(intercomId);
-  return false;
+  // Unset: een gekoppeld SIP-paneel mag deuren openen die het mag zien.
+  // Explict `[]` blijft weigeren. Er is geen installer-veld per intercom.
+  const uid = u.id;
+  const hasSip = (getConfig().voip?.endpoints ?? []).some(
+    (e) => e.userId === uid || u.sipEndpointId === e.id
+  );
+  return hasSip;
 }
 
 /** Can this authenticated caller view/answer the given intercom? */

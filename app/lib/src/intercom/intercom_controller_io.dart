@@ -74,6 +74,7 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
       ..displayName =
           (displayName != null && displayName.isNotEmpty) ? displayName : 'Intercom'
       ..userAgent = 'ArchieOS-Intercom'
+      ..dtmfMode = DtmfMode.RFC2833
       ..register = true;
 
     await start(settings);
@@ -100,6 +101,7 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
       ..displayName =
           (displayName != null && displayName.isNotEmpty) ? displayName : 'Paneel'
       ..userAgent = 'ArchieOS-Intercom'
+      ..dtmfMode = DtmfMode.RFC2833
       ..register = true;
     await start(settings);
   }
@@ -203,6 +205,23 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
     notifyListeners();
   }
 
+  bool sendDtmf(String digit) {
+    final call = _activeCall;
+    final tone = digit.trim();
+    if (call == null || _phase != IntercomSipPhase.inCall || tone.isEmpty) {
+      debugPrint('[SIP] DTMF overgeslagen fase=$_phase');
+      return false;
+    }
+    try {
+      call.sendDTMF(tone);
+      debugPrint('[SIP] DTMF $tone');
+      return true;
+    } catch (e) {
+      debugPrint('[SIP] DTMF mislukt: $e');
+      return false;
+    }
+  }
+
   void _resetCall() {
     _elsewhereTimer?.cancel();
     _elsewhereTimer = null;
@@ -261,8 +280,12 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
         '${state.cause != null ? ' (${state.cause?.cause} ${state.cause?.status_code})' : ''}');
     switch (state.state) {
       case CallStateEnum.CALL_INITIATION:
+      case CallStateEnum.PROGRESS:
+        // PROGRESS is 180/183, geen antwoord. Anders slaat OPNEMEN SIP over.
         _activeCall = call;
-        _phase = IntercomSipPhase.ringing;
+        if (_phase != IntercomSipPhase.inCall) {
+          _phase = IntercomSipPhase.ringing;
+        }
         _remoteLabel = (call.remote_display_name?.trim().isNotEmpty == true)
             ? call.remote_display_name
             : call.remote_identity;
@@ -279,7 +302,8 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
         _phase = IntercomSipPhase.inCall;
         break;
       case CallStateEnum.CONNECTING:
-      case CallStateEnum.PROGRESS:
+        _activeCall = call;
+        break;
       case CallStateEnum.ACCEPTED:
       case CallStateEnum.CONFIRMED:
         _activeCall = call;
