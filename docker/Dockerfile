@@ -7,7 +7,7 @@
 # ── Flutter web ──────────────────────────────────────────────────────────────
 FROM ghcr.io/cirruslabs/flutter:stable AS flutter
 WORKDIR /src/app
-COPY app/pubspec.yaml ./
+COPY app/pubspec.yaml app/pubspec.lock ./
 RUN flutter pub get
 COPY app/ ./
 # Keep this command identical to .github/workflows/ci.yml (flutter-web job).
