@@ -123,9 +123,27 @@ export function buildDoorRingContext(
       return dial && g ? { t, dial, g } : null;
     })
     .filter((x): x is NonNullable<typeof x> => x != null);
-  if (usable.length === 0) return null;
 
   const ctx = doorContextName(ic);
+  const id = astSafe(ic.id);
+  // Ophangen door de deur: overlay op de panelen sluiten.
+  const hangupExt = `exten => h,1,UserEvent(Archie,Kind: cleared,IntercomId: ${id})`;
+  if (usable.length === 0) {
+    // Geen SIP-toestellen: wel de belmelding naar alle panelen (WebSocket/push),
+    // zodat camera en deur-open werken. Anders weigert Asterisk de oproep.
+    return `[${ctx}]
+exten => s,1,NoOp(Ring ${id} zonder SIP-toestellen)
+ same => n,Set(__INTERCOM_ID=${id})
+ same => n,UserEvent(Archie,Kind: ring,IntercomId: ${id})
+ same => n,Ringing()
+ same => n,Wait(30)
+ same => n,UserEvent(Archie,Kind: cleared,IntercomId: ${id})
+ same => n,Hangup()
+exten => _X.,1,Goto(s,1)
+${hangupExt}
+`;
+  }
+
   const lines: string[] = [`[${ctx}]`];
   const primary = usable.find((x) => x.t.button === 1) ?? usable[0];
   lines.push(doorDialBlock(ic, primary.t.ringGroupId, primary.dial, "s"));
@@ -143,6 +161,7 @@ export function buildDoorRingContext(
   // Unknown numbers (DoorBird knop 1 often not the group ext) → knop 1.
   // Exact extra-button extensions above take priority over this pattern.
   lines.push(`exten => _X.,1,Goto(s,1)`);
+  lines.push(hangupExt);
   return `${lines.join("\n")}\n`;
 }
 
@@ -307,6 +326,7 @@ ${(cfg.intercoms ?? [])
   const groupExtens: string[] = [];
 
   for (const ic of cfg.intercoms ?? []) {
+    if (!ic.intercom.sipExt || !ic.intercom.sipPassword) continue;
     const ctx = buildDoorRingContext(cfg, ic);
     if (ctx) ringContexts.push(ctx);
   }

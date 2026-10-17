@@ -226,9 +226,26 @@ async function ensureAmi(): Promise<void> {
     await client.connect("archie", secret);
     ami = client;
     logger.info({ host, port }, "AMI verbonden");
+    void syncRegisteredContacts(client);
   } catch (err) {
     client.close();
     throw err;
+  }
+}
+
+/** ContactStatus komt alleen bij wijzigingen; registraties van vóór de AMI-login ophalen. */
+async function syncRegisteredContacts(client: AmiClient): Promise<void> {
+  try {
+    const evs = await client.send({ Action: "PJSIPShowContacts" });
+    registered.clear();
+    for (const ev of evs) {
+      if (ev.Event !== "ContactList") continue;
+      const aor = ev.AOR || "";
+      const status = (ev.Status || "").toLowerCase();
+      if (aor && status !== "unreachable" && status !== "removed") registered.add(aor);
+    }
+  } catch (err) {
+    logger.debug({ err }, "PJSIPShowContacts mislukt");
   }
 }
 

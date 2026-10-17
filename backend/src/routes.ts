@@ -652,6 +652,10 @@ export function buildRouter(
     }
     const cfgNow = getConfig();
     const pbx = asteriskProcessStatus();
+    const regs = new Set(voipRegisteredExts());
+    const sipDoors = (cfgNow.intercoms ?? []).filter(
+      (ic) => ic.intercom.sipExt && ic.intercom.sipPassword
+    );
     res.json({
       ok: true,
       // App-routewissel: herken dezelfde NUC via LAN én via de cloud-URL.
@@ -666,6 +670,10 @@ export function buildRouter(
         pbxRestarts: pbx.restarts,
         pbxLastExit: pbx.lastExit,
         pbxLastError: pbx.lastError,
+        doorsRegistered: sipDoors.filter((ic) => regs.has(ic.intercom.sipExt!)).length,
+        doors: sipDoors.length,
+        phonesRegistered: (cfgNow.voip?.endpoints ?? []).filter((e) => regs.has(e.ext)).length,
+        phones: (cfgNow.voip?.endpoints ?? []).length,
         // Alleen bij een kapotte PBX: startfout zonder login te kunnen lezen.
         pbxLog: pbx.running ? [] : pbx.recent.slice(-8)
       }

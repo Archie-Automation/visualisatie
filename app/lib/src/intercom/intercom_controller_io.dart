@@ -98,6 +98,9 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
   }
 
   Future<void> start(UaSettings settings) async {
+    // WSS van de NUC draait op een zelfondertekend certificaat; zonder dit
+    // weigert Android de TLS-handshake en registreert het toestel nooit.
+    settings.webSocketSettings.allowBadCertificate = true;
     if (!_listenerAttached) {
       _helper.addSipUaHelperListener(this);
       _listenerAttached = true;
