@@ -13,12 +13,13 @@ Future<void> main() async {
 
   // ── Global error handlers ──────────────────────────────────────────────
   // Prevent a single broken widget from bricking the wall panel.
+  // Ook in release naar logcat: een leeg paneel is anders niet te diagnosticeren.
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
-    if (kDebugMode) debugPrint('FlutterError: ${details.exceptionAsString()}');
+    debugPrint('FlutterError: ${details.exceptionAsString()}');
   };
   PlatformDispatcher.instance.onError = (error, stack) {
-    if (kDebugMode) debugPrint('Uncaught: $error\n$stack');
+    debugPrint('Uncaught: $error\n$stack');
     return true;
   };
   ErrorWidget.builder = (details) {
@@ -26,15 +27,20 @@ Future<void> main() async {
     return const SizedBox.shrink();
   };
 
+  debugPrint('[boot] kiosk-ui');
   await applyAndroidKioskSystemUi();
+  debugPrint('[boot] api-base');
   await loadApiBaseOverride();
+  debugPrint('[boot] server-route');
   // LAN of cloud? Max ~1,5 s, thuis <200 ms. Splash pingt daarna de keuze.
   await chooseServerRoute();
+  debugPrint('[boot] fonts');
   try {
     await preloadLuxeFonts();
   } catch (e) {
-    if (kDebugMode) debugPrint('Font preload mislukt: $e');
+    debugPrint('Font preload mislukt: $e');
   }
+  debugPrint('[boot] runApp');
   runApp(
     ValueListenableBuilder<int>(
       valueListenable: appBootEpoch,
