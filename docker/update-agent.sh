@@ -365,11 +365,17 @@ run_update() {
     log "fail compose_failed knx-stack"
     return 1
   fi
+  asterisk_err=""
   if ! ( cd "$DOCKER_DIR" && $DOCKER compose --env-file .env up -d --build asterisk >>"$LOG" 2>&1 ); then
     log "warn asterisk compose failed (app is up)"
+    asterisk_err="$(tail -n 15 "$LOG" 2>/dev/null | tr '\n' ' ' | cut -c1-400)"
   fi
 
-  ST_STATE=success ST_STEP= ST_MESSAGE="Server wordt bijgewerkt." ST_CLEAR_ERROR=1 ST_FINISHED=1 write_status
+  if [ -n "$asterisk_err" ]; then
+    ST_STATE=success ST_STEP=asterisk ST_MESSAGE="App bijgewerkt. Asterisk startte niet." ST_ERROR="$asterisk_err" ST_FINISHED=1 write_status
+  else
+    ST_STATE=success ST_STEP= ST_MESSAGE="Server wordt bijgewerkt." ST_CLEAR_ERROR=1 ST_FINISHED=1 write_status
+  fi
   log "update success"
   NEED_REEXEC=1
   return 0

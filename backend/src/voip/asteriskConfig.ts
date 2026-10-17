@@ -252,6 +252,21 @@ write=system,call,log,verbose,command,agent,user,config,reporting,originate
 [applicationmap]
 `;
 
+  // WS/WSS hangen aan http.conf. Een eigen poort op die transporten
+  // botst met bindport/tlsbindaddr en Asterisk start dan niet.
+  const wsTransport = `[transport-ws]
+type=transport
+protocol=ws
+bind=0.0.0.0
+${transportNat}`;
+  const wssTransport = tls
+    ? `[transport-wss]
+type=transport
+protocol=wss
+bind=0.0.0.0
+${transportNat}`
+    : "";
+
   files["pjsip.conf"] = `[global]
 type=global
 endpoint_identifier_order=username,ip,anonymous
@@ -261,16 +276,8 @@ type=transport
 protocol=udp
 bind=0.0.0.0:${sipPort}
 ${transportNat}
-[transport-ws]
-type=transport
-protocol=ws
-bind=0.0.0.0:${wsPort}
-${transportNat}
-[transport-wss]
-type=transport
-protocol=wss
-bind=0.0.0.0:${wssPort}
-${transportNat}
+${wsTransport}
+${wssTransport}
 ${(v.endpoints ?? [])
   .map((ep) =>
     pjsipEndpointBlock({

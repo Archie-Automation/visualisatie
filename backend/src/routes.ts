@@ -500,7 +500,8 @@ export function buildRouter(
       serverUpdate: {
         agentReady: serverUpdate.agentReady,
         state: serverUpdate.state,
-        message: serverUpdate.message
+        message: serverUpdate.message,
+        error: serverUpdate.error
       }
     });
   });
