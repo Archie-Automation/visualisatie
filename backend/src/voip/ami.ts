@@ -35,15 +35,23 @@ export class AmiClient {
     return this.sock != null && !this.sock.destroyed;
   }
 
-  connect(username: string, secret: string): Promise<void> {
+  connect(username: string, secret: string, timeoutMs = 10_000): Promise<void> {
     this.close();
+    this.buf = "";
+    this.sawGreeting = false;
+    this.greeting = false;
     return new Promise((resolve, reject) => {
       const sock = net.connect({ host: this.host, port: this.port });
       this.sock = sock;
       let settled = false;
+      const timer = setTimeout(() => {
+        fail(new Error("AMI login timeout"));
+        sock.destroy();
+      }, timeoutMs);
       const fail = (err: Error) => {
         if (settled) return;
         settled = true;
+        clearTimeout(timer);
         reject(err);
       };
       sock.setEncoding("utf8");
@@ -69,7 +77,9 @@ export class AmiClient {
             .then((evs) => {
               const r = evs[0];
               if (r?.Response === "Success") {
+                if (settled) return;
                 settled = true;
+                clearTimeout(timer);
                 resolve();
               } else {
                 fail(new Error(r?.Message || "AMI login failed"));
@@ -84,15 +94,20 @@ export class AmiClient {
   private sawGreeting = false;
 
   private drain(): void {
+    // De begroeting is één regel met één CRLF, geen blok met lege regel.
+    if (!this.sawGreeting) {
+      const eol = this.buf.indexOf("\r\n");
+      if (eol < 0) return;
+      if (this.buf.startsWith("Asterisk Call Manager")) {
+        this.sawGreeting = true;
+        this.buf = this.buf.slice(eol + 2);
+      }
+    }
     while (true) {
       const idx = this.buf.indexOf("\r\n\r\n");
       if (idx < 0) return;
       const raw = this.buf.slice(0, idx);
       this.buf = this.buf.slice(idx + 4);
-      if (raw.startsWith("Asterisk Call Manager")) {
-        this.sawGreeting = true;
-        continue;
-      }
       const fields = parseAmiBlock(raw);
       const aid = fields.ActionID;
       if (aid && this.pending.has(aid)) {
