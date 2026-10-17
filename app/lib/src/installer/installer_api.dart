@@ -408,6 +408,27 @@ Future<InstallerCameraProbeSummary> postInstallerCameraProbe(
   );
 }
 
+/// Deuropener testen met de (niet-opgeslagen) intercom uit het formulier.
+Future<void> postInstallerTestRelease(
+  String token, {
+  required Map<String, dynamic> device,
+}) async {
+  final res = await http.post(
+    Uri.parse('$apiBase/api/installer/intercoms/test-release'),
+    headers: {
+      'content-type': 'application/json',
+      'authorization': 'Bearer $token',
+    },
+    body: jsonEncode({'device': device}),
+  );
+  if (res.statusCode == 200) return;
+  String? msg;
+  try {
+    msg = (jsonDecode(res.body) as Map)['error'] as String?;
+  } catch (_) {}
+  throw StateError(msg ?? 'Deur-test mislukt (HTTP ${res.statusCode})');
+}
+
 class InstallerVoipTestRingResult {
   const InstallerVoipTestRingResult({
     required this.overlay,

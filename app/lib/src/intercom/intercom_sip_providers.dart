@@ -16,6 +16,18 @@ final intercomSipControllerProvider =
     onAnsweredElsewhere: () {
       ref.read(intercomRingProvider.notifier).markAnsweredElsewhere();
     },
+    resolveIntercomId: (callerExt) {
+      if (callerExt.isEmpty) return null;
+      final cfg = ref.read(configProvider).value;
+      if (cfg == null) return null;
+      for (final ic in cfg.intercoms) {
+        final raw = ic.raw['intercom'];
+        if (raw is Map && '${raw['sipExt'] ?? ''}'.trim() == callerExt) {
+          return ic.id;
+        }
+      }
+      return null;
+    },
   );
   ref.onDispose(c.dispose);
   return c;

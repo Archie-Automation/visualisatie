@@ -122,6 +122,10 @@ import { probeCameraStreams } from "./cameraProbe";
 import { parseKnxExport, persistGaCatalog, loadGaCatalog } from "./knxImport";
 import { scheduleAdminProcessRestart } from "./processRestart";
 import { releaseDoor } from "./intercoms";
+import {
+  effectiveIntercomReleaseMode,
+  intercomSupportsRelease
+} from "./intercomReleaseMode";
 import type { MediaManager } from "./media/manager";
 import type { LutronIntegrationManager } from "./lutron/manager";
 import type { WsHub } from "./ws";
@@ -151,6 +155,7 @@ import {
   syncVoipFromConfig,
   testRingGroup,
   voipAmiUp,
+  voipRecentCalls,
   voipRegisteredExts
 } from "./voip/manager";
 
@@ -674,6 +679,7 @@ export function buildRouter(
         doors: sipDoors.length,
         phonesRegistered: (cfgNow.voip?.endpoints ?? []).filter((e) => regs.has(e.ext)).length,
         phones: (cfgNow.voip?.endpoints ?? []).length,
+        calls: voipRecentCalls(),
         // Alleen bij een kapotte PBX: startfout zonder login te kunnen lezen.
         pbxLog: pbx.running ? [] : pbx.recent.slice(-8)
       }
@@ -1479,6 +1485,46 @@ export function buildRouter(
         "installer test-ring"
       );
       res.json({ ok: true, ...result });
+    }
+  );
+
+  /**
+   * Installer: deuropener testen met de instellingen uit het formulier
+   * (ook niet-opgeslagen). Leeg DoorBird-wachtwoord = opgeslagen wachtwoord.
+   */
+  r.post(
+    "/installer/intercoms/test-release",
+    requireAuth,
+    requireInstaller,
+    async (req: AuthedRequest, res) => {
+      const draft = req.body?.device as IntercomDevice | undefined;
+      if (!draft || typeof draft !== "object" || typeof draft.intercom !== "object") {
+        return res.status(400).json({ error: "Intercom ontbreekt." });
+      }
+      const ic = structuredClone(draft);
+      const saved = collectIntercoms(getConfig()).find((i) => i.id === ic.id);
+      const db = ic.intercom.doorbird;
+      if (db && !db.password && saved?.intercom.doorbird?.password) {
+        db.password = saved.intercom.doorbird.password;
+      }
+      const mode = effectiveIntercomReleaseMode(ic);
+      if (!intercomSupportsRelease(ic)) {
+        const hint =
+          mode === "knx"
+            ? "Vul het KNX-schrijfadres voor deur open in."
+            : mode === "http"
+              ? "Vul de HTTP-URL in."
+              : "Vul IP, gebruikersnaam en wachtwoord van de DoorBird in.";
+        return res.status(400).json({ error: hint, mode });
+      }
+      try {
+        await releaseDoor(ic, bus);
+        logger.info({ by: req.user?.username, id: ic.id, mode }, "installer test-release");
+        res.json({ ok: true, mode });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        res.status(502).json({ error: msg, mode });
+      }
     }
   );
 

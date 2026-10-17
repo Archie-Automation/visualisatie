@@ -10,10 +10,15 @@ typedef IntercomRingAlignCallback = void Function(IntercomRing ring);
 
 /// SIP via JsSIP in de browser (sip_ua compileert niet op web).
 class IntercomController extends ChangeNotifier {
-  IntercomController({this.onAlignKnxRing, this.onAnsweredElsewhere});
+  IntercomController({
+    this.onAlignKnxRing,
+    this.onAnsweredElsewhere,
+    this.resolveIntercomId,
+  });
 
   final IntercomRingAlignCallback? onAlignKnxRing;
   final VoidCallback? onAnsweredElsewhere;
+  final String? Function(String callerExt)? resolveIntercomId;
 
   IntercomSipPhase _phase = IntercomSipPhase.idle;
   String? boundIntercomId;
@@ -81,7 +86,11 @@ class IntercomController extends ChangeNotifier {
   void _onIncoming(JSString label) {
     _phase = IntercomSipPhase.ringing;
     _remoteLabel = label.toDart;
-    final id = boundIntercomId ?? 'sip';
+    final id = boundIntercomId;
+    if (id == null) {
+      notifyListeners();
+      return;
+    }
     onAlignKnxRing?.call(IntercomRing(
       intercomId: id,
       name: _remoteLabel ?? 'Intercom',

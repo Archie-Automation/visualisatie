@@ -34,6 +34,24 @@ export function voipRegisteredExts(): string[] {
   return [...registered];
 }
 
+export interface VoipCallEvent {
+  at: string;
+  event: string;
+  detail: string;
+}
+
+const callLog: VoipCallEvent[] = [];
+
+function logCall(event: string, detail: string): void {
+  callLog.push({ at: new Date().toISOString(), event, detail });
+  while (callLog.length > 12) callLog.shift();
+}
+
+/** Laatste bel-gebeurtenissen (zonder nummers of namen) voor diagnose. */
+export function voipRecentCalls(): VoipCallEvent[] {
+  return [...callLog];
+}
+
 export function voipAmiUp(): boolean {
   return ami?.connected === true;
 }
@@ -255,6 +273,7 @@ function onAmiEvent(ev: AmiFields): void {
     const kind = (ev.Kind ?? "").toLowerCase();
     const id = ev.IntercomId;
     if (!id) return;
+    logCall(`door.${kind}`, ev.GroupId ? "groep" : "alle panelen");
     if (kind === "ring") {
       lastRingIntercomId = id;
       answeredBroadcastFor = null;
@@ -285,6 +304,7 @@ function onAmiEvent(ev: AmiFields): void {
     return;
   }
   if (event === "DialBegin") {
+    logCall("dial.begin", (ev.DestChannel || "").split("/")[0] || "?");
     const ic = ev.INTERCOM_ID || channelIntercom.get(ev.Linkedid || "") || channelIntercom.get(ev.Uniqueid || "");
     const uid = ev.DestUniqueid || ev.Uniqueid;
     if (ic && uid) channelIntercom.set(uid, ic);
@@ -294,6 +314,7 @@ function onAmiEvent(ev: AmiFields): void {
   }
   if (event === "DialEnd") {
     const status = (ev.DialStatus || "").toUpperCase();
+    logCall("dial.end", status || "?");
     if (status === "ANSWER" || status === "CANCEL") {
       const ic =
         ev.INTERCOM_ID ||
@@ -308,6 +329,7 @@ function onAmiEvent(ev: AmiFields): void {
     return;
   }
   if (event === "Hangup") {
+    logCall("hangup", `${ev.Cause ?? "?"} ${ev["Cause-txt"] ?? ""}`.trim());
     const uid = ev.Uniqueid;
     const linked = ev.Linkedid;
     const ic = uid ? channelIntercom.get(uid) : (linked ? channelIntercom.get(linked) : undefined);

@@ -8,10 +8,15 @@ typedef IntercomRingAlignCallback = void Function(IntercomRing ring);
 
 /// Geen SIP op Flutter Web (sip_ua compileert daar niet); zelfde API, alles no-op.
 class IntercomController extends ChangeNotifier {
-  IntercomController({this.onAlignKnxRing, this.onAnsweredElsewhere});
+  IntercomController({
+    this.onAlignKnxRing,
+    this.onAnsweredElsewhere,
+    this.resolveIntercomId,
+  });
 
   final IntercomRingAlignCallback? onAlignKnxRing;
   final VoidCallback? onAnsweredElsewhere;
+  final String? Function(String callerExt)? resolveIntercomId;
 
   IntercomSipPhase _phase = IntercomSipPhase.idle;
   String? boundIntercomId;

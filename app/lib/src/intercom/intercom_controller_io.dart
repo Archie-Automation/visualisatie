@@ -12,10 +12,17 @@ typedef IntercomRingAlignCallback = void Function(IntercomRing ring);
 
 /// SIP User-Agent voor inkomende intercom-oproepen (iOS / Android / desktop).
 class IntercomController extends ChangeNotifier implements SipUaHelperListener {
-  IntercomController({this.onAlignKnxRing, this.onAnsweredElsewhere});
+  IntercomController({
+    this.onAlignKnxRing,
+    this.onAnsweredElsewhere,
+    this.resolveIntercomId,
+  });
 
   final IntercomRingAlignCallback? onAlignKnxRing;
   final VoidCallback? onAnsweredElsewhere;
+
+  /// SIP-nummer van de beller → intercom-id uit house.json (null = onbekend).
+  final String? Function(String callerExt)? resolveIntercomId;
 
   final SIPUAHelper _helper = SIPUAHelper();
   bool _listenerAttached = false;
@@ -141,33 +148,29 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
 
   Future<void> answerCall() async {
     final call = _activeCall;
-    if (call == null) return;
-    final remoteVideo = call.remote_has_video;
-    final ok = await ensureAvPermissions(video: remoteVideo);
-    if (!ok) return;
-
-    final mediaConstraints = <String, dynamic>{
-      'audio': true,
-      'video': remoteVideo
-          ? <String, dynamic>{
-              'mandatory': <String, dynamic>{
-                'minWidth': '640',
-                'minHeight': '480',
-                'minFrameRate': '24',
-              },
-              'facingMode': 'user',
-              'optional': <dynamic>[],
-            }
-          : false,
-    };
-    if (!remoteVideo) {
-      mediaConstraints['video'] = false;
+    if (call == null) {
+      debugPrint('[SIP] opnemen: geen actieve oproep');
+      return;
+    }
+    // Beeld komt via go2rtc; SIP draagt alleen het gesprek.
+    final ok = await ensureAvPermissions(video: false);
+    if (!ok) {
+      debugPrint('[SIP] opnemen: microfoontoestemming geweigerd');
+      return;
     }
 
-    final mediaStream =
-        await navigator.mediaDevices.getUserMedia(mediaConstraints);
-    _localStream = mediaStream;
-    call.answer(_helper.buildCallOptions(!remoteVideo), mediaStream: mediaStream);
+    final mediaConstraints = <String, dynamic>{'audio': true, 'video': false};
+
+    try {
+      final mediaStream =
+          await navigator.mediaDevices.getUserMedia(mediaConstraints);
+      _localStream = mediaStream;
+      call.answer(_helper.buildCallOptions(true), mediaStream: mediaStream);
+      debugPrint('[SIP] opgenomen');
+    } catch (e) {
+      debugPrint('[SIP] opnemen mislukt: $e');
+      return;
+    }
     _phase = IntercomSipPhase.inCall;
     notifyListeners();
   }
@@ -231,7 +234,14 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
   void _maybeAlignRing(Call call) {
     if (_ringAlignSentForThisCall) return;
     if (call.direction != Direction.incoming) return;
-    final id = boundIntercomId ?? 'sip-intercom';
+    final caller = call.remote_identity?.trim() ?? '';
+    final id = boundIntercomId ?? resolveIntercomId?.call(caller);
+    // Onbekende beller: de server stuurt zelf de belmelding met het juiste id.
+    // Een verzonnen id opent anders een intercomscherm dat 404 geeft.
+    if (id == null) {
+      debugPrint('[SIP] oproep van $caller zonder bekende intercom');
+      return;
+    }
     final name = (call.remote_display_name?.trim().isNotEmpty == true)
         ? call.remote_display_name!.trim()
         : (call.remote_identity?.trim().isNotEmpty == true)
@@ -247,6 +257,8 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
 
   @override
   void callStateChanged(Call call, CallState state) {
+    debugPrint('[SIP] oproep ${state.state.name}'
+        '${state.cause != null ? ' (${state.cause?.cause} ${state.cause?.status_code})' : ''}');
     switch (state.state) {
       case CallStateEnum.CALL_INITIATION:
         _activeCall = call;
@@ -296,11 +308,16 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
 
   @override
   void registrationStateChanged(RegistrationState state) {
+    debugPrint('[SIP] registratie ${state.state?.name}'
+        '${state.cause != null ? ' (${state.cause?.cause} ${state.cause?.status_code})' : ''}');
     notifyListeners();
   }
 
   @override
-  void transportStateChanged(TransportState state) {}
+  void transportStateChanged(TransportState state) {
+    debugPrint('[SIP] transport ${state.state.name}'
+        '${state.cause != null ? ' (${state.cause?.cause})' : ''}');
+  }
 
   @override
   void onNewMessage(SIPMessageRequest msg) {}

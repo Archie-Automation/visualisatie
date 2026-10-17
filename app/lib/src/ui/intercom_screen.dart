@@ -9,7 +9,6 @@ import '../camera_api.dart';
 import '../intercom/intercom_controller.dart';
 import '../intercom/intercom_sip_providers.dart';
 import '../intercom/intercom_sip_types.dart';
-import '../models.dart';
 import '../theme.dart';
 import 'app_nav.dart';
 import 'responsive.dart';
@@ -192,9 +191,11 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
               });
             }
             final phone = context.isPhone;
-            final showRelease = i.canRelease &&
-                intercomHasReleaseTarget(
-                    ref.watch(configProvider).value?.deviceById(i.id));
+            // De server rekent canRelease uit met de echte wachtwoorden; de
+            // app-config heeft die niet (DoorBird-wachtwoord is leeg).
+            final showRelease = i.canRelease;
+            // SIP-gesprek actief: geluid via Asterisk, go2rtc alleen beeld.
+            final sipCall = sip.phase == IntercomSipPhase.inCall;
             final hPad = phone ? 12.0 : 16.0;
             final stagePad = EdgeInsets.fromLTRB(hPad, 4, hPad, 8);
             return IntercomCaptureScope(
@@ -210,7 +211,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                       child: Stack(
                         fit: StackFit.expand,
                         children: [
-                          if (waiting) ...[
+                          if (waiting || sipCall) ...[
                             if (!_previewLive)
                               CameraSnapshot(
                                 cameraId: i.id,
@@ -524,27 +525,4 @@ class _ActionButton extends StatelessWidget {
       ],
     );
   }
-}
-
-/// True when house.json has a real unlock target (KNX / HTTP / DoorBird).
-bool intercomHasReleaseTarget(Device? device) {
-  if (device == null) return false;
-  final ic = device.raw['intercom'];
-  if (ic is! Map) return false;
-  final mode = '${ic['releaseMode'] ?? ''}'.trim();
-  final ga = ic['release'] is Map
-      ? '${(ic['release'] as Map)['ga'] ?? ''}'.trim()
-      : '';
-  final url = ic['httpRelease'] is Map
-      ? '${(ic['httpRelease'] as Map)['url'] ?? ''}'.trim()
-      : '';
-  final db = ic['doorbird'] is Map ? ic['doorbird'] as Map : null;
-  final doorbirdOk = db != null &&
-      '${db['host'] ?? ''}'.trim().isNotEmpty &&
-      '${db['username'] ?? ''}'.trim().isNotEmpty &&
-      '${db['password'] ?? ''}'.isNotEmpty;
-  if (mode == 'http') return url.isNotEmpty;
-  if (mode == 'doorbird') return doorbirdOk;
-  if (mode == 'knx') return ga.isNotEmpty;
-  return url.isNotEmpty || ga.isNotEmpty || doorbirdOk;
 }

@@ -7255,6 +7255,7 @@ class _DeviceForm extends StatelessWidget {
                   _IntercomKnxExtras(
                     device: device,
                     onChanged: onChanged,
+                    getToken: getInstallerToken,
                   ),
                   _NestedStringFields(
                     label: 'Extra stream-opties',
@@ -7690,14 +7691,100 @@ class _SourcesCommaFieldState extends State<_SourcesCommaField> {
   }
 }
 
+/// Stuurt de deuropener aan met de instellingen zoals ze nu in het formulier staan.
+class _IntercomTestReleaseButton extends StatefulWidget {
+  const _IntercomTestReleaseButton({
+    required this.device,
+    required this.getToken,
+  });
+
+  final Map<String, dynamic> device;
+  final Future<String?> Function() getToken;
+
+  @override
+  State<_IntercomTestReleaseButton> createState() =>
+      _IntercomTestReleaseButtonState();
+}
+
+class _IntercomTestReleaseButtonState
+    extends State<_IntercomTestReleaseButton> {
+  bool _busy = false;
+  String? _status;
+  bool _ok = false;
+
+  Future<void> _run() async {
+    final token = await widget.getToken();
+    if (!mounted) return;
+    if (token == null) {
+      setState(() {
+        _status = 'Niet ingelogd.';
+        _ok = false;
+      });
+      return;
+    }
+    setState(() {
+      _busy = true;
+      _status = null;
+    });
+    try {
+      await postInstallerTestRelease(token, device: widget.device);
+      if (!mounted) return;
+      setState(() {
+        _status = 'Deuropener aangestuurd. Gaat de deur of poort open?';
+        _ok = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _status = '$e'.replaceFirst('Bad state: ', '');
+        _ok = false;
+      });
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        OutlinedButton.icon(
+          onPressed: _busy ? null : _run,
+          icon: _busy
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.lock_open, size: 18),
+          label: const Text('Deur open testen'),
+        ),
+        if (_status != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              _status!,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: _ok ? null : Colors.red.shade700,
+                  ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 class _IntercomKnxExtras extends StatelessWidget {
   const _IntercomKnxExtras({
     required this.device,
     required this.onChanged,
+    this.getToken,
   });
 
   final Map<String, dynamic> device;
   final VoidCallback onChanged;
+  final Future<String?> Function()? getToken;
 
   @override
   Widget build(BuildContext context) {
@@ -7902,6 +7989,10 @@ class _IntercomKnxExtras extends StatelessWidget {
             emptyMeansRemove: true,
             key: ValueKey('http-body-${device['id']}'),
           ),
+        ],
+        if (getToken != null) ...[
+          const SizedBox(height: 12),
+          _IntercomTestReleaseButton(device: device, getToken: getToken!),
         ],
         const SizedBox(height: 20),
         Text('Bel-webhook (DoorBird / 2N ring-notificatie)',
