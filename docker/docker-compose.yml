@@ -37,6 +37,7 @@ services:
       - FCM_CLIENT_CONFIG=${FCM_CLIENT_CONFIG:-}
       - ASTERISK_CONF_DIR=/data/asterisk
       - ASTERISK_AMI_HOST=127.0.0.1
+      - ASTERISK_AUTO_START=1
       - GITHUB_REPO=${GITHUB_REPO:-Archie-Automation/visualisatie}
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       # Remote toegang (Archie Cloud); leeg = alleen LAN.
@@ -52,20 +53,8 @@ services:
       - ../config:/config
       - ./go2rtc:/media
       - ./data:/data
-      # Zodat een SIP-intercom de Asterisk-container kan starten.
+      # Alleen om de oude losse archie-os-asterisk-container op te ruimen.
       - /var/run/docker.sock:/var/run/docker.sock
-
-  asterisk:
-    build:
-      context: ./asterisk
-      dockerfile: Dockerfile
-    image: archie-os-asterisk:latest
-    container_name: archie-os-asterisk
-    restart: unless-stopped
-    network_mode: host
-    volumes:
-      - ./data/asterisk:/etc/asterisk
-      - ./data/certs:/data/certs:ro
 
   # Optioneel: KNXnet/IP-server voor ETS op afstand (via WireGuard).
   # Deelt de fysieke IP-interface; ETS verbindt met <WG_ADDRESS>:3671.

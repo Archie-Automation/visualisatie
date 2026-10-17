@@ -145,6 +145,7 @@ import {
 import { mergeVoipSecrets, normalizeVoip } from "./voip/normalize";
 import { parseVoipHost } from "./voip/host";
 import { randomSipPassword } from "./voip/secrets";
+import { asteriskProcessStatus } from "./voip/asteriskProcess";
 import {
   resolveUserEndpoint,
   syncVoipFromConfig,
@@ -649,13 +650,25 @@ export function buildRouter(
         warnings.push(`Lutron telnet offline: ${l.name} (${l.host}:${l.port})`);
       }
     }
+    const cfgNow = getConfig();
+    const pbx = asteriskProcessStatus();
     res.json({
       ok: true,
       // App-routewissel: herken dezelfde NUC via LAN én via de cloud-URL.
       serverId: serverId(),
       remoteUrl: remoteUrl(),
       warnings,
-      connectivity
+      connectivity,
+      voip: {
+        enabled: cfgNow.voip?.enabled === true,
+        amiUp: voipAmiUp(),
+        pbxRunning: pbx.running,
+        pbxRestarts: pbx.restarts,
+        pbxLastExit: pbx.lastExit,
+        pbxLastError: pbx.lastError,
+        // Alleen bij een kapotte PBX: startfout zonder login te kunnen lezen.
+        pbxLog: pbx.running ? [] : pbx.recent.slice(-8)
+      }
     });
   });
 
@@ -1748,6 +1761,7 @@ export function buildRouter(
     res.json({
       enabled: cfg.voip?.enabled === true,
       amiUp: voipAmiUp(),
+      pbx: asteriskProcessStatus(),
       host: parseVoipHost(cfg.voip?.host) ?? "",
       suggestedHost: lanHost(req),
       sipPort: cfg.voip?.sipPort ?? 5060,

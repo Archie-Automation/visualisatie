@@ -360,22 +360,14 @@ run_update() {
 
   ST_STATE=running ST_STEP=build ST_MESSAGE="Software bouwen. Meestal 1–3 minuten. Het huis blijft werken tot de herstart aan het eind." write_status
 
-  if ! ( cd "$DOCKER_DIR" && $DOCKER compose --env-file .env up -d --build knx-stack >>"$LOG" 2>&1 ); then
+  # Asterisk zit in knx-stack; --remove-orphans haalt de oude losse container weg.
+  if ! ( cd "$DOCKER_DIR" && $DOCKER compose --env-file .env up -d --build --remove-orphans knx-stack >>"$LOG" 2>&1 ); then
     ST_STATE=error ST_STEP=build ST_MESSAGE="App bouwen/starten mislukt. Zie docker/data/update-agent.log op de NUC." ST_ERROR="compose_failed" ST_FINISHED=1 write_status
     log "fail compose_failed knx-stack"
     return 1
   fi
-  asterisk_err=""
-  if ! ( cd "$DOCKER_DIR" && $DOCKER compose --env-file .env up -d --build asterisk >>"$LOG" 2>&1 ); then
-    log "warn asterisk compose failed (app is up)"
-    asterisk_err="$(tail -n 15 "$LOG" 2>/dev/null | tr '\n' ' ' | cut -c1-400)"
-  fi
 
-  if [ -n "$asterisk_err" ]; then
-    ST_STATE=success ST_STEP=asterisk ST_MESSAGE="App bijgewerkt. Asterisk startte niet." ST_ERROR="$asterisk_err" ST_FINISHED=1 write_status
-  else
-    ST_STATE=success ST_STEP= ST_MESSAGE="Server wordt bijgewerkt." ST_CLEAR_ERROR=1 ST_FINISHED=1 write_status
-  fi
+  ST_STATE=success ST_STEP= ST_MESSAGE="Server wordt bijgewerkt." ST_CLEAR_ERROR=1 ST_FINISHED=1 write_status
   log "update success"
   NEED_REEXEC=1
   return 0

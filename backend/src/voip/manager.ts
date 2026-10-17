@@ -7,7 +7,8 @@ import type { HouseConfig, VoipEndpoint } from "../types";
 import type { WsHub } from "../ws";
 import { AmiClient, type AmiFields } from "./ami";
 import { doorContextName, groupDial, writeAsteriskConfig } from "./asteriskConfig";
-import { ensureAsteriskContainer } from "./asteriskDocker";
+import { removeLegacyAsteriskContainer } from "./asteriskDocker";
+import { ensureAsteriskProcess, stopAsteriskProcess } from "./asteriskProcess";
 import { normalizeVoip } from "./normalize";
 import { intercomRingTargets } from "./ringTargets";
 import { astSafe } from "./secrets";
@@ -181,12 +182,19 @@ export async function syncVoipFromConfig(cfg: HouseConfig): Promise<void> {
   if (!cfg.voip?.enabled) {
     ami?.close();
     ami = null;
+    stopAsteriskProcess();
     return;
   }
-  const state = await ensureAsteriskContainer();
-  // Net gestarte container heeft een paar seconden nodig voor poort 5038.
-  await amiReload(state === "started" ? 12 : 1);
+  if (!legacyRemoved) {
+    legacyRemoved = true;
+    await removeLegacyAsteriskContainer();
+  }
+  const state = ensureAsteriskProcess(dir);
+  // Net gestart proces heeft een paar seconden nodig voor poort 5038.
+  await amiReload(state === "started" ? 15 : 1);
 }
+
+let legacyRemoved = false;
 
 async function amiReload(attempts = 1): Promise<void> {
   for (let attempt = 1; attempt <= attempts; attempt++) {

@@ -43,7 +43,9 @@ ENV LOG_STORE_PATH=/data/logs.db
 ENV HVAC_LOCK_STORE_PATH=/data/hvac-locks.json
 ENV SPOTIFY_STORE_PATH=/data/spotify.json
 
-RUN apk add --no-cache ffmpeg tini openssl iproute2 \
+# asterisk: SIP-server voor intercoms; de backend start hem zelf (ASTERISK_AUTO_START).
+# asterisk-srtp: DTLS/SRTP voor WebRTC-toestellen (panelen/app).
+RUN apk add --no-cache ffmpeg tini openssl iproute2 asterisk asterisk-srtp \
   && mkdir -p /app/web /media /data
 
 COPY --from=alexxit/go2rtc:latest /usr/local/bin/go2rtc /usr/local/bin/go2rtc
