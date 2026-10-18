@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -43,6 +44,8 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
   bool _inConversation = false;
   bool _previewFailed = false;
   bool _previewLive = false;
+  bool _lineFetched = false;
+  bool _claimed = false;
 
   bool _isRinging({
     required IntercomRing? ring,
@@ -56,17 +59,81 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
     return sipPhase == IntercomSipPhase.ringing;
   }
 
+  void _snack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _ensureLine() {
+    if (_lineFetched) return;
+    _lineFetched = true;
+    final token = ref.read(authProvider).token;
+    if (token == null) return;
+    unawaited(
+      fetchIntercomLine(intercomId: widget.intercomId, token: token).then((s) {
+        if (s == null) return;
+        ref.read(intercomLineProvider.notifier).setLine(widget.intercomId, s);
+      }),
+    );
+  }
+
+  Future<void> _releaseClaim() async {
+    if (!_claimed) return;
+    _claimed = false;
+    final token = ref.read(authProvider).token;
+    if (token == null) return;
+    await releaseIntercomLine(intercomId: widget.intercomId, token: token);
+  }
+
   Future<void> _answer(IntercomController sip) async {
-    if (_inConversation) return;
+    if (_inConversation || sip.phase == IntercomSipPhase.inCall) return;
+    if (sip.phase == IntercomSipPhase.ringing) {
+      setState(() => _inConversation = true);
+      debugPrint('[SIP] UI opnemen fase=${sip.phase.name}');
+      await sip.answerCall();
+      ref.read(intercomRingProvider.notifier).clear();
+      return;
+    }
+    if (kIsWeb) {
+      _snack(
+        'Praten en luisteren kan in de browser niet. Het paneel belt wel mee.',
+      );
+      return;
+    }
+    final token = ref.read(authProvider).token;
+    if (token == null) return;
+    final claim = await claimIntercomLine(
+      intercomId: widget.intercomId,
+      token: token,
+    );
+    if (!mounted) return;
+    if (!claim.ok || claim.target == null || claim.target!.isEmpty) {
+      final line = claim.state;
+      if (line != null && line.isNotEmpty) {
+        ref.read(intercomLineProvider.notifier).setLine(widget.intercomId, line);
+      }
+      _snack(claim.error ?? 'Er is al een gesprek.');
+      return;
+    }
     setState(() => _inConversation = true);
-    debugPrint('[SIP] UI opnemen fase=${sip.phase.name}');
-    await sip.answerCall();
-    ref.read(intercomRingProvider.notifier).clear();
+    _claimed = true;
+    final err = await sip.placeCall(claim.target!);
+    if (!mounted) return;
+    if (err != null) {
+      await _releaseClaim();
+      setState(() => _inConversation = false);
+      _snack(err);
+    }
   }
 
   void _cancel(IntercomController sip) {
     if (_closing) return;
     _closing = true;
+    unawaited(_releaseClaim());
     if (sip.phase == IntercomSipPhase.ringing) {
       sip.declineCall();
     } else if (sip.phase == IntercomSipPhase.inCall) {
@@ -166,9 +233,15 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
     return ListenableBuilder(
       listenable: sip,
       builder: (context, _) {
-        final waiting = !_inConversation;
+        final inTalk = sip.phase == IntercomSipPhase.inCall ||
+            (_inConversation && sip.phase == IntercomSipPhase.ringing);
+        final waiting = !inTalk;
         final ringing =
             waiting && _isRinging(ring: ring, sipPhase: sip.phase);
+        final line = ref.watch(intercomLineProvider)[widget.intercomId];
+        final taken = waiting &&
+            sip.phase != IntercomSipPhase.ringing &&
+            (line == 'busy' || line == 'dialing');
         if (!_closing &&
             ring != null &&
             ring.answeredElsewhere &&
@@ -213,6 +286,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 _ensureSipUaFromConfig();
                 _ensureWarm();
+                _ensureLine();
               });
             }
             final phone = context.isPhone;
@@ -343,12 +417,18 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                                   if (waiting)
                                     Expanded(
                                       child: _ActionButton(
-                                        icon: Icons.call_rounded,
-                                        label: 'OPNEMEN',
-                                        color: _kCallAnswer,
+                                        icon: taken
+                                            ? Icons.phone_locked_outlined
+                                            : Icons.call_rounded,
+                                        label: taken ? 'BEZET' : 'OPNEMEN',
+                                        color: taken ? _kCallPhoto : _kCallAnswer,
                                         diameter: diameter,
-                                        shake: ringing,
-                                        onTap: () => _answer(sip),
+                                        shake: ringing && !taken,
+                                        onTap: taken
+                                            ? () => _snack(
+                                                  'Er is al een gesprek op deze intercom.',
+                                                )
+                                            : () => _answer(sip),
                                       ),
                                     ),
                                   Expanded(

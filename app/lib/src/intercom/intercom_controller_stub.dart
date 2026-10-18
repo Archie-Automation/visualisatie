@@ -47,6 +47,11 @@ class IntercomController extends ChangeNotifier {
 
   Future<bool> ensureAvPermissions({required bool video}) async => false;
 
+  Future<String?> placeCall(String target) async {
+    if (target.trim().isEmpty) return 'Geen nummer voor deze intercom.';
+    return 'Praten en luisteren kan hier niet.';
+  }
+
   Future<void> answerCall() async {}
 
   void declineCall() {}

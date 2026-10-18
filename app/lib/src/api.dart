@@ -763,6 +763,12 @@ class BusController extends Notifier<BusState> {
                   ));
             case 'intercom.cleared':
               ref.read(intercomRingProvider.notifier).markAnsweredElsewhere();
+            case 'intercom.line':
+              final p = msg['payload'] as Map<String, dynamic>;
+              ref.read(intercomLineProvider.notifier).setLine(
+                    p['intercomId'] as String? ?? '',
+                    p['state'] as String? ?? 'idle',
+                  );
             case 'config_changed':
               ref.invalidate(configProvider);
             case 'scene.heard':
@@ -950,6 +956,25 @@ class IntercomRingController extends Notifier<IntercomRing?> {
 final intercomRingProvider =
     NotifierProvider<IntercomRingController, IntercomRing?>(
   IntercomRingController.new,
+);
+
+/// `idle`, `ringing`, `dialing` of `busy` per intercom. Leeg = nog onbekend.
+class IntercomLineController extends Notifier<Map<String, String>> {
+  @override
+  Map<String, String> build() => const {};
+
+  void setLine(String intercomId, String lineState) {
+    final id = intercomId.trim();
+    if (id.isEmpty) return;
+    final next = Map<String, String>.from(state);
+    next[id] = lineState;
+    state = next;
+  }
+}
+
+final intercomLineProvider =
+    NotifierProvider<IntercomLineController, Map<String, String>>(
+  IntercomLineController.new,
 );
 
 /// Alleen admin. Vraagt een backend-herstart aan (zelfde Node-proces).

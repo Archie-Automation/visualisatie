@@ -37,6 +37,17 @@ void main() {
   });
 
   group('belgroep', () {
+    test('ring timeout keeps the typed number', () {
+      final g = <String, dynamic>{'timeoutSec': 30};
+      setBelgroepTimeoutSec(g, '3');
+      expect(g['timeoutSec'], 3);
+      expect(belgroepTimeoutSec(g), 3);
+      setBelgroepTimeoutSec(g, '45');
+      expect(g['timeoutSec'], 45);
+      expect(validateRingTimeout('45'), isNull);
+      expect(validateRingTimeout('3'), isNotNull);
+    });
+
     test('createBelgroep writes default name and timeout', () {
       final house = <String, dynamic>{
         'users': <Map<String, dynamic>>[],

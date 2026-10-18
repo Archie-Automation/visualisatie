@@ -113,6 +113,7 @@ export function normalizeVoip(cfg: HouseConfig): void {
     if (!Array.isArray(g.memberIds)) g.memberIds = [];
     g.memberIds = g.memberIds.filter((id) => epIds.has(id));
     if (!g.timeoutSec || g.timeoutSec < 5) g.timeoutSec = 30;
+    else if (g.timeoutSec > 180) g.timeoutSec = 180;
   }
 
   if (v.groups.length === 0 && v.endpoints.length > 0) {

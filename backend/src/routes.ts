@@ -154,6 +154,9 @@ import {
   resolveUserEndpoint,
   syncVoipFromConfig,
   testRingGroup,
+  claimIntercomLine,
+  intercomLinePhase,
+  releaseIntercomLine,
   voipAmiUp,
   voipRecentCalls,
   voipRegisteredExts
@@ -1753,6 +1756,50 @@ export function buildRouter(
    * app bij opstart kan registreren. Alleen voor geauthenticeerde gebruikers
    * die toegang hebben tot dit intercom.
    */
+  r.get("/intercoms/:id/line", requireAuth, (req: AuthedRequest, res) => {
+    if (!canViewIntercom(req, req.params.id))
+      return res.status(403).json({ error: "not allowed" });
+    const ic = collectIntercoms(getConfig()).find((i) => i.id === req.params.id);
+    if (!ic) return res.status(404).json({ error: "unknown intercom" });
+    res.json({ state: intercomLinePhase(ic.id) });
+  });
+
+  r.post("/intercoms/:id/line", requireAuth, (req: AuthedRequest, res) => {
+    if (!canViewIntercom(req, req.params.id))
+      return res.status(403).json({ error: "not allowed" });
+    const cfg = getConfig();
+    const ic = collectIntercoms(cfg).find((i) => i.id === req.params.id);
+    if (!ic) return res.status(404).json({ error: "unknown intercom" });
+    const ext = (ic.intercom.sipExt ?? "").trim();
+    const host = parseVoipHost(cfg.voip?.host);
+    if (!cfg.voip?.enabled || !ext || !host) {
+      return res.status(409).json({
+        error: "Deze intercom kan niet gebeld worden.",
+        state: intercomLinePhase(ic.id)
+      });
+    }
+    const holder = req.user?.sub || "";
+    if (!holder || !claimIntercomLine(ic.id, holder)) {
+      const state = intercomLinePhase(ic.id);
+      return res.status(409).json({
+        error:
+          state === "ringing"
+            ? "Er wordt al aangebeld."
+            : "Er is al een gesprek.",
+        state
+      });
+    }
+    res.json({ state: "dialing", target: `sip:${ext}@${host}` });
+  });
+
+  r.post("/intercoms/:id/line/release", requireAuth, (req: AuthedRequest, res) => {
+    if (!canViewIntercom(req, req.params.id))
+      return res.status(403).json({ error: "not allowed" });
+    const holder = req.user?.sub || "";
+    releaseIntercomLine(req.params.id, holder);
+    res.json({ state: intercomLinePhase(req.params.id) });
+  });
+
   r.get("/intercoms/:id/sip", requireAuth, (req: AuthedRequest, res) => {
     if (!canViewIntercom(req, req.params.id))
       return res.status(403).json({ error: "not allowed" });

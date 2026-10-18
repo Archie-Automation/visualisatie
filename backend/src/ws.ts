@@ -45,6 +45,10 @@ type Outgoing =
       type: "intercom.cleared";
       payload: { intercomId: string };
     }
+  | {
+      type: "intercom.line";
+      payload: { intercomId: string; state: "idle" | "ringing" | "dialing" | "busy" };
+    }
   | { type: "config_changed"; payload: { version: number } }
   | {
       type: "scene.heard";
@@ -70,6 +74,10 @@ type Outgoing =
 export interface WsHub {
   broadcastIntercomRing(intercomId: string, groupId?: string): void;
   broadcastIntercomCleared(intercomId: string): void;
+  broadcastIntercomLine(
+    intercomId: string,
+    state: "idle" | "ringing" | "dialing" | "busy"
+  ): void;
   broadcastConfigChanged(version: number): void;
   broadcastSceneHeard(payload: {
     roomId: string;
@@ -219,6 +227,12 @@ export function attachWebSocket(
         payload: { intercomId }
       });
       pushCleared(intercomId);
+    },
+    broadcastIntercomLine(intercomId, state) {
+      broadcastAll({
+        type: "intercom.line",
+        payload: { intercomId, state }
+      });
     },
     broadcastConfigChanged(version: number) {
       broadcastAll({ type: "config_changed", payload: { version } });

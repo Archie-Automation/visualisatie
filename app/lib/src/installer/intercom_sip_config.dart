@@ -200,15 +200,17 @@ String doorButtonDialHint(Map<String, dynamic> house, Map<String, dynamic>? grou
 
 int belgroepTimeoutSec(Map<String, dynamic> group) {
   final t = group['timeoutSec'];
-  if (t is int && t >= minRingTimeoutSec) return t;
-  if (t is num && t >= minRingTimeoutSec) return t.toInt();
+  if (t is int) return t;
+  if (t is num) return t.toInt();
   return defaultRingTimeoutSec;
 }
 
 void setBelgroepTimeoutSec(Map<String, dynamic> group, String raw) {
   final n = int.tryParse(raw.trim());
   if (n == null) return;
-  group['timeoutSec'] = n.clamp(minRingTimeoutSec, maxRingTimeoutSec);
+  // Niet meteen naar 5 klemmen: het eerste cijfer van 30 is 3, en dat
+  // werd anders direct 5 en het veld sprong terug.
+  group['timeoutSec'] = n;
 }
 
 bool isValidRtspUrl(String raw) => _rtspRe.hasMatch(raw.trim());

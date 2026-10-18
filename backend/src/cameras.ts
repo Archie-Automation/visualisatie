@@ -218,6 +218,13 @@ export function intercomGo2rtcSources(
   return [tagged, ...extra];
 }
 
+/** True after the last [writeGo2rtcConfig] when the yaml bytes actually changed. */
+let go2rtcYamlChanged = true;
+
+export function lastGo2rtcYamlChanged(): boolean {
+  return go2rtcYamlChanged;
+}
+
 /**
  * Generate a go2rtc YAML configuration. Cameras are view-only.
  * Intercoms: DoorBird wordt getranscodeerd; overige merken krijgen `#backchannel=1`.
@@ -234,15 +241,31 @@ export function writeGo2rtcConfig(cfg: HouseConfig): string | null {
   const ffmpegBin = resolveFfmpegBinForGo2rtc();
   const yaml = buildGo2rtcYaml(cams, ics, ffmpegBin);
   fs.mkdirSync(path.dirname(target), { recursive: true });
-  fs.writeFileSync(target, yaml, "utf-8");
+  let previous = "";
+  try {
+    previous = fs.readFileSync(target, "utf-8");
+  } catch {
+    previous = "";
+  }
+  // Afringduur en andere niet-camera velden zitten niet in deze yaml.
+  // Alleen een echte streamwijziging mag go2rtc herstarten.
+  go2rtcYamlChanged = previous !== yaml;
+  if (go2rtcYamlChanged) {
+    fs.writeFileSync(target, yaml, "utf-8");
+  }
   if (yamlUsesFfmpegSources(yaml) && !ffmpegBin) {
     logger.warn(
       "Streams gebruiken ffmpeg maar er is geen ffmpeg-binary gevonden. Zet FFMPEG_PATH of plaats tools/ffmpeg(.exe); anders faalt WebRTC/signalling."
     );
   }
   logger.info(
-    { target, cameras: cams.length, intercoms: ics.length },
-    "go2rtc config written"
+    {
+      target,
+      cameras: cams.length,
+      intercoms: ics.length,
+      changed: go2rtcYamlChanged
+    },
+    go2rtcYamlChanged ? "go2rtc config written" : "go2rtc config ongewijzigd"
   );
   return target;
 }

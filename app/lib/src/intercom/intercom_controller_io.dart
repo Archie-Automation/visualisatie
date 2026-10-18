@@ -39,6 +39,7 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
   String? boundIntercomId;
   bool _ringAlignSentForThisCall = false;
   bool _localTerminate = false;
+  bool _outgoing = false;
   Timer? _elsewhereTimer;
 
   IntercomSipPhase get phase => _phase;
@@ -149,6 +150,46 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
     return true;
   }
 
+  /// Bel de deur zelf, zonder dat er aangebeld is. `null` = gestart.
+  Future<String?> placeCall(String target) async {
+    final uri = target.trim();
+    if (uri.isEmpty) return 'Geen nummer voor deze intercom.';
+    if (_phase == IntercomSipPhase.inCall || _phase == IntercomSipPhase.ringing) {
+      return 'Er is al een gesprek.';
+    }
+    if (!_started) return 'Dit scherm is niet aangemeld op de belcentrale.';
+    final ok = await ensureAvPermissions(video: false);
+    if (!ok) return 'Microfoon geweigerd.';
+    try {
+      await configurePanelSpeechAudio();
+      final mediaStream = await navigator.mediaDevices.getUserMedia({
+        'audio': true,
+        'video': false,
+      });
+      _localStream = mediaStream;
+      _outgoing = true;
+      _localTerminate = false;
+      final started = await _helper.call(
+        uri,
+        voiceOnly: true,
+        mediaStream: mediaStream,
+      );
+      if (!started) {
+        _outgoing = false;
+        _localStream?.getTracks().forEach((t) => t.stop());
+        _localStream = null;
+        return 'Opnemen mislukt. De belcentrale nam niet op.';
+      }
+      _phase = IntercomSipPhase.ringing;
+      notifyListeners();
+      return null;
+    } catch (e) {
+      _outgoing = false;
+      debugPrint('[SIP] zelf bellen mislukt: $e');
+      return 'Opnemen mislukt.';
+    }
+  }
+
   Future<void> answerCall() async {
     final call = _activeCall;
     if (call == null) {
@@ -236,6 +277,7 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
     _muted = false;
     _ringAlignSentForThisCall = false;
     _localTerminate = false;
+    _outgoing = false;
   }
 
   void _onRemoteCancelWhileRinging() {
@@ -319,8 +361,10 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
         break;
       case CallStateEnum.ENDED:
       case CallStateEnum.FAILED:
+        final outgoing = _outgoing;
         final ringing = _phase == IntercomSipPhase.ringing;
-        if (ringing && !_localTerminate) {
+        _outgoing = false;
+        if (!outgoing && ringing && !_localTerminate) {
           _onRemoteCancelWhileRinging();
         } else {
           _resetCall();

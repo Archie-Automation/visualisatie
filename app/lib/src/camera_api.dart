@@ -270,6 +270,78 @@ Future<Map<String, dynamic>?> fetchIntercomSipConfig({
   }
 }
 
+class IntercomLineClaim {
+  const IntercomLineClaim({required this.ok, this.target, this.error, this.state});
+  final bool ok;
+  final String? target;
+  final String? error;
+  final String? state;
+}
+
+/// Of er al iemand met deze intercom praat of belt.
+Future<String?> fetchIntercomLine({
+  required String intercomId,
+  required String token,
+}) async {
+  try {
+    final res = await http.get(
+      Uri.parse('$apiBase/api/intercoms/$intercomId/line'),
+      headers: {'authorization': 'Bearer $token'},
+    );
+    if (res.statusCode != 200) return null;
+    final body = jsonDecode(res.body);
+    if (body is Map && body['state'] is String) return body['state'] as String;
+  } catch (_) {}
+  return null;
+}
+
+/// Reserveer de lijn en krijg het SIP-adres van de deur. 409 = al bezet.
+Future<IntercomLineClaim> claimIntercomLine({
+  required String intercomId,
+  required String token,
+}) async {
+  try {
+    final res = await http.post(
+      Uri.parse('$apiBase/api/intercoms/$intercomId/line'),
+      headers: {'authorization': 'Bearer $token'},
+    );
+    Map<String, dynamic> body = const {};
+    try {
+      final decoded = jsonDecode(res.body);
+      if (decoded is Map<String, dynamic>) body = decoded;
+    } catch (_) {}
+    if (res.statusCode == 200 && body['target'] is String) {
+      return IntercomLineClaim(
+        ok: true,
+        target: body['target'] as String,
+        state: body['state'] as String?,
+      );
+    }
+    return IntercomLineClaim(
+      ok: false,
+      error: body['error'] as String? ?? 'Er is al een gesprek.',
+      state: body['state'] as String?,
+    );
+  } catch (_) {
+    return const IntercomLineClaim(
+      ok: false,
+      error: 'De belcentrale is niet bereikbaar.',
+    );
+  }
+}
+
+Future<void> releaseIntercomLine({
+  required String intercomId,
+  required String token,
+}) async {
+  try {
+    await http.post(
+      Uri.parse('$apiBase/api/intercoms/$intercomId/line/release'),
+      headers: {'authorization': 'Bearer $token'},
+    );
+  } catch (_) {}
+}
+
 /// SIP-inlog van de ingelogde gebruiker op de eigen PBX.
 Future<Map<String, dynamic>?> fetchVoipMe({required String token}) async {
   try {

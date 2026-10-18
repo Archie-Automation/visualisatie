@@ -17,6 +17,7 @@ import {
   recordDoorChannel,
   setDtmfAmiGetter
 } from "./dtmfRelease";
+import { intercomLines, type IntercomLinePhase } from "./lineState";
 import { astSafe } from "./secrets";
 
 let hub: WsHub | null = null;
@@ -25,6 +26,8 @@ let ami: AmiClient | null = null;
 let amiTimer: ReturnType<typeof setInterval> | null = null;
 const registered = new Set<string>();
 const channelIntercom = new Map<string, string>();
+/** Alleen het kanaal van het deurstation, niet de panelen die meebellen. */
+const doorChannels = new Map<string, Set<string>>();
 let lastRingIntercomId: string | null = null;
 let answeredBroadcastFor: string | null = null;
 
@@ -60,6 +63,69 @@ export function voipRecentCalls(): VoipCallEvent[] {
 
 export function voipAmiUp(): boolean {
   return ami?.connected === true;
+}
+
+export function intercomLinePhase(intercomId: string): IntercomLinePhase {
+  return intercomLines.phase(intercomId);
+}
+
+/** Paneel belt zelf naar de deur. Mislukt als er al gerinkeld of gepraat wordt. */
+export function claimIntercomLine(intercomId: string, holder: string): boolean {
+  const ok = intercomLines.claim(intercomId, holder);
+  if (ok) publishLine(intercomId, "dialing");
+  return ok;
+}
+
+export function releaseIntercomLine(intercomId: string, holder: string): boolean {
+  const ok = intercomLines.release(intercomId, holder);
+  if (ok) publishLine(intercomId, "idle");
+  return ok;
+}
+
+function publishLine(intercomId: string, phase: IntercomLinePhase): void {
+  hub?.broadcastIntercomLine(intercomId, phase);
+}
+
+function pjsipExt(channel: string | undefined): string | null {
+  if (!channel) return null;
+  const m = /^PJSIP\/([^-\/;]+)/i.exec(channel);
+  return m?.[1] ?? null;
+}
+
+function intercomIdForExt(ext: string | null): string | null {
+  if (!ext) return null;
+  const ic = collectIntercoms(getConfig()).find(
+    (i) => (i.intercom.sipExt ?? "").trim() === ext
+  );
+  return ic?.id ?? null;
+}
+
+function noteDoorChannel(intercomId: string, channel: string | undefined): void {
+  const ch = channel?.trim();
+  if (!intercomId || !ch) return;
+  if (intercomIdForExt(pjsipExt(ch)) !== intercomId) return;
+  let set = doorChannels.get(intercomId);
+  if (!set) {
+    set = new Set();
+    doorChannels.set(intercomId, set);
+  }
+  set.add(ch);
+}
+
+function forgetDoorChannel(intercomId: string, channel: string | undefined): boolean {
+  const set = doorChannels.get(intercomId);
+  if (!set) return false;
+  if (channel) set.delete(channel.trim());
+  if (set.size > 0) return false;
+  doorChannels.delete(intercomId);
+  return true;
+}
+
+function idleLine(intercomId: string): void {
+  doorChannels.delete(intercomId);
+  if (intercomLines.phase(intercomId) === "idle") return;
+  intercomLines.onIdle(intercomId);
+  publishLine(intercomId, "idle");
 }
 
 /**
@@ -286,9 +352,13 @@ function onAmiEvent(ev: AmiFields): void {
       lastRingIntercomId = id;
       answeredBroadcastFor = null;
       if (ev.Channel) recordDoorChannel(id, ev.Channel);
+      const line = intercomLines.onRing(id);
+      if (line === "ringing") publishLine(id, "ringing");
       hub?.broadcastIntercomRing(id, ev.GroupId);
     }
     if (kind === "answered") {
+      intercomLines.onBusy(id);
+      publishLine(id, "busy");
       if (answeredBroadcastFor !== id) {
         answeredBroadcastFor = id;
         hub?.broadcastIntercomCleared(id);
@@ -296,6 +366,7 @@ function onAmiEvent(ev: AmiFields): void {
     }
     if (kind === "cleared") {
       if (lastRingIntercomId === id) lastRingIntercomId = null;
+      idleLine(id);
       hub?.broadcastIntercomCleared(id);
     }
     return;
@@ -320,12 +391,24 @@ function onAmiEvent(ev: AmiFields): void {
     const linked = ev.Linkedid;
     if (ic && linked) channelIntercom.set(linked, ic);
     if (ic && ev.Channel) recordDoorChannel(ic, ev.Channel);
+    const doorDest = intercomIdForExt(pjsipExt(ev.DestChannel));
+    const doorChan = intercomIdForExt(pjsipExt(ev.Channel));
+    if (doorDest) noteDoorChannel(doorDest, ev.DestChannel);
+    if (doorChan) noteDoorChannel(doorChan, ev.Channel);
     return;
   }
   if (event === "DialEnd") {
     const status = (ev.DialStatus || "").toUpperCase();
     logCall("dial.end", status || "?");
-    if (status === "ANSWER" || status === "CANCEL") {
+    const answeredDoor = intercomIdForExt(pjsipExt(ev.DestChannel));
+    if (status === "ANSWER" && answeredDoor) {
+      intercomLines.onBusy(answeredDoor);
+      publishLine(answeredDoor, "busy");
+    }
+    // CANCEL van één toestel is geen einde van de bel: Dial() loopt door
+    // tot timeoutSec. Alleen opnemen stopt de andere panelen hier.
+    // Afronden komt via UserEvent cleared.
+    if (status === "ANSWER") {
       const ic =
         ev.INTERCOM_ID ||
         channelIntercom.get(ev.Uniqueid || "") ||
@@ -347,7 +430,14 @@ function onAmiEvent(ev: AmiFields): void {
     if (linked) channelIntercom.delete(linked);
     if (ic) {
       clearDoorChannel(ic, ev.Channel);
-      hub?.broadcastIntercomCleared(ic);
+    }
+    const doorId = intercomIdForExt(pjsipExt(ev.Channel));
+    if (
+      doorId &&
+      forgetDoorChannel(doorId, ev.Channel) &&
+      intercomLines.hasHolder(doorId)
+    ) {
+      idleLine(doorId);
     }
     return;
   }

@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
+import { lastGo2rtcYamlChanged } from "./cameras";
 import { logger } from "./logger";
 
 let child: ChildProcess | null = null;
@@ -140,9 +141,19 @@ export function syncGo2rtcProcessAfterConfigWritten(
   }
 
   registerExitHooks();
+  const absConfig = resolveConfigPath(configPath);
+  // Een opslag van alleen afringduur (of een ander niet-stream veld) mag
+  // lopende WebRTC-sessies niet afbreken. go2rtc leest de yaml alleen bij start.
+  if (child && _configPath === absConfig && !lastGo2rtcYamlChanged()) {
+    logger.info(
+      { config: absConfig },
+      "go2rtc blijft draaien (streamconfig ongewijzigd)"
+    );
+    return;
+  }
+
   stopGo2rtcChild(); // clears old process; also sets _restartEnabled=false
 
-  const absConfig = resolveConfigPath(configPath);
   _configPath = absConfig;
   _restartEnabled = true;
   _restartDelay = 2_000;
