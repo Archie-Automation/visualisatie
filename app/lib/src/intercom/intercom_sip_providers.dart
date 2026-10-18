@@ -11,7 +11,19 @@ final intercomSipControllerProvider =
     Provider<IntercomController>((ref) {
   final c = IntercomController(
     onAlignKnxRing: (ring) {
-      ref.read(intercomRingProvider.notifier).push(ring);
+      final cur = ref.read(intercomRingProvider);
+      final timeout = ring.timeoutSec ??
+          (cur != null && cur.intercomId == ring.intercomId
+              ? cur.timeoutSec
+              : null);
+      ref.read(intercomRingProvider.notifier).push(
+            IntercomRing(
+              intercomId: ring.intercomId,
+              name: ring.name,
+              ts: ring.ts,
+              timeoutSec: timeout,
+            ),
+          );
     },
     onAnsweredElsewhere: () {
       ref.read(intercomRingProvider.notifier).markAnsweredElsewhere();

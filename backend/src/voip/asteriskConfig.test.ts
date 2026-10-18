@@ -35,5 +35,8 @@ describe("buildDoorRingContext", () => {
     const ctx = buildDoorRingContext(cfg, door) ?? "";
     assert.match(ctx, /Dial\(PJSIP\/201,30/);
     assert.match(ctx, /GroupId: grp-1/);
+    const answerAt = ctx.indexOf("Answer()");
+    const dialAt = ctx.indexOf("Dial(");
+    assert.ok(answerAt >= 0 && answerAt < dialAt);
   });
 });

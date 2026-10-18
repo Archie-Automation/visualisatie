@@ -40,6 +40,7 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
   bool _ringAlignSentForThisCall = false;
   bool _localTerminate = false;
   bool _outgoing = false;
+  String? dialError;
   Timer? _elsewhereTimer;
 
   IntercomSipPhase get phase => _phase;
@@ -150,6 +151,10 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
     return true;
   }
 
+  void clearDialError() {
+    dialError = null;
+  }
+
   /// Bel de deur zelf, zonder dat er aangebeld is. `null` = gestart.
   Future<String?> placeCall(String target) async {
     final uri = target.trim();
@@ -157,7 +162,9 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
     if (_phase == IntercomSipPhase.inCall || _phase == IntercomSipPhase.ringing) {
       return 'Er is al een gesprek.';
     }
-    if (!_started) return 'Dit scherm is niet aangemeld op de belcentrale.';
+    if (!_started || !_helper.registered) {
+      return 'Dit scherm is niet aangemeld op de belcentrale.';
+    }
     final ok = await ensureAvPermissions(video: false);
     if (!ok) return 'Microfoon geweigerd.';
     try {
@@ -363,8 +370,15 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
       case CallStateEnum.FAILED:
         final outgoing = _outgoing;
         final ringing = _phase == IntercomSipPhase.ringing;
+        final local = _localTerminate;
         _outgoing = false;
-        if (!outgoing && ringing && !_localTerminate) {
+        if (outgoing && !local) {
+          final code = state.cause?.status_code;
+          dialError = (code == 404 || code == 480 || code == 603 || code == 604)
+              ? 'De intercom nam niet op. Zet op de DoorBird aan dat een inkomend gesprek wordt opgenomen.'
+              : 'Bellen mislukt.';
+        }
+        if (!outgoing && ringing && !local) {
           _onRemoteCancelWhileRinging();
         } else {
           _resetCall();

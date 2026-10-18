@@ -1771,10 +1771,17 @@ export function buildRouter(
     const ic = collectIntercoms(cfg).find((i) => i.id === req.params.id);
     if (!ic) return res.status(404).json({ error: "unknown intercom" });
     const ext = (ic.intercom.sipExt ?? "").trim();
-    const host = parseVoipHost(cfg.voip?.host);
-    if (!cfg.voip?.enabled || !ext || !host) {
+    if (!cfg.voip?.enabled || !ext) {
       return res.status(409).json({
         error: "Deze intercom kan niet gebeld worden.",
+        state: intercomLinePhase(ic.id)
+      });
+    }
+    const regs = voipRegisteredExts();
+    if (voipAmiUp() && regs.length > 0 && !regs.includes(ext)) {
+      return res.status(409).json({
+        error:
+          "De intercom is niet aangemeld. Zet op de DoorBird aan dat een inkomend gesprek wordt opgenomen.",
         state: intercomLinePhase(ic.id)
       });
     }
@@ -1789,7 +1796,7 @@ export function buildRouter(
         state
       });
     }
-    res.json({ state: "dialing", target: `sip:${ext}@${host}` });
+    res.json({ state: "dialing", target: ext });
   });
 
   r.post("/intercoms/:id/line/release", requireAuth, (req: AuthedRequest, res) => {

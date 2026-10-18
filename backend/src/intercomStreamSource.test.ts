@@ -13,13 +13,13 @@ function ic(intercom: IntercomDevice["intercom"]): IntercomDevice {
 }
 
 describe("intercomGo2rtcSources", () => {
-  it("transcodes a DoorBird so widescreen H.264 still reaches WebRTC", () => {
+  it("passes DoorBird H.264 through without a transcode", () => {
     const d = ic({
       rtsp: "rtsp://192.168.1.102/live#backchannel=1",
       kind: "doorbird"
     });
     assert.deepEqual(intercomGo2rtcSources(d, "/usr/bin/ffmpeg"), [
-      "ffmpeg:rtsp://192.168.1.102/live#video=h264"
+      "rtsp://192.168.1.102/live#media=video"
     ]);
   });
 

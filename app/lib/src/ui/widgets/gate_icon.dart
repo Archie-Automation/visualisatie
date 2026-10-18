@@ -2,10 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'campfire_icon.dart';
 
-/// De intercomknop tekent dit merk op 0.52 van de cirkel en een Material-icoon
-/// op 0.42. Daarmee blijft de pen even dik als deur en camera.
-const gateButtonStrokeScale = 0.42 / 0.52;
-
 /// Dubbele inrijpoort: twee stijlen, regels en een schoor per vleugel.
 class GateIcon extends StatelessWidget {
   const GateIcon({

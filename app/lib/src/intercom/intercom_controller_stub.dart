@@ -28,6 +28,8 @@ class IntercomController extends ChangeNotifier {
   MediaStream? get localStream => null;
   bool get muted => false;
   bool get isStarted => false;
+  String? get dialError => null;
+  void clearDialError() {}
 
   Future<void> startFromHouseIntercom({
     required String intercomId,

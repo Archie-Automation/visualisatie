@@ -199,19 +199,19 @@ export function intercomPublicAspect(ic: IntercomDevice): string {
 
 /**
  * go2rtc-bronnen voor een intercom.
- * DoorBird: één RTSP-sessie, video naar H.264 main. Breedbeeld wisselt het
- * profiel op het toestel; samen met `#backchannel=1` wordt het beeld dan zwart.
+ * DoorBird levert zelf H.264. Opnieuw coderen via ffmpeg wacht op een proces
+ * en een sleutelframe, en dat is het trage beeld. `#media=video` laat het
+ * beeld door zonder backchannel: die backchannel maakte breedbeeld zwart.
  * Praten gaat via SIP. Andere merken houden de ONVIF-backchannel.
  */
 export function intercomGo2rtcSources(
   ic: IntercomDevice,
-  ffmpegBin: string | null
+  _ffmpegBin: string | null
 ): string[] {
   const raw = ic.intercom.rtsp.trim();
   const extra = ic.intercom.sources ?? [];
   if (ic.intercom.kind === "doorbird") {
     const base = raw.split("#")[0] ?? raw;
-    if (ffmpegBin) return [`ffmpeg:${base}#video=h264`, ...extra];
     return [`${base}#media=video`, ...extra];
   }
   const tagged = /[#]backchannel=/i.test(raw) ? raw : `${raw}#backchannel=1`;
@@ -227,7 +227,7 @@ export function lastGo2rtcYamlChanged(): boolean {
 
 /**
  * Generate a go2rtc YAML configuration. Cameras are view-only.
- * Intercoms: DoorBird wordt getranscodeerd; overige merken krijgen `#backchannel=1`.
+ * Intercoms: DoorBird gaat als H.264 door; overige merken krijgen `#backchannel=1`.
  */
 export function writeGo2rtcConfig(cfg: HouseConfig): string | null {
   const target = process.env.GO2RTC_CONFIG_PATH;

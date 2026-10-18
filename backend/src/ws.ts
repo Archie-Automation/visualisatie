@@ -3,7 +3,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import jwt from "jsonwebtoken";
 import { logger } from "./logger";
 import type { KnxBus } from "./knxBus";
-import type { GAState, MediaState } from "./types";
+import type { GAState, HouseConfig, MediaState } from "./types";
 import { getConfig, getConfigVersion } from "./config";
 import { buildDoorbellIndex } from "./intercoms";
 import type { TokenPayload } from "./auth";
@@ -16,6 +16,22 @@ import { wtwRuntime, type WtwLogicStatus } from "./wtwRuntime";
 import { captureOnIntercomRing } from "./intercomCaptures";
 import { userIdsInVoipGroup } from "./voip/ringTargets";
 import { pushCleared, pushRing } from "./push";
+
+function ringTimeoutSec(
+  cfg: HouseConfig,
+  intercomId: string,
+  groupId: string
+): number {
+  let gid = groupId.trim();
+  if (!gid) {
+    const ic = collectIntercoms(cfg).find((i) => i.id === intercomId);
+    gid = (ic?.intercom.ringGroupId ?? "").trim();
+  }
+  const g = (cfg.voip?.groups ?? []).find((x) => x.id === gid);
+  const n = g?.timeoutSec ?? 30;
+  if (!Number.isFinite(n) || n < 5) return 30;
+  return Math.min(180, Math.round(n));
+}
 
 const SECRET = process.env.JWT_SECRET ?? "dev-secret-change-me";
 if (
@@ -39,7 +55,7 @@ type Outgoing =
   | { type: "wtw.logic.snapshot"; payload: WtwLogicStatus[] }
   | {
       type: "intercom.ring";
-      payload: { intercomId: string; name: string; ts: number };
+      payload: { intercomId: string; name: string; ts: number; timeoutSec: number };
     }
   | {
       type: "intercom.cleared";
@@ -181,9 +197,10 @@ export function attachWebSocket(
     if (nowHigh && !wasHigh) {
       logger.info({ id: intercom.id, ga: state.ga }, "doorbell ring");
       const ts = Date.now();
+      const timeoutSec = ringTimeoutSec(getConfig(), intercom.id, "");
       broadcastAll({
         type: "intercom.ring",
-        payload: { intercomId: intercom.id, name: intercom.name, ts }
+        payload: { intercomId: intercom.id, name: intercom.name, ts, timeoutSec }
       });
       pushRing({ intercomId: intercom.id, name: intercom.name, ts });
       captureOnIntercomRing(intercom.id);
@@ -201,11 +218,12 @@ export function attachWebSocket(
       const found = collectIntercoms(cfg).find((i) => i.id === intercomId);
       if (!found) return;
       const ts = Date.now();
+      const gid = groupId?.trim() ?? "";
+      const timeoutSec = ringTimeoutSec(cfg, found.id, gid);
       const msg: Outgoing = {
         type: "intercom.ring",
-        payload: { intercomId: found.id, name: found.name, ts }
+        payload: { intercomId: found.id, name: found.name, ts, timeoutSec }
       };
-      const gid = groupId?.trim() ?? "";
       if (!gid) {
         broadcastAll(msg);
         pushRing({ intercomId: found.id, name: found.name, ts });

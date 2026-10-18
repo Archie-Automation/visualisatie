@@ -760,6 +760,7 @@ class BusController extends Notifier<BusState> {
                     intercomId: p['intercomId'] as String,
                     name: p['name'] as String,
                     ts: p['ts'] as int,
+                    timeoutSec: (p['timeoutSec'] as num?)?.toInt(),
                   ));
             case 'intercom.cleared':
               ref.read(intercomRingProvider.notifier).markAnsweredElsewhere();
@@ -908,18 +909,24 @@ class IntercomRing {
   final String name;
   final int ts;
   final bool answeredElsewhere;
+
+  /// Afringduur van de belgroep, in seconden. Het paneel gaat zo lang over.
+  final int? timeoutSec;
   const IntercomRing({
     required this.intercomId,
     required this.name,
     required this.ts,
     this.answeredElsewhere = false,
+    this.timeoutSec,
   });
 
-  IntercomRing copyWith({bool? answeredElsewhere}) => IntercomRing(
+  IntercomRing copyWith({bool? answeredElsewhere, int? timeoutSec}) =>
+      IntercomRing(
         intercomId: intercomId,
         name: name,
         ts: ts,
         answeredElsewhere: answeredElsewhere ?? this.answeredElsewhere,
+        timeoutSec: timeoutSec ?? this.timeoutSec,
       );
 }
 

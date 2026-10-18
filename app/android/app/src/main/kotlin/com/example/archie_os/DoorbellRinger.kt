@@ -132,6 +132,14 @@ class DoorbellRinger(private val context: Context) {
             p.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
             afd.close()
             p.isLooping = true
+            p.setOnCompletionListener { mp ->
+                if (!running) return@setOnCompletionListener
+                try {
+                    mp.seekTo(0)
+                    if (!mp.isPlaying) mp.start()
+                } catch (_: Exception) {
+                }
+            }
             val amp = playbackAmplitude()
             p.setVolume(amp, amp)
             p.prepare()
@@ -264,9 +272,24 @@ class DoorbellRinger(private val context: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 am.requestAudioFocus(
                     android.media.AudioFocusRequest.Builder(
-                        AudioManager.AUDIOFOCUS_GAIN_TRANSIENT,
+                        AudioManager.AUDIOFOCUS_GAIN,
                     )
                         .setAudioAttributes(mediaAttrs(AudioAttributes.USAGE_ALARM))
+                        .setOnAudioFocusChangeListener { change ->
+                            if (!running) return@setOnAudioFocusChangeListener
+                            if (change == AudioManager.AUDIOFOCUS_LOSS ||
+                                change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT ||
+                                change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK
+                            ) {
+                                val playing = player
+                                if (playing != null && !playing.isPlaying) {
+                                    try {
+                                        playing.start()
+                                    } catch (_: Exception) {
+                                    }
+                                }
+                            }
+                        }
                         .build(),
                 )
             } else {

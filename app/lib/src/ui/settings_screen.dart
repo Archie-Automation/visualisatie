@@ -1993,8 +1993,6 @@ class _DoorbellMuteSectionState extends ConsumerState<_DoorbellMuteSection> {
     final until = me?.doorbellMutedUntil;
     final volume = doorbellVolumeValue(ref.watch(doorbellVolumeProvider));
     final toneId = doorbellToneValue(ref.watch(doorbellToneProvider));
-    final ringSeconds =
-        doorbellRingSecondsValue(ref.watch(doorbellRingSecondsProvider));
     return _SettingsCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2100,27 +2098,14 @@ class _DoorbellMuteSectionState extends ConsumerState<_DoorbellMuteSection> {
             ),
             const SizedBox(height: 14),
             Text(
-              'Overgaan op dit paneel',
+              'Overgaan',
               style: Theme.of(context).textTheme.bodyLarge,
             ),
             const SizedBox(height: 2),
             Text(
-              'Daarna stopt de bel hier. Andere toestellen gaan door tot de belgroep stopt.',
+              'Dit paneel gaat over zolang de afringduur van de belgroep. '
+              'Die stel je in bij de intercom.',
               style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final s in DoorbellRinger.ringSecondsChoices)
-                  _MuteChip(
-                    label: '${s}s',
-                    selected: ringSeconds == s,
-                    onTap: () =>
-                        ref.read(doorbellRingSecondsProvider.notifier).set(s),
-                  ),
-              ],
             ),
             const SizedBox(height: 12),
             OutlinedButton.icon(

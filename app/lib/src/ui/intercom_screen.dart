@@ -39,13 +39,13 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
   Timer? _openedTimer;
   bool _sipUaStarted = false;
   bool _sipDiscoveryScheduled = false;
-  bool _warmScheduled = false;
   bool _closing = false;
   bool _inConversation = false;
   bool _previewFailed = false;
   bool _previewLive = false;
   bool _lineFetched = false;
   bool _claimed = false;
+  String? _notice;
 
   bool _isRinging({
     required IntercomRing? ring,
@@ -60,6 +60,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
   }
 
   void _snack(String message) {
+    setState(() => _notice = message);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -119,7 +120,10 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
       _snack(claim.error ?? 'Er is al een gesprek.');
       return;
     }
-    setState(() => _inConversation = true);
+    setState(() {
+      _inConversation = true;
+      _notice = null;
+    });
     _claimed = true;
     final err = await sip.placeCall(claim.target!);
     if (!mounted) return;
@@ -141,16 +145,6 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
     }
     ref.read(intercomRingProvider.notifier).clear();
     if (mounted) appBack(context);
-  }
-
-  void _ensureWarm() {
-    if (_warmScheduled) return;
-    _warmScheduled = true;
-    final token = ref.read(authProvider).token;
-    unawaited(
-      warmIntercomStream(intercomId: widget.intercomId, token: token)
-          .then((_) {}, onError: (_) {}),
-    );
   }
 
   void _ensureSipUaFromConfig() {
@@ -242,6 +236,20 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
         final taken = waiting &&
             sip.phase != IntercomSipPhase.ringing &&
             (line == 'busy' || line == 'dialing');
+        final failed = sip.dialError;
+        if (failed != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted || sip.dialError != failed) return;
+            sip.clearDialError();
+            setState(() {
+              _inConversation = false;
+              _notice = failed;
+            });
+            unawaited(_releaseClaim());
+          });
+        }
+        final dialing = _inConversation &&
+            sip.phase == IntercomSipPhase.ringing;
         if (!_closing &&
             ring != null &&
             ring.answeredElsewhere &&
@@ -285,7 +293,6 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
               _sipDiscoveryScheduled = true;
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 _ensureSipUaFromConfig();
-                _ensureWarm();
                 _ensureLine();
               });
             }
@@ -402,7 +409,22 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                               final diameter =
                                   ((constraints.maxWidth / count) - 8)
                                       .clamp(48.0, 72.0);
-                              return Row(
+                              return Column(
+                                children: [
+                                  if (_notice != null || dialing)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 12),
+                                      child: Text(
+                                        _notice ?? 'Bezig met bellen…',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: LuxeColors.ink,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
+                                  Row(
                                 children: [
                                   Expanded(
                                     child: _ActionButton(
@@ -458,8 +480,6 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                                             ? (size, color) => GateIcon(
                                                   size: size,
                                                   color: color,
-                                                  strokeScale:
-                                                      gateButtonStrokeScale,
                                                 )
                                             : null,
                                         label: releaseLabel,
@@ -469,6 +489,8 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                                         onTap: () => _release(i, sip),
                                       ),
                                     ),
+                                ],
+                              ),
                                 ],
                               );
                             },
@@ -619,7 +641,7 @@ class _ActionButton extends StatelessWidget {
                 ),
               )
             : (mark != null
-                ? Center(child: mark!(diameter * 0.52, _kCallOnFill))
+                ? Center(child: mark!(diameter * 0.42, _kCallOnFill))
                 : Icon(icon, color: _kCallOnFill, size: diameter * 0.42)),
       ),
     );

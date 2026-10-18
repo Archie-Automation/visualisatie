@@ -101,11 +101,15 @@ function doorDialBlock(
 ): string {
   const id = astSafe(ic.id);
   const gid = astSafe(groupId);
+  // Answer() meteen: een deurstation (DoorBird) verbreekt een oproep die niet
+  // binnen een paar seconden wordt opgenomen. Zonder dit stopt de bel na
+  // ~5 s, ongeacht timeoutSec. Dial() laat de panelen daarna alsnog overgaan.
   return `exten => ${exten},1,NoOp(Ring ${id} ${gid})
  same => n,Set(__INTERCOM_ID=${id})
  same => n,Set(__RING_GROUP=${gid})
+ same => n,Answer()
  same => n,UserEvent(Archie,Kind: ring,IntercomId: ${id},GroupId: ${gid})
- same => n,Dial(${dial.dial},${dial.timeout},tTU(archie-on-answer))
+ same => n,Dial(${dial.dial},${dial.timeout},rtTU(archie-on-answer))
  same => n,UserEvent(Archie,Kind: cleared,IntercomId: ${id})
  same => n,Hangup()
 `;
@@ -132,12 +136,19 @@ export function buildDoorRingContext(
   if (usable.length === 0) {
     // Geen SIP-toestellen: wel de belmelding naar alle panelen (WebSocket/push),
     // zodat camera en deur-open werken. Anders weigert Asterisk de oproep.
+    const gid = (ic.intercom.ringGroupId ?? "").trim();
+    const group = (cfg.voip?.groups ?? []).find((x) => x.id === gid);
+    const waitRaw = group?.timeoutSec ?? 30;
+    const wait =
+      !Number.isFinite(waitRaw) || waitRaw < 5
+        ? 30
+        : Math.min(180, Math.round(waitRaw));
     return `[${ctx}]
 exten => s,1,NoOp(Ring ${id} zonder SIP-toestellen)
  same => n,Set(__INTERCOM_ID=${id})
+ same => n,Answer()
  same => n,UserEvent(Archie,Kind: ring,IntercomId: ${id})
- same => n,Ringing()
- same => n,Wait(30)
+ same => n,Wait(${wait})
  same => n,UserEvent(Archie,Kind: cleared,IntercomId: ${id})
  same => n,Hangup()
 exten => _X.,1,Goto(s,1)
@@ -347,7 +358,7 @@ writeprotect=yes
 
 [from-internal]
 ${groupExtens.join("\n")}
-exten => _X.,1,Dial(PJSIP/\${EXTEN},45)
+exten => _X.,1,Dial(PJSIP/\${EXTEN},45,r)
  same => n,Hangup()
 
 [archie-on-answer]

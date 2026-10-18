@@ -148,7 +148,9 @@ export async function refreshSnapshotCache(
     // go2rtc frame.jpeg is instant when the producer is warm. ffmpeg
     // `-frames:v 1` waits for the next IDR — often 10s on Synology/NVR.
     let buf = await fetchSnapshotFromGo2rtc(url, 2_500);
-    if (!buf && rtsp) {
+    // Een intercom (DoorBird) heeft vaak maar één RTSP-kijker. Een tweede
+    // ffmpeg naast de live-stream duwt het beeld weg en maakt het traag.
+    if (!buf && rtsp && target.type === "camera") {
       buf = await captureSnapshotFfmpeg(rtsp, { width, timeoutMs: 8_000 });
     }
     if (!buf) {

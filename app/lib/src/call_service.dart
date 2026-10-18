@@ -100,8 +100,7 @@ class CallService {
         await DoorbellRinger.start(volume: volume, toneId: tone);
       }
     }
-    final seconds =
-        doorbellRingSecondsValue(_ref.read(doorbellRingSecondsProvider));
+    final seconds = _ringSeconds(ring);
     _panelRingTimer = Timer(Duration(seconds: seconds), () {
       unawaited(_onPanelRingTimedOut(ring));
     });
@@ -121,6 +120,13 @@ class CallService {
     }
   }
 
+  /// De belgroep-afringduur. Een lokale kortere stand (bijv. 5 s) wint niet.
+  int _ringSeconds(IntercomRing ring) {
+    final n = ring.timeoutSec;
+    if (n != null && n >= 5 && n <= 180) return n;
+    return 30;
+  }
+
   Future<void> end(String intercomId) async {
     _panelRingTimer?.cancel();
     _panelRingTimer = null;
@@ -137,7 +143,6 @@ class CallService {
 final callServiceListenerProvider = Provider<void>((ref) {
   ref.watch(doorbellVolumeProvider);
   ref.watch(doorbellToneProvider);
-  ref.watch(doorbellRingSecondsProvider);
   // Push (app dicht) aan/uit met de login. Bij een WebSocket die leeft
   // rinkelt de app zelf en wordt het pushbericht genegeerd.
   ref.listen<AuthState>(authProvider, (prev, next) {
