@@ -8,15 +8,16 @@ class DoorbellRinger {
   DoorbellRinger._();
 
   static const _channel = MethodChannel('archie_os/doorbell');
-  static const defaultVolume = 0.8;
-  static const defaultToneId = 'chime';
+  static const defaultVolume = 1.0;
+  static const defaultToneId = 'dingdong';
   static const defaultRingSeconds = 20;
 
   static const tones = <({String id, String label})>[
-    (id: 'chime', label: 'Klassiek'),
-    (id: 'modern', label: 'Modern'),
-    (id: 'brass', label: 'Mechanisch'),
-    (id: 'melody', label: 'Melodisch'),
+    (id: 'dingdong', label: 'Ding Dong'),
+    (id: 'friendly', label: 'Friendly'),
+    (id: 'bell', label: 'Bell'),
+    (id: 'klingel', label: 'Klingel'),
+    (id: 'westminster', label: 'Westminster'),
   ];
 
   static const ringSecondsChoices = <int>[
@@ -38,16 +39,8 @@ class DoorbellRinger {
   static bool isKnownTone(String id) => tones.any((t) => t.id == id);
 
   static String migrateToneId(String? raw) {
-    switch (raw) {
-      case 'short':
-      case 'double':
-        return 'modern';
-      case 'soft':
-        return 'melody';
-      default:
-        if (raw != null && isKnownTone(raw)) return raw;
-        return defaultToneId;
-    }
+    if (raw != null && isKnownTone(raw)) return raw;
+    return defaultToneId;
   }
 
   static Future<void> start({double? volume, String? toneId}) async {
@@ -75,7 +68,7 @@ class DoorbellRinger {
   }
 }
 
-const _volumePrefsKey = 'doorbell_panel_volume';
+const _volumePrefsKey = 'doorbell_panel_volume_v2';
 const _tonePrefsKey = 'doorbell_panel_tone';
 const _ringSecondsPrefsKey = 'doorbell_panel_ring_seconds';
 

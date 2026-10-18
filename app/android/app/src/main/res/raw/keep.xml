@@ -1,3 +1,3 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@raw/doorbell,@raw/doorbell_chime,@raw/doorbell_modern,@raw/doorbell_brass,@raw/doorbell_melody" />
+    tools:keep="@raw/doorbell_dingdong,@raw/doorbell_friendly,@raw/doorbell_bell,@raw/doorbell_klingel,@raw/doorbell_westminster" />

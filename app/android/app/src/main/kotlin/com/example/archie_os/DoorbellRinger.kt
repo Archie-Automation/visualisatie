@@ -30,9 +30,9 @@ class DoorbellRinger(private val context: Context) {
     private var savedMode: Int? = null
     @Volatile private var gain = 0.8f
 
-    @Volatile private var toneId = "chime"
+    @Volatile private var toneId = "dingdong"
 
-    fun start(volume: Float, tone: String = "chime") {
+    fun start(volume: Float, tone: String = "dingdong") {
         synchronized(lock) {
             stopLocked()
             gain = volume.coerceIn(0f, 1f)
@@ -108,29 +108,32 @@ class DoorbellRinger(private val context: Context) {
     /** Keep a compile-time reference so aapt cannot strip the wavs. */
     @Suppress("unused")
     private val keepWav = intArrayOf(
-        R.raw.doorbell,
-        R.raw.doorbell_chime,
-        R.raw.doorbell_modern,
-        R.raw.doorbell_brass,
-        R.raw.doorbell_melody,
+        R.raw.doorbell_dingdong,
+        R.raw.doorbell_friendly,
+        R.raw.doorbell_bell,
+        R.raw.doorbell_klingel,
+        R.raw.doorbell_westminster,
     )
 
     private fun wavResId(): Int = when (toneId) {
-        "modern" -> R.raw.doorbell_modern
-        "brass" -> R.raw.doorbell_brass
-        "melody" -> R.raw.doorbell_melody
-        else -> R.raw.doorbell_chime
+        "friendly" -> R.raw.doorbell_friendly
+        "bell" -> R.raw.doorbell_bell
+        "klingel" -> R.raw.doorbell_klingel
+        "westminster" -> R.raw.doorbell_westminster
+        else -> R.raw.doorbell_dingdong
     }
 
     private fun startWav(): Boolean {
         return try {
             val afd = context.resources.openRawResourceFd(wavResId()) ?: return false
             val p = MediaPlayer()
-            p.setAudioAttributes(mediaAttrs(AudioAttributes.USAGE_MEDIA))
+            // Alarmstroom, sample op vol volume. Het paneelvolume zit in de
+            // stream zelf; nog eens setVolume(gain) maakte de bel te zacht.
+            p.setAudioAttributes(mediaAttrs(AudioAttributes.USAGE_ALARM))
             p.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
             afd.close()
             p.isLooping = true
-            p.setVolume(gain, gain)
+            p.setVolume(1f, 1f)
             p.prepare()
             p.start()
             player = p
@@ -247,10 +250,20 @@ class DoorbellRinger(private val context: Context) {
     }
 
     private fun mediaAttrs(usage: Int): AudioAttributes {
+        val stream = if (usage == AudioAttributes.USAGE_ALARM) {
+            AudioManager.STREAM_ALARM
+        } else {
+            AudioManager.STREAM_MUSIC
+        }
         return AudioAttributes.Builder()
             .setUsage(usage)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .setLegacyStreamType(AudioManager.STREAM_MUSIC)
+            .setLegacyStreamType(stream)
+            .apply {
+                if (usage == AudioAttributes.USAGE_ALARM) {
+                    setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED)
+                }
+            }
             .build()
     }
 
@@ -305,8 +318,7 @@ class DoorbellRinger(private val context: Context) {
                 if (max <= 0) continue
                 val cur = am.getStreamVolume(stream)
                 saved.add(stream to cur)
-                val floor = 0.35f
-                val scaled = (max * maxOf(gain, floor)).toInt().coerceAtLeast(1).coerceAtMost(max)
+                val scaled = (max * gain).toInt().coerceAtLeast(1).coerceAtMost(max)
                 if (cur < scaled) am.setStreamVolume(stream, scaled, 0)
             } catch (_: Exception) {
             }

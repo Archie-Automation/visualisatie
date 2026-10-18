@@ -126,7 +126,7 @@ export function publicOverviewCamera(
     id: d.id,
     name: d.name,
     kind: "camera",
-    aspect: d.intercom.aspect ?? "4:3",
+    aspect: intercomPublicAspect(d),
     hls,
     webrtc: `${mediaBase}/api/webrtc?src=${encodeURIComponent(p)}`,
     whep: `${mediaBase}/api/whep?src=${encodeURIComponent(p)}`,
@@ -179,7 +179,7 @@ export function publicIntercom(
     id: ic.id,
     name: ic.name,
     kind: "intercom",
-    aspect: ic.intercom.aspect ?? "4:3",
+    aspect: intercomPublicAspect(ic),
     webrtc: `${mediaBase}/api/webrtc?src=${encodeURIComponent(p)}`,
     snapshot: `${apiBase}/api/intercoms/${ic.id}/snapshot`,
     canRelease: intercomSupportsRelease(ic)
@@ -187,9 +187,40 @@ export function publicIntercom(
 }
 
 /**
- * Generate a go2rtc YAML configuration. Cameras are registered as plain
- * sources (view-only); intercoms always get `#backchannel=1` appended so
- * go2rtc negotiates the ONVIF two-way-audio channel.
+ * Aspect in de app. Een DoorBird zonder vaste `aspect` is 16:9: breedbeeld
+ * op het toestel is de gangbare stand, 4:3 liet dat beeld in een te smalle tegel.
+ */
+export function intercomPublicAspect(ic: IntercomDevice): string {
+  const set = ic.intercom.aspect?.trim();
+  if (set) return set;
+  if (ic.intercom.kind === "doorbird") return "16:9";
+  return "4:3";
+}
+
+/**
+ * go2rtc-bronnen voor een intercom.
+ * DoorBird: één RTSP-sessie, video naar H.264 main. Breedbeeld wisselt het
+ * profiel op het toestel; samen met `#backchannel=1` wordt het beeld dan zwart.
+ * Praten gaat via SIP. Andere merken houden de ONVIF-backchannel.
+ */
+export function intercomGo2rtcSources(
+  ic: IntercomDevice,
+  ffmpegBin: string | null
+): string[] {
+  const raw = ic.intercom.rtsp.trim();
+  const extra = ic.intercom.sources ?? [];
+  if (ic.intercom.kind === "doorbird") {
+    const base = raw.split("#")[0] ?? raw;
+    if (ffmpegBin) return [`ffmpeg:${base}#video=h264`, ...extra];
+    return [`${base}#media=video`, ...extra];
+  }
+  const tagged = /[#]backchannel=/i.test(raw) ? raw : `${raw}#backchannel=1`;
+  return [tagged, ...extra];
+}
+
+/**
+ * Generate a go2rtc YAML configuration. Cameras are view-only.
+ * Intercoms: DoorBird wordt getranscodeerd; overige merken krijgen `#backchannel=1`.
  */
 export function writeGo2rtcConfig(cfg: HouseConfig): string | null {
   const target = process.env.GO2RTC_CONFIG_PATH;
@@ -315,11 +346,7 @@ function buildGo2rtcYaml(
 
   for (const ic of intercoms) {
     const p = cameraPath(ic);
-    const tagged = /[#]backchannel=/i.test(ic.intercom.rtsp)
-      ? ic.intercom.rtsp
-      : `${ic.intercom.rtsp}#backchannel=1`;
-    const sources = [tagged, ...(ic.intercom.sources ?? [])];
-    pushStream(L, p, sources);
+    pushStream(L, p, intercomGo2rtcSources(ic, ffmpegBin));
   }
 
   if (cams.length + intercoms.length === 0) L.push("  # (no cameras or intercoms configured)");

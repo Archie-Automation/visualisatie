@@ -2587,6 +2587,21 @@ class CameraTile extends ConsumerWidget {
 /*  Intercom                                                             */
 /* --------------------------------------------------------------------- */
 
+double _intercomTileAspect(Device device) {
+  final o = device.raw['intercom'];
+  if (o is Map) {
+    final aspect = o['aspect'];
+    if (aspect is String && aspect.contains(':')) {
+      final p = aspect.split(':');
+      final w = double.tryParse(p[0]) ?? 0;
+      final h = p.length > 1 ? double.tryParse(p[1]) ?? 0 : 0;
+      if (w > 0 && h > 0) return w / h;
+    }
+    if (o['kind'] == 'doorbird') return 16 / 9;
+  }
+  return 4 / 3;
+}
+
 class IntercomTile extends ConsumerWidget {
   const IntercomTile({super.key, required this.device});
   final Device device;
@@ -2637,8 +2652,9 @@ class IntercomTile extends ConsumerWidget {
               borderRadius: BorderRadius.circular(18),
               child: CameraSnapshot(
                 cameraId: device.id,
-                aspectRatio: 4 / 3,
+                aspectRatio: _intercomTileAspect(device),
                 kind: SnapshotKind.intercom,
+                fit: BoxFit.contain,
               ),
             ),
           ),

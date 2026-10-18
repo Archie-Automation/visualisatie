@@ -1911,7 +1911,7 @@ class _DoorbellMuteSectionState extends ConsumerState<_DoorbellMuteSection> {
     final tone = doorbellToneValue(ref.read(doorbellToneProvider));
     await DoorbellRinger.start(volume: volume, toneId: tone);
     _testTimer?.cancel();
-    _testTimer = Timer(const Duration(seconds: 4), () async {
+    _testTimer = Timer(const Duration(seconds: 8), () async {
       await DoorbellRinger.stop();
       if (mounted) setState(() => _testing = false);
     });
@@ -1922,7 +1922,7 @@ class _DoorbellMuteSectionState extends ConsumerState<_DoorbellMuteSection> {
     await DoorbellRinger.start(volume: volume, toneId: tone);
     _testTimer?.cancel();
     setState(() => _testing = true);
-    _testTimer = Timer(const Duration(seconds: 2), () async {
+    _testTimer = Timer(const Duration(seconds: 8), () async {
       await DoorbellRinger.stop();
       if (mounted) setState(() => _testing = false);
     });
@@ -1934,7 +1934,7 @@ class _DoorbellMuteSectionState extends ConsumerState<_DoorbellMuteSection> {
     await DoorbellRinger.start(volume: volume, toneId: toneId);
     _testTimer?.cancel();
     setState(() => _testing = true);
-    _testTimer = Timer(const Duration(seconds: 2), () async {
+    _testTimer = Timer(const Duration(seconds: 8), () async {
       await DoorbellRinger.stop();
       if (mounted) setState(() => _testing = false);
     });
