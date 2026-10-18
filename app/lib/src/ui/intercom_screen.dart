@@ -458,6 +458,8 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                                             ? (size, color) => GateIcon(
                                                   size: size,
                                                   color: color,
+                                                  strokeScale:
+                                                      gateButtonStrokeScale,
                                                 )
                                             : null,
                                         label: releaseLabel,

@@ -2,50 +2,58 @@ import 'package:flutter/material.dart';
 
 import 'campfire_icon.dart';
 
+/// De intercomknop tekent dit merk op 0.52 van de cirkel en een Material-icoon
+/// op 0.42. Daarmee blijft de pen even dik als deur en camera.
+const gateButtonStrokeScale = 0.42 / 0.52;
+
 /// Dubbele inrijpoort: twee stijlen, regels en een schoor per vleugel.
 class GateIcon extends StatelessWidget {
-  const GateIcon({super.key, required this.size, required this.color});
+  const GateIcon({
+    super.key,
+    required this.size,
+    required this.color,
+    this.strokeScale = 1,
+  });
 
   final double size;
   final Color color;
+
+  /// 1 naast een Material-icoon van dezelfde maat. [gateButtonStrokeScale] op de belknop.
+  final double strokeScale;
 
   @override
   Widget build(BuildContext context) {
     return CustomPaint(
       size: Size.square(size),
-      painter: _GateIconPainter(color),
+      painter: _GateIconPainter(color, strokeScale),
     );
   }
 }
 
 class _GateIconPainter extends CustomPainter {
-  _GateIconPainter(this.color);
+  _GateIconPainter(this.color, this.strokeScale);
 
   final Color color;
+  final double strokeScale;
 
   @override
   void paint(Canvas canvas, Size size) {
     final u = size.width / 24;
-    final stroke = materialOutlineStroke(size.width);
+    final stroke = materialOutlineStroke(size.width) * strokeScale;
     final bar = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = stroke
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
-    final post = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke * 1.45
-      ..strokeCap = StrokeCap.round;
 
     Offset p(double x, double y) => Offset(x * u, y * u);
     void line(double x1, double y1, double x2, double y2, Paint paint) {
       canvas.drawLine(p(x1, y1), p(x2, y2), paint);
     }
 
-    line(3.6, 2.6, 3.6, 21.4, post);
-    line(20.4, 2.6, 20.4, 21.4, post);
+    line(3.6, 2.6, 3.6, 21.4, bar);
+    line(20.4, 2.6, 20.4, 21.4, bar);
 
     line(3.6, 6.4, 20.4, 6.4, bar);
     line(3.6, 19.2, 20.4, 19.2, bar);
@@ -61,5 +69,5 @@ class _GateIconPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _GateIconPainter oldDelegate) =>
-      oldDelegate.color != color;
+      oldDelegate.color != color || oldDelegate.strokeScale != strokeScale;
 }
