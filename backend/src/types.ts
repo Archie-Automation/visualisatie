@@ -600,6 +600,8 @@ export interface IntercomConfig {
   ringButtons?: IntercomRingButton[];
   /** Enkele DTMF-toets tijdens het gesprek om het slot te openen. Standaard `#`. */
   dtmfDigit?: string;
+  /** Icoon en opschrift van de open-knop in de app. Standaard deur. */
+  releaseGlyph?: "door" | "gate";
   /**
    * Toon deze deurbelcamera ook op de Camera's-pagina (alleen beeld, geen microfoon).
    */

@@ -672,6 +672,11 @@
               }
             },
             "dtmfDigit": { "type": "string", "maxLength": 4 },
+            "releaseGlyph": {
+              "type": "string",
+              "enum": ["door", "gate"],
+              "description": "Icoon van de open-knop in de app: deur of poort."
+            },
             "httpRelease": {
               "type": "object",
               "properties": {

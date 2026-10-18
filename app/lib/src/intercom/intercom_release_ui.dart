@@ -18,3 +18,11 @@ bool intercomShowsDoorButton({
   }
   return false;
 }
+
+/// `releaseGlyph` op de intercom: `gate` is een poort, al het andere een deur.
+bool intercomReleaseIsGate(Map<String, dynamic>? intercomRaw) =>
+    intercomRaw?['releaseGlyph'] == 'gate';
+
+/// Opschrift onder de open-knop.
+String intercomReleaseActionLabel(Map<String, dynamic>? intercomRaw) =>
+    intercomReleaseIsGate(intercomRaw) ? 'POORT OPEN' : 'DEUR OPEN';

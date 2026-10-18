@@ -33,6 +33,17 @@ void main() {
     );
   });
 
+  test('release glyph defaults to a door and can be a gate', () {
+    expect(intercomReleaseIsGate(null), isFalse);
+    expect(intercomReleaseIsGate({'releaseGlyph': 'door'}), isFalse);
+    expect(intercomReleaseActionLabel(null), 'DEUR OPEN');
+    expect(intercomReleaseIsGate({'releaseGlyph': 'gate'}), isTrue);
+    expect(
+      intercomReleaseActionLabel({'releaseGlyph': 'gate'}),
+      'POORT OPEN',
+    );
+  });
+
   test('shows door button for a configured DoorBird without a call', () {
     expect(
       intercomShowsDoorButton(

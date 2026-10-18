@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../intercom/intercom_release_ui.dart';
 import '../theme.dart';
 import '../ui/widgets/confirm_dialog.dart';
 import '../ui/widgets/luxe_form.dart';
@@ -250,6 +251,49 @@ class IntercomDeviceSetupCard extends StatelessWidget {
               o['dtmfDigit'] = t.isEmpty ? defaultDtmfDigit : t;
               onChanged();
             },
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Open-knop',
+            style: Theme.of(context).textTheme.labelLarge,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Deur of poort. Alleen het icoon en het opschrift in de app.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w400,
+                  color: LuxeColors.inkSoft,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: SegmentedButton<String>(
+              segments: const [
+                ButtonSegment<String>(
+                  value: 'door',
+                  label: Text('Deur'),
+                  icon: Icon(Icons.door_front_door_outlined, size: 18),
+                ),
+                ButtonSegment<String>(
+                  value: 'gate',
+                  label: Text('Poort'),
+                  icon: Icon(Icons.fence_outlined, size: 18),
+                ),
+              ],
+              emptySelectionAllowed: false,
+              showSelectedIcon: false,
+              selected: {intercomReleaseIsGate(o) ? 'gate' : 'door'},
+              onSelectionChanged: (next) {
+                if (next.isEmpty) return;
+                if (next.first == 'gate') {
+                  o['releaseGlyph'] = 'gate';
+                } else {
+                  o.remove('releaseGlyph');
+                }
+                onChanged();
+              },
+            ),
           ),
         ],
       ),

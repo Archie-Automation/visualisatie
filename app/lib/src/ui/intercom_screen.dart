@@ -33,7 +33,8 @@ class IntercomScreen extends ConsumerStatefulWidget {
 
 class _IntercomScreenState extends ConsumerState<IntercomScreen> {
   bool _releasing = false;
-  String? _releaseFeedback;
+  bool _opened = false;
+  Timer? _openedTimer;
   bool _sipUaStarted = false;
   bool _sipDiscoveryScheduled = false;
   bool _warmScheduled = false;
@@ -101,6 +102,20 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
         );
   }
 
+  @override
+  void dispose() {
+    _openedTimer?.cancel();
+    super.dispose();
+  }
+
+  void _flashOpened() {
+    _openedTimer?.cancel();
+    setState(() => _opened = true);
+    _openedTimer = Timer(const Duration(milliseconds: 1600), () {
+      if (mounted) setState(() => _opened = false);
+    });
+  }
+
   Future<void> _release(IntercomInfo i, IntercomController sip) async {
     if (_releasing) return;
 
@@ -111,10 +126,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
     final ok = await maybeConfirm(context, prompt);
     if (!ok) return;
 
-    setState(() {
-      _releasing = true;
-      _releaseFeedback = null;
-    });
+    setState(() => _releasing = true);
     try {
       final raw = device?.raw['intercom'];
       final digit = raw is Map
@@ -130,17 +142,17 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
         if (!viaSip) rethrow;
       }
       if (!mounted) return;
-      setState(() => _releaseFeedback = 'Deur geopend');
+      _flashOpened();
     } catch (e) {
       if (!mounted) return;
-      setState(() => _releaseFeedback = 'Fout: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Openen mislukt: $e'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } finally {
-      if (mounted) {
-        setState(() => _releasing = false);
-        Future.delayed(const Duration(seconds: 3), () {
-          if (mounted) setState(() => _releaseFeedback = null);
-        });
-      }
+      if (mounted) setState(() => _releasing = false);
     }
   }
 
@@ -204,17 +216,24 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
             }
             final phone = context.isPhone;
             final icRaw = ref.read(configProvider).value?.deviceById(i.id)?.raw['intercom'];
+            final intercomRaw = icRaw is Map
+                ? Map<String, dynamic>.from(icRaw)
+                : null;
             final showRelease = intercomShowsDoorButton(
               canRelease: i.canRelease,
               sipInCall: sip.phase == IntercomSipPhase.inCall,
-              intercomRaw: icRaw is Map
-                  ? Map<String, dynamic>.from(icRaw)
-                  : null,
+              intercomRaw: intercomRaw,
             );
             // SIP-gesprek (bellen of opgenomen): geluid via Asterisk,
             // go2rtc alleen beeld. Anders claimt de UI "spreken" zonder mic.
             final sipLive = sip.phase == IntercomSipPhase.ringing ||
                 sip.phase == IntercomSipPhase.inCall;
+            final releaseIcon = _opened
+                ? Icons.check_rounded
+                : (intercomReleaseIsGate(intercomRaw)
+                    ? Icons.fence_outlined
+                    : Icons.door_front_door_outlined);
+            final releaseLabel = intercomReleaseActionLabel(intercomRaw);
             final hPad = phone ? 12.0 : 16.0;
             final stagePad = EdgeInsets.fromLTRB(hPad, 4, hPad, 8);
             return IntercomCaptureScope(
@@ -226,6 +245,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                     padding: stagePad,
                     child: LiveVideoFittedStage(
                       aspectRatio: i.aspectRatio,
+                      factor: _kIntercomStageFactor,
                       heroTag: 'intercom-${i.id}',
                       child: Stack(
                         fit: StackFit.expand,
@@ -275,30 +295,11 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                     ),
                   ),
                 ),
-                if (_releaseFeedback != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 18, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: LuxeColors.brass.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(_releaseFeedback!,
-                          style: TextStyle(
-                            color: LuxeColors.brassGlow,
-                            letterSpacing: 2,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          )),
-                    ),
-                  ),
                 Padding(
                   padding: EdgeInsets.fromLTRB(hPad, 12, hPad, 28),
                   child: Center(
                     child: FractionallySizedBox(
-                      widthFactor: kLiveVideoStageFactor,
+                      widthFactor: _kIntercomStageFactor,
                       child: SizedBox(
                         width: double.infinity,
                         child: LuxeRimBox(
@@ -371,8 +372,8 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                                   if (showRelease)
                                     Expanded(
                                       child: _ActionButton(
-                                        icon: Icons.lock_open_rounded,
-                                        label: 'DEUR OPEN',
+                                        icon: releaseIcon,
+                                        label: releaseLabel,
                                         color: _kCallDoor,
                                         diameter: diameter,
                                         loading: _releasing,
@@ -468,6 +469,10 @@ class _AlarmShakeState extends State<_AlarmShake>
   }
 }
 
+/// Ruimer dan het camerabeeld op de camera-pagina. De verhouding blijft
+/// die van de stream; alleen de maximale tegel groeit.
+const _kIntercomStageFactor = 0.9;
+
 /// Same fills in light and dark — palette danger/brass wash out in dark mode.
 const _kCallHangup = Color(0xFFB83A3A);
 const _kCallAnswer = Color(0xFF3E6B4F);
@@ -535,7 +540,7 @@ class _ActionButton extends StatelessWidget {
               maxLines: 1,
               softWrap: false,
               style: TextStyle(
-                color: color,
+                color: LuxeColors.inkSoft,
                 fontSize: 10,
                 letterSpacing: 2.2,
                 fontWeight: FontWeight.w700,
