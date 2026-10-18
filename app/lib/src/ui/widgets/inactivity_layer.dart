@@ -11,6 +11,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
 import '../../api.dart';
+import '../../intercom/intercom_sip_providers.dart';
+import '../../intercom/intercom_sip_types.dart';
 import '../../display_panel_config.dart';
 import '../../idle_reset.dart';
 import '../../screen_clean.dart';
@@ -341,11 +343,15 @@ class _InactivityLayerState extends ConsumerState<InactivityLayer> {
   void _onEntryDelayStarted() => _wakePanel();
 
   bool _isPaused() {
-    if (ref.read(intercomRingProvider) != null) return true;
+    final ring = ref.read(intercomRingProvider);
+    if (ring != null && !ring.answeredElsewhere) return true;
     final satel = ref.read(satelStatusProvider);
     if (satel.worstState == SatelPartitionState.entryDelay) return true;
-    final loc = widget.router.state.matchedLocation;
-    if (loc.startsWith('/intercom/')) return true;
+    final sip = ref.read(intercomSipControllerProvider);
+    if (sip.phase == IntercomSipPhase.ringing ||
+        sip.phase == IntercomSipPhase.inCall) {
+      return true;
+    }
     return false;
   }
 

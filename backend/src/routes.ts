@@ -1809,6 +1809,14 @@ export function buildRouter(
           state: "idle"
         });
       }
+      const regs = voipRegisteredExts();
+      if (voipAmiUp() && regs.length > 0 && !regs.includes(panelExt)) {
+        releaseIntercomLine(ic.id, holder);
+        return res.status(409).json({
+          error: "Dit scherm is niet aangemeld op de belcentrale.",
+          state: "idle"
+        });
+      }
       try {
         await doorbirdMakeCall(ic, `sip:${panelExt}@${host}`);
       } catch (err) {

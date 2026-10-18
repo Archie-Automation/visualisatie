@@ -161,7 +161,7 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
   void armMonitorAnswer() {
     _armMonitor = true;
     _monitorTimer?.cancel();
-    _monitorTimer = Timer(const Duration(seconds: 15), () {
+    _monitorTimer = Timer(const Duration(seconds: 25), () {
       if (!_armMonitor) return;
       _armMonitor = false;
       dialError = 'De DoorBird startte het gesprek niet.';
@@ -227,6 +227,8 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
     final ok = await ensureAvPermissions(video: false);
     if (!ok) {
       debugPrint('[SIP] opnemen: microfoontoestemming geweigerd');
+      dialError = 'Microfoon geweigerd.';
+      notifyListeners();
       return;
     }
 
@@ -241,6 +243,8 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
       debugPrint('[SIP] opgenomen');
     } catch (e) {
       debugPrint('[SIP] opnemen mislukt: $e');
+      dialError = 'Opnemen mislukt.';
+      notifyListeners();
       return;
     }
     _phase = IntercomSipPhase.inCall;
@@ -354,7 +358,8 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
       case CallStateEnum.PROGRESS:
         // PROGRESS is 180/183, geen antwoord. Anders slaat OPNEMEN SIP over.
         _activeCall = call;
-        if (_armMonitor && call.direction == Direction.incoming) {
+        if (_armMonitor &&
+            (call.direction == Direction.incoming || !_outgoing)) {
           _armMonitor = false;
           _monitorTimer?.cancel();
           _outgoing = true;
@@ -400,7 +405,7 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
         final ringing = _phase == IntercomSipPhase.ringing;
         final local = _localTerminate;
         _outgoing = false;
-        if (outgoing && !local) {
+        if (outgoing && !local && ringing) {
           dialError = 'De intercom nam niet op.';
         }
         if (!outgoing && ringing && !local) {

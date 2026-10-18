@@ -89,6 +89,21 @@ export function groupDial(
   return { dial: targets.join("&"), timeout: g.timeoutSec ?? 30 };
 }
 
+/** Terugbellen van de deur naar één toestel. Geen belgroep, wel meteen Answer(). */
+function monitorCallbackLines(cfg: HouseConfig, taken: Set<string>): string[] {
+  const lines: string[] = [];
+  for (const ep of cfg.voip?.endpoints ?? []) {
+    const ext = astSafe(ep.ext ?? "");
+    if (!ext || taken.has(ext)) continue;
+    taken.add(ext);
+    lines.push(`exten => ${ext},1,NoOp(Monitor ${ext})
+ same => n,Answer()
+ same => n,Dial(PJSIP/${ext},45,tT)
+ same => n,Hangup()`);
+  }
+  return lines;
+}
+
 export function doorContextName(ic: IntercomDevice): string {
   return `ring-${astSafe(ic.id).replace(/[^a-zA-Z0-9_-]/g, "")}`;
 }
@@ -143,6 +158,7 @@ export function buildDoorRingContext(
       !Number.isFinite(waitRaw) || waitRaw < 5
         ? 30
         : Math.min(180, Math.round(waitRaw));
+    const monitor = monitorCallbackLines(cfg, new Set()).join("\n");
     return `[${ctx}]
 exten => s,1,NoOp(Ring ${id} zonder SIP-toestellen)
  same => n,Set(__INTERCOM_ID=${id})
@@ -151,6 +167,7 @@ exten => s,1,NoOp(Ring ${id} zonder SIP-toestellen)
  same => n,Wait(${wait})
  same => n,UserEvent(Archie,Kind: cleared,IntercomId: ${id})
  same => n,Hangup()
+${monitor}
 exten => _X.,1,Goto(s,1)
 ${hangupExt}
 `;
@@ -171,18 +188,12 @@ ${hangupExt}
     lines.push(doorDialBlock(ic, row.t.ringGroupId, row.dial, ext));
   }
   // Een paneel dat de deur belt laat de DoorBird zélf dit toestel bellen.
+  // Answer() meteen: anders verbreekt de DoorBird de oproep na een paar seconden.
   // Zonder deze regels vangt `_X.` dat nummer en gaat de hele belgroep af.
   const taken = new Set(
     [primaryExt, ...usable.map((row) => astSafe(row.g.ext))].filter(Boolean)
   );
-  for (const ep of cfg.voip?.endpoints ?? []) {
-    const ext = astSafe(ep.ext ?? "");
-    if (!ext || taken.has(ext)) continue;
-    taken.add(ext);
-    lines.push(
-      `exten => ${ext},1,Dial(PJSIP/${ext},45,tT)\n same => n,Hangup()`
-    );
-  }
+  lines.push(...monitorCallbackLines(cfg, taken));
   // Unknown numbers (DoorBird knop 1 often not the group ext) → knop 1.
   // Exact extra-button extensions above take priority over this pattern.
   lines.push(`exten => _X.,1,Goto(s,1)`);

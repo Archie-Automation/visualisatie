@@ -38,9 +38,11 @@ describe("buildDoorRingContext", () => {
     const answerAt = ctx.indexOf("Answer()");
     const dialAt = ctx.indexOf("Dial(");
     assert.ok(answerAt >= 0 && answerAt < dialAt);
-    assert.match(ctx, /exten => 201,1,Dial\(PJSIP\/201,45,tT\)/);
-    assert.ok(
-      ctx.indexOf("exten => 201,1,Dial") < ctx.indexOf("exten => _X.,1,Goto(s,1)")
-    );
+    const monitorAt = ctx.indexOf("exten => 201,1,NoOp(Monitor 201)");
+    const monitorAnswer = ctx.indexOf("Answer()", monitorAt);
+    const monitorDial = ctx.indexOf("Dial(PJSIP/201,45,tT)");
+    const catchAll = ctx.indexOf("exten => _X.,1,Goto(s,1)");
+    assert.ok(monitorAt >= 0 && monitorAt < monitorAnswer);
+    assert.ok(monitorAnswer < monitorDial && monitorDial < catchAll);
   });
 });

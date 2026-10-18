@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../api.dart';
 import '../camera_api.dart';
@@ -46,6 +47,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
   bool _lineFetched = false;
   bool _claimed = false;
   String? _notice;
+  bool _callWasLive = false;
 
   bool _isRinging({
     required IntercomRing? ring,
@@ -246,6 +248,8 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
             waiting && _isRinging(ring: ring, sipPhase: sip.phase);
         final line = ref.watch(intercomLineProvider)[widget.intercomId];
         final taken = waiting &&
+            !_inConversation &&
+            !_claimed &&
             sip.phase != IntercomSipPhase.ringing &&
             (line == 'busy' || line == 'dialing');
         final failed = sip.dialError;
@@ -262,13 +266,49 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
         }
         final dialing = _inConversation &&
             sip.phase != IntercomSipPhase.inCall;
+        final sipLive = sip.phase == IntercomSipPhase.ringing ||
+            sip.phase == IntercomSipPhase.inCall;
+        final ringLive = ring != null &&
+            ring.intercomId == widget.intercomId &&
+            !ring.answeredElsewhere;
+        final placing = _inConversation &&
+            !sipLive &&
+            !_callWasLive &&
+            _notice == null &&
+            sip.dialError == null;
+        if (sipLive || ringLive) _callWasLive = true;
+        final sessionOver = _callWasLive ||
+            (ring != null &&
+                ring.intercomId == widget.intercomId &&
+                ring.answeredElsewhere);
+        final otherDoor = ring != null &&
+            ring.intercomId != widget.intercomId &&
+            !ring.answeredElsewhere;
         if (!_closing &&
-            ring != null &&
-            ring.answeredElsewhere &&
-            ring.intercomId == widget.intercomId) {
+            sessionOver &&
+            !sipLive &&
+            !ringLive &&
+            !placing &&
+            !otherDoor) {
           _closing = true;
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) appBack(context);
+            if (!mounted) return;
+            final sipNow = ref.read(intercomSipControllerProvider);
+            final ringNow = ref.read(intercomRingProvider);
+            final stillLive = sipNow.phase == IntercomSipPhase.ringing ||
+                sipNow.phase == IntercomSipPhase.inCall ||
+                (ringNow != null &&
+                    ringNow.intercomId == widget.intercomId &&
+                    !ringNow.answeredElsewhere);
+            if (stillLive) {
+              _closing = false;
+              return;
+            }
+            unawaited(_releaseClaim());
+            if (ringNow != null && ringNow.intercomId == widget.intercomId) {
+              ref.read(intercomRingProvider.notifier).clear();
+            }
+            context.go('/');
           });
         }
 
