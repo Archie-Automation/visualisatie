@@ -505,19 +505,15 @@ class _FloorBrowseHeader extends StatelessWidget {
   }
 }
 
-/// Gebouw- en verdiepingchips. In licht modus iets minder vet en donkergrijs.
-TextStyle _scopeChipLabel(BuildContext context, {required bool selected}) {
-  final light = Theme.of(context).brightness == Brightness.light;
-  return Theme.of(context).textTheme.labelLarge!.copyWith(
-        height: 1.0,
-        fontSize: context.isPhone ? 16 : 15,
-        color: light
-            ? (selected ? const Color(0xFF3E3D39) : const Color(0xFF5C5A55))
-            : (selected ? LuxeColors.ink : LuxeColors.inkSoft),
-        fontWeight: light
-            ? (selected ? FontWeight.w500 : FontWeight.w400)
-            : (selected ? FontWeight.w600 : FontWeight.w500),
-      );
+/// Zelfde als de namen in de systeemtegels, één punt groter (12 i.p.v. 11).
+TextStyle _scopeChipLabel() {
+  return TextStyle(
+    color: LuxeColors.ink,
+    fontSize: 12,
+    height: 1.2,
+    letterSpacing: 0.5,
+    fontWeight: FontWeight.w600,
+  );
 }
 
 /// Horizontale gebouwkiezer. Zelfde chips als verdiepingen, erboven.
@@ -593,7 +589,7 @@ class _BuildingTabBar extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 18),
                   child: Center(
                     child: Text(
-                      building.name,
+                      building.name.toUpperCase(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
@@ -601,7 +597,7 @@ class _BuildingTabBar extends ConsumerWidget {
                         applyHeightToFirstAscent: false,
                         applyHeightToLastDescent: false,
                       ),
-                      style: _scopeChipLabel(context, selected: selected),
+                      style: _scopeChipLabel(),
                     ),
                   ),
                 ),
@@ -779,7 +775,7 @@ class _FloorTabBar extends ConsumerWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 18),
                   child: Center(
                     child: Text(
-                      floor.name,
+                      floor.name.toUpperCase(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
@@ -787,7 +783,7 @@ class _FloorTabBar extends ConsumerWidget {
                         applyHeightToFirstAscent: false,
                         applyHeightToLastDescent: false,
                       ),
-                      style: _scopeChipLabel(context, selected: selected),
+                      style: _scopeChipLabel(),
                     ),
                   ),
                 ),
