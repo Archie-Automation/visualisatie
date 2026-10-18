@@ -170,6 +170,19 @@ ${hangupExt}
     if (!ext || ext === primaryExt) continue;
     lines.push(doorDialBlock(ic, row.t.ringGroupId, row.dial, ext));
   }
+  // Een paneel dat de deur belt laat de DoorBird zélf dit toestel bellen.
+  // Zonder deze regels vangt `_X.` dat nummer en gaat de hele belgroep af.
+  const taken = new Set(
+    [primaryExt, ...usable.map((row) => astSafe(row.g.ext))].filter(Boolean)
+  );
+  for (const ep of cfg.voip?.endpoints ?? []) {
+    const ext = astSafe(ep.ext ?? "");
+    if (!ext || taken.has(ext)) continue;
+    taken.add(ext);
+    lines.push(
+      `exten => ${ext},1,Dial(PJSIP/${ext},45,tT)\n same => n,Hangup()`
+    );
+  }
   // Unknown numbers (DoorBird knop 1 often not the group ext) → knop 1.
   // Exact extra-button extensions above take priority over this pattern.
   lines.push(`exten => _X.,1,Goto(s,1)`);

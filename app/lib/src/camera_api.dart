@@ -271,11 +271,20 @@ Future<Map<String, dynamic>?> fetchIntercomSipConfig({
 }
 
 class IntercomLineClaim {
-  const IntercomLineClaim({required this.ok, this.target, this.error, this.state});
+  const IntercomLineClaim({
+    required this.ok,
+    this.target,
+    this.error,
+    this.state,
+    this.mode,
+  });
   final bool ok;
   final String? target;
   final String? error;
   final String? state;
+
+  /// `callback`: de DoorBird belt dit scherm, niet andersom.
+  final String? mode;
 }
 
 /// Of er al iemand met deze intercom praat of belt.
@@ -310,11 +319,14 @@ Future<IntercomLineClaim> claimIntercomLine({
       final decoded = jsonDecode(res.body);
       if (decoded is Map<String, dynamic>) body = decoded;
     } catch (_) {}
-    if (res.statusCode == 200 && body['target'] is String) {
+    final mode = body['mode'] as String?;
+    if (res.statusCode == 200 &&
+        (body['target'] is String || mode == 'callback')) {
       return IntercomLineClaim(
         ok: true,
-        target: body['target'] as String,
+        target: body['target'] as String?,
         state: body['state'] as String?,
+        mode: mode,
       );
     }
     return IntercomLineClaim(

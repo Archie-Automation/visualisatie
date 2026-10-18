@@ -106,6 +106,7 @@ import {
   warmGo2rtcProducer
 } from "./cameraSnapshot";
 import { syncGo2rtcProcessAfterConfigWritten } from "./go2rtcSpawn";
+import { doorbirdMakeCall } from "./doorbirdRelease";
 import { iceBundleFor, remoteUrl, serverId } from "./remoteAccess";
 import {
   claimPairCode,
@@ -1764,7 +1765,7 @@ export function buildRouter(
     res.json({ state: intercomLinePhase(ic.id) });
   });
 
-  r.post("/intercoms/:id/line", requireAuth, (req: AuthedRequest, res) => {
+  r.post("/intercoms/:id/line", requireAuth, async (req: AuthedRequest, res) => {
     if (!canViewIntercom(req, req.params.id))
       return res.status(403).json({ error: "not allowed" });
     const cfg = getConfig();
@@ -1777,13 +1778,14 @@ export function buildRouter(
         state: intercomLinePhase(ic.id)
       });
     }
-    const regs = voipRegisteredExts();
-    if (voipAmiUp() && regs.length > 0 && !regs.includes(ext)) {
-      return res.status(409).json({
-        error:
-          "De intercom is niet aangemeld. Zet op de DoorBird aan dat een inkomend gesprek wordt opgenomen.",
-        state: intercomLinePhase(ic.id)
-      });
+    if (ic.intercom.kind !== "doorbird") {
+      const regs = voipRegisteredExts();
+      if (voipAmiUp() && regs.length > 0 && !regs.includes(ext)) {
+        return res.status(409).json({
+          error: "De intercom is niet aangemeld op de belcentrale.",
+          state: intercomLinePhase(ic.id)
+        });
+      }
     }
     const holder = req.user?.sub || "";
     if (!holder || !claimIntercomLine(ic.id, holder)) {
@@ -1795,6 +1797,26 @@ export function buildRouter(
             : "Er is al een gesprek.",
         state
       });
+    }
+    if (ic.intercom.kind === "doorbird") {
+      const ep = resolveUserEndpoint(cfg, holder);
+      const host = parseVoipHost(cfg.voip?.host);
+      const panelExt = ep?.ext?.trim() ?? "";
+      if (!panelExt || !host) {
+        releaseIntercomLine(ic.id, holder);
+        return res.status(409).json({
+          error: "Dit scherm heeft geen nummer op de belcentrale.",
+          state: "idle"
+        });
+      }
+      try {
+        await doorbirdMakeCall(ic, `sip:${panelExt}@${host}`);
+      } catch (err) {
+        releaseIntercomLine(ic.id, holder);
+        const message = err instanceof Error ? err.message : "DoorBird bellen mislukt.";
+        return res.status(409).json({ error: message, state: "idle" });
+      }
+      return res.json({ state: "dialing", mode: "callback" });
     }
     res.json({ state: "dialing", target: ext });
   });

@@ -107,12 +107,21 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
     }
     final token = ref.read(authProvider).token;
     if (token == null) return;
+    // Arm vóór het verzoek: de DoorBird kan al bellen voordat het antwoord
+    // van de server binnen is.
+    sip.armMonitorAnswer();
     final claim = await claimIntercomLine(
       intercomId: widget.intercomId,
       token: token,
     );
-    if (!mounted) return;
-    if (!claim.ok || claim.target == null || claim.target!.isEmpty) {
+    if (!mounted) {
+      sip.disarmMonitorAnswer();
+      return;
+    }
+    final callback = claim.mode == 'callback';
+    if (!claim.ok ||
+        (!callback && (claim.target == null || claim.target!.isEmpty))) {
+      sip.disarmMonitorAnswer();
       final line = claim.state;
       if (line != null && line.isNotEmpty) {
         ref.read(intercomLineProvider.notifier).setLine(widget.intercomId, line);
@@ -125,6 +134,8 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
       _notice = null;
     });
     _claimed = true;
+    if (callback) return;
+    sip.disarmMonitorAnswer();
     final err = await sip.placeCall(claim.target!);
     if (!mounted) return;
     if (err != null) {
@@ -137,6 +148,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
   void _cancel(IntercomController sip) {
     if (_closing) return;
     _closing = true;
+    sip.disarmMonitorAnswer();
     unawaited(_releaseClaim());
     if (sip.phase == IntercomSipPhase.ringing) {
       sip.declineCall();
@@ -249,7 +261,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
           });
         }
         final dialing = _inConversation &&
-            sip.phase == IntercomSipPhase.ringing;
+            sip.phase != IntercomSipPhase.inCall;
         if (!_closing &&
             ring != null &&
             ring.answeredElsewhere &&
@@ -403,12 +415,81 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                               horizontal: 20, vertical: 20),
                           child: LayoutBuilder(
                             builder: (context, constraints) {
-                              final count = 3 +
+                              final callCount = 1 +
                                   (waiting ? 1 : 0) +
                                   (showRelease ? 1 : 0);
+                              final count = phone ? callCount : callCount + 2;
                               final diameter =
                                   ((constraints.maxWidth / count) - 8)
                                       .clamp(48.0, 72.0);
+                              final photos = [
+                                _ActionButton(
+                                  icon: Icons.photo_camera_outlined,
+                                  label: 'FOTO',
+                                  color: _kCallPhoto,
+                                  diameter: diameter,
+                                  loading: cap.busy,
+                                  onTap: cap.takePhoto,
+                                ),
+                                _ActionButton(
+                                  icon: Icons.photo_library_outlined,
+                                  label: "FOTO'S",
+                                  color: _kCallPhoto,
+                                  diameter: diameter,
+                                  onTap: cap.openPhotos,
+                                ),
+                              ];
+                              final calls = <Widget>[
+                                Expanded(
+                                  child: _ActionButton(
+                                    icon: Icons.call_end_rounded,
+                                    label: 'OPHANGEN',
+                                    color: _kCallHangup,
+                                    diameter: diameter,
+                                    shake: ringing,
+                                    onTap: () => _cancel(sip),
+                                  ),
+                                ),
+                                if (waiting)
+                                  Expanded(
+                                    child: _ActionButton(
+                                      icon: taken
+                                          ? Icons.phone_locked_outlined
+                                          : Icons.call_rounded,
+                                      label: taken ? 'BEZET' : 'OPNEMEN',
+                                      color: taken
+                                          ? _kCallPhoto
+                                          : _kCallAnswer,
+                                      diameter: diameter,
+                                      shake: ringing && !taken,
+                                      onTap: taken
+                                          ? () => _snack(
+                                                'Er is al een gesprek op deze intercom.',
+                                              )
+                                          : () => _answer(sip),
+                                    ),
+                                  ),
+                                if (!phone)
+                                  for (final photo in photos)
+                                    Expanded(child: photo),
+                                if (showRelease)
+                                  Expanded(
+                                    child: _ActionButton(
+                                      icon: releaseIcon,
+                                      mark: releaseIsGate
+                                          ? (size, color) => GateIcon(
+                                                size: size,
+                                                color: color,
+                                              )
+                                          : null,
+                                      label: releaseLabel,
+                                      color: _kCallDoor,
+                                      diameter: diameter,
+                                      loading: _releasing,
+                                      onTap: () => _release(i, sip),
+                                    ),
+                                  ),
+                              ];
                               return Column(
                                 children: [
                                   if (_notice != null || dialing)
@@ -424,73 +505,21 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                                         ),
                                       ),
                                     ),
-                                  Row(
-                                children: [
-                                  Expanded(
-                                    child: _ActionButton(
-                                      icon: Icons.call_end_rounded,
-                                      label: 'OPHANGEN',
-                                      color: _kCallHangup,
-                                      diameter: diameter,
-                                      shake: ringing,
-                                      onTap: () => _cancel(sip),
+                                  Row(children: calls),
+                                  if (phone) ...[
+                                    const SizedBox(height: 14),
+                                    Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        for (final photo in photos) ...[
+                                          photo,
+                                          if (photo != photos.last)
+                                            const SizedBox(width: 28),
+                                        ],
+                                      ],
                                     ),
-                                  ),
-                                  if (waiting)
-                                    Expanded(
-                                      child: _ActionButton(
-                                        icon: taken
-                                            ? Icons.phone_locked_outlined
-                                            : Icons.call_rounded,
-                                        label: taken ? 'BEZET' : 'OPNEMEN',
-                                        color: taken ? _kCallPhoto : _kCallAnswer,
-                                        diameter: diameter,
-                                        shake: ringing && !taken,
-                                        onTap: taken
-                                            ? () => _snack(
-                                                  'Er is al een gesprek op deze intercom.',
-                                                )
-                                            : () => _answer(sip),
-                                      ),
-                                    ),
-                                  Expanded(
-                                    child: _ActionButton(
-                                      icon: Icons.photo_camera_outlined,
-                                      label: 'FOTO',
-                                      color: _kCallPhoto,
-                                      diameter: diameter,
-                                      loading: cap.busy,
-                                      onTap: cap.takePhoto,
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: _ActionButton(
-                                      icon: Icons.photo_library_outlined,
-                                      label: "FOTO'S",
-                                      color: _kCallPhoto,
-                                      diameter: diameter,
-                                      onTap: cap.openPhotos,
-                                    ),
-                                  ),
-                                  if (showRelease)
-                                    Expanded(
-                                      child: _ActionButton(
-                                        icon: releaseIcon,
-                                        mark: releaseIsGate
-                                            ? (size, color) => GateIcon(
-                                                  size: size,
-                                                  color: color,
-                                                )
-                                            : null,
-                                        label: releaseLabel,
-                                        color: _kCallDoor,
-                                        diameter: diameter,
-                                        loading: _releasing,
-                                        onTap: () => _release(i, sip),
-                                      ),
-                                    ),
-                                ],
-                              ),
+                                  ],
                                 ],
                               );
                             },

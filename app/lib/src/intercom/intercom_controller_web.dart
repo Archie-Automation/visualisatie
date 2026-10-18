@@ -39,6 +39,8 @@ class IntercomController extends ChangeNotifier {
   bool get isStarted => _started;
   String? get dialError => null;
   void clearDialError() {}
+  void armMonitorAnswer() {}
+  void disarmMonitorAnswer() {}
 
   Future<void> startFromHouseIntercom({
     required String intercomId,

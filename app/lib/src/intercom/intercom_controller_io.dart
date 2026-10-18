@@ -41,6 +41,8 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
   bool _localTerminate = false;
   bool _outgoing = false;
   String? dialError;
+  bool _armMonitor = false;
+  Timer? _monitorTimer;
   Timer? _elsewhereTimer;
 
   IntercomSipPhase get phase => _phase;
@@ -153,6 +155,24 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
 
   void clearDialError() {
     dialError = null;
+  }
+
+  /// De DoorBird belt zo dit scherm. De inkomende oproep meteen opnemen.
+  void armMonitorAnswer() {
+    _armMonitor = true;
+    _monitorTimer?.cancel();
+    _monitorTimer = Timer(const Duration(seconds: 15), () {
+      if (!_armMonitor) return;
+      _armMonitor = false;
+      dialError = 'De DoorBird startte het gesprek niet.';
+      notifyListeners();
+    });
+  }
+
+  void disarmMonitorAnswer() {
+    _armMonitor = false;
+    _monitorTimer?.cancel();
+    _monitorTimer = null;
   }
 
   /// Bel de deur zelf, zonder dat er aangebeld is. `null` = gestart.
@@ -334,6 +354,14 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
       case CallStateEnum.PROGRESS:
         // PROGRESS is 180/183, geen antwoord. Anders slaat OPNEMEN SIP over.
         _activeCall = call;
+        if (_armMonitor && call.direction == Direction.incoming) {
+          _armMonitor = false;
+          _monitorTimer?.cancel();
+          _outgoing = true;
+          _ringAlignSentForThisCall = true;
+          unawaited(answerCall());
+          break;
+        }
         if (_phase != IntercomSipPhase.inCall) {
           _phase = IntercomSipPhase.ringing;
         }
@@ -373,10 +401,7 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
         final local = _localTerminate;
         _outgoing = false;
         if (outgoing && !local) {
-          final code = state.cause?.status_code;
-          dialError = (code == 404 || code == 480 || code == 603 || code == 604)
-              ? 'De intercom nam niet op. Zet op de DoorBird aan dat een inkomend gesprek wordt opgenomen.'
-              : 'Bellen mislukt.';
+          dialError = 'De intercom nam niet op.';
         }
         if (!outgoing && ringing && !local) {
           _onRemoteCancelWhileRinging();
@@ -415,6 +440,7 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
   @override
   void dispose() {
     registrationInFlight = false;
+    _monitorTimer?.cancel();
     _activeCall?.hangup();
     _resetCall();
     if (_listenerAttached) {
