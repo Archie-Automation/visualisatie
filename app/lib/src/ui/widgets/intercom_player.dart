@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../api.dart';
+import '../../intercom/panel_speech_audio.dart';
 import '../../media_ice.dart';
 import '../../theme.dart';
 
@@ -70,6 +71,7 @@ class _IntercomPlayerState extends ConsumerState<IntercomPlayer> {
 
   Future<void> _start() async {
     try {
+      await configurePanelSpeechAudio();
       await _renderer.initialize();
 
       // Ask for the mic eagerly – answering a call with permission prompts

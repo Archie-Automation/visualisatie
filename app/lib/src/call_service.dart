@@ -9,6 +9,7 @@ import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 
 import 'api.dart';
 import 'doorbell_ringer.dart';
+import 'inactivity_controller.dart';
 import 'proximity_wake.dart';
 import 'push_service.dart';
 
@@ -59,14 +60,19 @@ class CallService {
     }
   }
 
-  void _openFromCallkit(CallKitParams p) {
-    final id = (p.extra?['intercomId'] as String?) ?? '';
-    unawaited(FlutterCallkitIncoming.endAllCalls());
+  void _wakeAndOpenIntercom(String id) {
     if (id.isEmpty) return;
     ProximityWake.wakeScreen();
+    _ref.read(inactivityControllerProvider.notifier).registerActivity();
     final target = '/intercom/$id';
     final loc = _router?.state.uri.path;
     if (loc != target) _router?.push(target);
+  }
+
+  void _openFromCallkit(CallKitParams p) {
+    final id = (p.extra?['intercomId'] as String?) ?? '';
+    unawaited(FlutterCallkitIncoming.endAllCalls());
+    _wakeAndOpenIntercom(id);
   }
 
   void dispose() {
@@ -79,8 +85,8 @@ class CallService {
   }
 
   Future<void> showIncoming(IntercomRing ring) async {
-    ProximityWake.wakeScreen();
     _panelRingTimer?.cancel();
+    _wakeAndOpenIntercom(ring.intercomId);
     final silent =
         _ref.read(configProvider).value?.me?.doorbellSilent == true;
     if (silent) {
@@ -93,11 +99,6 @@ class CallService {
         final tone = doorbellToneValue(_ref.read(doorbellToneProvider));
         await DoorbellRinger.start(volume: volume, toneId: tone);
       }
-    }
-    final target = '/intercom/${ring.intercomId}';
-    final loc = _router?.state.uri.path;
-    if (loc != target) {
-      _router?.push(target);
     }
     final seconds =
         doorbellRingSecondsValue(_ref.read(doorbellRingSecondsProvider));

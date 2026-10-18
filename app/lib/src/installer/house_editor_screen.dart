@@ -7270,26 +7270,13 @@ class _DeviceForm extends StatelessWidget {
                 childrenPadding: EdgeInsets.zero,
                 title: const Text('Geavanceerd'),
                 subtitle: const Text(
-                  'Merk, KNX-deur, DoorBird-API, webhook — alleen als DTMF niet volstaat',
+                  'Alleen als de deur niet met de toetsencode opengaat',
                 ),
                 children: [
                   _IntercomKnxExtras(
                     device: device,
                     onChanged: onChanged,
                     getToken: getInstallerToken,
-                  ),
-                  _NestedStringFields(
-                    label: 'Extra stream-opties',
-                    jsonKey: 'intercom',
-                    device: device,
-                    fields: const ['path', 'aspect'],
-                    onChanged: onChanged,
-                  ),
-                  _RtspDeviceExtra(
-                    device: device,
-                    nestedKey: 'intercom',
-                    includeRepublish: false,
-                    onChanged: onChanged,
                   ),
                 ],
               ),
@@ -7530,7 +7517,7 @@ class _RtspDeviceExtra extends StatelessWidget {
         Text(
             nestedKey == 'camera'
                 ? 'Geavanceerd (meestal automatisch)'
-                : 'Encoder & extra stream-opties',
+                : 'Codec',
             style: Theme.of(context).textTheme.titleSmall),
         Padding(
           padding: const EdgeInsets.only(bottom: 12),
@@ -7702,7 +7689,7 @@ class _SourcesCommaFieldState extends State<_SourcesCommaField> {
     return TextField(
       controller: _c,
       decoration: const InputDecoration(
-        labelText: 'Extra bronnen (comma-gescheiden URL?s)',
+        labelText: 'Extra bronnen (kommagescheiden URL\'s)',
         border: OutlineInputBorder(),
         helperText: 'Optioneel: alternatieve streams. Sluit af met Enter om op te slaan.',
       ),
@@ -7829,26 +7816,15 @@ class _IntercomKnxExtras extends StatelessWidget {
     final doorMode = (o['releaseMode'] as String?) ?? 'knx';
     final doorViaDoorbird = doorMode == 'doorbird';
     final doorViaHttp = doorMode == 'http';
+    final rawAspect = (o['aspect'] as String?)?.trim() ?? '';
+    final aspectSel =
+        rawAspect == '4:3' || rawAspect == '16:9' ? rawAspect : 'auto';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: Text('Merk', style: Theme.of(context).textTheme.titleSmall),
-            ),
-            LuxeInfoIconButton(
-              title: 'Merk',
-              body: kind == 'unifi'
-                  ? 'UniFi Protect is meestal geen SIP-toestel. Gebruik RTSP + webhook, of UniFi Talk apart.'
-                  : kind == 'siedle' || kind == 'comelit'
-                      ? 'Alleen IP-modellen met SIP. Oudere bus-systemen (Vario/Simplebus) koppelen hier niet.'
-                      : 'Alleen nodig als de deuropener via KNX, HTTP of DoorBird-API gaat in plaats van de DTMF-code.',
-            ),
-          ],
-        ),
+        Text('Merk', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
         DropdownButtonFormField<String>(
           initialValue: kinds.containsKey(kind) ? kind : 'other',
@@ -7872,30 +7848,32 @@ class _IntercomKnxExtras extends StatelessWidget {
           },
         ),
         const SizedBox(height: 20),
-        Text('Deur / poort open',
+        Text('Deur of poort openen',
             style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 4),
+        Text(
+          'De toetsencode uit stap 1 blijft werken. Kies hier alleen een andere manier.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w400,
+                color: LuxeColors.inkSoft,
+              ),
+        ),
         const SizedBox(height: 8),
         SegmentedButton<String>(
           segments: const [
-            ButtonSegment<String>(
-              value: 'knx',
-              label: Text('KNX'),
-              icon: Icon(Icons.hub_outlined, size: 18),
-            ),
-            ButtonSegment<String>(
-              value: 'doorbird',
-              label: Text('DoorBird'),
-              icon: Icon(Icons.lock_open, size: 18),
-            ),
-            ButtonSegment<String>(
-              value: 'http',
-              label: Text('HTTP'),
-              icon: Icon(Icons.http, size: 18),
-            ),
+            ButtonSegment<String>(value: 'knx', label: Text('KNX')),
+            ButtonSegment<String>(value: 'doorbird', label: Text('DoorBird')),
+            ButtonSegment<String>(value: 'http', label: Text('Webadres')),
           ],
           emptySelectionAllowed: false,
           showSelectedIcon: false,
-          selected: {doorMode},
+          selected: {
+            doorViaDoorbird
+                ? 'doorbird'
+                : doorViaHttp
+                    ? 'http'
+                    : 'knx',
+          },
           onSelectionChanged: (Set<String> next) {
             if (next.isEmpty) return;
             o['releaseMode'] = next.first;
@@ -7903,19 +7881,12 @@ class _IntercomKnxExtras extends StatelessWidget {
           },
         ),
         const SizedBox(height: 12),
-        _BoundStrField(
-          'ga',
-          doorbell,
-          onChanged,
-          labelOverride: 'Deurbel KNX (optioneel, voor busmonitor)',
-          key: ValueKey('db-${device['id']}'),
-        ),
         if (!doorViaDoorbird && !doorViaHttp) ...[
           _BoundStrField(
             'ga',
             release,
             onChanged,
-            labelOverride: 'Deur open ? KNX schrijfadres',
+            labelOverride: 'KNX-adres',
             key: ValueKey('rel-ga-${device['id']}'),
           ),
           _BoundStrField(
@@ -7923,50 +7894,26 @@ class _IntercomKnxExtras extends StatelessWidget {
             release,
             onChanged,
             number: true,
-            labelOverride: 'Deur open ? pulsduur (ms)',
+            labelOverride: 'Pulsduur (milliseconden)',
             key: ValueKey('rel-pulse-${device['id']}'),
           ),
         ],
         if (doorViaDoorbird) ...[
-          const SizedBox(height: 8),
           Text(
-            'HTTP open-door (zelfde login als DoorBird-app indien van toepassing).',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11),
+            'Leeg laten als gebruiker en wachtwoord al in het camerastream-adres staan.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w400,
+                  color: LuxeColors.inkSoft,
+                ),
           ),
           const SizedBox(height: 8),
           _BoundStrField(
             'host',
             doorbird,
             onChanged,
-            labelOverride: 'IP of hostname',
+            labelOverride: 'IP-adres',
             key: ValueKey('dbird-host-${device['id']}'),
           ),
-          _BoundStrField(
-            'port',
-            doorbird,
-            onChanged,
-            number: true,
-            labelOverride: 'HTTP-poort (leeg = 80 of 443 bij TLS)',
-            emptyMeansRemove: true,
-            key: ValueKey('dbird-port-${device['id']}'),
-          ),
-          LuxeSwitchRow(
-          title: 'HTTPS',
-          subtitle: 'Poort 443 standaard bij TLS.',
-          value: doorbird['useTls'] == true,
-          onChanged: (v) {
-              doorbird['useTls'] = v;
-              onChanged();
-            },
-        ),
-          LuxeSwitchRow(
-          title: 'Zelfondertekend certificaat accepteren',
-          value: doorbird['insecureTls'] != false,
-          onChanged: (v) {
-              doorbird['insecureTls'] = v;
-              onChanged();
-            },
-        ),
           _BoundStrField(
             'username',
             doorbird,
@@ -7981,90 +7928,153 @@ class _IntercomKnxExtras extends StatelessWidget {
             labelOverride: 'Wachtwoord',
             key: ValueKey('dbird-pass-${device['id']}'),
           ),
-          _BoundStrField(
-            'relay',
-            doorbird,
-            onChanged,
-            labelOverride: 'Relay r= (standaard 1)',
-            key: ValueKey('dbird-relay-${device['id']}'),
-          ),
         ],
-        if (doorViaHttp) ...[
-          const SizedBox(height: 8),
-          Text(
-            'GET of POST naar een URL op het LAN (2N switch, Axis VAPIX, …). '
-            'Gebruikersnaam mag in de URL: http://user:pass@192.168.1.50/...',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11),
-          ),
+        if (doorViaHttp)
           _BoundStrField(
             'url',
             _ensureChildMap(o, 'httpRelease'),
             onChanged,
-            labelOverride: 'HTTP-URL',
+            labelOverride: 'Webadres',
+            hintText: 'http://gebruiker:wachtwoord@192.168.1.50/...',
             key: ValueKey('http-url-${device['id']}'),
           ),
-          _BoundStrField(
-            'method',
-            _ensureChildMap(o, 'httpRelease'),
-            onChanged,
-            labelOverride: 'Methode (GET of POST)',
-            key: ValueKey('http-method-${device['id']}'),
-          ),
-          _BoundStrField(
-            'body',
-            _ensureChildMap(o, 'httpRelease'),
-            onChanged,
-            labelOverride: 'Body (alleen POST, optioneel)',
-            emptyMeansRemove: true,
-            key: ValueKey('http-body-${device['id']}'),
-          ),
-        ],
         if (getToken != null) ...[
           const SizedBox(height: 12),
           _IntercomTestReleaseButton(device: device, getToken: getToken!),
         ],
         const SizedBox(height: 20),
-        Text('Bel-webhook (DoorBird / 2N ring-notificatie)',
-            style: Theme.of(context).textTheme.titleSmall),
+        Text('Beeld', style: Theme.of(context).textTheme.titleSmall),
         const SizedBox(height: 8),
-        Card(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          margin: EdgeInsets.zero,
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Configureer in DoorBird (Schedule ? HTTP(S)) of 2N (HTTP Automation):',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: 6),
-                SelectableText(
-                  'http://<server>:4000/api/webhooks/ring/${device['id'] ?? '<id>'}?passcode=<code>',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        fontFamily: 'monospace',
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Method: GET of POST. Gebruik dezelfde passcode als hieronder.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
+        SegmentedButton<String>(
+          segments: const [
+            ButtonSegment<String>(value: 'auto', label: Text('Automatisch')),
+            ButtonSegment<String>(value: '16:9', label: Text('Breedbeeld')),
+            ButtonSegment<String>(value: '4:3', label: Text('4:3')),
+          ],
+          emptySelectionAllowed: false,
+          showSelectedIcon: false,
+          selected: {aspectSel},
+          onSelectionChanged: (next) {
+            if (next.isEmpty) return;
+            if (next.first == 'auto') {
+              o.remove('aspect');
+            } else {
+              o['aspect'] = next.first;
+            }
+            onChanged();
+          },
         ),
         const SizedBox(height: 8),
-        _BoundStrField(
-          'webhookPasscode',
-          o,
-          onChanged,
-          labelOverride: 'Webhook passcode (optioneel)',
-          hintText: 'Leeg = geen beveiliging (alleen voor intern LAN)',
-          emptyMeansRemove: true,
-          key: ValueKey('webhook-pc-${device['id']}'),
+        Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.zero,
+            title: const Text('Technisch'),
+            subtitle: const Text(
+              'Poort, certificaat, codec en aanbel-link. Alleen als het standaard niet werkt.',
+            ),
+            children: [
+              _BoundStrField(
+                'ga',
+                doorbell,
+                onChanged,
+                labelOverride: 'Deurbel op de KNX-bus (optioneel)',
+                key: ValueKey('db-${device['id']}'),
+              ),
+              if (doorViaDoorbird) ...[
+                _BoundStrField(
+                  'port',
+                  doorbird,
+                  onChanged,
+                  number: true,
+                  labelOverride: 'Poort (leeg = 80)',
+                  emptyMeansRemove: true,
+                  key: ValueKey('dbird-port-${device['id']}'),
+                ),
+                _BoundStrField(
+                  'relay',
+                  doorbird,
+                  onChanged,
+                  labelOverride: 'Relais (leeg = 1)',
+                  emptyMeansRemove: true,
+                  key: ValueKey('dbird-relay-${device['id']}'),
+                ),
+                LuxeSwitchRow(
+                  title: 'Beveiligde verbinding (HTTPS)',
+                  value: doorbird['useTls'] == true,
+                  onChanged: (v) {
+                    doorbird['useTls'] = v;
+                    onChanged();
+                  },
+                ),
+                if (doorbird['useTls'] == true)
+                  LuxeSwitchRow(
+                    title: 'Eigen certificaat toestaan',
+                    value: doorbird['insecureTls'] != false,
+                    onChanged: (v) {
+                      doorbird['insecureTls'] = v;
+                      onChanged();
+                    },
+                  ),
+              ],
+              if (doorViaHttp) ...[
+                _BoundStrField(
+                  'method',
+                  _ensureChildMap(o, 'httpRelease'),
+                  onChanged,
+                  labelOverride: 'Methode (GET of POST)',
+                  key: ValueKey('http-method-${device['id']}'),
+                ),
+                _BoundStrField(
+                  'body',
+                  _ensureChildMap(o, 'httpRelease'),
+                  onChanged,
+                  labelOverride: 'Inhoud bij POST (optioneel)',
+                  emptyMeansRemove: true,
+                  key: ValueKey('http-body-${device['id']}'),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Text(
+                'Aanbel-link, als het toestel zelf moet melden dat er gebeld wordt. Bij SIP hoeft dit niet.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontWeight: FontWeight.w400,
+                      color: LuxeColors.inkSoft,
+                    ),
+              ),
+              const SizedBox(height: 6),
+              SelectableText(
+                'http://<server>:4000/api/webhooks/ring/${device['id'] ?? '<id>'}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+              ),
+              _BoundStrField(
+                'webhookPasscode',
+                o,
+                onChanged,
+                labelOverride: 'Code achter die link (optioneel)',
+                emptyMeansRemove: true,
+                key: ValueKey('webhook-pc-${device['id']}'),
+              ),
+              _BoundStrField(
+                'path',
+                o,
+                onChanged,
+                labelOverride: 'Pad in de stream-url',
+                emptyMeansRemove: true,
+                key: ValueKey('path-${device['id']}'),
+              ),
+              _RtspDeviceExtra(
+                device: device,
+                nestedKey: 'intercom',
+                includeRepublish: false,
+                onChanged: onChanged,
+              ),
+            ],
+          ),
         ),
       ],
     );

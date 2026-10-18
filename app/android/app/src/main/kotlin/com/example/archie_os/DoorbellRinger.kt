@@ -10,6 +10,7 @@ import android.media.ToneGenerator
 import android.os.Build
 import android.util.Log
 import kotlin.math.exp
+import kotlin.math.pow
 import kotlin.math.sin
 
 /**
@@ -127,13 +128,12 @@ class DoorbellRinger(private val context: Context) {
         return try {
             val afd = context.resources.openRawResourceFd(wavResId()) ?: return false
             val p = MediaPlayer()
-            // Alarmstroom, sample op vol volume. Het paneelvolume zit in de
-            // stream zelf; nog eens setVolume(gain) maakte de bel te zacht.
             p.setAudioAttributes(mediaAttrs(AudioAttributes.USAGE_ALARM))
             p.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
             afd.close()
             p.isLooping = true
-            p.setVolume(1f, 1f)
+            val amp = playbackAmplitude()
+            p.setVolume(amp, amp)
             p.prepare()
             p.start()
             player = p
@@ -147,11 +147,7 @@ class DoorbellRinger(private val context: Context) {
     private fun startPcm(): Boolean {
         val pcm = dingDongPcm(toneId)
         val tries = listOf(
-            Triple(
-                AudioAttributes.USAGE_ALARM,
-                AudioManager.STREAM_ALARM,
-                AudioAttributes.FLAG_AUDIBILITY_ENFORCED,
-            ),
+            Triple(AudioAttributes.USAGE_ALARM, AudioManager.STREAM_ALARM, 0),
             Triple(AudioAttributes.USAGE_MEDIA, AudioManager.STREAM_MUSIC, 0),
             Triple(
                 AudioAttributes.USAGE_NOTIFICATION_RINGTONE,
@@ -162,7 +158,7 @@ class DoorbellRinger(private val context: Context) {
         for ((usage, stream, flags) in tries) {
             val built = buildTrack(usage, stream, flags) ?: continue
             try {
-                built.setVolume(gain)
+                built.setVolume(playbackAmplitude())
                 built.play()
                 track = built
                 worker = Thread({ writeLoop(built, pcm) }, "doorbell-pcm").also { it.start() }
@@ -259,11 +255,6 @@ class DoorbellRinger(private val context: Context) {
             .setUsage(usage)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .setLegacyStreamType(stream)
-            .apply {
-                if (usage == AudioAttributes.USAGE_ALARM) {
-                    setFlags(AudioAttributes.FLAG_AUDIBILITY_ENFORCED)
-                }
-            }
             .build()
     }
 
@@ -302,27 +293,28 @@ class DoorbellRinger(private val context: Context) {
         }
     }
 
+    /**
+     * De alarmstream heeft op veel panelen 7 trappen; de eerste is al keihard.
+     * Die stream blijft op maximum. De schuif zit in [playbackAmplitude].
+     */
     private fun boost() {
         if (saved.isNotEmpty()) return
         val am = audio() ?: return
-        val streams = intArrayOf(
-            AudioManager.STREAM_MUSIC,
-            AudioManager.STREAM_ALARM,
-            AudioManager.STREAM_RING,
-            AudioManager.STREAM_NOTIFICATION,
-            AudioManager.STREAM_SYSTEM,
-        )
-        for (stream in streams) {
-            try {
-                val max = am.getStreamMaxVolume(stream)
-                if (max <= 0) continue
-                val cur = am.getStreamVolume(stream)
-                saved.add(stream to cur)
-                val scaled = (max * gain).toInt().coerceAtLeast(1).coerceAtMost(max)
-                if (cur < scaled) am.setStreamVolume(stream, scaled, 0)
-            } catch (_: Exception) {
-            }
+        val stream = AudioManager.STREAM_ALARM
+        try {
+            val max = am.getStreamMaxVolume(stream)
+            if (max <= 0) return
+            saved.add(stream to am.getStreamVolume(stream))
+            am.setStreamVolume(stream, max, 0)
+        } catch (_: Exception) {
         }
+    }
+
+    /** Schuif 0..1 naar amplitude. Midden is ongeveer −18 dB, niet al vol. */
+    private fun playbackAmplitude(): Float {
+        if (gain <= 0.001f) return 0f
+        val db = -36.0 * (1.0 - gain)
+        return 10.0.pow(db / 20.0).toFloat().coerceIn(0f, 1f)
     }
 
     private fun restore() {

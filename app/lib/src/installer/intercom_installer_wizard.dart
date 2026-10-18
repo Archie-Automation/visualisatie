@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../intercom/intercom_release_ui.dart';
 import '../theme.dart';
 import '../ui/widgets/confirm_dialog.dart';
+import '../ui/widgets/gate_icon.dart';
 import '../ui/widgets/luxe_form.dart';
 import 'installer_api.dart';
 import 'intercom_sip_config.dart';
@@ -269,16 +270,21 @@ class IntercomDeviceSetupCard extends StatelessWidget {
           Align(
             alignment: Alignment.centerLeft,
             child: SegmentedButton<String>(
-              segments: const [
-                ButtonSegment<String>(
+              segments: [
+                const ButtonSegment<String>(
                   value: 'door',
                   label: Text('Deur'),
                   icon: Icon(Icons.door_front_door_outlined, size: 18),
                 ),
                 ButtonSegment<String>(
                   value: 'gate',
-                  label: Text('Poort'),
-                  icon: Icon(Icons.fence_outlined, size: 18),
+                  label: const Text('Poort'),
+                  icon: Builder(
+                    builder: (context) => GateIcon(
+                      size: 18,
+                      color: IconTheme.of(context).color ?? LuxeColors.ink,
+                    ),
+                  ),
                 ),
               ],
               emptySelectionAllowed: false,

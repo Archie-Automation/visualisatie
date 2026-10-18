@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'src/api.dart';
 import 'src/app.dart';
 import 'src/app_bootstrap.dart';
+import 'src/intercom/panel_speech_audio.dart';
 import 'src/kiosk_system_ui.dart';
 import 'src/theme.dart';
 
@@ -29,6 +30,8 @@ Future<void> main() async {
 
   debugPrint('[boot] kiosk-ui');
   await applyAndroidKioskSystemUi();
+  // Vóór de eerste camera of intercom, anders blijft spraak op het bel-volume.
+  await configurePanelSpeechAudio();
   debugPrint('[boot] api-base');
   await loadApiBaseOverride();
   debugPrint('[boot] server-route');

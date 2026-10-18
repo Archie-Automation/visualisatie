@@ -17,6 +17,7 @@ import 'responsive.dart';
 import 'widgets/camera_snapshot.dart';
 import 'widgets/confirm_dialog.dart';
 import 'widgets/function_screen_header.dart';
+import 'widgets/gate_icon.dart';
 import 'widgets/intercom_capture_overlay.dart';
 import 'widgets/intercom_player.dart';
 import 'widgets/live_video_stage.dart';
@@ -228,11 +229,11 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
             // go2rtc alleen beeld. Anders claimt de UI "spreken" zonder mic.
             final sipLive = sip.phase == IntercomSipPhase.ringing ||
                 sip.phase == IntercomSipPhase.inCall;
+            final releaseIsGate =
+                !_opened && intercomReleaseIsGate(intercomRaw);
             final releaseIcon = _opened
                 ? Icons.check_rounded
-                : (intercomReleaseIsGate(intercomRaw)
-                    ? Icons.fence_outlined
-                    : Icons.door_front_door_outlined);
+                : Icons.door_front_door_outlined;
             final releaseLabel = intercomReleaseActionLabel(intercomRaw);
             final hPad = phone ? 12.0 : 16.0;
             final stagePad = EdgeInsets.fromLTRB(hPad, 4, hPad, 8);
@@ -373,6 +374,12 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                                     Expanded(
                                       child: _ActionButton(
                                         icon: releaseIcon,
+                                        mark: releaseIsGate
+                                            ? (size, color) => GateIcon(
+                                                  size: size,
+                                                  color: color,
+                                                )
+                                            : null,
                                         label: releaseLabel,
                                         color: _kCallDoor,
                                         diameter: diameter,
@@ -486,11 +493,13 @@ class _ActionButton extends StatelessWidget {
     required this.label,
     required this.color,
     required this.onTap,
+    this.mark,
     this.diameter = 72,
     this.loading = false,
     this.shake = false,
   });
   final IconData icon;
+  final Widget Function(double size, Color color)? mark;
   final String label;
   final Color color;
   final VoidCallback onTap;
@@ -527,7 +536,9 @@ class _ActionButton extends StatelessWidget {
                   ),
                 ),
               )
-            : Icon(icon, color: _kCallOnFill, size: diameter * 0.42),
+            : (mark != null
+                ? Center(child: mark!(diameter * 0.52, _kCallOnFill))
+                : Icon(icon, color: _kCallOnFill, size: diameter * 0.42)),
       ),
     );
     return Column(

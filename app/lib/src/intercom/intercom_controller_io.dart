@@ -7,6 +7,7 @@ import 'package:sip_ua/sip_ua.dart';
 
 import '../api.dart';
 import 'intercom_sip_types.dart';
+import 'panel_speech_audio.dart';
 
 typedef IntercomRingAlignCallback = void Function(IntercomRing ring);
 
@@ -164,6 +165,7 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
     final mediaConstraints = <String, dynamic>{'audio': true, 'video': false};
 
     try {
+      await configurePanelSpeechAudio();
       final mediaStream =
           await navigator.mediaDevices.getUserMedia(mediaConstraints);
       _localStream = mediaStream;

@@ -505,6 +505,21 @@ class _FloorBrowseHeader extends StatelessWidget {
   }
 }
 
+/// Gebouw- en verdiepingchips. In licht modus iets minder vet en donkergrijs.
+TextStyle _scopeChipLabel(BuildContext context, {required bool selected}) {
+  final light = Theme.of(context).brightness == Brightness.light;
+  return Theme.of(context).textTheme.labelLarge!.copyWith(
+        height: 1.0,
+        fontSize: context.isPhone ? 16 : 15,
+        color: light
+            ? (selected ? const Color(0xFF3E3D39) : const Color(0xFF5C5A55))
+            : (selected ? LuxeColors.ink : LuxeColors.inkSoft),
+        fontWeight: light
+            ? (selected ? FontWeight.w500 : FontWeight.w400)
+            : (selected ? FontWeight.w600 : FontWeight.w500),
+      );
+}
+
 /// Horizontale gebouwkiezer. Zelfde chips als verdiepingen, erboven.
 class _BuildingTabBar extends ConsumerWidget {
   const _BuildingTabBar({
@@ -586,16 +601,7 @@ class _BuildingTabBar extends ConsumerWidget {
                         applyHeightToFirstAscent: false,
                         applyHeightToLastDescent: false,
                       ),
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            height: 1.0,
-                            fontSize: context.isPhone ? 16 : 15,
-                            color: selected
-                                ? LuxeColors.ink
-                                : LuxeColors.inkSoft,
-                            fontWeight: selected
-                                ? FontWeight.w600
-                                : FontWeight.w500,
-                          ),
+                      style: _scopeChipLabel(context, selected: selected),
                     ),
                   ),
                 ),
@@ -781,16 +787,7 @@ class _FloorTabBar extends ConsumerWidget {
                         applyHeightToFirstAscent: false,
                         applyHeightToLastDescent: false,
                       ),
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            height: 1.0,
-                            fontSize: context.isPhone ? 16 : 15,
-                            color: selected
-                                ? LuxeColors.ink
-                                : LuxeColors.inkSoft,
-                            fontWeight: selected
-                                ? FontWeight.w600
-                                : FontWeight.w500,
-                          ),
+                      style: _scopeChipLabel(context, selected: selected),
                     ),
                   ),
                 ),
