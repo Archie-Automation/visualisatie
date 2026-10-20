@@ -1,3 +1,5 @@
+import { detectLanInterface } from "../remoteAccess";
+
 /** Hostname/IP that SIP clients should use as registrar. */
 export function parseVoipHost(raw: string | undefined | null): string | null {
   const t = (raw ?? "").trim();
@@ -10,6 +12,13 @@ export function parseVoipHost(raw: string | undefined | null): string | null {
   }
   const stripped = t.replace(/^\[|\]$/g, "").replace(/:\d+$/, "");
   return stripped || null;
+}
+
+/** Adres dat de deur en de panelen voor SIP gebruiken. Lege voip.host → LAN-IP van deze server. */
+export function sipAdvertiseHost(cfg: {
+  voip?: { host?: string | null };
+}): string | null {
+  return parseVoipHost(cfg.voip?.host) || detectLanInterface()?.address || null;
 }
 
 export function isLoopbackHost(host: string): boolean {

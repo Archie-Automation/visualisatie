@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../api.dart';
 import '../camera_api.dart';
+import '../inactivity_controller.dart';
 import '../installer/intercom_sip_config.dart';
 import '../intercom/intercom_controller.dart';
 import '../intercom/intercom_release_ui.dart';
@@ -48,6 +49,8 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
   bool _claimed = false;
   String? _notice;
   bool _callWasLive = false;
+  Timer? _homeTimer;
+  bool _homeQueued = false;
 
   bool _isRinging({
     required IntercomRing? ring,
@@ -147,9 +150,64 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
     }
   }
 
-  void _cancel(IntercomController sip) {
+  bool _callStillLive() {
+    if (_inConversation) return true;
+    final sip = ref.read(intercomSipControllerProvider);
+    final ring = ref.read(intercomRingProvider);
+    return sip.phase == IntercomSipPhase.ringing ||
+        sip.phase == IntercomSipPhase.inCall ||
+        (ring != null &&
+            ring.intercomId == widget.intercomId &&
+            !ring.answeredElsewhere);
+  }
+
+  void _goHomeNow() {
     if (_closing) return;
     _closing = true;
+    _homeTimer?.cancel();
+    _homeTimer = null;
+    if (!mounted) return;
+    context.go('/');
+  }
+
+  /// Na ophangen het beeld nog even laten staan, dan pas het beginscherm.
+  void _scheduleHome() {
+    if (_homeTimer != null || _closing) return;
+    ref.read(inactivityControllerProvider.notifier).registerActivity();
+    _homeTimer = Timer(const Duration(seconds: 5), () {
+      _homeTimer = null;
+      if (!mounted || _closing) return;
+      if (_callStillLive()) return;
+      unawaited(_releaseClaim());
+      final ringNow = ref.read(intercomRingProvider);
+      if (ringNow != null && ringNow.intercomId == widget.intercomId) {
+        ref.read(intercomRingProvider.notifier).clear();
+      }
+      _goHomeNow();
+    });
+  }
+
+  void _queueHome() {
+    if (_homeQueued || _homeTimer != null || _closing) return;
+    _homeQueued = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _homeQueued = false;
+      if (!mounted || _closing || _homeTimer != null) return;
+      if (_callStillLive()) return;
+      _scheduleHome();
+    });
+  }
+
+  void _cancel(IntercomController sip) {
+    if (_homeTimer != null) {
+      _goHomeNow();
+      return;
+    }
+    if (_closing) return;
+    final live = _callWasLive ||
+        _inConversation ||
+        sip.phase == IntercomSipPhase.inCall ||
+        sip.phase == IntercomSipPhase.ringing;
     sip.disarmMonitorAnswer();
     unawaited(_releaseClaim());
     if (sip.phase == IntercomSipPhase.ringing) {
@@ -158,7 +216,12 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
       sip.hangup();
     }
     ref.read(intercomRingProvider.notifier).clear();
-    if (mounted) appBack(context);
+    if (!live) {
+      _closing = true;
+      if (mounted) appBack(context);
+      return;
+    }
+    _scheduleHome();
   }
 
   void _ensureSipUaFromConfig() {
@@ -181,6 +244,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
   @override
   void dispose() {
     _openedTimer?.cancel();
+    _homeTimer?.cancel();
     super.dispose();
   }
 
@@ -290,26 +354,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
             !ringLive &&
             !placing &&
             !otherDoor) {
-          _closing = true;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!mounted) return;
-            final sipNow = ref.read(intercomSipControllerProvider);
-            final ringNow = ref.read(intercomRingProvider);
-            final stillLive = sipNow.phase == IntercomSipPhase.ringing ||
-                sipNow.phase == IntercomSipPhase.inCall ||
-                (ringNow != null &&
-                    ringNow.intercomId == widget.intercomId &&
-                    !ringNow.answeredElsewhere);
-            if (stillLive) {
-              _closing = false;
-              return;
-            }
-            unawaited(_releaseClaim());
-            if (ringNow != null && ringNow.intercomId == widget.intercomId) {
-              ref.read(intercomRingProvider.notifier).clear();
-            }
-            context.go('/');
-          });
+          _queueHome();
         }
 
         final title = info.maybeWhen(

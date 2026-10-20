@@ -106,7 +106,7 @@ import {
   warmGo2rtcProducer
 } from "./cameraSnapshot";
 import { syncGo2rtcProcessAfterConfigWritten } from "./go2rtcSpawn";
-import { doorbirdMakeCall } from "./doorbirdRelease";
+import { doorbirdAllowIncoming, doorbirdMakeCall } from "./doorbirdRelease";
 import { iceBundleFor, remoteUrl, serverId } from "./remoteAccess";
 import {
   claimPairCode,
@@ -148,7 +148,7 @@ import {
   validateLutronLoadOutputSemantics
 } from "./houseValidate";
 import { mergeVoipSecrets, normalizeVoip } from "./voip/normalize";
-import { parseVoipHost } from "./voip/host";
+import { parseVoipHost, sipAdvertiseHost } from "./voip/host";
 import { randomSipPassword } from "./voip/secrets";
 import { asteriskProcessStatus } from "./voip/asteriskProcess";
 import {
@@ -1800,7 +1800,7 @@ export function buildRouter(
     }
     if (ic.intercom.kind === "doorbird") {
       const ep = resolveUserEndpoint(cfg, holder);
-      const host = parseVoipHost(cfg.voip?.host);
+      const host = sipAdvertiseHost(cfg);
       const panelExt = ep?.ext?.trim() ?? "";
       if (!panelExt || !host) {
         releaseIntercomLine(ic.id, holder);
@@ -1816,6 +1816,18 @@ export function buildRouter(
           error: "Dit scherm is niet aangemeld op de belcentrale.",
           state: "idle"
         });
+      }
+      // De deur zelf bellen. Inkomend aanzetten, anders neemt de DoorBird niet op.
+      // Staat de deur niet op de centrale, dan laat de deur dit paneel terugbellen.
+      const doorRegistered =
+        !voipAmiUp() || regs.length === 0 || regs.includes(ext);
+      if (doorRegistered) {
+        try {
+          await doorbirdAllowIncoming(ic, host);
+          return res.json({ state: "dialing", target: ext });
+        } catch (err) {
+          logger.warn({ err, id: ic.id }, "DoorBird inkomend gesprek niet gezet");
+        }
       }
       try {
         await doorbirdMakeCall(ic, `sip:${panelExt}@${host}`);

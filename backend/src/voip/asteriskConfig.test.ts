@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { HouseConfig, IntercomDevice } from "../types";
-import { buildDoorRingContext } from "./asteriskConfig";
+import { buildAsteriskFiles, buildDoorRingContext } from "./asteriskConfig";
 
 const door = {
   id: "dev-ic-1",
@@ -44,5 +44,23 @@ describe("buildDoorRingContext", () => {
     const catchAll = ctx.indexOf("exten => _X.,1,Goto(s,1)");
     assert.ok(monitorAt >= 0 && monitorAt < monitorAnswer);
     assert.ok(monitorAnswer < monitorDial && monitorDial < catchAll);
+  });
+
+  it("dials the door as pbx so the DoorBird accepts the invite", () => {
+    const cfg = {
+      intercoms: [door],
+      voip: {
+        enabled: true,
+        host: "192.168.1.50",
+        groups: [{ id: "grp-1", name: "Huis", ext: "901", memberIds: ["ep-1"] }],
+        endpoints: [{ id: "ep-1", ext: "201", name: "Paneel", password: "x", type: "panel" }]
+      }
+    } as unknown as HouseConfig;
+    const files = buildAsteriskFiles(cfg);
+    assert.match(files["pjsip.conf"], /from_user=pbx/);
+    assert.match(files["pjsip.conf"], /from_domain=192.168.1.50/);
+    assert.match(files["extensions.conf"], /exten => 900,1,NoOp\(Bel deur 900\)/);
+    assert.match(files["extensions.conf"], /Set\(CALLERID\(num\)=pbx\)/);
+    assert.match(files["extensions.conf"], /Dial\(PJSIP\/900,45,r\)/);
   });
 });

@@ -4,6 +4,8 @@ import type { HouseConfig, IntercomDevice, VoipEndpoint } from "../types";
 import { astSafe } from "./secrets";
 import { intercomRingTargets } from "./ringTargets";
 import { localNets, turnCredentials } from "../remoteAccess";
+import { DOORBIRD_INCOMING_USER } from "../doorbirdRelease";
+import { sipAdvertiseHost } from "./host";
 
 export function asteriskConfDir(): string {
   return (
@@ -29,11 +31,20 @@ function pjsipEndpointBlock(opts: {
   password: string;
   webrtc: boolean;
   context: string;
+  fromUser?: string;
+  fromDomain?: string;
 }): string {
   const ext = astSafe(opts.ext);
   const name = astSafe(opts.name);
   const password = astSafe(opts.password);
   const context = astSafe(opts.context);
+  const fromUser = astSafe(opts.fromUser ?? "");
+  const fromDomain = astSafe(opts.fromDomain ?? "");
+  const from =
+    fromUser.length > 0
+      ? `from_user=${fromUser}
+${fromDomain.length > 0 ? `from_domain=${fromDomain}\n` : ""}`
+      : "";
   const media = opts.webrtc
     ? `webrtc=yes
 dtls_auto_generate_cert=yes
@@ -55,7 +66,7 @@ context=${context}
 disallow=all
 allow=ulaw,alaw,opus,h264
 dtmf_mode=rfc4733
-${media}auth=${ext}
+${media}${from}auth=${ext}
 aors=${ext}
 callerid="${name}" <${ext}>
 
@@ -352,7 +363,10 @@ ${(cfg.intercoms ?? [])
       name: ic.name,
       password: ic.intercom.sipPassword!,
       webrtc: false,
-      context: doorContextName(ic)
+      context: doorContextName(ic),
+      // Zelfde user als incoming_call_user op de DoorBird, anders weigert de deur.
+      fromUser: DOORBIRD_INCOMING_USER,
+      fromDomain: sipAdvertiseHost(cfg) ?? undefined
     })
   )
   .join("\n")}
@@ -376,12 +390,28 @@ ${(cfg.intercoms ?? [])
 `);
   }
 
+  const groupExts = new Set(
+    (v.groups ?? []).map((g) => astSafe(g.ext)).filter((ext) => ext.length > 0)
+  );
+  const doorDials: string[] = [];
+  for (const ic of cfg.intercoms ?? []) {
+    const ext = astSafe(ic.intercom.sipExt ?? "");
+    if (!ext || groupExts.has(ext)) continue;
+    // CallerID op de user die de DoorBird als inkomende beller toestaat.
+    doorDials.push(`exten => ${ext},1,NoOp(Bel deur ${ext})
+ same => n,Set(CALLERID(num)=${DOORBIRD_INCOMING_USER})
+ same => n,Dial(PJSIP/${ext},45,r)
+ same => n,Hangup()
+`);
+  }
+
   files["extensions.conf"] = `[general]
 static=yes
 writeprotect=yes
 
 [from-internal]
 ${groupExtens.join("\n")}
+${doorDials.join("\n")}
 exten => _X.,1,Dial(PJSIP/\${EXTEN},45,r)
  same => n,Hangup()
 
