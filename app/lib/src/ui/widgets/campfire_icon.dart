@@ -75,7 +75,7 @@ class _CampfireIconState extends State<CampfireIcon>
   Widget _mark(double scale) {
     // Het Material-vlammetje heeft eigen witruimte; groter tekenen dan het
     // vak, anders oogt de haard kleiner dan de split-unit ernaast.
-    final flame = widget.size * (widget.status ? 0.96 : 1.0);
+    final flame = widget.size * (widget.status ? 0.88 : 0.92);
     return Stack(
       fit: StackFit.expand,
       clipBehavior: Clip.none,
@@ -87,7 +87,8 @@ class _CampfireIconState extends State<CampfireIcon>
           ),
         ),
         Align(
-          alignment: Alignment(0, widget.status ? -0.70 : -0.80),
+          // Tegen de bovenrand: zo blijft er net lucht boven de stronken.
+          alignment: const Alignment(0, -1),
           child: Transform.scale(
             scale: scale,
             alignment: Alignment.bottomCenter,
@@ -146,8 +147,8 @@ class _CampfireLogsPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     // Onderkant op de lamp-keyline (halve pen eraf), kruis net onder de vlam.
-    final top = status ? 0.78 : 0.82;
-    final bottom = status ? 0.90 : 0.95;
+    final top = status ? 0.83 : 0.86;
+    final bottom = status ? 0.92 : 0.96;
     canvas.drawLine(
       Offset(w * 0.16, h * top),
       Offset(w * 0.84, h * bottom),
