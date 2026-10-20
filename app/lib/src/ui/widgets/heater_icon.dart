@@ -210,14 +210,14 @@ class _HeaterIconPainter extends CustomPainter {
     final rayR = innerR - (innerR - innerL) * 0.10;
     // Zachte golf: breed genoeg om te lezen, smal genoeg om niet te klonteren.
     final amp = math.min(s * 0.028, rayH * 0.16);
+    // Alle straaltjes exact synchroon: zelfde fase, zelfde drift, zelfde alpha.
+    final phase = animate ? t * math.pi * 2 : 0.0;
+    final drift = animate ? t : 0.0;
+    final alpha = animate ? 0.45 + 0.55 * (1 - (drift * 2 - 1).abs()) : 1.0;
+    rayPaint.color = color.withValues(alpha: color.a * alpha);
+    final shift = animate ? (drift - 0.5) * rayH * 0.14 : 0.0;
     for (var i = 0; i < rays; i++) {
       final cx = rayL + (rayR - rayL) * i / (rays - 1);
-      final phase = animate ? t * math.pi * 2 + i * 1.9 : i * 1.2;
-      // Elk straaltje schuift omhoog en komt onderaan vager terug.
-      final drift = animate ? ((t + i / rays) % 1.0) : 0.0;
-      final alpha = animate ? 0.45 + 0.55 * (1 - (drift * 2 - 1).abs()) : 1.0;
-      rayPaint.color = color.withValues(alpha: color.a * alpha);
-      final shift = animate ? (drift - 0.5) * rayH * 0.14 : 0.0;
       canvas.drawPath(
         _heatRay(
           cx: cx,
