@@ -49,15 +49,20 @@ class SceneStrip extends ConsumerWidget {
 
   final ScrollController? scrollController;
 
+  /// Chip (124) plus verticale padding; het dashboard reserveert dit ook
+  /// voor een gebouw zonder scenes.
+  static const double stripHeight = 124 + _vPad * 2;
+  static const double _vPad = 10;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final count = scenes.length + (canEdit ? 1 : 0);
     if (count == 0) return const SizedBox.shrink();
 
-    const double vPad = 10;
+    const double vPad = _vPad;
     final hPad = context.hPad;
     return SizedBox(
-      height: 124 + vPad * 2,
+      height: stripHeight,
       child: ListView.separated(
         controller: scrollController,
         scrollDirection: Axis.horizontal,

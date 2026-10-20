@@ -385,6 +385,9 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
             ),
           )
         else if (showBuildings || floors.isNotEmpty) ...[
+          const SliverToBoxAdapter(
+            child: _SectionTitleRow(title: 'RUIMTES', bottom: 6),
+          ),
           if (showBuildings)
             SliverToBoxAdapter(
               child: _BuildingTabBar(
@@ -822,7 +825,10 @@ class _FloorsHomeBand extends StatelessWidget {
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Zelfde kopregel als Scenes en Systemen.
+          const _SectionTitleRow(title: 'RUIMTES', bottom: 6),
           if (showBuildings)
             _BuildingTabBar(
               buildings: buildings,
@@ -1553,6 +1559,86 @@ Widget _header(
   );
 }
 
+/// Kopregel boven Scenes, Systemen en Ruimtes. Vaste hoogte (die van het
+/// icoon rechts), ook zonder icoon: anders verspringt de titel per gebouw.
+class _SectionTitleRow extends StatelessWidget {
+  const _SectionTitleRow({
+    required this.title,
+    this.trailingIcon,
+    this.onTrailingTap,
+    this.bottom = 14,
+  });
+
+  final String title;
+  final IconData? trailingIcon;
+  final VoidCallback? onTrailingTap;
+  final double bottom;
+
+  static double iconSize(BuildContext context) => context.isPhone ? 26 : 32;
+
+  @override
+  Widget build(BuildContext context) {
+    final hp = context.hPad;
+    final size = iconSize(context);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(hp, 0, hp, bottom),
+      child: SizedBox(
+        height: size,
+        child: Row(
+          children: [
+            Text(
+              title,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    fontSize: context.isPhone ? 16 : 15,
+                  ),
+            ),
+            const Spacer(),
+            if (trailingIcon != null)
+              GestureDetector(
+                onTap: onTrailingTap,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Icon(
+                    trailingIcon,
+                    size: size,
+                    color: LuxeColors.inkSoft.withValues(alpha: 0.85),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Lege strook met dezelfde hoogte als de echte, zodat een gebouw zonder
+/// scenes of systemen de rest van het scherm niet laat opschuiven.
+class _EmptyStripNote extends StatelessWidget {
+  const _EmptyStripNote({required this.height, required this.text});
+  final double height;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: height,
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: context.hPad),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            text,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: LuxeColors.inkSoft,
+                ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 Widget _scenes(
   BuildContext context,
   HouseConfig cfg,
@@ -1562,62 +1648,49 @@ Widget _scenes(
   String? buildingId,
 }) {
   final scenes = cfg.scenesIn(buildingId);
-  if (scenes.isEmpty && !canEdit) return const SizedBox.shrink();
-  final hp = context.hPad;
+  // Meerdere gebouwen: blok altijd even hoog, ook zonder scenes.
+  final keepHeight = cfg.scopedBuildingId(buildingId) != null;
+  if (scenes.isEmpty && !canEdit && !keepHeight) {
+    return const SizedBox.shrink();
+  }
   final order = ref.watch(sceneOrderProvider);
   final ordered = applySceneOrder(order, scenes);
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Padding(
-        padding: EdgeInsets.fromLTRB(hp, 0, hp, 14),
-        child: Row(
-          children: [
-            Text(
-              'SCENES',
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    fontSize: context.isPhone ? 16 : 15,
-                  ),
-            ),
-            if (scenes.length > 1) ...[
-              const Spacer(),
-              GestureDetector(
-                onTap: () => showModalBottomSheet<void>(
-                  context: context,
-                  isScrollControlled: true,
-                  useSafeArea: true,
-                  backgroundColor: Colors.transparent,
-                  builder: (_) => _SceneReorderSheet(
-                    scenes: ordered,
-                    onReordered: (ids) =>
-                        ref.read(sceneOrderProvider.notifier).reorder(
-                              mergeVisibleOrder(
-                                ref.read(sceneOrderProvider),
-                                ids,
-                              ),
-                            ),
-                  ),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: Icon(
-                    Icons.sort_rounded,
-                    size: context.isPhone ? 26 : 32,
-                    color: LuxeColors.inkSoft.withValues(alpha: 0.85),
-                  ),
-                ),
-              ),
-            ],
-          ],
+      _SectionTitleRow(
+        title: 'SCENES',
+        trailingIcon: scenes.length > 1 ? Icons.sort_rounded : null,
+        onTrailingTap: () => showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          useSafeArea: true,
+          backgroundColor: Colors.transparent,
+          builder: (_) => _SceneReorderSheet(
+            scenes: ordered,
+            onReordered: (ids) =>
+                ref.read(sceneOrderProvider.notifier).reorder(
+                      mergeVisibleOrder(
+                        ref.read(sceneOrderProvider),
+                        ids,
+                      ),
+                    ),
+          ),
         ),
       ),
-      SceneStrip(
-        scenes: ordered,
-        canEdit: canEdit,
-        scrollController: scrollController,
-        buildingId: buildingId,
-        onEdited: (_) => ref.invalidate(configProvider),
-      ),
+      if (scenes.isEmpty && !canEdit)
+        const _EmptyStripNote(
+          height: SceneStrip.stripHeight,
+          text: 'Geen scenes in dit gebouw',
+        )
+      else
+        SceneStrip(
+          scenes: ordered,
+          canEdit: canEdit,
+          scrollController: scrollController,
+          buildingId: buildingId,
+          onEdited: (_) => ref.invalidate(configProvider),
+        ),
       const SizedBox(height: 24),
     ],
   );
@@ -1759,7 +1832,9 @@ class _Systemen extends ConsumerWidget {
       ));
     }
 
-    if (chips.isEmpty) return const SizedBox.shrink();
+    // Meerdere gebouwen: blok altijd even hoog, ook zonder systemen.
+    final keepHeight = cfg.scopedBuildingId(buildingId) != null;
+    if (chips.isEmpty && !keepHeight) return const SizedBox.shrink();
 
     // Pas volgorde en zichtbaarheid toe.
     final sysOrder = ref.watch(systemOrderProvider);
@@ -1779,37 +1854,24 @@ class _Systemen extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(context.hPad, 0, context.hPad, 16),
-            child: Row(
-              children: [
-                Text(
-                  'SYSTEMEN',
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        fontSize: context.isPhone ? 16 : 15,
-                      ),
-                ),
-                const Spacer(),
-                GestureDetector(
-                  onTap: () => _openManageSheet(
-                    context,
-                    ref,
-                    allOrderedChips,
-                    sysHidden,
-                    _chipKey,
-                  ),
-                  child: Padding(
-                    padding: EdgeInsets.only(left: 8),
-                    child: Icon(
-                      Icons.tune_rounded,
-                      size: context.isPhone ? 26 : 32,
-                      color: LuxeColors.inkSoft.withValues(alpha: 0.85),
-                    ),
-                  ),
-                ),
-              ],
+          _SectionTitleRow(
+            title: 'SYSTEMEN',
+            bottom: 16,
+            trailingIcon: chips.isEmpty ? null : Icons.tune_rounded,
+            onTrailingTap: () => _openManageSheet(
+              context,
+              ref,
+              allOrderedChips,
+              sysHidden,
+              _chipKey,
             ),
           ),
+          if (chips.isEmpty)
+            const _EmptyStripNote(
+              height: chipH + vPad * 2,
+              text: 'Geen systemen in dit gebouw',
+            )
+          else
           SizedBox(
             height: chipH + vPad * 2,
             child: (!kIsWeb && !context.isPhone)
