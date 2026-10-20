@@ -106,7 +106,7 @@ import {
   warmGo2rtcProducer
 } from "./cameraSnapshot";
 import { syncGo2rtcProcessAfterConfigWritten } from "./go2rtcSpawn";
-import { doorbirdAllowIncoming, doorbirdMakeCall } from "./doorbirdRelease";
+import { doorbirdMakeCall } from "./doorbirdRelease";
 import { iceBundleFor, remoteUrl, serverId } from "./remoteAccess";
 import {
   claimPairCode,
@@ -1817,18 +1817,8 @@ export function buildRouter(
           state: "idle"
         });
       }
-      // De deur zelf bellen. Inkomend aanzetten, anders neemt de DoorBird niet op.
-      // Staat de deur niet op de centrale, dan laat de deur dit paneel terugbellen.
-      const doorRegistered =
-        !voipAmiUp() || regs.length === 0 || regs.includes(ext);
-      if (doorRegistered) {
-        try {
-          await doorbirdAllowIncoming(ic, host);
-          return res.json({ state: "dialing", target: ext });
-        } catch (err) {
-          logger.warn({ err, id: ic.id }, "DoorBird inkomend gesprek niet gezet");
-        }
-      }
+      // De DoorBird neemt een INVITE niet op. Zij belt dit paneel; dat neemt meteen op.
+      // Geen sip.cgi?action=settings: dat herschrijft de SIP-config en laat de poort stuk.
       try {
         await doorbirdMakeCall(ic, `sip:${panelExt}@${host}`);
       } catch (err) {

@@ -42,6 +42,7 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
   bool _outgoing = false;
   String? dialError;
   bool _armMonitor = false;
+  int _armGen = 0;
   Timer? _monitorTimer;
   Timer? _elsewhereTimer;
 
@@ -160,6 +161,7 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
   /// De DoorBird belt zo dit scherm. De inkomende oproep meteen opnemen.
   void armMonitorAnswer() {
     _armMonitor = true;
+    _armGen++;
     _monitorTimer?.cancel();
     _monitorTimer = Timer(const Duration(seconds: 25), () {
       if (!_armMonitor) return;
@@ -171,8 +173,24 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
 
   void disarmMonitorAnswer() {
     _armMonitor = false;
+    _armGen++;
     _monitorTimer?.cancel();
     _monitorTimer = null;
+  }
+
+  /// Antwoord buiten de SIP-callback. Meteen answer() slikt sip_ua soms.
+  void _maybeAutoAnswer() {
+    if (!_armMonitor) return;
+    final gen = _armGen;
+    _armMonitor = false;
+    _outgoing = true;
+    _ringAlignSentForThisCall = true;
+    unawaited(() async {
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      if (gen != _armGen) return;
+      _monitorTimer?.cancel();
+      await answerCall();
+    }());
   }
 
   /// Bel de deur zelf, zonder dat er aangebeld is. `null` = gestart.
@@ -358,13 +376,8 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
       case CallStateEnum.PROGRESS:
         // PROGRESS is 180/183, geen antwoord. Anders slaat OPNEMEN SIP over.
         _activeCall = call;
-        if (_armMonitor &&
-            (call.direction == Direction.incoming || !_outgoing)) {
-          _armMonitor = false;
-          _monitorTimer?.cancel();
-          _outgoing = true;
-          _ringAlignSentForThisCall = true;
-          unawaited(answerCall());
+        if (_armMonitor) {
+          _maybeAutoAnswer();
           break;
         }
         if (_phase != IntercomSipPhase.inCall) {
@@ -387,6 +400,7 @@ class IntercomController extends ChangeNotifier implements SipUaHelperListener {
         break;
       case CallStateEnum.CONNECTING:
         _activeCall = call;
+        if (_armMonitor) _maybeAutoAnswer();
         break;
       case CallStateEnum.ACCEPTED:
       case CallStateEnum.CONFIRMED:

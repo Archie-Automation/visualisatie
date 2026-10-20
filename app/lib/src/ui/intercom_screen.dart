@@ -49,6 +49,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
   bool _claimed = false;
   String? _notice;
   bool _callWasLive = false;
+  bool _hungUp = false;
   Timer? _homeTimer;
   bool _homeQueued = false;
 
@@ -96,6 +97,11 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
   }
 
   Future<void> _answer(IntercomController sip) async {
+    if (_hungUp) {
+      _homeTimer?.cancel();
+      _homeTimer = null;
+      setState(() => _hungUp = false);
+    }
     if (_inConversation || sip.phase == IntercomSipPhase.inCall) return;
     if (sip.phase == IntercomSipPhase.ringing) {
       setState(() => _inConversation = true);
@@ -170,9 +176,19 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
     context.go('/');
   }
 
+  void _markHungUp() {
+    if (!mounted) return;
+    setState(() {
+      _hungUp = true;
+      _inConversation = false;
+      _notice = null;
+    });
+  }
+
   /// Na ophangen het beeld nog even laten staan, dan pas het beginscherm.
   void _scheduleHome() {
     if (_homeTimer != null || _closing) return;
+    _markHungUp();
     ref.read(inactivityControllerProvider.notifier).registerActivity();
     _homeTimer = Timer(const Duration(seconds: 5), () {
       _homeTimer = null;
@@ -328,7 +344,8 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
             unawaited(_releaseClaim());
           });
         }
-        final dialing = _inConversation &&
+        final dialing = !_hungUp &&
+            _inConversation &&
             sip.phase != IntercomSipPhase.inCall;
         final sipLive = sip.phase == IntercomSipPhase.ringing ||
             sip.phase == IntercomSipPhase.inCall;
@@ -528,7 +545,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                                 Expanded(
                                   child: _ActionButton(
                                     icon: Icons.call_end_rounded,
-                                    label: 'OPHANGEN',
+                                    label: _hungUp ? 'OPGEHANGEN' : 'OPHANGEN',
                                     color: _kCallHangup,
                                     diameter: diameter,
                                     shake: ringing,
@@ -577,7 +594,21 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                               ];
                               return Column(
                                 children: [
-                                  if (_notice != null || dialing)
+                                  if (_hungUp)
+                                    const Padding(
+                                      padding: EdgeInsets.only(bottom: 14),
+                                      child: Text(
+                                        'Opgehangen',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: _kCallHangup,
+                                          fontSize: 28,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.4,
+                                        ),
+                                      ),
+                                    )
+                                  else if (_notice != null || dialing)
                                     Padding(
                                       padding: const EdgeInsets.only(bottom: 12),
                                       child: Text(

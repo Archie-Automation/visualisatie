@@ -390,7 +390,10 @@ function onAmiEvent(ev: AmiFields): void {
     if (ic && uid) channelIntercom.set(uid, ic);
     const linked = ev.Linkedid;
     if (ic && linked) channelIntercom.set(linked, ic);
-    if (ic && ev.Channel) recordDoorChannel(ic, ev.Channel);
+    const destIsDoor = intercomIdForExt(pjsipExt(ev.DestChannel)) === ic;
+    const chanIsDoor = intercomIdForExt(pjsipExt(ev.Channel)) === ic;
+    const doorLeg = destIsDoor ? ev.DestChannel : chanIsDoor ? ev.Channel : ev.Channel;
+    if (ic && doorLeg) recordDoorChannel(ic, doorLeg);
     const doorDest = intercomIdForExt(pjsipExt(ev.DestChannel));
     const doorChan = intercomIdForExt(pjsipExt(ev.Channel));
     if (doorDest) noteDoorChannel(doorDest, ev.DestChannel);

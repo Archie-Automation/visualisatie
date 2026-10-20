@@ -4,8 +4,6 @@ import type { HouseConfig, IntercomDevice, VoipEndpoint } from "../types";
 import { astSafe } from "./secrets";
 import { intercomRingTargets } from "./ringTargets";
 import { localNets, turnCredentials } from "../remoteAccess";
-import { DOORBIRD_INCOMING_USER } from "../doorbirdRelease";
-import { sipAdvertiseHost } from "./host";
 
 export function asteriskConfDir(): string {
   return (
@@ -31,20 +29,11 @@ function pjsipEndpointBlock(opts: {
   password: string;
   webrtc: boolean;
   context: string;
-  fromUser?: string;
-  fromDomain?: string;
 }): string {
   const ext = astSafe(opts.ext);
   const name = astSafe(opts.name);
   const password = astSafe(opts.password);
   const context = astSafe(opts.context);
-  const fromUser = astSafe(opts.fromUser ?? "");
-  const fromDomain = astSafe(opts.fromDomain ?? "");
-  const from =
-    fromUser.length > 0
-      ? `from_user=${fromUser}
-${fromDomain.length > 0 ? `from_domain=${fromDomain}\n` : ""}`
-      : "";
   const media = opts.webrtc
     ? `webrtc=yes
 dtls_auto_generate_cert=yes
@@ -66,7 +55,7 @@ context=${context}
 disallow=all
 allow=ulaw,alaw,opus,h264
 dtmf_mode=rfc4733
-${media}${from}auth=${ext}
+${media}auth=${ext}
 aors=${ext}
 callerid="${name}" <${ext}>
 
@@ -101,13 +90,20 @@ export function groupDial(
 }
 
 /** Terugbellen van de deur naar één toestel. Geen belgroep, wel meteen Answer(). */
-function monitorCallbackLines(cfg: HouseConfig, taken: Set<string>): string[] {
+function monitorCallbackLines(
+  cfg: HouseConfig,
+  taken: Set<string>,
+  intercomId: string
+): string[] {
+  const id = astSafe(intercomId);
   const lines: string[] = [];
   for (const ep of cfg.voip?.endpoints ?? []) {
     const ext = astSafe(ep.ext ?? "");
     if (!ext || taken.has(ext)) continue;
     taken.add(ext);
+    // tT: DTMF van het paneel (poort) gaat naar de deur, niet naar een doorverbinding.
     lines.push(`exten => ${ext},1,NoOp(Monitor ${ext})
+ same => n,Set(__INTERCOM_ID=${id})
  same => n,Answer()
  same => n,Dial(PJSIP/${ext},45,tT)
  same => n,Hangup()`);
@@ -169,7 +165,7 @@ export function buildDoorRingContext(
       !Number.isFinite(waitRaw) || waitRaw < 5
         ? 30
         : Math.min(180, Math.round(waitRaw));
-    const monitor = monitorCallbackLines(cfg, new Set()).join("\n");
+    const monitor = monitorCallbackLines(cfg, new Set(), ic.id).join("\n");
     return `[${ctx}]
 exten => s,1,NoOp(Ring ${id} zonder SIP-toestellen)
  same => n,Set(__INTERCOM_ID=${id})
@@ -204,7 +200,7 @@ ${hangupExt}
   const taken = new Set(
     [primaryExt, ...usable.map((row) => astSafe(row.g.ext))].filter(Boolean)
   );
-  lines.push(...monitorCallbackLines(cfg, taken));
+  lines.push(...monitorCallbackLines(cfg, taken, ic.id));
   // Unknown numbers (DoorBird knop 1 often not the group ext) → knop 1.
   // Exact extra-button extensions above take priority over this pattern.
   lines.push(`exten => _X.,1,Goto(s,1)`);
@@ -363,10 +359,7 @@ ${(cfg.intercoms ?? [])
       name: ic.name,
       password: ic.intercom.sipPassword!,
       webrtc: false,
-      context: doorContextName(ic),
-      // Zelfde user als incoming_call_user op de DoorBird, anders weigert de deur.
-      fromUser: DOORBIRD_INCOMING_USER,
-      fromDomain: sipAdvertiseHost(cfg) ?? undefined
+      context: doorContextName(ic)
     })
   )
   .join("\n")}
@@ -390,29 +383,13 @@ ${(cfg.intercoms ?? [])
 `);
   }
 
-  const groupExts = new Set(
-    (v.groups ?? []).map((g) => astSafe(g.ext)).filter((ext) => ext.length > 0)
-  );
-  const doorDials: string[] = [];
-  for (const ic of cfg.intercoms ?? []) {
-    const ext = astSafe(ic.intercom.sipExt ?? "");
-    if (!ext || groupExts.has(ext)) continue;
-    // CallerID op de user die de DoorBird als inkomende beller toestaat.
-    doorDials.push(`exten => ${ext},1,NoOp(Bel deur ${ext})
- same => n,Set(CALLERID(num)=${DOORBIRD_INCOMING_USER})
- same => n,Dial(PJSIP/${ext},45,r)
- same => n,Hangup()
-`);
-  }
-
   files["extensions.conf"] = `[general]
 static=yes
 writeprotect=yes
 
 [from-internal]
 ${groupExtens.join("\n")}
-${doorDials.join("\n")}
-exten => _X.,1,Dial(PJSIP/\${EXTEN},45,r)
+exten => _X.,1,Dial(PJSIP/\${EXTEN},45,rtT)
  same => n,Hangup()
 
 [archie-on-answer]
