@@ -339,16 +339,12 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (!mounted || sip.dialError != failed) return;
             sip.clearDialError();
-            setState(() {
-              _inConversation = false;
-              _notice = failed;
-            });
+            setState(() => _inConversation = false);
+            // Geen statusregel meer: de reden alleen nog als melding onderin.
+            _snack(failed);
             unawaited(_releaseClaim());
           });
         }
-        final dialing = !_hungUp &&
-            _inConversation &&
-            sip.phase != IntercomSipPhase.inCall;
         final sipLive = sip.phase == IntercomSipPhase.ringing ||
             sip.phase == IntercomSipPhase.inCall;
         final ringLive = ring != null &&
@@ -519,9 +515,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                               horizontal: 20, vertical: 20),
                           child: LayoutBuilder(
                             builder: (context, constraints) {
-                              final callCount = 1 +
-                                  (waiting ? 1 : 0) +
-                                  (showRelease ? 1 : 0);
+                              final callCount = 2 + (showRelease ? 1 : 0);
                               final count = phone ? callCount : callCount + 2;
                               final diameter =
                                   ((constraints.maxWidth / count) - 8)
@@ -554,25 +548,27 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                                     onTap: () => _cancel(sip),
                                   ),
                                 ),
-                                if (waiting)
-                                  Expanded(
-                                    child: _ActionButton(
-                                      icon: taken
-                                          ? Icons.phone_locked_outlined
-                                          : Icons.call_rounded,
-                                      label: taken ? 'BEZET' : 'OPNEMEN',
-                                      color: taken
-                                          ? _kCallPhoto
-                                          : _kCallAnswer,
-                                      diameter: diameter,
-                                      shake: ringing && !taken,
-                                      onTap: taken
-                                          ? () => _snack(
-                                                'Er is al een gesprek op deze intercom.',
-                                              )
-                                          : () => _answer(sip),
-                                    ),
+                                // Altijd aanwezig: tijdens het gesprek vaag,
+                                // zodat de andere knoppen niet verspringen.
+                                Expanded(
+                                  child: _ActionButton(
+                                    icon: taken
+                                        ? Icons.phone_locked_outlined
+                                        : Icons.call_rounded,
+                                    label: taken ? 'BEZET' : 'OPNEMEN',
+                                    color: taken
+                                        ? _kCallPhoto
+                                        : _kCallAnswer,
+                                    diameter: diameter,
+                                    shake: ringing && !taken,
+                                    disabled: !waiting,
+                                    onTap: taken
+                                        ? () => _snack(
+                                              'Er is al een gesprek op deze intercom.',
+                                            )
+                                        : () => _answer(sip),
                                   ),
+                                ),
                                 if (!phone)
                                   for (final photo in photos)
                                     Expanded(child: photo),
@@ -594,45 +590,10 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                                     ),
                                   ),
                               ];
-                              // Vaste hoogte: anders groeit het vak bij een
-                              // melding en verspringt het camerabeeld erboven.
-                              final Widget statusLine;
-                              if (_hungUp) {
-                                statusLine = const Text(
-                                  'Opgehangen',
-                                  textAlign: TextAlign.center,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: _kCallHangup,
-                                    fontSize: 26,
-                                    height: 1.1,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.4,
-                                  ),
-                                );
-                              } else if (_notice != null || dialing) {
-                                statusLine = Text(
-                                  _notice ?? 'Bezig met bellen…',
-                                  textAlign: TextAlign.center,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: LuxeColors.ink,
-                                    fontSize: 14,
-                                    height: 1.2,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                );
-                              } else {
-                                statusLine = const SizedBox.shrink();
-                              }
+                              // Geen statusregel: de knoppen zelf tonen de
+                              // toestand (OPGEHANGEN, vage OPNEMEN).
                               return Column(
                                 children: [
-                                  SizedBox(
-                                    height: _kStatusSlotHeight,
-                                    child: Center(child: statusLine),
-                                  ),
                                   Row(children: calls),
                                   if (phone) ...[
                                     const SizedBox(height: 14),
@@ -740,11 +701,6 @@ class _AlarmShakeState extends State<_AlarmShake>
 /// Ruimer dan het camerabeeld op de camera-pagina. De verhouding blijft
 /// die van de stream; alleen de maximale tegel groeit.
 const _kIntercomStageFactor = 0.9;
-
-/// Vaste regel boven de knoppen voor "Bezig met bellen…" / "Opgehangen".
-/// Altijd gereserveerd, zodat het camerabeeld niet verspringt.
-const _kStatusSlotHeight = 44.0;
-
 /// Same fills in light and dark — palette danger/brass wash out in dark mode.
 const _kCallHangup = Color(0xFFB83A3A);
 const _kCallAnswer = Color(0xFF3E6B4F);
@@ -762,6 +718,7 @@ class _ActionButton extends StatelessWidget {
     this.diameter = 72,
     this.loading = false,
     this.shake = false,
+    this.disabled = false,
   });
   final IconData icon;
   final Widget Function(double size, Color color)? mark;
@@ -772,8 +729,27 @@ class _ActionButton extends StatelessWidget {
   final bool loading;
   final bool shake;
 
+  /// Blijft op zijn plek staan maar is vaag en reageert niet (bijv. OPNEMEN
+  /// tijdens een gesprek). Zo verspringen de andere knoppen niet.
+  final bool disabled;
+
   @override
   Widget build(BuildContext context) {
+    if (disabled) {
+      return Opacity(
+        opacity: 0.32,
+        child: IgnorePointer(
+          child: _ActionButton(
+            icon: icon,
+            label: label,
+            color: color,
+            onTap: () {},
+            mark: mark,
+            diameter: diameter,
+          ),
+        ),
+      );
+    }
     final circle = GestureDetector(
       onTap: loading ? null : onTap,
       child: Container(
