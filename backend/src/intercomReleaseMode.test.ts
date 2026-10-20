@@ -3,7 +3,8 @@ import { describe, it } from "node:test";
 import type { IntercomDevice } from "./types";
 import {
   effectiveIntercomReleaseMode,
-  intercomSupportsRelease
+  intercomSupportsRelease,
+  isDoorbirdIntercom
 } from "./intercomReleaseMode";
 
 function ic(intercom: IntercomDevice["intercom"]): IntercomDevice {
@@ -53,5 +54,41 @@ describe("effectiveIntercomReleaseMode", () => {
     });
     assert.equal(effectiveIntercomReleaseMode(d), "doorbird");
     assert.equal(intercomSupportsRelease(d), true);
+  });
+});
+
+describe("isDoorbirdIntercom", () => {
+  it("herkent een DoorBird die als Overig SIP is aangemaakt aan de RTSP-URL", () => {
+    const d = ic({
+      kind: "other",
+      rtsp: "rtsp://jxdobk0001:s3cret@192.168.1.172/mpeg/media.amp",
+      releaseMode: "knx",
+      sipExt: "900",
+      sipPassword: "x"
+    });
+    assert.equal(isDoorbirdIntercom(d), true);
+  });
+
+  it("herkent kind doorbird ook zonder login in de RTSP-URL", () => {
+    const d = ic({ kind: "doorbird", rtsp: "rtsp://192.168.1.172/x" });
+    assert.equal(isDoorbirdIntercom(d), true);
+  });
+
+  it("een ander merk blijft gewoon SIP, ook met een DoorBird-achtig pad", () => {
+    const d = ic({
+      kind: "twoN",
+      rtsp: "rtsp://abcdef0001:x@10.0.0.5/mpeg/media.amp",
+      sipExt: "901"
+    });
+    assert.equal(isDoorbirdIntercom(d), false);
+  });
+
+  it("Overig SIP zonder DoorBird-kenmerken wordt direct gebeld", () => {
+    const d = ic({
+      kind: "other",
+      rtsp: "rtsp://admin:x@10.0.0.6/stream1",
+      sipExt: "901"
+    });
+    assert.equal(isDoorbirdIntercom(d), false);
   });
 });

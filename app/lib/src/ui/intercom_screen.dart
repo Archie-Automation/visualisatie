@@ -301,10 +301,12 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
       _flashOpened();
     } catch (e) {
       if (!mounted) return;
+      final reason = e is IntercomReleaseException ? e.message : '$e';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Openen mislukt: $e'),
+          content: Text('Openen mislukt: $reason'),
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 6),
         ),
       );
     } finally {
@@ -592,35 +594,45 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                                     ),
                                   ),
                               ];
+                              // Vaste hoogte: anders groeit het vak bij een
+                              // melding en verspringt het camerabeeld erboven.
+                              final Widget statusLine;
+                              if (_hungUp) {
+                                statusLine = const Text(
+                                  'Opgehangen',
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: _kCallHangup,
+                                    fontSize: 26,
+                                    height: 1.1,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.4,
+                                  ),
+                                );
+                              } else if (_notice != null || dialing) {
+                                statusLine = Text(
+                                  _notice ?? 'Bezig met bellen…',
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: LuxeColors.ink,
+                                    fontSize: 14,
+                                    height: 1.2,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                );
+                              } else {
+                                statusLine = const SizedBox.shrink();
+                              }
                               return Column(
                                 children: [
-                                  if (_hungUp)
-                                    const Padding(
-                                      padding: EdgeInsets.only(bottom: 14),
-                                      child: Text(
-                                        'Opgehangen',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          color: _kCallHangup,
-                                          fontSize: 28,
-                                          fontWeight: FontWeight.w700,
-                                          letterSpacing: 0.4,
-                                        ),
-                                      ),
-                                    )
-                                  else if (_notice != null || dialing)
-                                    Padding(
-                                      padding: const EdgeInsets.only(bottom: 12),
-                                      child: Text(
-                                        _notice ?? 'Bezig met bellen…',
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(
-                                          color: LuxeColors.ink,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ),
+                                  SizedBox(
+                                    height: _kStatusSlotHeight,
+                                    child: Center(child: statusLine),
+                                  ),
                                   Row(children: calls),
                                   if (phone) ...[
                                     const SizedBox(height: 14),
@@ -728,6 +740,10 @@ class _AlarmShakeState extends State<_AlarmShake>
 /// Ruimer dan het camerabeeld op de camera-pagina. De verhouding blijft
 /// die van de stream; alleen de maximale tegel groeit.
 const _kIntercomStageFactor = 0.9;
+
+/// Vaste regel boven de knoppen voor "Bezig met bellen…" / "Opgehangen".
+/// Altijd gereserveerd, zodat het camerabeeld niet verspringt.
+const _kStatusSlotHeight = 44.0;
 
 /// Same fills in light and dark — palette danger/brass wash out in dark mode.
 const _kCallHangup = Color(0xFFB83A3A);

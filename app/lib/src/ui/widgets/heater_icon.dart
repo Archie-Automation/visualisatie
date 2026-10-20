@@ -7,8 +7,8 @@ import 'campfire_icon.dart';
 /// Sentinel — render via [iconWidgetForData] / [universalIconGlyph], niet [Icon].
 const IconData heaterIconData = IconData(0xF001);
 
-/// Terrasheater: liggende rechthoek met twee horizontale spiralen.
-/// Op het statusicoon dooft de spiraal en komt terug, zonder helemaal te verdwijnen.
+/// Terrasheater: liggende kachel met verticale lamellen op twee pootjes,
+/// met warmtestraaltjes erboven. Op het statusicoon golven de straaltjes omhoog.
 class HeaterIcon extends StatefulWidget {
   const HeaterIcon({
     super.key,
@@ -139,79 +139,117 @@ class _HeaterIconPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
-    // Iets hoger dan voorheen, anders vult de dikkere spiraal zichzelf.
-    // Statusrij: dezelfde boven- en onderkant als het lampje. Tegel blijft lager.
-    final frame = Rect.fromCenter(
-      center: Offset(s / 2, s / 2),
-      width: s * 0.88,
-      height: s * (status ? 0.748 : 0.66),
+    // Klein icoon: minder lamellen en straaltjes, anders loopt het dicht.
+    final small = s < 30;
+    final bars = small ? 3 : 5;
+    final rays = small ? 2 : 3;
+
+    // Statusrij deelt de keyline van het lampje (boven 0.084, onder 0.916).
+    final top = status ? 0.084 : 0.10;
+    final bottom = status ? 0.916 : 0.90;
+    final span = bottom - top;
+    final bodyTop = top + span * 0.50;
+    final bodyBottom = bottom - span * 0.11;
+    final body = Rect.fromLTRB(
+      s * 0.12 + frameStroke / 2,
+      s * bodyTop,
+      s * 0.88 - frameStroke / 2,
+      s * bodyBottom,
     );
     canvas.drawRRect(
-      RRect.fromRectAndRadius(frame, Radius.circular(s * 0.08)),
+      RRect.fromRectAndRadius(body, Radius.circular(s * 0.07)),
       line,
     );
 
-    // Op de statusrij piekt de spiraal lager, anders vult het vak zich.
-    final wave = (math.sin(t * math.pi * 2) + 1) / 2;
-    final pulse = status
-        ? (animate ? 0.38 + 0.32 * wave : 0.55)
-        : (animate ? 0.42 + 0.58 * wave : 1.0);
-    final coilPaint = Paint()
-      ..color = color.withValues(alpha: color.a * pulse)
+    // Lamellen: gelijk verdeeld, los van de rand.
+    final padX = s * 0.07 + stroke;
+    final padY = s * 0.05 + stroke;
+    final innerL = body.left + padX;
+    final innerR = body.right - padX;
+    for (var i = 0; i < bars; i++) {
+      final x = innerL + (innerR - innerL) * i / (bars - 1);
+      canvas.drawLine(
+        Offset(x, body.top + padY),
+        Offset(x, body.bottom - padY),
+        line,
+      );
+    }
+
+    // Pootjes.
+    final footY = s * bottom - frameStroke / 2;
+    final footInset = s * 0.12;
+    final foot = Paint()
+      ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = stroke
+      ..strokeWidth = frameStroke
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+      Offset(body.left + footInset, body.bottom),
+      Offset(body.left + footInset, footY),
+      foot,
+    );
+    canvas.drawLine(
+      Offset(body.right - footInset, body.bottom),
+      Offset(body.right - footInset, footY),
+      foot,
+    );
+
+    // Warmtestraaltjes: golvende lijntjes die omhoog bewegen en vervagen.
+    final rayTop = s * top + stroke;
+    final rayBottom = body.top - s * 0.06 - stroke;
+    final rayH = rayBottom - rayTop;
+    if (rayH <= stroke * 2) return;
+    final rayPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke * 0.9
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
-
-    final padY = stroke * 0.55 + s * 0.045;
-    final inner = Rect.fromLTRB(
-      frame.left + s * 0.055,
-      frame.top + padY,
-      frame.right - s * 0.055,
-      frame.bottom - padY,
-    );
-    const rows = 2;
-    const intervals = 4;
-    final gap = stroke * 1.15;
-    final rowH = (inner.height - gap) / rows;
-    final pitch = inner.width / intervals;
-    for (var row = 0; row < rows; row++) {
-      final top = inner.top + row * (rowH + gap);
+    final rayL = innerL + (innerR - innerL) * 0.12;
+    final rayR = innerR - (innerR - innerL) * 0.12;
+    // Zachte golf: breed genoeg om te lezen, smal genoeg om niet te klonteren.
+    final amp = math.min(s * 0.028, rayH * 0.16);
+    for (var i = 0; i < rays; i++) {
+      final cx = rays == 1 ? (rayL + rayR) / 2 : rayL + (rayR - rayL) * i / (rays - 1);
+      final phase = animate ? t * math.pi * 2 + i * 1.9 : i * 1.2;
+      // Elk straaltje schuift omhoog en komt onderaan vager terug.
+      final drift = animate ? ((t + i / rays) % 1.0) : 0.0;
+      final alpha = animate ? 0.45 + 0.55 * (1 - (drift * 2 - 1).abs()) : 1.0;
+      rayPaint.color = color.withValues(alpha: color.a * alpha);
+      final shift = animate ? (drift - 0.5) * rayH * 0.14 : 0.0;
       canvas.drawPath(
-        _heatingCoil(
-          left: inner.left,
-          right: inner.right,
-          top: top,
-          bottom: top + rowH,
-          pitch: pitch,
+        _heatRay(
+          cx: cx,
+          top: rayTop - shift,
+          bottom: rayBottom - shift,
+          amp: amp,
+          phase: phase,
         ),
-        coilPaint,
+        rayPaint,
       );
     }
   }
 
-  /// Horizontale spiraal: aaneengesloten halve cirkels, boven en onder om de beurt.
-  Path _heatingCoil({
-    required double left,
-    required double right,
+  /// Eén golvend straaltje: één sinusslag van onder naar boven.
+  Path _heatRay({
+    required double cx,
     required double top,
     required double bottom,
-    required double pitch,
+    required double amp,
+    required double phase,
   }) {
-    final band = bottom - top;
-    final waves = (pitch <= 0 ? 4 : (right - left) / pitch).round().clamp(3, 5);
-    final step = (right - left) / waves;
-    final r = math.min(step / 2, band / 2);
-    final cy = (top + bottom) / 2;
-    final path = Path()..moveTo(left, cy);
-    for (var i = 0; i < waves; i++) {
-      final x = left + i * step;
-      path.arcTo(
-        Rect.fromCircle(center: Offset(x + step / 2, cy), radius: r),
-        math.pi,
-        i.isEven ? math.pi : -math.pi,
-        false,
-      );
+    const steps = 16;
+    final h = bottom - top;
+    final path = Path();
+    for (var k = 0; k <= steps; k++) {
+      final f = k / steps;
+      final y = bottom - h * f;
+      final x = cx + math.sin(f * math.pi * 2 + phase) * amp;
+      if (k == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
     }
     return path;
   }

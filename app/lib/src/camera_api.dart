@@ -245,8 +245,30 @@ Future<void> releaseIntercomDoor({
     headers: {'authorization': 'Bearer $token'},
   );
   if (res.statusCode != 200) {
-    throw StateError('release failed: ${res.statusCode}');
+    // De server zegt waarom (DoorBird weigert, geen GA, time-out). Toon dat
+    // in plaats van alleen de statuscode.
+    String? reason;
+    try {
+      final body = jsonDecode(res.body);
+      if (body is Map && body['error'] is String) {
+        reason = (body['error'] as String).trim();
+      }
+    } catch (_) {}
+    throw IntercomReleaseException(
+      reason?.isNotEmpty == true
+          ? reason!
+          : 'Openen mislukt (HTTP ${res.statusCode}).',
+    );
   }
+}
+
+/// Reden van de server waarom de deur of poort niet openging.
+class IntercomReleaseException implements Exception {
+  const IntercomReleaseException(this.message);
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 /// Haalt de volledige SIP-configuratie op (inclusief wachtwoord) van de server.

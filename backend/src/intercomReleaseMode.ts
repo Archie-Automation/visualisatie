@@ -59,6 +59,35 @@ function hasDoorbird(ic: IntercomDevice): boolean {
   return resolvedDoorbird(ic) != null;
 }
 
+/** DoorBird RTSP: `/mpeg/media.amp` met een API-gebruiker als `abcdef0001`. */
+const DOORBIRD_RTSP_PATH_RE = /\/mpeg\/media\.amp(\?|$)/i;
+const DOORBIRD_API_USER_RE = /^[a-z0-9]{6}0{3}[0-9]$/i;
+
+/**
+ * Of dit toestel zich als DoorBird gedraagt (neemt geen INVITE op, belt zelf
+ * via `sip.cgi?action=makecall`). Niet alleen `kind`: een DoorBird die als
+ * "Overig SIP" is aangemaakt heeft dezelfde RTSP-URL en hetzelfde API-blok.
+ */
+export function isDoorbirdIntercom(ic: IntercomDevice): boolean {
+  const i = ic.intercom;
+  if (i.kind === "doorbird") return true;
+  if (i.kind && i.kind !== "other" && i.kind !== "sip") return false;
+  if (i.releaseMode === "doorbird") return true;
+  if (i.doorbird?.host?.trim()) return true;
+  const fromRtsp = credentialsFromRtsp(i.rtsp);
+  if (!fromRtsp) return false;
+  let path = "";
+  try {
+    path = new URL(i.rtsp.trim()).pathname;
+  } catch {
+    return false;
+  }
+  return (
+    DOORBIRD_RTSP_PATH_RE.test(path) ||
+    DOORBIRD_API_USER_RE.test(fromRtsp.username)
+  );
+}
+
 /** SIP-deurstation: DTMF tijdens het gesprek (DoorBird-standaard `#`). */
 function hasDtmf(ic: IntercomDevice): boolean {
   return !!ic.intercom.sipExt?.trim();

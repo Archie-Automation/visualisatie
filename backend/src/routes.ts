@@ -125,7 +125,8 @@ import { scheduleAdminProcessRestart } from "./processRestart";
 import { releaseDoor } from "./intercoms";
 import {
   effectiveIntercomReleaseMode,
-  intercomSupportsRelease
+  intercomSupportsRelease,
+  isDoorbirdIntercom
 } from "./intercomReleaseMode";
 import type { MediaManager } from "./media/manager";
 import type { LutronIntegrationManager } from "./lutron/manager";
@@ -159,6 +160,7 @@ import {
   intercomLinePhase,
   releaseIntercomLine,
   voipAmiUp,
+  voipLogCall,
   voipRecentCalls,
   voipRegisteredExts
 } from "./voip/manager";
@@ -1778,11 +1780,24 @@ export function buildRouter(
         state: intercomLinePhase(ic.id)
       });
     }
-    if (ic.intercom.kind !== "doorbird") {
+    // Niet alleen `kind`: een DoorBird die als "Overig SIP" staat belt ook terug.
+    const doorbird = isDoorbirdIntercom(ic);
+    if (!doorbird) {
       const regs = voipRegisteredExts();
       if (voipAmiUp() && regs.length > 0 && !regs.includes(ext)) {
         return res.status(409).json({
           error: "De intercom is niet aangemeld op de belcentrale.",
+          state: intercomLinePhase(ic.id)
+        });
+      }
+      // Zelfde nummer als een belgroep: from-internal belt dan de groep (dus
+      // dit paneel zelf) in plaats van de deur. Asterisk geeft daar 404 op.
+      const clash = (cfg.voip?.groups ?? []).find(
+        (g) => (g.ext ?? "").trim() === ext
+      );
+      if (clash) {
+        return res.status(409).json({
+          error: `De intercom heeft hetzelfde nummer (${ext}) als belgroep "${clash.name}". Geef de deur een eigen SIP-nummer.`,
           state: intercomLinePhase(ic.id)
         });
       }
@@ -1798,7 +1813,7 @@ export function buildRouter(
         state
       });
     }
-    if (ic.intercom.kind === "doorbird") {
+    if (doorbird) {
       const ep = resolveUserEndpoint(cfg, holder);
       const host = sipAdvertiseHost(cfg);
       const panelExt = ep?.ext?.trim() ?? "";
@@ -1819,15 +1834,20 @@ export function buildRouter(
       }
       // De DoorBird neemt een INVITE niet op. Zij belt dit paneel; dat neemt meteen op.
       // Geen sip.cgi?action=settings: dat herschrijft de SIP-config en laat de poort stuk.
+      voipLogCall("makecall.start", `paneel ${panelExt}`);
       try {
         await doorbirdMakeCall(ic, `sip:${panelExt}@${host}`);
       } catch (err) {
         releaseIntercomLine(ic.id, holder);
         const message = err instanceof Error ? err.message : "DoorBird bellen mislukt.";
+        voipLogCall("makecall.fail", message);
+        logger.warn({ id: ic.id, panelExt, host, err: message }, "intercom: DoorBird makecall mislukt");
         return res.status(409).json({ error: message, state: "idle" });
       }
+      voipLogCall("makecall.ok", `paneel ${panelExt}`);
       return res.json({ state: "dialing", mode: "callback" });
     }
+    voipLogCall("panel.dial", `deur ${ext}`);
     res.json({ state: "dialing", target: ext });
   });
 
@@ -2007,8 +2027,13 @@ export function buildRouter(
       );
       res.json({ ok: true });
     } catch (err) {
-      logger.warn({ err, id: ic.id }, "door release failed");
-      res.status(400).json({ error: (err as Error).message });
+      const message = (err as Error).message || "Openen mislukt.";
+      logger.warn(
+        { err, id: ic.id, mode: effectiveIntercomReleaseMode(ic) },
+        "door release failed"
+      );
+      voipLogCall("release.fail", `${effectiveIntercomReleaseMode(ic)}: ${message}`);
+      res.status(400).json({ error: message });
     }
   });
 

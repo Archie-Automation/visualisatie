@@ -28,7 +28,8 @@ class _EqualizerIconState extends State<EqualizerIcon>
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1150),
+      // Rustiger: één slag per ~1,7 s in plaats van 1,15 s.
+      duration: const Duration(milliseconds: 1700),
     );
     if (widget.animate) _ctrl.repeat();
   }

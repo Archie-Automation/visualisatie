@@ -56,6 +56,11 @@ function logCall(event: string, detail: string): void {
   while (callLog.length > 12) callLog.shift();
 }
 
+/** Zelf bellen vanaf een paneel (makecall) hoort ook in de diagnose. */
+export function voipLogCall(event: string, detail: string): void {
+  logCall(event, detail);
+}
+
 /** Laatste bel-gebeurtenissen (zonder nummers of namen) voor diagnose. */
 export function voipRecentCalls(): VoipCallEvent[] {
   return [...callLog];
