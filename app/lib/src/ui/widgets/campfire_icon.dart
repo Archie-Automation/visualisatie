@@ -73,10 +73,12 @@ class _CampfireIconState extends State<CampfireIcon>
   }
 
   Widget _mark(double scale) {
-    // Statusrij: iets hoger zodat vlam en hout binnen de lamp-keyline vallen.
-    final flame = widget.size * (widget.status ? 0.80 : 0.84);
+    // Het Material-vlammetje heeft eigen witruimte; groter tekenen dan het
+    // vak, anders oogt de haard kleiner dan de split-unit ernaast.
+    final flame = widget.size * (widget.status ? 0.96 : 1.0);
     return Stack(
       fit: StackFit.expand,
+      clipBehavior: Clip.none,
       children: [
         CustomPaint(
           painter: _CampfireLogsPainter(
@@ -85,7 +87,7 @@ class _CampfireIconState extends State<CampfireIcon>
           ),
         ),
         Align(
-          alignment: Alignment(0, widget.status ? -0.42 : -0.50),
+          alignment: Alignment(0, widget.status ? -0.70 : -0.80),
           child: Transform.scale(
             scale: scale,
             alignment: Alignment.bottomCenter,
@@ -134,8 +136,9 @@ class _CampfireLogsPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
+    // Dunner dan de vlam: de stronken zijn bijzaak en mogen niet massief ogen.
     final weight =
-        status ? statusOutlineStroke(w) : materialOutlineStroke(w);
+        (status ? statusOutlineStroke(w) : materialOutlineStroke(w)) * 0.7;
     final logs = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
@@ -143,16 +146,16 @@ class _CampfireLogsPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     // Onderkant op de lamp-keyline (halve pen eraf), kruis net onder de vlam.
-    final top = status ? 0.76 : 0.80;
-    final bottom = status ? 0.88 : 0.93;
+    final top = status ? 0.78 : 0.82;
+    final bottom = status ? 0.90 : 0.95;
     canvas.drawLine(
-      Offset(w * 0.22, h * top),
-      Offset(w * 0.78, h * bottom),
+      Offset(w * 0.16, h * top),
+      Offset(w * 0.84, h * bottom),
       logs,
     );
     canvas.drawLine(
-      Offset(w * 0.22, h * bottom),
-      Offset(w * 0.78, h * top),
+      Offset(w * 0.16, h * bottom),
+      Offset(w * 0.84, h * top),
       logs,
     );
   }

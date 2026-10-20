@@ -139,10 +139,10 @@ class _HeaterIconPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
-    // Klein icoon: minder lamellen en straaltjes, anders loopt het dicht.
+    // Klein icoon: minder lamellen, anders loopt het dicht. Altijd 3 straaltjes.
     final small = s < 30;
     final bars = small ? 3 : 5;
-    final rays = small ? 2 : 3;
+    const rays = 3;
 
     // Statusrij deelt de keyline van het lampje (boven 0.084, onder 0.916).
     final top = status ? 0.084 : 0.10;
@@ -150,10 +150,11 @@ class _HeaterIconPainter extends CustomPainter {
     final span = bottom - top;
     final bodyTop = top + span * 0.50;
     final bodyBottom = bottom - span * 0.11;
+    // Even breed als de split-unit (0.08–0.92), anders oogt de heater kleiner.
     final body = Rect.fromLTRB(
-      s * 0.12 + frameStroke / 2,
+      s * 0.08 + frameStroke / 2,
       s * bodyTop,
-      s * 0.88 - frameStroke / 2,
+      s * 0.92 - frameStroke / 2,
       s * bodyBottom,
     );
     canvas.drawRRect(
@@ -205,12 +206,12 @@ class _HeaterIconPainter extends CustomPainter {
       ..strokeWidth = stroke * 0.9
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
-    final rayL = innerL + (innerR - innerL) * 0.12;
-    final rayR = innerR - (innerR - innerL) * 0.12;
+    final rayL = innerL + (innerR - innerL) * 0.10;
+    final rayR = innerR - (innerR - innerL) * 0.10;
     // Zachte golf: breed genoeg om te lezen, smal genoeg om niet te klonteren.
     final amp = math.min(s * 0.028, rayH * 0.16);
     for (var i = 0; i < rays; i++) {
-      final cx = rays == 1 ? (rayL + rayR) / 2 : rayL + (rayR - rayL) * i / (rays - 1);
+      final cx = rayL + (rayR - rayL) * i / (rays - 1);
       final phase = animate ? t * math.pi * 2 + i * 1.9 : i * 1.2;
       // Elk straaltje schuift omhoog en komt onderaan vager terug.
       final drift = animate ? ((t + i / rays) % 1.0) : 0.0;
