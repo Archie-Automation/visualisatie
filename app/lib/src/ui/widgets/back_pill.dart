@@ -34,7 +34,8 @@ class HeaderIconButton extends StatelessWidget {
     final iconSize = isPhone ? 20.0 : 22.0;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final fillAlpha = isDark ? 0.96 : LuxeChipChrome.lightFill();
+    final fillAlpha =
+        isDark ? LuxeChipChrome.darkFill() : LuxeChipChrome.lightFill();
     final fill = LuxeColors.surface.withValues(alpha: fillAlpha);
 
     final visual = LuxeRimBox(

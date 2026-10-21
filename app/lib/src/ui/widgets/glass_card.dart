@@ -50,10 +50,10 @@ class GlassCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = Theme.of(context).extension<LuxePalette>() ?? LuxeColors.active;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    // Light: zelfde luchtigheid als scene/systeem-chips (canvas doorschijnt).
-    final alpha = _useBackdropBlur
-        ? (isDark ? 0.88 : LuxeChipChrome.lightFill())
-        : (isDark ? 0.90 : LuxeChipChrome.lightFill());
+    // Donker glas laat het veld door; licht houdt de luchtige chipvulling.
+    final alpha = isDark
+        ? LuxeChipChrome.darkFill()
+        : LuxeChipChrome.lightFill();
     final effectiveTint = tint ?? p.surface.withValues(alpha: alpha);
     final highlight = p.glassHighlight;
 
@@ -69,7 +69,7 @@ class GlassCard extends StatelessWidget {
             right: 0,
             child: IgnorePointer(
               child: Container(
-                height: radius + (isDark ? 14 : 10),
+                height: radius + (isDark ? 28 : 10),
                 decoration: BoxDecoration(
                   borderRadius:
                       BorderRadius.vertical(top: Radius.circular(radius)),

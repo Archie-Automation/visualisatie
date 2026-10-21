@@ -235,11 +235,11 @@ class LuxePalette extends ThemeExtension<LuxePalette> {
     brassGlow: Color(0xFFFFFFFF),
     brassSoft: Color(0xFF424242),
     brassDeep: Color(0xFFBDBDBD),
-    line: Color(0xFF424242),
-    lineSoft: Color(0x99424242),
-    glassRim: Color(0xFF424242),
+    line: Color(0xFF6A6A6A),
+    lineSoft: Color(0x996A6A6A),
+    glassRim: Color(0xFF6A6A6A),
     danger: Color(0xFFFF8888),
-    glassHighlight: Color(0x14FFFFFF),
+    glassHighlight: Color(0x38FFFFFF),
   );
 
   @override
@@ -445,9 +445,12 @@ abstract final class LuxeChipChrome {
   /// Light-mode “luchtige” surface — canvas schemert erdoorheen.
   static double lightFill({bool pressed = false}) => pressed ? 0.88 : 0.78;
 
+  /// Donker glas: het veld schemert door, indrukken maakt het vlak dichter.
+  static double darkFill({bool pressed = false}) => pressed ? 0.86 : 0.70;
+
   static Color fill(BuildContext context, {required bool pressed}) {
     final a = isDark(context)
-        ? (pressed ? 1.0 : 0.88)
+        ? darkFill(pressed: pressed)
         : lightFill(pressed: pressed);
     return LuxeColors.surface.withValues(alpha: a);
   }

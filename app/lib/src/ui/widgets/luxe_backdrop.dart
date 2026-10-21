@@ -27,9 +27,10 @@ class LuxeCanvas extends StatelessWidget {
     final cream = phoneLight ? LuxePalette.phoneCream : p.cream;
     final creamLight = phoneLight ? LuxePalette.phoneCreamLight : p.creamLight;
     final creamDeep = phoneLight ? LuxePalette.phoneCreamDeep : p.creamDeep;
-    // Donker: geen messingwaas, anders trekt die de zwartschaal warm.
-    final brassWash = useDark ? 0.0 : (phoneLight ? 0.02 : 0.055);
-    final glowWash = useDark ? 0.0 : (phoneLight ? 0.015 : 0.04);
+    // Donker: koele lichtval, zodat glas iets heeft om door te laten.
+    // Messing is hier wit; een hoge alpha wordt een grijze vlek.
+    final brassWash = useDark ? 0.06 : (phoneLight ? 0.02 : 0.055);
+    final glowWash = useDark ? 0.04 : (phoneLight ? 0.015 : 0.04);
 
     return Stack(
       fit: StackFit.expand,
