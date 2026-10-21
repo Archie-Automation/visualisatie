@@ -149,9 +149,8 @@ class LuxePalette extends ThemeExtension<LuxePalette> {
     glassHighlight: Color(0x12E8E8E6),
   );
 
-  /// Quiet luxury dark — warme olijf-canvas en champagne.
-  /// Rollback: [buildLuxeTheme] → darkQuiet.
-  static const darkQuiet = LuxePalette(
+  /// Quiet luxury dark — diepere canvas, lichtere kaarten, rijker goud.
+  static const dark = LuxePalette(
     cream: Color(0xFF0A0A09), // diepere canvas
     creamLight: Color(0xFF383834), // hover wash
     creamDeep: Color(0xFF0A0A09),
@@ -171,75 +170,6 @@ class LuxePalette extends ThemeExtension<LuxePalette> {
     glassRim: Color(0xFF4A4A44),
     danger: Color(0xFFFF8888),
     glassHighlight: Color(0x28F2F1EC),
-  );
-
-  /// Graphite — koel leisteen. Rollback: [buildLuxeTheme] → darkGraphite.
-  static const darkGraphite = LuxePalette(
-    cream: Color(0xFF101318),
-    creamLight: Color(0xFF232A34),
-    creamDeep: Color(0xFF090B0E),
-    surface: Color(0xFF2A3140),
-    surfaceDim: Color(0xFF1A202A),
-    surfaceDark: Color(0xFF090B0E),
-    surfaceDarkElev: Color(0xFF363E4E),
-    ink: Color(0xFFF4F6F8),
-    inkSoft: Color(0xFFC5CDD6),
-    inkFaint: Color(0xFF9AA3B0),
-    brass: Color(0xFFC9A36A),
-    brassGlow: Color(0xFFE2C79A),
-    brassSoft: Color(0xFF363E4E),
-    brassDeep: Color(0xFFA68345),
-    line: Color(0xFF465062),
-    lineSoft: Color(0x99465062),
-    glassRim: Color(0xFF465062),
-    danger: Color(0xFFFF8888),
-    glassHighlight: Color(0x16F4F6F8),
-  );
-
-  /// Taupe / Dryad Bark / khaki. Rollback: [buildLuxeTheme] → darkTaupe.
-  static const darkTaupe = LuxePalette(
-    cream: Color(0xFF33312D), // Dryad Bark
-    creamLight: Color(0xFF3E3C38),
-    creamDeep: Color(0xFF282623),
-    surface: Color(0xFF504746), // taupe grey
-    surfaceDim: Color(0xFF353434), // onyx
-    surfaceDark: Color(0xFF282623),
-    surfaceDarkElev: Color(0xFF5E5451),
-    ink: Color(0xFFF6EFE8),
-    inkSoft: Color(0xFFD5C4B8),
-    inkFaint: Color(0xFFC4B3A7),
-    brass: Color(0xFFBFADA3), // khaki beige
-    brassGlow: Color(0xFFD9CBBF),
-    brassSoft: Color(0xFF5E5451),
-    brassDeep: Color(0xFF8F7D72),
-    line: Color(0xFF7A6C68),
-    lineSoft: Color(0x997A6C68),
-    glassRim: Color(0xFF7A6C68),
-    danger: Color(0xFFFF8888),
-    glassHighlight: Color(0x14F6EFE8),
-  );
-
-  /// Zwartschaal uit het palet: veld #212121, kaarten #303030, lift #424242, diepte #000000.
-  static const dark = LuxePalette(
-    cream: Color(0xFF212121),
-    creamLight: Color(0xFF212121),
-    creamDeep: Color(0xFF000000),
-    surface: Color(0xFF303030),
-    surfaceDim: Color(0xFF212121),
-    surfaceDark: Color(0xFF000000),
-    surfaceDarkElev: Color(0xFF424242),
-    ink: Color(0xFFF5F5F5),
-    inkSoft: Color(0xFFBDBDBD),
-    inkFaint: Color(0xFF9E9E9E),
-    brass: Color(0xFFFFFFFF),
-    brassGlow: Color(0xFFFFFFFF),
-    brassSoft: Color(0xFF424242),
-    brassDeep: Color(0xFFBDBDBD),
-    line: Color(0xFF6A6A6A),
-    lineSoft: Color(0x996A6A6A),
-    glassRim: Color(0xFF6A6A6A),
-    danger: Color(0xFFFF8888),
-    glassHighlight: Color(0x38FFFFFF),
   );
 
   @override
@@ -445,12 +375,9 @@ abstract final class LuxeChipChrome {
   /// Light-mode “luchtige” surface — canvas schemert erdoorheen.
   static double lightFill({bool pressed = false}) => pressed ? 0.88 : 0.78;
 
-  /// Donker glas: het veld schemert door, indrukken maakt het vlak dichter.
-  static double darkFill({bool pressed = false}) => pressed ? 0.86 : 0.70;
-
   static Color fill(BuildContext context, {required bool pressed}) {
     final a = isDark(context)
-        ? darkFill(pressed: pressed)
+        ? (pressed ? 1.0 : 0.88)
         : lightFill(pressed: pressed);
     return LuxeColors.surface.withValues(alpha: a);
   }
@@ -680,9 +607,9 @@ Future<void> preloadLuxeFonts() async {
 }
 
 ThemeData buildLuxeTheme([Brightness brightness = Brightness.light]) {
-  // Zwartschaal actief. Rollback:
+  // Quiet luxury active. Rollback:
   //   light → LuxePalette.lightLegacy
-  //   dark  → LuxePalette.darkTaupe  (of darkGraphite, darkQuiet, darkNardo, darkCharcoal)
+  //   dark  → LuxePalette.darkNardo  (of darkCharcoal voor oudere charcoal)
   final p = brightness == Brightness.dark ? LuxePalette.dark : LuxePalette.light;
   final baseText = GoogleFonts.interTextTheme().apply(
     bodyColor: p.ink,

@@ -2458,7 +2458,7 @@ class _GlassBack extends StatelessWidget {
           rimColor: LuxeColors.glassRim,
           fillColor: LuxeColors.surface.withValues(
             alpha: Theme.of(context).brightness == Brightness.dark
-                ? LuxeChipChrome.darkFill()
+                ? 0.92
                 : LuxeChipChrome.lightFill(),
           ),
           shadows: LuxeShadows.soft,

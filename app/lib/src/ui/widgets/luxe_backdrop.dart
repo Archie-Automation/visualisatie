@@ -27,10 +27,19 @@ class LuxeCanvas extends StatelessWidget {
     final cream = phoneLight ? LuxePalette.phoneCream : p.cream;
     final creamLight = phoneLight ? LuxePalette.phoneCreamLight : p.creamLight;
     final creamDeep = phoneLight ? LuxePalette.phoneCreamDeep : p.creamDeep;
-    // Donker: koele lichtval, zodat glas iets heeft om door te laten.
-    // Messing is hier wit; een hoge alpha wordt een grijze vlek.
-    final brassWash = useDark ? 0.06 : (phoneLight ? 0.02 : 0.055);
-    final glowWash = useDark ? 0.04 : (phoneLight ? 0.015 : 0.04);
+    final brassWash = useDark ? 0.14 : (phoneLight ? 0.02 : 0.055);
+    final glowWash = useDark ? 0.12 : (phoneLight ? 0.015 : 0.04);
+    // Donker: verticale diepte in dezelfde tint. De oude diagonaal begon
+    // op creamLight (#383834) en legde een lichte hoek over het veld.
+    final canvasColors = useDark
+        ? const <Color>[
+            Color(0xFF161614),
+            Color(0xFF0A0A09),
+            Color(0xFF050504),
+          ]
+        : <Color>[creamLight, cream, creamDeep];
+    final canvasBegin = useDark ? Alignment.topCenter : Alignment.topLeft;
+    final canvasEnd = useDark ? Alignment.bottomCenter : Alignment.bottomRight;
 
     return Stack(
       fit: StackFit.expand,
@@ -40,9 +49,9 @@ class LuxeCanvas extends StatelessWidget {
           child: DecoratedBox(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [creamLight, cream, creamDeep],
+                begin: canvasBegin,
+                end: canvasEnd,
+                colors: canvasColors,
                 stops: const [0.0, 0.55, 1.0],
               ),
             ),
