@@ -584,7 +584,7 @@ class _BuildingTabBar extends ConsumerWidget {
                   rimColor: selected
                       ? LuxeBorders.solid(LuxeColors.brass)
                       : LuxeColors.glassRim,
-                  fillColor: LuxeChipChrome.fill(
+                  fillColor: LuxeChipChrome.tileFill(
                     context,
                     pressed: selected,
                   ),
@@ -770,7 +770,7 @@ class _FloorTabBar extends ConsumerWidget {
                   rimColor: selected
                       ? LuxeBorders.solid(LuxeColors.brass)
                       : LuxeColors.glassRim,
-                  fillColor: LuxeChipChrome.fill(
+                  fillColor: LuxeChipChrome.tileFill(
                     context,
                     pressed: selected,
                   ),
@@ -2543,7 +2543,7 @@ class _GlassIconButton extends StatelessWidget {
         radius: radius,
         rimWidth: 1,
         rimColor: LuxeColors.glassRim,
-        fillColor: LuxeChipChrome.fill(context, pressed: false),
+        fillColor: LuxeChipChrome.tileFill(context, pressed: false),
         shadows: LuxeShadows.soft,
         child: Center(
           child: Icon(icon, color: LuxeColors.ink, size: iconSize),
@@ -2583,7 +2583,7 @@ class _GlassStatusButton extends StatelessWidget {
           radius: _GlassIconButton.statusRadius,
           rimWidth: 1,
           rimColor: LuxeColors.glassRim,
-          fillColor: LuxeChipChrome.fill(context, pressed: false),
+          fillColor: LuxeChipChrome.tileFill(context, pressed: false),
           shadows: LuxeShadows.soft,
           child: Center(child: child),
         ),

@@ -2456,11 +2456,7 @@ class _GlassBack extends StatelessWidget {
           radius: 14,
           rimWidth: 1,
           rimColor: LuxeColors.glassRim,
-          fillColor: LuxeColors.surface.withValues(
-            alpha: Theme.of(context).brightness == Brightness.dark
-                ? 0.92
-                : LuxeChipChrome.lightFill(),
-          ),
+          fillColor: LuxeChipChrome.tileFill(context, pressed: false),
           shadows: LuxeShadows.soft,
           child: Icon(Icons.arrow_back_ios_new,
               size: 16, color: LuxeColors.ink),

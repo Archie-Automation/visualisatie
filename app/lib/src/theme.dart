@@ -382,11 +382,11 @@ abstract final class LuxeChipChrome {
     return LuxeColors.surface.withValues(alpha: a);
   }
 
-  /// Scene-, systeem- en ruimtetegels in dark mode. De tegelkleur ligt
-  /// vlak bij het veld, dus pas onder ~0.5 leest de vulling als doorzichtig.
-  /// De icoonvakjes gebruiken dit niet.
+  /// Scene-, systeem- en ruimtetegels, plus de headerknoppen.
+  /// Zelfde dekking in licht en donker: de tegelkleur ligt anders te dicht
+  /// bij het veld en de doorzichtigheid valt weg.
+  /// De icoonvakjes ín een tegel gebruiken dit niet.
   static Color tileFill(BuildContext context, {required bool pressed}) {
-    if (!isDark(context)) return fill(context, pressed: pressed);
     return LuxeColors.surface.withValues(alpha: pressed ? 0.58 : 0.40);
   }
 
