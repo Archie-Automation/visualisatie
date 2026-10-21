@@ -173,8 +173,8 @@ class LuxePalette extends ThemeExtension<LuxePalette> {
     glassHighlight: Color(0x28F2F1EC),
   );
 
-  /// Graphite — koele inkt, gelifte leisteen-kaarten, messing als enig warm accent.
-  static const dark = LuxePalette(
+  /// Graphite — koel leisteen. Rollback: [buildLuxeTheme] → darkGraphite.
+  static const darkGraphite = LuxePalette(
     cream: Color(0xFF101318),
     creamLight: Color(0xFF232A34),
     creamDeep: Color(0xFF090B0E),
@@ -194,6 +194,30 @@ class LuxePalette extends ThemeExtension<LuxePalette> {
     glassRim: Color(0xFF465062),
     danger: Color(0xFFFF8888),
     glassHighlight: Color(0x16F4F6F8),
+  );
+
+  /// Taupe-kaarten op Dryad Bark, onyx als verdieping, khaki als accent.
+  /// Khaki niet als lopende tekst: op taupe haalt #BFADA3 het contrast niet.
+  static const dark = LuxePalette(
+    cream: Color(0xFF33312D), // Dryad Bark
+    creamLight: Color(0xFF3E3C38),
+    creamDeep: Color(0xFF282623),
+    surface: Color(0xFF504746), // taupe grey
+    surfaceDim: Color(0xFF353434), // onyx
+    surfaceDark: Color(0xFF282623),
+    surfaceDarkElev: Color(0xFF5E5451),
+    ink: Color(0xFFF6EFE8),
+    inkSoft: Color(0xFFD5C4B8),
+    inkFaint: Color(0xFFC4B3A7),
+    brass: Color(0xFFBFADA3), // khaki beige
+    brassGlow: Color(0xFFD9CBBF),
+    brassSoft: Color(0xFF5E5451),
+    brassDeep: Color(0xFF8F7D72),
+    line: Color(0xFF7A6C68),
+    lineSoft: Color(0x997A6C68),
+    glassRim: Color(0xFF7A6C68),
+    danger: Color(0xFFFF8888),
+    glassHighlight: Color(0x14F6EFE8),
   );
 
   @override
@@ -631,9 +655,9 @@ Future<void> preloadLuxeFonts() async {
 }
 
 ThemeData buildLuxeTheme([Brightness brightness = Brightness.light]) {
-  // Graphite dark actief. Rollback:
+  // Taupe / Dryad Bark actief. Rollback:
   //   light → LuxePalette.lightLegacy
-  //   dark  → LuxePalette.darkQuiet  (warm olijf; of darkNardo / darkCharcoal)
+  //   dark  → LuxePalette.darkGraphite  (of darkQuiet, darkNardo, darkCharcoal)
   final p = brightness == Brightness.dark ? LuxePalette.dark : LuxePalette.light;
   final baseText = GoogleFonts.interTextTheme().apply(
     bodyColor: p.ink,
