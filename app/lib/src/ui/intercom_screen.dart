@@ -185,12 +185,23 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
     });
   }
 
+  /// Nieuwe oproep (paneel belt de intercom, of de intercom belt het paneel)
+  /// stopt de lopende terugkeer. Na dat gesprek begint de wachttijd opnieuw.
+  void _holdHomeForLiveCall({required bool sipLive, required bool ringLive}) {
+    if (!sipLive && !ringLive) return;
+    _callWasLive = true;
+    if (_homeTimer == null && !_hungUp) return;
+    _homeTimer?.cancel();
+    _homeTimer = null;
+    _hungUp = false;
+  }
+
   /// Na ophangen het beeld nog even laten staan, dan pas het beginscherm.
   void _scheduleHome() {
     if (_homeTimer != null || _closing) return;
     _markHungUp();
     ref.read(inactivityControllerProvider.notifier).registerActivity();
-    _homeTimer = Timer(const Duration(seconds: 5), () {
+    _homeTimer = Timer(const Duration(seconds: 20), () {
       _homeTimer = null;
       if (!mounted || _closing) return;
       if (_callStillLive()) return;
@@ -355,7 +366,7 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
             !_callWasLive &&
             _notice == null &&
             sip.dialError == null;
-        if (sipLive || ringLive) _callWasLive = true;
+        _holdHomeForLiveCall(sipLive: sipLive, ringLive: ringLive);
         final sessionOver = _callWasLive ||
             (ring != null &&
                 ring.intercomId == widget.intercomId &&

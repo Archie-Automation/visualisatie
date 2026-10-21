@@ -149,8 +149,9 @@ class LuxePalette extends ThemeExtension<LuxePalette> {
     glassHighlight: Color(0x12E8E8E6),
   );
 
-  /// Quiet luxury dark — diepere canvas, lichtere kaarten, rijker goud.
-  static const dark = LuxePalette(
+  /// Quiet luxury dark — warme olijf-canvas en champagne.
+  /// Rollback: [buildLuxeTheme] → darkQuiet.
+  static const darkQuiet = LuxePalette(
     cream: Color(0xFF0A0A09), // diepere canvas
     creamLight: Color(0xFF383834), // hover wash
     creamDeep: Color(0xFF0A0A09),
@@ -170,6 +171,29 @@ class LuxePalette extends ThemeExtension<LuxePalette> {
     glassRim: Color(0xFF4A4A44),
     danger: Color(0xFFFF8888),
     glassHighlight: Color(0x28F2F1EC),
+  );
+
+  /// Graphite — koele inkt, gelifte leisteen-kaarten, messing als enig warm accent.
+  static const dark = LuxePalette(
+    cream: Color(0xFF101318),
+    creamLight: Color(0xFF232A34),
+    creamDeep: Color(0xFF090B0E),
+    surface: Color(0xFF2A3140),
+    surfaceDim: Color(0xFF1A202A),
+    surfaceDark: Color(0xFF090B0E),
+    surfaceDarkElev: Color(0xFF363E4E),
+    ink: Color(0xFFF4F6F8),
+    inkSoft: Color(0xFFC5CDD6),
+    inkFaint: Color(0xFF9AA3B0),
+    brass: Color(0xFFC9A36A),
+    brassGlow: Color(0xFFE2C79A),
+    brassSoft: Color(0xFF363E4E),
+    brassDeep: Color(0xFFA68345),
+    line: Color(0xFF465062),
+    lineSoft: Color(0x99465062),
+    glassRim: Color(0xFF465062),
+    danger: Color(0xFFFF8888),
+    glassHighlight: Color(0x16F4F6F8),
   );
 
   @override
@@ -607,9 +631,9 @@ Future<void> preloadLuxeFonts() async {
 }
 
 ThemeData buildLuxeTheme([Brightness brightness = Brightness.light]) {
-  // Quiet luxury active. Rollback:
+  // Graphite dark actief. Rollback:
   //   light → LuxePalette.lightLegacy
-  //   dark  → LuxePalette.darkNardo  (of darkCharcoal voor oudere charcoal)
+  //   dark  → LuxePalette.darkQuiet  (warm olijf; of darkNardo / darkCharcoal)
   final p = brightness == Brightness.dark ? LuxePalette.dark : LuxePalette.light;
   final baseText = GoogleFonts.interTextTheme().apply(
     bodyColor: p.ink,
