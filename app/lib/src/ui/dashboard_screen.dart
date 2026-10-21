@@ -2348,7 +2348,7 @@ class _SystemChipState extends ConsumerState<_SystemChip>
                 : const Color(0xFFC08500))
         : defaultAccent;
 
-    final fillColor = LuxeChipChrome.fill(context, pressed: _pressed);
+    final fillColor = LuxeChipChrome.tileFill(context, pressed: _pressed);
     final borderColor = hasAlert
         ? LuxeBorders.solid(accent.withValues(alpha: 0.7))
         : LuxeChipChrome.border(

@@ -223,7 +223,7 @@ class _SceneChipState extends State<_SceneChip>
     final confirm = _running && ack < 0.4 ? 0.4 : ack;
     final baseFill = forceDarkChrome
         ? Colors.white.withValues(alpha: _pressed ? 0.12 : 0.06)
-        : LuxeChipChrome.fill(context, pressed: _pressed);
+        : LuxeChipChrome.tileFill(context, pressed: _pressed);
     final baseBorder = forceDarkChrome
         ? LuxeBorders.solid(
             _pressed
@@ -341,7 +341,7 @@ class _AddSceneChip extends StatelessWidget {
         : LuxeChipChrome.border(context, pressed: false);
     final fill = forceDark
         ? Colors.white.withValues(alpha: 0.04)
-        : LuxeChipChrome.fill(context, pressed: false);
+        : LuxeChipChrome.tileFill(context, pressed: false);
     return GestureDetector(
       onTap: onTap,
       child: LuxeRimBox(

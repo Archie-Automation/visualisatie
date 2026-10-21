@@ -73,7 +73,7 @@ class _SegmentChipState extends State<_SegmentChip> {
   @override
   Widget build(BuildContext context) {
     final accent = LuxeColors.brass;
-    final fillColor = LuxeChipChrome.fill(context, pressed: _pressed);
+    final fillColor = LuxeChipChrome.tileFill(context, pressed: _pressed);
     final borderColor =
         LuxeChipChrome.border(context, pressed: _pressed, accent: accent);
     final iconBox = context.chipIconBox;
