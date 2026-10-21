@@ -416,13 +416,7 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
                       ),
                 ),
               ),
-          ] else
-            const SliverToBoxAdapter(
-              child: Padding(
-                padding: EdgeInsets.fromLTRB(28, 8, 28, 24),
-                child: Text('Geen verdiepingen in dit gebouw'),
-              ),
-            ),
+          ],
           const SliverToBoxAdapter(child: SizedBox(height: 64)),
         ],
       ],
@@ -845,16 +839,10 @@ class _FloorsHomeBand extends StatelessWidget {
               onSelect: onSelect,
               bottomPadding: 0,
             )
-          else if (showBuildings)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                'Geen verdiepingen in dit gebouw',
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: LuxeColors.inkSoft,
-                    ),
-              ),
-            ),
+          else
+            // Zelfde hoogte als de verdiepingsbalk, anders schuift
+            // de gecentreerde gebouwenrij omhoog.
+            const SizedBox(height: HeaderIconButton.size + 16),
         ],
       ),
     );

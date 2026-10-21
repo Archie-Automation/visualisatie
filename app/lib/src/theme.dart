@@ -383,10 +383,11 @@ abstract final class LuxeChipChrome {
   }
 
   /// Scene-, systeem- en ruimtetegels, plus de headerknoppen.
-  /// Zelfde dekking in licht en donker: de tegelkleur ligt anders te dicht
-  /// bij het veld en de doorzichtigheid valt weg.
+  /// Donker moet laag, anders valt de vulling weg tegen het veld.
+  /// Licht blijft bijna dicht: 40% op papier wordt een grijze waas.
   /// De icoonvakjes ín een tegel gebruiken dit niet.
   static Color tileFill(BuildContext context, {required bool pressed}) {
+    if (!isDark(context)) return fill(context, pressed: pressed);
     return LuxeColors.surface.withValues(alpha: pressed ? 0.58 : 0.40);
   }
 
