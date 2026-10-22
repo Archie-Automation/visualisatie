@@ -391,7 +391,7 @@ class _InactivityLayerState extends ConsumerState<InactivityLayer> {
     if (standby != true) return;
     if (await ProximityWake.canDimBrightness()) return;
     final prefs = await SharedPreferences.getInstance();
-    const key = 'standby_brightness_asked_v365';
+    const key = 'standby_brightness_asked_v366';
     if (prefs.getBool(key) == true) return;
     await prefs.setBool(key, true);
     if (!mounted) return;

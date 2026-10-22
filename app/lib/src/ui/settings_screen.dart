@@ -641,7 +641,7 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Helderheid niet gewijzigd. Aanraken werkt wel. Zonder die toestemming kan de backlight blijven gloeien.',
+            'Zet op dat scherm “Systeeminstellingen wijzigen” aan. Zonder dat blijft de backlight gloeien. Aanraken werkt wel.',
           ),
         ),
       );
