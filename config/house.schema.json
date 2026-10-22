@@ -143,7 +143,7 @@
         "standbyInsteadOfScreensaver": {
           "type": "boolean",
           "default": false,
-          "description": "Na dezelfde timeout het scherm uitzetten (backlight uit) in plaats van de screensaver. Voor een paneel in een slaapkamer. Android vraagt eenmalig toestemming om het scherm te vergrendelen."
+          "description": "Na dezelfde timeout de backlight uit in plaats van de screensaver. Het scherm blijft aanraakbaar. Android vraagt eenmalig toestemming om de helderheid te wijzigen."
         },
         "panelRoomId": {
           "type": "string",

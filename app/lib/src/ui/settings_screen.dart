@@ -635,18 +635,16 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
       return;
     }
     setState(() => _saving = true);
-    final allowed = await ProximityWake.requestScreenOffAdmin();
+    final allowed = await ProximityWake.requestStandbyBrightness();
     if (!mounted) return;
     if (!allowed) {
-      setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Zonder die toestemming blijft de backlight aan. Het scherm gaat dan niet uit.',
+            'Helderheid niet gewijzigd. Aanraken werkt wel. Zonder die toestemming kan de backlight blijven gloeien.',
           ),
         ),
       );
-      return;
     }
     await _save(settings.copyWith(standbyInsteadOfScreensaver: true));
   }
@@ -807,7 +805,7 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                   label: 'Scherm uit in plaats van screensaver',
                   hint: settings.screensaverMinutes <= 0
                       ? 'Zet eerst een tijd bij Screensaver.'
-                      : 'Scherm en backlight gaan uit. Android vraagt één keer toestemming.',
+                      : 'Backlight uit. Aanraken zet het scherm weer aan.',
                   value: settings.standbyInsteadOfScreensaver,
                   onChanged: settings.enabled &&
                           !_saving &&

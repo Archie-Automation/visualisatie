@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
@@ -294,8 +295,7 @@ class _OutdoorTempIcon extends StatelessWidget {
   }
 }
 
-/// Vangt de aanraking als het paneel uit standby komt.
-/// Het scherm zelf gaat uit via Android; een zwart vlak laat de backlight aan.
+/// Zwart vlak. De backlight gaat uit; een aanraking zet de helderheid terug.
 class StandbyOverlay extends StatefulWidget {
   const StandbyOverlay({super.key, required this.onDismiss});
 
@@ -359,6 +359,9 @@ class _InactivityLayerState extends ConsumerState<InactivityLayer> {
     if (_displayPanelActive) {
       ProximityWake.start();
       _proximitySub = ProximityWake.onNear.listen((_) => _onProximityNear());
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(_askBrightnessOnce());
+      });
     }
   }
 
@@ -368,6 +371,31 @@ class _InactivityLayerState extends ConsumerState<InactivityLayer> {
     _proximitySub?.cancel();
     if (_displayPanelActive) ProximityWake.stop();
     super.dispose();
+  }
+
+  /// Schakelaar stond al aan vóór de helderheidstoestemming bestond.
+  Future<void> _askBrightnessOnce() async {
+    if (!mounted) return;
+    var standby = ref.read(displayPanelSettingsProvider).maybeWhen(
+          data: (s) => s.standbyInsteadOfScreensaver,
+          orElse: () => null,
+        );
+    if (standby == null) {
+      await Future<void>.delayed(const Duration(seconds: 1));
+      if (!mounted) return;
+      standby = ref.read(displayPanelSettingsProvider).maybeWhen(
+            data: (s) => s.standbyInsteadOfScreensaver,
+            orElse: () => false,
+          );
+    }
+    if (standby != true) return;
+    if (await ProximityWake.canDimBrightness()) return;
+    final prefs = await SharedPreferences.getInstance();
+    const key = 'standby_brightness_asked_v365';
+    if (prefs.getBool(key) == true) return;
+    await prefs.setBool(key, true);
+    if (!mounted) return;
+    await ProximityWake.requestStandbyBrightness();
   }
 
   void _wakePanel() {
