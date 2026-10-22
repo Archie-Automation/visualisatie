@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api.dart';
+import '../../inactivity_controller.dart';
 import '../../melding_alert_sound.dart';
 import '../../proximity_wake.dart';
 
@@ -50,6 +51,7 @@ class _MeldingAlertSoundLayerState
     if (shouldPlay) {
       HapticFeedback.heavyImpact();
       ProximityWake.wakeScreen();
+      ref.read(inactivityControllerProvider.notifier).registerActivity();
       MeldingAlertSound.start();
     } else {
       MeldingAlertSound.stop();

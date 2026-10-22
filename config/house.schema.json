@@ -140,6 +140,11 @@
           "default": 5,
           "description": "Minuten zonder aanraking voordat de screensaver verschijnt (0 = uit)."
         },
+        "standbyInsteadOfScreensaver": {
+          "type": "boolean",
+          "default": false,
+          "description": "Na dezelfde timeout het scherm uitzetten (backlight uit) in plaats van de screensaver. Voor een paneel in een slaapkamer. Android vraagt eenmalig toestemming om het scherm te vergrendelen."
+        },
         "panelRoomId": {
           "type": "string",
           "description": "Ruimte waar het wandtablet hangt (muziek-blokkade screensaver)."

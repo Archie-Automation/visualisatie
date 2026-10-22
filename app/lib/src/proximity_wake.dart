@@ -37,4 +37,32 @@ class ProximityWake {
       await _methods.invokeMethod<void>('wakeScreen');
     } catch (_) {}
   }
+
+  /// Backlight uit via device-admin lockNow. Een zwart vlak laat die aan.
+  static Future<bool> enterStandby() async {
+    if (!supported) return false;
+    try {
+      return await _methods.invokeMethod<bool>('enterStandby') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<void> leaveStandby() async {
+    if (!supported) return;
+    try {
+      await _methods.invokeMethod<void>('leaveStandby');
+    } catch (_) {}
+  }
+
+  /// Systeemdialoog: dit paneel mag het scherm vergrendelen (backlight uit).
+  /// true als de toestemming aan staat, ook als die er al was.
+  static Future<bool> requestScreenOffAdmin() async {
+    if (!supported) return false;
+    try {
+      return await _methods.invokeMethod<bool>('requestScreenOffAdmin') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
 }

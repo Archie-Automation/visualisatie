@@ -1,6 +1,12 @@
 package com.example.archie_os
 
+import android.annotation.SuppressLint
+import android.app.admin.DevicePolicyManager
+import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.PixelFormat
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -21,11 +27,15 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 
+private const val REQUEST_SCREEN_OFF_ADMIN = 4817
+
 /**
  * Wandtablet wake:
  * - Proximity-sensor indien aanwezig
  * - Anders lichtsensor: snelle donkere dip = hand over sensor → wake
  * - [wakeScreen] ook aanroepbaar vanuit Flutter (alarm-inloop etc.)
+ * - Standby (slaapkamer): [DevicePolicyManager.lockNow] zet de backlight uit.
+ *   Een zwart vlak laat die aan.
  * - APK-update via PackageInstaller-sessie (GitHub OTA via NUC)
  */
 class MainActivity : FlutterActivity(), SensorEventListener {
@@ -38,6 +48,13 @@ class MainActivity : FlutterActivity(), SensorEventListener {
     private var lastWakeAtMs = 0L
     private val mainHandler = Handler(Looper.getMainLooper())
     private var wakeLock: PowerManager.WakeLock? = null
+    private var standbyCpuLock: PowerManager.WakeLock? = null
+    private var inStandby = false
+    private var standbyGeneration = 0
+    private var standbyRelockCount = 0
+    private var ignoreWakeUntilMs = 0L
+    private var pendingAdminResult: MethodChannel.Result? = null
+    private var screenOnReceiver: BroadcastReceiver? = null
     private var apkInstaller: ApkInstaller? = null
     private var doorbellRinger: DoorbellRinger? = null
     private var meldingAlertRinger: MeldingAlertRinger? = null
@@ -69,6 +86,12 @@ class MainActivity : FlutterActivity(), SensorEventListener {
                     wakeScreen()
                     result.success(null)
                 }
+                "enterStandby" -> result.success(enterStandby())
+                "leaveStandby" -> {
+                    leaveStandby()
+                    result.success(null)
+                }
+                "requestScreenOffAdmin" -> requestScreenOffAdmin(result)
                 else -> result.notImplemented()
             }
         }
@@ -147,24 +170,178 @@ class MainActivity : FlutterActivity(), SensorEventListener {
         )
     }
 
+    /** 0 = donkerst, BRIGHTNESS_OVERRIDE_NONE = systeemhelderheid. */
+    private fun setWindowBrightness(value: Float) {
+        val attrs = window.attributes
+        attrs.screenBrightness = value
+        window.attributes = attrs
+    }
+
+    private fun screenOffAdmin(): ComponentName =
+        ComponentName(this, ScreenOffAdminReceiver::class.java)
+
+    private fun isScreenOffAdminActive(): Boolean {
+        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        return dpm.isAdminActive(screenOffAdmin())
+    }
+
+    private fun requestScreenOffAdmin(result: MethodChannel.Result) {
+        if (isScreenOffAdminActive()) {
+            result.success(true)
+            return
+        }
+        if (pendingAdminResult != null) {
+            result.success(false)
+            return
+        }
+        pendingAdminResult = result
+        val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN).apply {
+            putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, screenOffAdmin())
+            putExtra(
+                DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                "Standby zet het scherm uit, inclusief de backlight, zodat een slaapkamer donker blijft. Daarvoor mag dit paneel het scherm vergrendelen. Niets anders.",
+            )
+        }
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(intent, REQUEST_SCREEN_OFF_ADMIN)
+        } catch (_: Exception) {
+            pendingAdminResult = null
+            result.success(false)
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != REQUEST_SCREEN_OFF_ADMIN) return
+        val pending = pendingAdminResult ?: return
+        pendingAdminResult = null
+        pending.success(isScreenOffAdminActive())
+    }
+
+    /**
+     * Backlight uit. Een zwart Flutter-vlak is daar niet genoeg: de lcd blijft
+     * gloeien zolang het paneel aan staat. lockNow() doet hetzelfde als de
+     * aan/uit-knop. PARTIAL_WAKE_LOCK houdt de app wakker voor deurbel en sensor.
+     */
+    private fun enterStandby(): Boolean {
+        if (!isScreenOffAdminActive()) {
+            setWindowBrightness(0f)
+            return false
+        }
+        val generation = ++standbyGeneration
+        inStandby = true
+        standbyRelockCount = 0
+        // Scherm uit geeft zelf een lichtdip. Die mag niet meteen weer wekken.
+        ignoreWakeUntilMs = System.currentTimeMillis() + 1200
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        setWindowBrightness(0f)
+        acquireStandbyCpuLock()
+        return try {
+            val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+            dpm.lockNow()
+            mainHandler.postDelayed({
+                if (generation != standbyGeneration || !inStandby) return@postDelayed
+                val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                if (!pm.isInteractive) return@postDelayed
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                try {
+                    dpm.lockNow()
+                } catch (_: SecurityException) {
+                }
+            }, 500)
+            true
+        } catch (_: Exception) {
+            leaveStandby()
+            false
+        }
+    }
+
+    private fun leaveStandby() {
+        standbyGeneration++
+        inStandby = false
+        standbyRelockCount = 0
+        ignoreWakeUntilMs = 0L
+        releaseStandbyCpuLock()
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        setWindowBrightness(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE)
+    }
+
+    @SuppressLint("WakelockTimeout")
+    private fun acquireStandbyCpuLock() {
+        if (standbyCpuLock == null) {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            standbyCpuLock = pm.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "archie_os:standby",
+            ).apply { setReferenceCounted(false) }
+        }
+        val wl = standbyCpuLock ?: return
+        if (!wl.isHeld) wl.acquire()
+    }
+
+    private fun releaseStandbyCpuLock() {
+        try {
+            standbyCpuLock?.let { if (it.isHeld) it.release() }
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun registerScreenOnReceiver() {
+        if (screenOnReceiver != null) return
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (intent?.action != Intent.ACTION_SCREEN_ON) return
+                if (!inStandby || System.currentTimeMillis() < ignoreWakeUntilMs) return
+                standbyGeneration++
+                inStandby = false
+                releaseStandbyCpuLock()
+                bringScreenUp()
+                try {
+                    proximityEvents?.success("screenOn")
+                } catch (_: Exception) {
+                }
+            }
+        }
+        screenOnReceiver = receiver
+        val filter = IntentFilter(Intent.ACTION_SCREEN_ON)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
+            registerReceiver(receiver, filter)
+        }
+    }
+
+    private fun bringScreenUp() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setTurnScreenOn(true)
+            setShowWhenLocked(true)
+        }
+        @Suppress("DEPRECATION")
+        window.addFlags(
+            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD,
+        )
+        setWindowBrightness(WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE)
+    }
+
     private fun wakeScreen() {
+        // Annuleer een lopende standby-herpoging (deurbel, alarm, sensor).
+        val wasStandby = inStandby
+        standbyGeneration++
+        inStandby = false
+        releaseStandbyCpuLock()
         val now = System.currentTimeMillis()
         // Short debounce — was 800ms and felt sluggish on wall panels.
-        if (now - lastWakeAtMs < 250) return
+        // Vanuit standby altijd doorzetten: het scherm staat dan echt uit.
+        if (!wasStandby && now - lastWakeAtMs < 250) return
         lastWakeAtMs = now
 
         runOnUiThread {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                setTurnScreenOn(true)
-                setShowWhenLocked(true)
-            }
-            @Suppress("DEPRECATION")
-            window.addFlags(
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
-                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
-                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                    WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD,
-            )
+            bringScreenUp()
         }
 
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
@@ -189,9 +366,13 @@ class MainActivity : FlutterActivity(), SensorEventListener {
     }
 
     private fun emitNear() {
+        if (System.currentTimeMillis() < ignoreWakeUntilMs) return
         wakeScreen()
         mainHandler.post {
-            proximityEvents?.success("near")
+            try {
+                proximityEvents?.success("near")
+            } catch (_: Exception) {
+            }
         }
     }
 
@@ -223,6 +404,9 @@ class MainActivity : FlutterActivity(), SensorEventListener {
                 // Near: 0 of duidelijk onder maxRange (binary of continuous).
                 val near = value < max * 0.65f || value <= 0.5f
                 if (near && !isNear) {
+                    // Tijdens het uitzetten niet vastzetten op "near": anders
+                    // wekt de eerstvolgende echte beweging niet meer.
+                    if (System.currentTimeMillis() < ignoreWakeUntilMs) return
                     isNear = true
                     emitNear()
                 } else if (!near) {
@@ -231,6 +415,12 @@ class MainActivity : FlutterActivity(), SensorEventListener {
             }
             Sensor.TYPE_LIGHT -> {
                 val lux = event.values[0]
+                // Backlight uit ziet eruit als een hand voor de sensor en zou
+                // standby meteen weer opheffen. Aanraken of proximity wekt wel.
+                if (inStandby || System.currentTimeMillis() < ignoreWakeUntilMs) {
+                    lastLight = lux
+                    return
+                }
                 val prev = lastLight
                 lastLight = lux
                 if (prev == null) return
@@ -252,6 +442,21 @@ class MainActivity : FlutterActivity(), SensorEventListener {
         window.setFormat(PixelFormat.RGBA_8888)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         hideSystemUi()
+        registerScreenOnReceiver()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Sommige panelen (zeker aan de lader) zetten het scherm meteen weer aan.
+        if (!inStandby || System.currentTimeMillis() >= ignoreWakeUntilMs) return
+        if (standbyRelockCount >= 3) return
+        standbyRelockCount++
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        try {
+            val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+            dpm.lockNow()
+        } catch (_: Exception) {
+        }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -296,6 +501,17 @@ class MainActivity : FlutterActivity(), SensorEventListener {
         } catch (_: Exception) {
         }
         wakeLock = null
+        releaseStandbyCpuLock()
+        standbyCpuLock = null
+        screenOnReceiver?.let {
+            try {
+                unregisterReceiver(it)
+            } catch (_: Exception) {
+            }
+        }
+        screenOnReceiver = null
+        pendingAdminResult?.success(false)
+        pendingAdminResult = null
         super.onDestroy()
     }
 }

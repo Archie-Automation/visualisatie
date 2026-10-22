@@ -18,6 +18,7 @@ class DisplayPanelSettings {
     this.enabled = true,
     this.idleHomeMinutes = 1,
     this.screensaverMinutes = 5,
+    this.standbyInsteadOfScreensaver = false,
     this.panelRoomId,
     this.panelRoomName,
     this.suppressScreensaverWhenMusicPlaying = true,
@@ -31,6 +32,9 @@ class DisplayPanelSettings {
   final int idleHomeMinutes;
   /// 0 = screensaver uit.
   final int screensaverMinutes;
+  /// Zelfde timeout als de screensaver, maar het scherm gaat uit (backlight uit).
+  /// Een zwart vlak blijft op een lcd gloeien. Voor een paneel in een slaapkamer.
+  final bool standbyInsteadOfScreensaver;
   /// Ruimte waar dit wandtablet hangt (muziek-blokkade, optioneel temperatuur).
   final String? panelRoomId;
   final String? panelRoomName;
@@ -55,6 +59,7 @@ class DisplayPanelSettings {
     bool? enabled,
     int? idleHomeMinutes,
     int? screensaverMinutes,
+    bool? standbyInsteadOfScreensaver,
     String? panelRoomId,
     String? panelRoomName,
     bool? suppressScreensaverWhenMusicPlaying,
@@ -70,6 +75,8 @@ class DisplayPanelSettings {
         enabled: enabled ?? this.enabled,
         idleHomeMinutes: idleHomeMinutes ?? this.idleHomeMinutes,
         screensaverMinutes: screensaverMinutes ?? this.screensaverMinutes,
+        standbyInsteadOfScreensaver: standbyInsteadOfScreensaver ??
+            this.standbyInsteadOfScreensaver,
         panelRoomId:
             clearPanelRoom ? null : (panelRoomId ?? this.panelRoomId),
         panelRoomName:
@@ -101,6 +108,8 @@ class DisplayPanelSettings {
       enabled: json['enabled'] as bool? ?? true,
       idleHomeMinutes: (json['idleHomeMinutes'] as num?)?.toInt() ?? 1,
       screensaverMinutes: (json['screensaverMinutes'] as num?)?.toInt() ?? 5,
+      standbyInsteadOfScreensaver:
+          json['standbyInsteadOfScreensaver'] as bool? ?? false,
       panelRoomId: json['panelRoomId'] as String?,
       panelRoomName: json['panelRoomName'] as String?,
       suppressScreensaverWhenMusicPlaying:
@@ -116,6 +125,7 @@ class DisplayPanelSettings {
         'enabled': enabled,
         'idleHomeMinutes': idleHomeMinutes,
         'screensaverMinutes': screensaverMinutes,
+        'standbyInsteadOfScreensaver': standbyInsteadOfScreensaver,
         if (panelRoomId != null && panelRoomId!.trim().isNotEmpty)
           'panelRoomId': panelRoomId!.trim(),
         if (panelRoomName != null) 'panelRoomName': panelRoomName,
@@ -134,6 +144,8 @@ class DisplayPanelSettings {
         enabled: json['enabled'] as bool? ?? true,
         idleHomeMinutes: (json['idleHomeMinutes'] as num?)?.toInt() ?? 1,
         screensaverMinutes: (json['screensaverMinutes'] as num?)?.toInt() ?? 5,
+        standbyInsteadOfScreensaver:
+            json['standbyInsteadOfScreensaver'] as bool? ?? false,
         panelRoomId: json['panelRoomId'] as String?,
         panelRoomName: json['panelRoomName'] as String?,
         suppressScreensaverWhenMusicPlaying:
@@ -166,6 +178,7 @@ class DisplayPanelSettingsNotifier extends AsyncNotifier<DisplayPanelSettings> {
         enabled: local.enabled,
         idleHomeMinutes: local.idleHomeMinutes,
         screensaverMinutes: local.screensaverMinutes,
+        standbyInsteadOfScreensaver: local.standbyInsteadOfScreensaver,
         panelRoomId: local.panelRoomId ?? house.panelRoomId,
         panelRoomName: local.panelRoomName ?? house.panelRoomName,
         suppressScreensaverWhenMusicPlaying:

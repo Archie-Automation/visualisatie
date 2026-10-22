@@ -294,6 +294,44 @@ class _OutdoorTempIcon extends StatelessWidget {
   }
 }
 
+/// Vangt de aanraking als het paneel uit standby komt.
+/// Het scherm zelf gaat uit via Android; een zwart vlak laat de backlight aan.
+class StandbyOverlay extends StatefulWidget {
+  const StandbyOverlay({super.key, required this.onDismiss});
+
+  final VoidCallback onDismiss;
+
+  @override
+  State<StandbyOverlay> createState() => _StandbyOverlayState();
+}
+
+class _StandbyOverlayState extends State<StandbyOverlay> {
+  @override
+  void initState() {
+    super.initState();
+    ProximityWake.enterStandby();
+  }
+
+  @override
+  void dispose() {
+    ProximityWake.leaveStandby();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: const Color(0xFF000000),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onDismiss,
+        onPanDown: (_) => widget.onDismiss(),
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+}
+
 /// Detecteert inactiviteit, keert terug naar home en toont screensaver.
 class InactivityLayer extends ConsumerStatefulWidget {
   const InactivityLayer({
@@ -434,6 +472,10 @@ class _InactivityLayerState extends ConsumerState<InactivityLayer> {
 
     final screensaver =
         ref.watch(inactivityControllerProvider).screensaverVisible;
+    final standby = ref.watch(displayPanelSettingsProvider).maybeWhen(
+          data: (s) => s.standbyInsteadOfScreensaver,
+          orElse: () => false,
+        );
 
     return Listener(
       behavior: HitTestBehavior.translucent,
@@ -445,7 +487,9 @@ class _InactivityLayerState extends ConsumerState<InactivityLayer> {
           widget.child,
           if (screensaver)
             Positioned.fill(
-              child: ScreensaverOverlay(onDismiss: _onUserActivity),
+              child: standby
+                  ? StandbyOverlay(onDismiss: _onUserActivity)
+                  : ScreensaverOverlay(onDismiss: _onUserActivity),
             ),
         ],
       ),

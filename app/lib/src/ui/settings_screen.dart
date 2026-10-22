@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
 import '../display_panel_config.dart';
+import '../proximity_wake.dart';
 import '../doorbell_ringer.dart';
 import '../push_service.dart';
 import '../media_api.dart';
@@ -279,7 +280,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             'Op telefoon of in de browser hebben ze geen effect op het wandtablet.\n\n'
             'Deurbel: volume, geluid en hoe lang dit paneel overgaat gelden alleen hier. '
             'Stilzetten geldt voor dit account op elk scherm.\n\n'
-            'Na inactiviteit gaat dit scherm terug naar home, daarna een screensaver met klok.\n\n'
+            'Na inactiviteit gaat dit scherm terug naar home, daarna een screensaver met klok. '
+            'Op een slaapkamer kun je standby aanzetten: dan gaat het scherm uit, backlight uit.\n\n'
             'Koppel de locatie waar dit tablet hangt. Optioneel toont '
             'de screensaver de temperatuur van een ruimte of buitentemperatuur '
             'via groepadres. Zet screensaver uit als de muziekspeler van '
@@ -627,6 +629,28 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
     }
   }
 
+  Future<void> _setStandby(DisplayPanelSettings settings, bool value) async {
+    if (!value) {
+      await _save(settings.copyWith(standbyInsteadOfScreensaver: false));
+      return;
+    }
+    setState(() => _saving = true);
+    final allowed = await ProximityWake.requestScreenOffAdmin();
+    if (!mounted) return;
+    if (!allowed) {
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Zonder die toestemming blijft de backlight aan. Het scherm gaat dan niet uit.',
+          ),
+        ),
+      );
+      return;
+    }
+    await _save(settings.copyWith(standbyInsteadOfScreensaver: true));
+  }
+
   List<({String id, String label})> _roomOptions(HouseConfig cfg) {
     final out = <({String id, String label})>[];
     for (final f in cfg.floors) {
@@ -672,7 +696,8 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                   infoBody:
                       'Deze instellingen gelden alleen voor dit apparaat. '
                       'Op telefoon of in de browser hebben ze geen effect op het wandtablet.\n\n'
-                      'Na inactiviteit gaat dit scherm terug naar home, daarna een screensaver met klok.\n\n'
+                      'Na inactiviteit gaat dit scherm terug naar home, daarna een screensaver met klok. '
+                      'Op een slaapkamer kun je standby aanzetten: dan gaat het scherm uit, backlight uit.\n\n'
                       'Koppel de locatie waar dit tablet hangt. Optioneel toont '
                       'de screensaver de temperatuur van een ruimte of buitentemperatuur '
                       'via groepadres. Zet screensaver uit als de muziekspeler van '
@@ -768,12 +793,27 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                 ),
                 const SizedBox(height: _kWandtabletFunctionGap),
                 _MinutesDropdown(
-                  label: 'Screensaver',
+                  label: settings.standbyInsteadOfScreensaver
+                      ? 'Scherm uit na'
+                      : 'Screensaver',
                   value: settings.screensaverMinutes,
                   enabled: settings.enabled && !_saving,
                   allowOff: true,
                   onChanged: (v) =>
                       _save(settings.copyWith(screensaverMinutes: v)),
+                ),
+                const SizedBox(height: _kWandtabletFunctionGap),
+                _SettingsToggle(
+                  label: 'Scherm uit in plaats van screensaver',
+                  hint: settings.screensaverMinutes <= 0
+                      ? 'Zet eerst een tijd bij Screensaver.'
+                      : 'Scherm en backlight gaan uit. Android vraagt één keer toestemming.',
+                  value: settings.standbyInsteadOfScreensaver,
+                  onChanged: settings.enabled &&
+                          !_saving &&
+                          settings.screensaverMinutes > 0
+                      ? (v) => _setStandby(settings, v)
+                      : null,
                 ),
                 const SizedBox(height: _kWandtabletFunctionGap),
                 _LabeledBox(
