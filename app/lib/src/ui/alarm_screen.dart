@@ -10,6 +10,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api.dart';
+import '../demo/demo_session.dart';
 import '../satel_api.dart';
 import '../theme.dart';
 import 'app_nav.dart';
@@ -207,6 +208,9 @@ class _AlarmBodyState extends ConsumerState<_AlarmBody> {
         FunctionScreenHeader(
           onBack: () => appBack(context),
           title: 'Alarm',
+          subtitle: isDemoToken(ref.read(authProvider).token)
+              ? 'Democode $kDemoPin'
+              : null,
         ),
         Expanded(
           child: SafeArea(

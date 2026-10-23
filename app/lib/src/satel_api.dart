@@ -15,6 +15,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart'; // authProvider
+import 'demo/demo_session.dart';
 
 // ---------------------------------------------------------------------------
 // Base URL
@@ -490,6 +491,7 @@ class SatelEnabledNotifier extends AsyncNotifier<bool> {
   Future<bool> build() async {
     final token = ref.watch(authProvider).token;
     if (token == null) return false;
+    if (isDemoToken(token)) return true;
     try {
       final res = await http
           .get(
@@ -529,6 +531,24 @@ final satelStatusProvider =
 
 class _SatelStatusNotifier extends Notifier<SatelStatus> {
   Timer? _pollTimer;
+  void Function()? _demoListener;
+
+  void _bindDemoAlarm() {
+    _unbindDemoAlarm();
+    void onChange() {
+      state = DemoAlarm.instance.status;
+    }
+
+    _demoListener = onChange;
+    DemoAlarm.instance.listen(onChange);
+  }
+
+  void _unbindDemoAlarm() {
+    final listener = _demoListener;
+    if (listener == null) return;
+    DemoAlarm.instance.unlisten(listener);
+    _demoListener = null;
+  }
 
   @override
   SatelStatus build() {
@@ -541,10 +561,20 @@ class _SatelStatusNotifier extends Notifier<SatelStatus> {
     ref.onDispose(() {
       _pollTimer?.cancel();
       _pollTimer = null;
+      _unbindDemoAlarm();
     });
 
     // ── Disabled: stop polling. ──────────────────────────────────────────
-    if (!enabled) return SatelStatus.empty;
+    if (!enabled) {
+      _unbindDemoAlarm();
+      return SatelStatus.empty;
+    }
+
+    if (isDemoToken(token)) {
+      _bindDemoAlarm();
+      return DemoAlarm.instance.status;
+    }
+    _unbindDemoAlarm();
 
     // ── Live: start periodic polling. ───────────────────────────────────
     _poll(token);
@@ -586,12 +616,14 @@ class _SatelStatusNotifier extends Notifier<SatelStatus> {
 /// If omitted, the backend falls back to the server-side stored PIN.
 Future<({bool ok, String? error})> satelArm(
     int partition, {int mode = 0, String? pin, String? token}) async {
+  if (isDemoToken(token)) return DemoAlarm.instance.tryArm(pin: pin);
   return _satelAction('/satel/arm', partition,
       mode: mode, pin: pin, token: token);
 }
 
 Future<({bool ok, String? error})> satelDisarm(
     int partition, {String? pin, String? token}) async {
+  if (isDemoToken(token)) return DemoAlarm.instance.tryDisarm(pin: pin);
   return _satelAction('/satel/disarm', partition, pin: pin, token: token);
 }
 
@@ -632,6 +664,9 @@ Future<({bool ok, String? error})> _satelAction(
 /// Bypass (or unbypass) one or more zones on the panel.
 Future<({bool ok, String? error})> satelBypass(
     List<int> zones, {required bool bypass, String? pin, String? token}) async {
+  if (isDemoToken(token)) {
+    return DemoAlarm.instance.tryBypass(zones, bypass: bypass, pin: pin);
+  }
   try {
     final headers = <String, String>{'content-type': 'application/json'};
     if (token != null) headers['authorization'] = 'Bearer $token';
@@ -665,6 +700,24 @@ const _kCachedPartitionsKey = 'satel_partitions_v1';
 /// Priority: (1) Satel Python service  (2) main backend house.json  (3) local cache.
 final satelServiceConfigProvider =
     FutureProvider<SatelServiceConfig?>((ref) async {
+  final token = ref.watch(authProvider).token;
+  if (isDemoToken(token)) {
+    return const SatelServiceConfig(
+      host: '',
+      port: 0,
+      partitions: [
+        SatelPartitionConfig(
+          number: 1,
+          name: 'Woning',
+          armModes: [
+            SatelArmMode(mode: 0, name: 'Volledig'),
+            SatelArmMode(mode: 2, name: 'Nacht'),
+          ],
+        ),
+      ],
+      hasPin: true,
+    );
+  }
   // Always load main-backend partitions — these are shared across all devices.
   final mainCfg = await ref.watch(satelMainConfigProvider.future);
 
@@ -868,5 +921,159 @@ Future<({bool ok, String? error})> saveSatelPin(String pin) async {
   } catch (e) {
     return (ok: false, error: e.toString());
   }
+}
+
+// ---------------------------------------------------------------------------
+// Demo-alarm — zelfde scherm, geen Satel-paneel
+// ---------------------------------------------------------------------------
+
+class DemoAlarm {
+  DemoAlarm._();
+  static final instance = DemoAlarm._();
+
+  final List<void Function()> _listeners = [];
+  Timer? _armTimer;
+  SatelPartitionState _partition = SatelPartitionState.disarmed;
+  final Set<int> _bypassed = {};
+  bool _doorOpen = true;
+
+  SatelStatus status = demoAlarmStatus(
+    SatelPartitionState.disarmed,
+    doorOpen: true,
+    bypassed: const {},
+  );
+
+  void listen(void Function() fn) => _listeners.add(fn);
+
+  void unlisten(void Function() fn) => _listeners.remove(fn);
+
+  void reset() {
+    _armTimer?.cancel();
+    _armTimer = null;
+    _partition = SatelPartitionState.disarmed;
+    _bypassed.clear();
+    _doorOpen = true;
+    _emit();
+  }
+
+  ({bool ok, String? error}) tryArm({String? pin, bool skipPin = false}) {
+    final error = _checkPin(pin, skip: skipPin);
+    if (error != null) return (ok: false, error: error);
+    _armTimer?.cancel();
+    _partition = SatelPartitionState.exitDelay;
+    _doorOpen = false;
+    _emit();
+    _armTimer = Timer(const Duration(seconds: 8), () {
+      if (_partition != SatelPartitionState.exitDelay) return;
+      _partition = SatelPartitionState.armed;
+      _emit();
+    });
+    return (ok: true, error: null);
+  }
+
+  ({bool ok, String? error}) tryDisarm({String? pin, bool skipPin = false}) {
+    final error = _checkPin(pin, skip: skipPin);
+    if (error != null) return (ok: false, error: error);
+    _armTimer?.cancel();
+    _armTimer = null;
+    _partition = SatelPartitionState.disarmed;
+    _doorOpen = true;
+    _emit();
+    return (ok: true, error: null);
+  }
+
+  ({bool ok, String? error}) tryBypass(
+    List<int> zones, {
+    required bool bypass,
+    String? pin,
+  }) {
+    if (pin != null && pin.isNotEmpty && pin != kDemoPin) {
+      return (ok: false, error: 'Onjuiste code. Democode is $kDemoPin.');
+    }
+    for (final zone in zones) {
+      if (bypass) {
+        _bypassed.add(zone);
+      } else {
+        _bypassed.remove(zone);
+      }
+    }
+    _emit();
+    return (ok: true, error: null);
+  }
+
+  String? _checkPin(String? pin, {required bool skip}) {
+    if (skip || pin == kDemoPin) return null;
+    return 'Onjuiste code. Democode is $kDemoPin.';
+  }
+
+  void _emit() {
+    status = demoAlarmStatus(
+      _partition,
+      doorOpen: _doorOpen,
+      bypassed: _bypassed,
+    );
+    for (final listener in List<void Function()>.of(_listeners)) {
+      listener();
+    }
+  }
+}
+
+SatelStatus demoAlarmStatus(
+  SatelPartitionState partition, {
+  required bool doorOpen,
+  required Set<int> bypassed,
+}) {
+  SatelZone zone(
+    int number,
+    String name,
+    String room,
+    String roomId,
+    String type, {
+    bool violated = false,
+  }) {
+    return SatelZone(
+      zoneNumber: number,
+      name: name,
+      room: room,
+      roomId: roomId,
+      deviceType: type,
+      violated: violated && !bypassed.contains(number),
+      bypassed: bypassed.contains(number),
+    );
+  }
+
+  final zones = [
+    zone(1, 'Voordeur', 'Entree', 'room-entree', 'magneetcontact',
+        violated: doorOpen),
+    zone(2, 'Raam woonkamer', 'Woonkamer', 'room-woonkamer', 'magneetcontact'),
+    zone(3, 'Beweging woonkamer', 'Woonkamer', 'room-woonkamer', 'pir_beweging'),
+    zone(4, 'Raam keuken', 'Keuken', 'room-keuken', 'magneetcontact'),
+    zone(5, 'Achterdeur', 'Bijkeuken', 'room-bijkeuken', 'magneetcontact'),
+    zone(6, 'Raam slaapkamer 1', 'Slaapkamer 1', 'room-sl1', 'magneetcontact'),
+    zone(7, 'Raam slaapkamer 2', 'Slaapkamer 2', 'room-sl2', 'magneetcontact'),
+    zone(8, 'Raam slaapkamer 3', 'Slaapkamer 3', 'room-sl3', 'magneetcontact'),
+    zone(9, 'Beweging overloop', 'Overloop', 'room-overloop', 'pir_beweging'),
+  ];
+
+  final byRoom = <String, List<SatelZone>>{};
+  for (final item in zones) {
+    byRoom.putIfAbsent(item.room, () => []).add(item);
+  }
+
+  return SatelStatus(
+    connected: true,
+    partitions: [
+      SatelPartitionInfo(number: 1, name: 'Woning', state: partition),
+    ],
+    rooms: [
+      for (final entry in byRoom.entries)
+        SatelRoom(
+          room: entry.key,
+          violated: entry.value.any((item) => item.violated),
+          sensors: entry.value,
+        ),
+    ],
+    allZones: zones,
+  );
 }
 

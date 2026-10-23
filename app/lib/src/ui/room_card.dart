@@ -160,5 +160,9 @@ IconData _iconFor(String? name) => switch (name) {
       'door' => Icons.door_front_door_outlined,
       'home' => Icons.home_outlined,
       'stairs' => Icons.stairs_outlined,
+      'bath' => Icons.bathtub_outlined,
+      'wc' => Icons.wc_outlined,
+      'desk' => Icons.desk_outlined,
+      'laundry' => Icons.local_laundry_service_outlined,
       _ => Icons.square_outlined,
     };

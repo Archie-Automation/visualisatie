@@ -84,6 +84,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (ok && mounted) context.go('/');
   }
 
+  Future<void> _demo() async {
+    setState(() {
+      _busy = true;
+      _err = null;
+    });
+    await ref.read(authProvider.notifier).enterDemo();
+    if (!mounted) return;
+    context.go('/');
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -163,7 +173,33 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                   ),
                                 ),
                         ),
-                        const SizedBox(height: 14),
+                        const SizedBox(height: 12),
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: LuxeColors.ink,
+                            minimumSize: const Size.fromHeight(52),
+                            side: BorderSide(color: LuxeColors.line),
+                            shape: const StadiumBorder(),
+                          ),
+                          onPressed: _busy ? null : _demo,
+                          child: const Text(
+                            'Demowoning bekijken',
+                            style: TextStyle(
+                              letterSpacing: 0.4,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Volledig bedienbaar, zonder echte installatie.',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: LuxeColors.inkSoft,
+                              ),
+                        ),
+                        const SizedBox(height: 6),
                         TextButton(
                           onPressed: _busy ? null : () => context.go('/pair'),
                           child: Text('Ik heb een koppelcode',

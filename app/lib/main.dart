@@ -5,12 +5,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'src/api.dart';
 import 'src/app.dart';
 import 'src/app_bootstrap.dart';
+import 'src/demo/demo_effects.dart';
 import 'src/intercom/panel_speech_audio.dart';
 import 'src/kiosk_system_ui.dart';
 import 'src/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  registerDemoHooks();
 
   // ── Global error handlers ──────────────────────────────────────────────
   // Prevent a single broken widget from bricking the wall panel.

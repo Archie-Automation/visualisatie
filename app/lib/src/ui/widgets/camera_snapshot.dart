@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import '../../api.dart';
+import '../../demo/demo_camera_view.dart';
+import '../../demo/demo_session.dart';
 
 /// Live snapshot preview that fetches JPEG bytes manually.
 ///
@@ -51,6 +53,7 @@ class _CameraSnapshotState extends ConsumerState<CameraSnapshot> {
   @override
   void initState() {
     super.initState();
+    if (isDemoToken(ref.read(authProvider).token)) return;
     // Kick off the first fetch immediately, then on a timer.
     _scheduleFetch(immediately: true);
   }
@@ -113,6 +116,18 @@ class _CameraSnapshotState extends ConsumerState<CameraSnapshot> {
 
   @override
   Widget build(BuildContext context) {
+    if (isDemoToken(ref.watch(authProvider.select((auth) => auth.token)))) {
+      final name = ref.watch(configProvider).maybeWhen(
+            data: (cfg) => cfg.deviceById(widget.cameraId)?.name ?? 'Camera',
+            orElse: () => 'Camera',
+          );
+      return DemoCameraView(
+        label: name,
+        seed: widget.cameraId,
+        expand: widget.expand,
+        aspectRatio: widget.aspectRatio,
+      );
+    }
     final stack = Stack(
       fit: StackFit.expand,
       children: [

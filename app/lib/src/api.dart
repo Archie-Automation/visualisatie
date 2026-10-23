@@ -8,6 +8,9 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'demo/demo_bus.dart';
+import 'demo/demo_house.dart';
+import 'demo/demo_session.dart';
 import 'media_api.dart';
 import 'server_route.dart';
 import 'hvac_switch_lock.dart';
@@ -15,6 +18,24 @@ import 'fireplace_virtual.dart';
 import 'wtw_logic.dart';
 import 'models.dart';
 import 'roles.dart';
+
+/// Gezet vanuit [registerDemoHooks]. De bus zelf blijft vrij van media/alarm.
+typedef DemoSessionHook = void Function(Ref ref, {required bool active});
+
+/// Lezen en schrijven gaan via de notifier zelf. `ref.read(busProvider)`
+/// vanuit een bus-commando is een afhankelijkheid op zichzelf en gooit.
+typedef DemoBusRead = Map<String, dynamic> Function();
+typedef DemoBusWrite = void Function(Map<String, dynamic> patches);
+typedef DemoCommandHook = void Function(
+  Ref ref,
+  Map<String, dynamic> command,
+  DemoBusRead readBus,
+  DemoBusWrite writeBus,
+);
+
+DemoSessionHook? demoSessionHook;
+DemoCommandHook? demoCommandHook;
+void Function()? demoDisposeHook;
 
 /// Returns the API base URL.
 /// In release builds on web the app is served by the backend itself, so we
@@ -244,6 +265,22 @@ class AuthController extends Notifier<AuthState> {
     }
   }
 
+  /// Prospectsessie: het demohuis staat in de app, er is geen server.
+  Future<void> enterDemo() async {
+    final sp = await SharedPreferences.getInstance();
+    await sp.setString('token', kDemoToken);
+    await sp.setString('username', 'Demo');
+    await sp.setString('role', 'user');
+    await sp.remove(_kRefreshPrefKey);
+    await sp.remove(kSessionIdPrefKey);
+    state = const AuthState(
+      token: kDemoToken,
+      username: 'Demo',
+      role: 'user',
+      restoreComplete: true,
+    );
+  }
+
   Future<bool> login(String username, String password) async {
     final res = await http.post(
       Uri.parse('$apiBase/api/auth/login'),
@@ -301,6 +338,7 @@ class AuthController extends Notifier<AuthState> {
 
   /// Nieuw access-token halen op het refresh-token. False = sessie echt weg.
   Future<bool> tryRefresh() async {
+    if (isDemoToken(state.token)) return true;
     if (_refreshing) return state.isAuthed;
     _refreshing = true;
     try {
@@ -332,7 +370,7 @@ class AuthController extends Notifier<AuthState> {
   /// Verloopt het token binnen twee uur (of is het al verlopen)? Dan stil vernieuwen.
   Future<void> ensureFresh() async {
     final t = state.token;
-    if (t == null) return;
+    if (t == null || isDemoToken(t)) return;
     final exp = _parseJwtExp(t);
     if (exp == null) return; // oud token zonder exp: niets doen
     final soon = DateTime.now().add(const Duration(hours: 2));
@@ -410,6 +448,7 @@ final configProvider = FutureProvider<HouseConfig>((ref) async {
   final isAuthed = ref.watch(authProvider.select((a) => a.isAuthed));
   if (!isAuthed) throw StateError('not authenticated');
   final token = ref.read(authProvider).token;
+  if (isDemoToken(token)) return demoHouse.config;
   final res = await http.get(
     Uri.parse('$apiBase/api/config'),
     headers: {'authorization': 'Bearer $token'},
@@ -470,6 +509,7 @@ class BusController extends Notifier<BusState> {
   /// Incremented on every `_connect()` call. Stale calls detect they're
   /// outdated and stop without corrupting the connection.
   int _connectGen = 0;
+  bool _demoSeeded = false;
   Timer? _reconnectTimer;
   Timer? _healthTimer;
   static const _dimHoldDuration = Duration(milliseconds: 1200);
@@ -540,6 +580,7 @@ class BusController extends Notifier<BusState> {
   BusState build() {
     ref.onDispose(() {
       _disposed = true;
+      demoDisposeHook?.call();
       _batchTimer?.cancel();
       _reconnectTimer?.cancel();
       _healthTimer?.cancel();
@@ -558,10 +599,17 @@ class BusController extends Notifier<BusState> {
     ref.onDispose(() => serverRouteEpoch.removeListener(onRouteSwitch));
     // Bus starts before auth restore / login finish; reconnect when session is ready.
     ref.listen<AuthState>(authProvider, (prev, next) {
+      if (isDemoToken(next.token) && !isDemoToken(prev?.token)) {
+        _demoSeeded = false;
+      }
       if (next.restoreComplete && next.isAuthed) {
         final wasReady = (prev?.restoreComplete ?? false) && (prev?.isAuthed ?? false);
         if (!wasReady) reconnectNow();
       } else if (prev?.isAuthed == true && !next.isAuthed) {
+        if (isDemoToken(prev?.token)) {
+          _demoSeeded = false;
+          demoSessionHook?.call(ref, active: false);
+        }
         _socketLive = false;
         _reconnectTimer?.cancel();
         _sub?.cancel();
@@ -594,6 +642,10 @@ class BusController extends Notifier<BusState> {
   Future<void> _probeHealth() async {
     if (_disposed) return;
     final auth = ref.read(authProvider);
+    if (isDemoToken(auth.token)) {
+      ref.read(serverLinkProvider.notifier).online();
+      return;
+    }
     if (!auth.isAuthed || !auth.restoreComplete) return;
     final ok = await _healthOk();
     if (_disposed) return;
@@ -649,6 +701,16 @@ class BusController extends Notifier<BusState> {
     if (!auth.isAuthed || !auth.restoreComplete) return;
     _connectInFlight = true;
     try {
+    if (isDemoToken(auth.token)) {
+      if (!_demoSeeded) {
+        state = BusState(Map<String, dynamic>.from(demoHouse.bus));
+        _demoSeeded = true;
+        demoSessionHook?.call(ref, active: true);
+      }
+      _socketLive = true;
+      ref.read(serverLinkProvider.notifier).online();
+      return;
+    }
     // Always re-fetch the full state snapshot on (re)connect so we catch
     // any updates that arrived while the WebSocket was down.
     try {
@@ -853,8 +915,27 @@ class BusController extends Notifier<BusState> {
     _connect();
   }
 
+  /// Schrijft demo-buswaarden zonder netwerk. Hooks doen media en zonwering.
+  void reflectAll(Map<String, dynamic> patches) {
+    if (patches.isEmpty) return;
+    final next = Map<String, dynamic>.from(state.values)..addAll(patches);
+    state = BusState(next);
+  }
+
+  void _applyDemoCommand(Map<String, dynamic> command) {
+    final cfg = ref.read(configProvider).value;
+    if (cfg != null) {
+      reflectAll(demoCommandPatches(cfg, state.values, command));
+    }
+    demoCommandHook?.call(ref, command, () => state.values, reflectAll);
+  }
+
   Future<void> send(Map<String, dynamic> command) async {
     final auth = ref.read(authProvider);
+    if (isDemoToken(auth.token)) {
+      _applyDemoCommand(command);
+      return;
+    }
     final res = await http.post(
       Uri.parse('$apiBase/api/command'),
       headers: {
@@ -872,6 +953,10 @@ class BusController extends Notifier<BusState> {
   /// message on failure, so the UI can show why a command did not work.
   Future<void> sendChecked(Map<String, dynamic> command) async {
     final auth = ref.read(authProvider);
+    if (isDemoToken(auth.token)) {
+      _applyDemoCommand(command);
+      return;
+    }
     final res = await http.post(
       Uri.parse('$apiBase/api/command'),
       headers: {

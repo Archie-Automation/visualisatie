@@ -5,6 +5,8 @@ import 'package:intl/intl.dart';
 
 import '../../api.dart';
 import '../../camera_api.dart';
+import '../../demo/demo_camera_view.dart';
+import '../../demo/demo_session.dart';
 import '../../theme.dart';
 
 /// Foto-flits op het beeld; de knoppen zelf horen in de belbalk.
@@ -356,6 +358,13 @@ class _AuthJpegState extends ConsumerState<_AuthJpeg> {
 
   @override
   Widget build(BuildContext context) {
+    if (isDemoToken(ref.watch(authProvider.select((auth) => auth.token)))) {
+      return const DemoCameraView(
+        label: 'Opname',
+        seed: 'capture',
+        expand: true,
+      );
+    }
     final bytes = _bytes;
     if (bytes == null) {
       return Center(

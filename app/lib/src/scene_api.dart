@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import 'api.dart';
+import 'demo/demo_effects.dart';
+import 'demo/demo_session.dart';
 import 'models.dart';
 
 /// Fire-and-forget: ask the backend to execute a scene by id.
@@ -70,6 +72,10 @@ class _SceneApi {
   final Ref _ref;
 
   Future<void> run(String sceneId) async {
+    if (isDemoToken(_ref.read(authProvider).token)) {
+      await runDemoScene(_ref, sceneId);
+      return;
+    }
     try {
       await runScene(
         sceneId: sceneId,

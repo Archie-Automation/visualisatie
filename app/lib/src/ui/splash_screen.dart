@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 
 import '../api.dart';
+import '../demo/demo_session.dart';
 import '../server_route.dart';
 import '../theme.dart';
 import 'widgets/luxe_backdrop.dart';
@@ -77,6 +78,19 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 
   Future<void> _pingOnce() async {
+    final auth = ref.read(authProvider);
+    if (!auth.restoreComplete) {
+      _retryTimer = Timer(const Duration(milliseconds: 200), _pingOnce);
+      return;
+    }
+    if (isDemoToken(auth.token)) {
+      _backendOk = true;
+      _failCount = 0;
+      _retryTimer?.cancel();
+      _tryNavigate();
+      return;
+    }
+
     bool ok = false;
     // Na een mislukte poging eerst de andere route proberen (LAN <-> cloud).
     if (_failCount > 0 && !kIsWeb) {
@@ -279,6 +293,25 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                             : Text(kIsWeb
                                 ? 'Opnieuw proberen'
                                 : 'Opnieuw verbinden'),
+                      ),
+                      const SizedBox(height: 10),
+                      TextButton(
+                        onPressed: _savingServer
+                            ? null
+                            : () async {
+                                await ref.read(authProvider.notifier).enterDemo();
+                                if (!context.mounted) return;
+                                _navigated = true;
+                                _retryTimer?.cancel();
+                                context.go('/');
+                              },
+                        child: Text(
+                          'Demowoning bekijken',
+                          style: TextStyle(
+                            color: LuxeColors.inkSoft,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
                     ],
                   ],

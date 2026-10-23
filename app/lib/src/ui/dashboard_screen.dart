@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../api.dart';
+import '../demo/demo_session.dart';
 import '../device_activity.dart';
 import '../fireplace_virtual.dart';
 import '../idle_reset.dart';
@@ -1514,6 +1515,15 @@ Widget _header(
                       fontSize: context.displayLargeFontSize,
                     ),
               ),
+              if (isDemoToken(auth.token)) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Rondleiding · er wordt niets in een echte installatie geschakeld',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: LuxeColors.inkSoft,
+                      ),
+                ),
+              ],
             ],
           ),
         ),

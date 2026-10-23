@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../api.dart';
 import '../camera_api.dart';
+import '../demo/demo_session.dart';
 import '../inactivity_controller.dart';
 import '../installer/intercom_sip_config.dart';
 import '../intercom/intercom_controller.dart';
@@ -97,6 +98,11 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
   }
 
   Future<void> _answer(IntercomController sip) async {
+    if (isDemoToken(ref.read(authProvider).token)) {
+      ref.read(intercomRingProvider.notifier).clear();
+      _snack('Opgenomen. In de demo is er geen audioverbinding.');
+      return;
+    }
     if (_hungUp) {
       _homeTimer?.cancel();
       _homeTimer = null;
@@ -295,6 +301,10 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
 
     setState(() => _releasing = true);
     try {
+      if (isDemoToken(ref.read(authProvider).token)) {
+        if (mounted) _flashOpened();
+        return;
+      }
       final raw = device?.raw['intercom'];
       final digit = raw is Map
           ? ((raw['dtmfDigit'] as String?)?.trim().isNotEmpty == true
@@ -465,7 +475,8 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                                 expand: true,
                                 showLiveBadge: false,
                               ),
-                            if (!_previewFailed)
+                            if (!_previewFailed &&
+                                !isDemoToken(ref.read(authProvider).token))
                               WebRTCCameraPlayer(
                                 signallingPath: 'intercoms/${i.id}',
                                 aspectRatio: i.aspectRatio,
@@ -606,6 +617,28 @@ class _IntercomScreenState extends ConsumerState<IntercomScreen> {
                               return Column(
                                 children: [
                                   Row(children: calls),
+                                  if (isDemoToken(ref.read(authProvider).token) &&
+                                      !ringing)
+                                    TextButton(
+                                      onPressed: () {
+                                        ref
+                                            .read(intercomRingProvider.notifier)
+                                            .push(IntercomRing(
+                                              intercomId: i.id,
+                                              name: i.name,
+                                              ts: DateTime.now()
+                                                  .millisecondsSinceEpoch,
+                                              timeoutSec: 25,
+                                            ));
+                                      },
+                                      child: Text(
+                                        'Simuleer deurbel',
+                                        style: TextStyle(
+                                          color: LuxeColors.inkSoft,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ),
                                   if (phone) ...[
                                     const SizedBox(height: 14),
                                     Row(

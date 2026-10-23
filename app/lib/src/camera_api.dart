@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import 'api.dart';
+import 'demo/demo_session.dart';
 
 /// ----------------------------- Cameras -------------------------------
 /// Passive, view-only. No microphone. Ever.
@@ -54,6 +55,18 @@ final cameraInfoProvider =
   final isAuthed = ref.watch(authProvider.select((a) => a.isAuthed));
   if (!isAuthed) throw StateError('not authenticated');
   final token = ref.read(authProvider).token;
+  if (isDemoToken(token)) {
+    final name = ref.read(configProvider).value?.deviceById(id)?.name ?? 'Camera';
+    return CameraInfo(
+      id: id,
+      name: name,
+      aspect: '16:9',
+      hlsUrl: '',
+      webrtcUrl: '',
+      whepUrl: '',
+      snapshotUrl: '',
+    );
+  }
   final res = await http.get(
     Uri.parse('$apiBase/api/cameras/$id'),
     headers: {'authorization': 'Bearer $token'},
@@ -134,6 +147,18 @@ final intercomInfoProvider =
     FutureProvider.family<IntercomInfo, String>((ref, id) async {
   final auth = ref.watch(authProvider);
   if (!auth.isAuthed) throw StateError('not authenticated');
+  if (isDemoToken(auth.token)) {
+    final name =
+        ref.read(configProvider).value?.deviceById(id)?.name ?? 'Intercom';
+    return IntercomInfo(
+      id: id,
+      name: name,
+      aspect: '16:9',
+      webrtcUrl: '',
+      snapshotUrl: '',
+      canRelease: true,
+    );
+  }
   final res = await http.get(
     Uri.parse('$apiBase/api/intercoms/$id'),
     headers: {'authorization': 'Bearer ${auth.token}'},
@@ -172,10 +197,15 @@ class IntercomCapture {
       );
 }
 
+final _demoCaptures = <String, List<IntercomCapture>>{};
+
 final intercomCapturesProvider =
     FutureProvider.family<List<IntercomCapture>, String>((ref, id) async {
   final auth = ref.watch(authProvider);
   if (!auth.isAuthed) throw StateError('not authenticated');
+  if (isDemoToken(auth.token)) {
+    return List<IntercomCapture>.from(_demoCaptures[id] ?? const []);
+  }
   final res = await http.get(
     Uri.parse('$apiBase/api/intercoms/$id/captures'),
     headers: {'authorization': 'Bearer ${auth.token}'},
@@ -195,6 +225,17 @@ Future<IntercomCapture> takeIntercomCapture({
   required String intercomId,
   required String? token,
 }) async {
+  if (isDemoToken(token)) {
+    final cap = IntercomCapture(
+      id: 'demo-cap-${DateTime.now().millisecondsSinceEpoch}',
+      intercomId: intercomId,
+      name: 'Voordeur',
+      ts: DateTime.now().millisecondsSinceEpoch,
+      source: 'manual',
+    );
+    _demoCaptures.putIfAbsent(intercomId, () => []).insert(0, cap);
+    return cap;
+  }
   final res = await http.post(
     Uri.parse('$apiBase/api/intercoms/$intercomId/captures'),
     headers: {'authorization': 'Bearer $token'},
@@ -212,6 +253,10 @@ Future<void> deleteIntercomCapture({
   required String captureId,
   required String? token,
 }) async {
+  if (isDemoToken(token)) {
+    _demoCaptures[intercomId]?.removeWhere((cap) => cap.id == captureId);
+    return;
+  }
   final res = await http.delete(
     Uri.parse('$apiBase/api/intercoms/$intercomId/captures/$captureId'),
     headers: {'authorization': 'Bearer $token'},
@@ -240,6 +285,7 @@ Future<void> releaseIntercomDoor({
   required String intercomId,
   required String? token,
 }) async {
+  if (isDemoToken(token)) return;
   final res = await http.post(
     Uri.parse('$apiBase/api/intercoms/$intercomId/release'),
     headers: {'authorization': 'Bearer $token'},

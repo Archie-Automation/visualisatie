@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import 'api.dart';
+import 'demo/demo_session.dart';
 
 /// ------------------------------- Logs --------------------------------
 /// Server-side time-series of KNX group-address values, rendered as graphs.
@@ -129,6 +130,7 @@ typedef LogQuery = ({String id, int fromMs, int toMs, int maxPoints});
 final logsListProvider = FutureProvider<List<LogInfo>>((ref) async {
   final auth = ref.watch(authProvider);
   if (!auth.isAuthed) throw StateError('not authenticated');
+  if (isDemoToken(auth.token)) return const [];
   ref.watch(configProvider);
   final res = await http.get(
     Uri.parse('$apiBase/api/logs'),
