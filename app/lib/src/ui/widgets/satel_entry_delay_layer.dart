@@ -15,9 +15,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api.dart';
 import '../../satel_api.dart';
-import '../../theme.dart';
-import '_satel_beep_stub.dart'
-    if (dart.library.html) '_satel_beep_web.dart';
+import 'alarm_delay_sound.dart';
 
 class SatelEntryDelayLayer extends ConsumerStatefulWidget {
   const SatelEntryDelayLayer({super.key, required this.child});
@@ -34,8 +32,12 @@ class _SatelEntryDelayLayerState extends ConsumerState<SatelEntryDelayLayer>
   late final AnimationController _animCtrl;
   late final Animation<double> _fadeAnim;
 
-  Timer? _beepTimer;
+  Timer? _fastTimer;
   SatelPartitionState? _lastState;
+  DateTime? _trackedDeadline;
+  DateTime? _panelDeadline;
+
+  static const _fastTail = Duration(seconds: 3);
 
   @override
   void initState() {
@@ -49,11 +51,13 @@ class _SatelEntryDelayLayerState extends ConsumerState<SatelEntryDelayLayer>
       curve: Curves.easeOutCubic,
       reverseCurve: Curves.easeInCubic,
     );
+    alarmDelayPrepare();
   }
 
   @override
   void dispose() {
-    _beepTimer?.cancel();
+    _fastTimer?.cancel();
+    alarmDelayStop();
     _animCtrl.dispose();
     super.dispose();
   }
@@ -75,34 +79,59 @@ class _SatelEntryDelayLayerState extends ConsumerState<SatelEntryDelayLayer>
       });
     }
 
-    // Beep ────────────────────────────────────────────────────────────────
-    _beepTimer?.cancel();
-    _beepTimer = null;
+    // Beep. Slow chirp for the delay; the fast tail only in the last seconds
+    // before the partition actually arms.
+    _fastTimer?.cancel();
+    _fastTimer = null;
+    _trackedDeadline = null;
+    _panelDeadline = null;
+    alarmDelayStop();
 
     switch (worst) {
       case SatelPartitionState.entryDelay:
-        // Satel entry-delay pattern: urgent "bi-bi" double-beep every second.
-        beepDouble(frequency: 1100, durationSec: 0.08);
-        _beepTimer = Timer.periodic(
-          const Duration(milliseconds: 1000),
-          (_) => beepDouble(frequency: 1100, durationSec: 0.08),
-        );
+        alarmDelaySlow();
       case SatelPartitionState.exitDelay:
-        // Satel exit-delay pattern: single short beep once per second.
-        beepOnce(frequency: 900, durationSec: 0.10);
-        _beepTimer = Timer.periodic(
-          const Duration(milliseconds: 1000),
-          (_) => beepOnce(frequency: 900, durationSec: 0.10),
-        );
+        alarmDelaySlow();
+        _armFast(status.exitDeadline);
       default:
-        break; // no beep when armed / disarmed
+        break;
     }
+  }
+
+  void _syncExitCountdown(SatelStatus status) {
+    if (status.worstState != SatelPartitionState.exitDelay) return;
+    if (status.exitDeadline != null) {
+      if (status.exitDeadline != _trackedDeadline) {
+        _armFast(status.exitDeadline);
+      }
+      return;
+    }
+    if (status.exitFinal && _panelDeadline == null) {
+      // The panel only reports "under 10 seconds", and that poll is a few
+      // seconds late. Count from here so the fast beeps sit in the last ~3s.
+      _panelDeadline = DateTime.now().add(const Duration(seconds: 8));
+      _armFast(_panelDeadline);
+    }
+  }
+
+  void _armFast(DateTime? deadline) {
+    _fastTimer?.cancel();
+    _fastTimer = null;
+    _trackedDeadline = deadline;
+    if (deadline == null) return;
+    final wait = deadline.difference(DateTime.now()) - _fastTail;
+    if (wait <= Duration.zero) {
+      alarmDelayFast();
+      return;
+    }
+    _fastTimer = Timer(wait, alarmDelayFast);
   }
 
   @override
   Widget build(BuildContext context) {
     ref.listen<SatelStatus>(satelStatusProvider, (_, next) {
       _syncState(next);
+      _syncExitCountdown(next);
     });
 
     final status = ref.watch(satelStatusProvider);

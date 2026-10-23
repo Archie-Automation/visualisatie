@@ -243,6 +243,8 @@ DemoHouseData _build() {
   final g = _Gas();
 
   final entreeLight = _switch(g, 'demo-light-entree', 'Plafond', on: true);
+  final gevel = _switch(g, 'demo-light-gevel', 'Gevel');
+  final tuin = _switch(g, 'demo-light-tuin', 'Tuinpad');
   final woonSpots = _dim(
     g,
     'demo-light-woon',
@@ -599,6 +601,8 @@ DemoHouseData _build() {
             'icon': 'door',
             'devices': [
               entreeLight,
+              gevel,
+              tuin,
               climates['entree']!.json,
             ],
           },

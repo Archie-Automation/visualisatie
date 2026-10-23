@@ -164,6 +164,7 @@ class SatelState:
         "partitions_armed",
         "partitions_entry",
         "partitions_exit",
+        "partitions_exit_under_10",
     )
 
     def __init__(self) -> None:
@@ -172,6 +173,7 @@ class SatelState:
         self.partitions_armed: set[int] = set()   # union of all arm modes
         self.partitions_entry: set[int] = set()
         self.partitions_exit:  set[int] = set()
+        self.partitions_exit_under_10: set[int] = set()
 
     def partition_state(self, partition: int) -> str:
         """Return a human-readable state string for a single partition."""
@@ -477,6 +479,7 @@ class SatelClient:
         self._buf = bytearray()
         self._armed_by_cmd.clear()
         self._exit_by_cmd.clear()
+        self.state.partitions_exit_under_10 = set()
         # A fresh encryption handler per connection (rolling counter resets).
         self._crypto = (
             EncryptedCommunicationHandler(self.integration_key)
@@ -640,3 +643,5 @@ class SatelClient:
         for s in self._exit_by_cmd.values():
             union |= s
         self.state.partitions_exit = union
+        if cmd == CMD_PART_EXIT_UNDER_10:
+            self.state.partitions_exit_under_10 = value

@@ -179,11 +179,15 @@ class SatelPartitionInfo {
     required this.number,
     required this.name,
     required this.state,
+    this.exitFinal = false,
   });
 
   final int number;
   final String name;
   final SatelPartitionState state;
+
+  /// Panel exit countdown is in its last 10 seconds.
+  final bool exitFinal;
 
   bool get isDisarmed   => state == SatelPartitionState.disarmed;
   bool get isArmed      => state == SatelPartitionState.armed;
@@ -195,6 +199,7 @@ class SatelPartitionInfo {
         number: (j['number'] as num).toInt(),
         name:   j['name'] as String,
         state:  SatelPartitionState.parse(j['state'] as String?),
+        exitFinal: j['exit_final'] == true,
       );
 }
 
@@ -372,12 +377,20 @@ class SatelStatus {
     required this.partitions,
     required this.rooms,
     required this.allZones,
+    this.exitDeadline,
   });
 
   final bool connected;
   final List<SatelPartitionInfo> partitions;
   final List<SatelRoom> rooms;
   final List<SatelZone> allZones;
+
+  /// When the demo (or a known timer) will leave exit delay. Null on a live
+  /// panel; that path uses [SatelPartitionInfo.exitFinal] instead.
+  final DateTime? exitDeadline;
+
+  bool get exitFinal =>
+      partitions.any((p) => p.isExitDelay && p.exitFinal);
 
   /// Worst state across all partitions (for the dashboard chip animation).
   SatelPartitionState get worstState {
@@ -933,6 +946,7 @@ class DemoAlarm {
 
   final List<void Function()> _listeners = [];
   Timer? _armTimer;
+  DateTime? _exitDeadline;
   SatelPartitionState _partition = SatelPartitionState.disarmed;
   final Set<int> _bypassed = {};
 
@@ -948,6 +962,7 @@ class DemoAlarm {
   void reset() {
     _armTimer?.cancel();
     _armTimer = null;
+    _exitDeadline = null;
     _partition = SatelPartitionState.disarmed;
     _bypassed.clear();
     _emit();
@@ -958,10 +973,12 @@ class DemoAlarm {
     if (error != null) return (ok: false, error: error);
     _armTimer?.cancel();
     _partition = SatelPartitionState.exitDelay;
+    _exitDeadline = DateTime.now().add(kDemoExitDelay);
     _emit();
-    _armTimer = Timer(const Duration(seconds: 8), () {
+    _armTimer = Timer(kDemoExitDelay, () {
       if (_partition != SatelPartitionState.exitDelay) return;
       _partition = SatelPartitionState.armed;
+      _exitDeadline = null;
       _emit();
     });
     return (ok: true, error: null);
@@ -972,6 +989,7 @@ class DemoAlarm {
     if (error != null) return (ok: false, error: error);
     _armTimer?.cancel();
     _armTimer = null;
+    _exitDeadline = null;
     _partition = SatelPartitionState.disarmed;
     _emit();
     return (ok: true, error: null);
@@ -1005,6 +1023,8 @@ class DemoAlarm {
     status = demoAlarmStatus(
       _partition,
       bypassed: _bypassed,
+      exitDeadline:
+          _partition == SatelPartitionState.exitDelay ? _exitDeadline : null,
     );
     for (final listener in List<void Function()>.of(_listeners)) {
       listener();
@@ -1012,9 +1032,12 @@ class DemoAlarm {
   }
 }
 
+const kDemoExitDelay = Duration(seconds: 8);
+
 SatelStatus demoAlarmStatus(
   SatelPartitionState partition, {
   required Set<int> bypassed,
+  DateTime? exitDeadline,
 }) {
   SatelZone zone(
     int number,
@@ -1064,6 +1087,7 @@ SatelStatus demoAlarmStatus(
         ),
     ],
     allZones: zones,
+    exitDeadline: exitDeadline,
   );
 }
 

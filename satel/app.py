@@ -263,6 +263,8 @@ class PartitionStatus(BaseModel):
     number: int
     name:   str
     state:  str   # "Disarmed" | "Armed" | "Exit_Delay" | "Entry_Delay"
+    # True while the panel's exit countdown is under 10 seconds.
+    exit_final: bool = False
 
 
 class StatusResponse(BaseModel):
@@ -289,6 +291,10 @@ async def get_status() -> StatusResponse:
             number=p.number,
             name=p.name,
             state=bus_state.partition_state(p.number) if bus_state else "Disarmed",
+            exit_final=(
+                bus_state is not None
+                and p.number in bus_state.partitions_exit_under_10
+            ),
         )
         for p in _config.partitions
     ]

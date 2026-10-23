@@ -60,6 +60,7 @@ class MainActivity : FlutterActivity(), SensorEventListener {
     private var apkInstaller: ApkInstaller? = null
     private var doorbellRinger: DoorbellRinger? = null
     private var meldingAlertRinger: MeldingAlertRinger? = null
+    private var alarmDelayRinger: AlarmDelayRinger? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -113,6 +114,25 @@ class MainActivity : FlutterActivity(), SensorEventListener {
                 }
                 "stop" -> {
                     doorbellRinger?.stop()
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
+
+        alarmDelayRinger = AlarmDelayRinger(this)
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "archie_os/alarm_delay",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "play" -> {
+                    val which = call.argument<String>("which") ?: "slow"
+                    alarmDelayRinger?.play(which)
+                    result.success(null)
+                }
+                "stop" -> {
+                    alarmDelayRinger?.stop()
                     result.success(null)
                 }
                 else -> result.notImplemented()
@@ -497,6 +517,8 @@ class MainActivity : FlutterActivity(), SensorEventListener {
         doorbellRinger = null
         meldingAlertRinger?.stop()
         meldingAlertRinger = null
+        alarmDelayRinger?.stop()
+        alarmDelayRinger = null
         apkInstaller?.dispose()
         apkInstaller = null
         try {

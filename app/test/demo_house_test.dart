@@ -2,6 +2,7 @@ import 'package:archie_os/src/api.dart';
 import 'package:archie_os/src/demo/demo_bus.dart';
 import 'package:archie_os/src/demo/demo_effects.dart';
 import 'package:archie_os/src/demo/demo_house.dart';
+import 'package:archie_os/src/demo/demo_schedules.dart';
 import 'package:archie_os/src/models.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -89,6 +90,24 @@ void main() {
       ]),
     );
     expect(demoHouse.issuedGas, demoHouse.bus.length);
+    expect(house.deviceById('demo-light-gevel')?.name, 'Gevel');
+    expect(house.deviceById('demo-light-tuin')?.name, 'Tuinpad');
+    final schedules = demoOutdoorSchedules();
+    expect(
+      schedules.map((schedule) => schedule.id),
+      ['sch-buiten-aan', 'sch-buiten-uit'],
+    );
+    final on = schedules.first;
+    expect((on.trigger as AstroTrigger).event, AstroEvent.sunset);
+    expect((schedules.last.trigger as AstroTrigger).event, AstroEvent.sunrise);
+    final patches = demoSchedulePatches('sch-buiten-aan');
+    expect(patches[house.deviceById('demo-light-gevel')!.ga['switch']], isTrue);
+    expect(patches[house.deviceById('demo-light-tuin')!.ga['switch']], isTrue);
+    expect(
+      demoSchedulePatches('sch-buiten-uit')[
+          house.deviceById('demo-light-gevel')!.ga['switch']],
+      isFalse,
+    );
   });
 
   test('scenes point at real addresses and commands update status', () {

@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:http/http.dart' as http;
 
 import 'api.dart';
+import 'demo/demo_schedules.dart';
+import 'demo/demo_session.dart';
 import 'models.dart';
 
 /// Read the list of schedules from the backend.
@@ -61,6 +63,7 @@ final schedulesProvider = FutureProvider<List<Schedule>>((ref) async {
   if (!isAuthed) return const [];
   final token = ref.read(authProvider).token;
   if (token == null) return const [];
+  if (isDemoToken(token)) return demoOutdoorSchedules();
   return fetchSchedules(token: token);
 });
 
@@ -73,10 +76,18 @@ class _ScheduleApi {
   String get _token => _ref.read(authProvider).token ?? '';
 
   Future<void> save(List<Schedule> schedules) async {
+    if (isDemoToken(_token)) return;
     await saveSchedules(schedules: schedules, token: _token);
     _ref.invalidate(schedulesProvider);
     _ref.invalidate(configProvider);
   }
 
-  Future<void> runNow(String id) => runScheduleNow(id: id, token: _token);
+  Future<void> runNow(String id) async {
+    if (isDemoToken(_token)) {
+      final patches = demoSchedulePatches(id);
+      _ref.read(busProvider.notifier).reflectAll(patches);
+      return;
+    }
+    await runScheduleNow(id: id, token: _token);
+  }
 }

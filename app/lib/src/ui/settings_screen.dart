@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api.dart';
+import '../demo/demo_session.dart';
 import '../display_panel_config.dart';
 import '../proximity_wake.dart';
 import '../doorbell_ringer.dart';
@@ -245,6 +246,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   ) {
     final topic = _topic!;
     final canEditSchedules = canEditScenesInApp(auth, cfg);
+    final canRunSchedules =
+        canEditSchedules || isDemoToken(auth.token);
     final themeMode = ref.watch(themeModeProvider);
     final showThemeSchedules = showThemeAutoSchedules(themeMode);
 
@@ -338,6 +341,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     cfg,
                     schedAsync,
                     canEditSchedules: canEditSchedules,
+                    canRunSchedules: canRunSchedules,
                     showTitle: false,
                   ),
                 _SettingsTopic.pairing => const PairingSection(),
@@ -443,6 +447,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     HouseConfig cfg,
     AsyncValue<List<Schedule>> schedAsync, {
     required bool canEditSchedules,
+    bool canRunSchedules = false,
     bool showTitle = true,
   }) {
     return _SettingsCard(
@@ -505,6 +510,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         schedule: s,
                         config: cfg,
                         canEdit: canEditSchedules,
+                        canRun: canRunSchedules,
                         onEdit: () {
                           if (!canEditSchedules) return;
                           _openEditor(ctx, ref, cfg,
@@ -536,7 +542,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           }
                         },
                         onRun: () async {
-                          if (!canEditSchedules) return;
+                          if (!canRunSchedules) return;
                           try {
                             await ref.read(scheduleApiProvider).runNow(s.id);
                             if (!ctx.mounted) return;
@@ -1584,6 +1590,7 @@ class _ScheduleRow extends StatelessWidget {
     required this.schedule,
     required this.config,
     required this.canEdit,
+    this.canRun,
     required this.onEdit,
     required this.onToggle,
     this.onRun,
@@ -1592,6 +1599,7 @@ class _ScheduleRow extends StatelessWidget {
   final Schedule schedule;
   final HouseConfig config;
   final bool canEdit;
+  final bool? canRun;
   final bool locked;
   final VoidCallback onEdit;
   final ValueChanged<bool> onToggle;
@@ -1646,16 +1654,18 @@ class _ScheduleRow extends StatelessWidget {
               ),
             if (onRun != null)
               IconButton(
-                tooltip: canEdit ? 'Nu uitvoeren' : 'Geen rechten',
+                tooltip: (canRun ?? canEdit) ? 'Nu uitvoeren' : 'Geen rechten',
                 visualDensity: VisualDensity.compact,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 padding: EdgeInsets.zero,
                 icon: Icon(
                   Icons.play_arrow_rounded,
                   size: 20,
-                  color: canEdit ? LuxeColors.ink : LuxeColors.inkSoft,
+                  color: (canRun ?? canEdit)
+                      ? LuxeColors.ink
+                      : LuxeColors.inkSoft,
                 ),
-                onPressed: canEdit ? onRun : null,
+                onPressed: (canRun ?? canEdit) ? onRun : null,
               ),
             LuxeOnOffSwitch(
               value: s.enabled,

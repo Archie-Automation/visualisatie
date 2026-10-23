@@ -74,9 +74,7 @@ Future<void> runDemoScene(Ref ref, String sceneId) async {
     });
   }
 
-  if (sceneId == 'scn-weg') {
-    DemoAlarm.instance.tryArm(skipPin: true);
-  } else if (sceneId == 'scn-welkom') {
+  if (sceneId == 'scn-welkom') {
     DemoAlarm.instance.tryDisarm(skipPin: true);
   }
 }
