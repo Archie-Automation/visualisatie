@@ -89,6 +89,18 @@ Map<String, dynamic> demoCommandPatches(
       final pct = _flamePercent(flame, command['value']);
       put(flame['ga'] as String?, pct);
       put(flame['statusGa'] as String?, pct);
+    case 'ac.on':
+      final onOff = _acNode(device, 'onOff');
+      if (onOff != null) _putBoth(put, onOff, command['on'] == true);
+    case 'ac.setpoint':
+      final sp = _acNode(device, 'setpoint');
+      if (sp != null) _putBoth(put, sp, command['celsius']);
+    case 'ac.mode':
+      final mode = _acNode(device, 'mode');
+      if (mode != null) _putBoth(put, mode, command['value']);
+    case 'ac.fanSpeed':
+      final fan = _acNode(device, 'fanSpeed');
+      if (fan != null) _putBoth(put, fan, command['value']);
     case 'wtw.press':
       _zehnderPress(device, command, out);
     case 'wtw.setBoostMinutes':
@@ -115,6 +127,23 @@ Map<String, dynamic> demoCommandPatches(
       break;
   }
   return out;
+}
+
+Map? _acNode(Device device, String key) {
+  final ac = device.raw['ac'];
+  if (ac is! Map) return null;
+  final node = ac[key];
+  if (node is! Map) return null;
+  return node;
+}
+
+void _putBoth(
+  void Function(String? ga, dynamic value) put,
+  Map node,
+  dynamic value,
+) {
+  put(node['ga'] as String?, value);
+  put(node['statusGa'] as String?, value);
 }
 
 int _flamePercent(Map flame, Object? value) {

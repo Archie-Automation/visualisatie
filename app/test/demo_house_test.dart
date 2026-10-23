@@ -42,6 +42,32 @@ void main() {
       living.devices.where((device) => device.type == DeviceType.shading),
       hasLength(2),
     );
+    expect(house.projectName, 'Demo Archie');
+    expect(
+      house.allDevices.where((device) => device.type == DeviceType.ac).map((d) => d.id),
+      ['demo-ac-woon', 'demo-ac-sl1', 'demo-ac-sl2', 'demo-ac-sl3'],
+    );
+    expect(
+      house.allDevices.where((device) => device.name == 'Contacten' || device.name == 'Ramen'),
+      isEmpty,
+    );
+    expect(
+      house.allDevices.firstWhere((device) => device.type == DeviceType.wtw).name,
+      'WTW',
+    );
+    final filter = house.allDevices
+        .expand((device) => (device.raw['melding'] as Map?)?['items'] as List? ?? const [])
+        .whereType<Map>()
+        .where((item) => item['id'] == 'meld-filter')
+        .single;
+    expect(demoHouse.bus[filter['ga']], isFalse);
+    final wtw = house.allDevices.firstWhere((device) => device.id == 'demo-wtw');
+    final daysGa = ((wtw.raw['wtw'] as Map)['zehnder'] as Map)['filterDaysGa'];
+    expect(demoHouse.bus[daysGa], 17);
+    expect(
+      house.scenes.firstWhere((scene) => scene.id == 'scn-weg').name,
+      'Afwezig',
+    );
     expect(house.cameras, hasLength(3));
     expect(house.intercoms, hasLength(1));
     expect(

@@ -935,11 +935,9 @@ class DemoAlarm {
   Timer? _armTimer;
   SatelPartitionState _partition = SatelPartitionState.disarmed;
   final Set<int> _bypassed = {};
-  bool _doorOpen = true;
 
   SatelStatus status = demoAlarmStatus(
     SatelPartitionState.disarmed,
-    doorOpen: true,
     bypassed: const {},
   );
 
@@ -952,7 +950,6 @@ class DemoAlarm {
     _armTimer = null;
     _partition = SatelPartitionState.disarmed;
     _bypassed.clear();
-    _doorOpen = true;
     _emit();
   }
 
@@ -961,7 +958,6 @@ class DemoAlarm {
     if (error != null) return (ok: false, error: error);
     _armTimer?.cancel();
     _partition = SatelPartitionState.exitDelay;
-    _doorOpen = false;
     _emit();
     _armTimer = Timer(const Duration(seconds: 8), () {
       if (_partition != SatelPartitionState.exitDelay) return;
@@ -977,7 +973,6 @@ class DemoAlarm {
     _armTimer?.cancel();
     _armTimer = null;
     _partition = SatelPartitionState.disarmed;
-    _doorOpen = true;
     _emit();
     return (ok: true, error: null);
   }
@@ -1009,7 +1004,6 @@ class DemoAlarm {
   void _emit() {
     status = demoAlarmStatus(
       _partition,
-      doorOpen: _doorOpen,
       bypassed: _bypassed,
     );
     for (final listener in List<void Function()>.of(_listeners)) {
@@ -1020,7 +1014,6 @@ class DemoAlarm {
 
 SatelStatus demoAlarmStatus(
   SatelPartitionState partition, {
-  required bool doorOpen,
   required Set<int> bypassed,
 }) {
   SatelZone zone(
@@ -1043,16 +1036,13 @@ SatelStatus demoAlarmStatus(
   }
 
   final zones = [
-    zone(1, 'Voordeur', 'Entree', 'room-entree', 'magneetcontact',
-        violated: doorOpen),
-    zone(2, 'Raam woonkamer', 'Woonkamer', 'room-woonkamer', 'magneetcontact'),
-    zone(3, 'Beweging woonkamer', 'Woonkamer', 'room-woonkamer', 'pir_beweging'),
-    zone(4, 'Raam keuken', 'Keuken', 'room-keuken', 'magneetcontact'),
-    zone(5, 'Achterdeur', 'Bijkeuken', 'room-bijkeuken', 'magneetcontact'),
-    zone(6, 'Raam slaapkamer 1', 'Slaapkamer 1', 'room-sl1', 'magneetcontact'),
-    zone(7, 'Raam slaapkamer 2', 'Slaapkamer 2', 'room-sl2', 'magneetcontact'),
-    zone(8, 'Raam slaapkamer 3', 'Slaapkamer 3', 'room-sl3', 'magneetcontact'),
-    zone(9, 'Beweging overloop', 'Overloop', 'room-overloop', 'pir_beweging'),
+    zone(1, 'Beweging woonkamer', 'Woonkamer', 'room-woonkamer', 'pir_beweging'),
+    zone(2, 'Raam keuken', 'Keuken', 'room-keuken', 'magneetcontact'),
+    zone(3, 'Achterdeur', 'Bijkeuken', 'room-bijkeuken', 'magneetcontact'),
+    zone(4, 'Raam slaapkamer 1', 'Slaapkamer 1', 'room-sl1', 'magneetcontact'),
+    zone(5, 'Raam slaapkamer 2', 'Slaapkamer 2', 'room-sl2', 'magneetcontact'),
+    zone(6, 'Raam slaapkamer 3', 'Slaapkamer 3', 'room-sl3', 'magneetcontact'),
+    zone(7, 'Beweging overloop', 'Overloop', 'room-overloop', 'pir_beweging'),
   ];
 
   final byRoom = <String, List<SatelZone>>{};

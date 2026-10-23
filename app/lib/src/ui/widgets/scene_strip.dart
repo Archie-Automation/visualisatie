@@ -304,17 +304,31 @@ class _SceneChipState extends State<_SceneChip>
                   ],
                 ),
               ),
-              Text(
-                widget.scene.name.toUpperCase(),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: nameColor,
-                  fontSize: 11,
-                  height: 1.35,
-                  letterSpacing: 1.4,
-                  fontWeight: FontWeight.w600,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (final word in widget.scene.name
+                      .toUpperCase()
+                      .split(RegExp(r'\s+'))
+                      .where((word) => word.isNotEmpty))
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        word,
+                        maxLines: 1,
+                        softWrap: false,
+                        style: TextStyle(
+                          color: nameColor,
+                          fontSize: 11,
+                          height: 1.2,
+                          letterSpacing: 0.6,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ],
           ),

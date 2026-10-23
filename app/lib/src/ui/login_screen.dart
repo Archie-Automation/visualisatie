@@ -183,21 +183,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           ),
                           onPressed: _busy ? null : _demo,
                           child: const Text(
-                            'Demowoning bekijken',
+                            'Demo',
                             style: TextStyle(
                               letterSpacing: 0.4,
                               fontWeight: FontWeight.w600,
                               fontSize: 14,
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Volledig bedienbaar, zonder echte installatie.',
-                          textAlign: TextAlign.center,
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: LuxeColors.inkSoft,
-                              ),
                         ),
                         const SizedBox(height: 6),
                         TextButton(

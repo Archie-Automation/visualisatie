@@ -363,6 +363,7 @@ class _AuthJpegState extends ConsumerState<_AuthJpeg> {
         label: 'Opname',
         seed: 'capture',
         expand: true,
+        doorStation: true,
       );
     }
     final bytes = _bytes;

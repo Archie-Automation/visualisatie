@@ -306,7 +306,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                                 context.go('/');
                               },
                         child: Text(
-                          'Demowoning bekijken',
+                          'Demo',
                           style: TextStyle(
                             color: LuxeColors.inkSoft,
                             fontWeight: FontWeight.w600,

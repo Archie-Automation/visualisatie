@@ -8,12 +8,16 @@ class DemoCameraView extends StatelessWidget {
     required this.seed,
     this.expand = false,
     this.aspectRatio = 16 / 9,
+    this.doorStation = false,
   });
 
   final String label;
   final String seed;
   final bool expand;
   final double aspectRatio;
+
+  /// Deuropname van een intercom, in plaats van het getekende camerabeeld.
+  final bool doorStation;
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +26,14 @@ class DemoCameraView extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          CustomPaint(painter: _DemoScenePainter(seed.hashCode)),
+          if (doorStation)
+            Image.asset(
+              'assets/images/demo_intercom.jpg',
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+            )
+          else
+            CustomPaint(painter: _DemoScenePainter(seed.hashCode)),
           Positioned(
             left: 12,
             bottom: 12,

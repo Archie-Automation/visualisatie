@@ -1,3 +1,4 @@
+import '../ac_mode_config.dart';
 import '../models.dart';
 
 /// Vast demohuis. Eén keer opgebouwd, daarna alleen de buswaarden veranderen.
@@ -130,6 +131,48 @@ _Climate _climate(
     heat,
     actual,
   );
+}
+
+Map<String, dynamic> _ac(
+  _Gas g,
+  String id, {
+  bool on = false,
+  double setpoint = 22,
+  int mode = 1,
+  double actual = 21.5,
+}) {
+  final onGa = g.hold(on);
+  final sp = g.hold(setpoint);
+  final modeGa = g.hold(mode);
+  final actualGa = g.hold(actual);
+  return {
+    'id': id,
+    'name': 'Airco',
+    'type': 'ac',
+    'ga': {
+      'switch': onGa,
+      'switch_status': onGa,
+      'setpoint': sp,
+      'setpoint_status': sp,
+      'mode': modeGa,
+      'mode_status': modeGa,
+      'actual_temp': actualGa,
+    },
+    'ac': {
+      'onOff': {'ga': onGa, 'statusGa': onGa},
+      'setpoint': {'ga': sp, 'statusGa': sp, 'min': 16, 'max': 30},
+      'actualTemp': {'ga': actualGa},
+      'mode': {
+        'ga': modeGa,
+        'statusGa': modeGa,
+        'options': [
+          for (final option in defaultAcModeOptions)
+            Map<String, dynamic>.from(option),
+        ],
+      },
+      'modeVisibility': Map<String, dynamic>.from(defaultAcModeVisibility),
+    },
+  };
 }
 
 class _Shade {
@@ -282,9 +325,7 @@ DemoHouseData _build() {
     'demo-media-sl3',
   ];
 
-  final deur = g.hold(true);
-  final raam = g.hold(false);
-  final filter = g.hold(true);
+  final filter = g.hold(false);
   final rook = g.hold(false);
 
   String stand(String key, bool on) => g.hold(on);
@@ -296,11 +337,11 @@ DemoHouseData _build() {
   final boost = stand('boost', false);
   final boostTime = g.hold(1800);
   final fault = g.hold(false);
-  final filterDays = g.hold(18);
+  final filterDays = g.hold(17);
 
   final wtw = {
     'id': 'demo-wtw',
-    'name': 'Zehnder',
+    'name': 'WTW',
     'type': 'wtw',
     'wtw': {
       'model': 'zehnder_comfoConnect',
@@ -503,8 +544,8 @@ DemoHouseData _build() {
     },
     {
       'id': 'scn-weg',
-      'name': 'Weg',
-      'icon': 'travel',
+      'name': 'Afwezig',
+      'icon': 'door',
       'actions': [
         ...lightsOff([...groundLights, ...upperLights]),
         ...shadeSet(allShades, 100, delayMs: 120),
@@ -522,7 +563,7 @@ DemoHouseData _build() {
   final json = {
     'project': {
       'id': 'demo-woning',
-      'name': 'Demowoning',
+      'name': 'Demo Archie',
       'timezone': 'Europe/Amsterdam',
       'location': {'lat': 52.09, 'lon': 5.12},
     },
@@ -559,10 +600,6 @@ DemoHouseData _build() {
             'devices': [
               entreeLight,
               climates['entree']!.json,
-              melding('demo-meld-deur', 'Contacten', [
-                alert('meld-deur', 'Voordeur', deur, 'minder_belangrijk',
-                    category: 'door'),
-              ]),
             ],
           },
           {
@@ -573,14 +610,11 @@ DemoHouseData _build() {
               woonSpots,
               woonWand,
               climates['woon']!.json,
+              _ac(g, 'demo-ac-woon', on: true, setpoint: 21, actual: 22.4),
               haard,
               woonGordijn.json,
               woonJal.json,
               _media(livingMedia, 'Woonkamer', favorite: true),
-              melding('demo-meld-raam', 'Ramen', [
-                alert('meld-raam', 'Raam woonkamer', raam, 'minder_belangrijk',
-                    category: 'window'),
-              ]),
             ],
             'scenes': [
               {
@@ -647,6 +681,7 @@ DemoHouseData _build() {
               sl1,
               sl1Lees,
               climates['sl1']!.json,
+              _ac(g, 'demo-ac-sl1', setpoint: 19, mode: 2, actual: 18.6),
               sl1G.json,
               sl1J.json,
               _media('demo-media-sl1', 'Slaapkamer 1'),
@@ -660,6 +695,7 @@ DemoHouseData _build() {
               sl2,
               sl2Lees,
               climates['sl2']!.json,
+              _ac(g, 'demo-ac-sl2', setpoint: 19, mode: 2, actual: 18.8),
               sl2G.json,
               sl2J.json,
               _media('demo-media-sl2', 'Slaapkamer 2'),
@@ -673,6 +709,7 @@ DemoHouseData _build() {
               sl3,
               sl3Lees,
               climates['sl3']!.json,
+              _ac(g, 'demo-ac-sl3', setpoint: 19, mode: 2, actual: 19.1),
               sl3G.json,
               sl3J.json,
               _media('demo-media-sl3', 'Slaapkamer 3'),
@@ -690,7 +727,7 @@ DemoHouseData _build() {
     'devices': [
       wtw,
       melding('demo-meld-installatie', 'Installatie', [
-        alert('meld-filter', 'Filter Zehnder', filter, 'belangrijk', reset: true),
+        alert('meld-filter', 'Filter WTW', filter, 'belangrijk', reset: true),
         alert('meld-rook', 'Rookmelder overloop', rook, 'urgent'),
       ]),
     ],

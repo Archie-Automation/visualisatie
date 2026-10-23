@@ -5,6 +5,7 @@ import '../../api.dart';
 import '../../camera_api.dart';
 import '../../demo/demo_camera_view.dart';
 import '../../demo/demo_session.dart';
+import '../../models.dart';
 import '../../theme.dart';
 import 'camera_player.dart';
 import 'webrtc_camera_player.dart';
@@ -72,11 +73,17 @@ class _CameraLivePlayerState extends ConsumerState<CameraLivePlayer> {
   @override
   Widget build(BuildContext context) {
     if (isDemoToken(ref.watch(authProvider.select((auth) => auth.token)))) {
+      final doorStation = ref.watch(configProvider).maybeWhen(
+            data: (cfg) =>
+                cfg.deviceById(widget.info.id)?.type == DeviceType.intercom,
+            orElse: () => false,
+          );
       return DemoCameraView(
         label: widget.info.name,
         seed: widget.info.id,
         expand: widget.expand,
         aspectRatio: widget.info.aspectRatio,
+        doorStation: doorStation,
       );
     }
     if (!_streamReady) {

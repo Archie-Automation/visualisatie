@@ -126,6 +126,7 @@ class _CameraSnapshotState extends ConsumerState<CameraSnapshot> {
         seed: widget.cameraId,
         expand: widget.expand,
         aspectRatio: widget.aspectRatio,
+        doorStation: widget.kind == SnapshotKind.intercom,
       );
     }
     final stack = Stack(
