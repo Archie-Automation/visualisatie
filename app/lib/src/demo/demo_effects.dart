@@ -31,7 +31,7 @@ void registerDemoHooks() {
       return;
     }
     _seedMedia(ref);
-    ref.read(energyStateProvider.notifier).show(demoHouse.energy);
+    ref.read(energyStateProvider.notifier).show(demoEnergyNow());
     DemoAlarm.instance.reset();
   };
   demoCommandHook = (ref, command, readBus, writeBus) {

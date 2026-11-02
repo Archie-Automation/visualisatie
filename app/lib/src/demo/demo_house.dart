@@ -27,6 +27,23 @@ DemoHouseData? _cached;
 
 DemoHouseData get demoHouse => _cached ??= _build();
 
+/// Demo prices for the current local day. The euro totals live on [demoHouse].
+EnergySnapshot demoEnergyNow() {
+  final now = DateTime.now();
+  final day = DateTime(now.year, now.month, now.day);
+  return demoHouse.energy.copyWith(
+    priceHours: [
+      for (var h = 0; h < 24; h++)
+        EnergyPriceHour(
+          fromMs: day.add(Duration(hours: h)).millisecondsSinceEpoch,
+          tillMs: day.add(Duration(hours: h + 1)).millisecondsSinceEpoch,
+          importEur: h >= 7 && h < 21 ? 0.31 : 0.24,
+          exportEur: 0.08,
+        ),
+    ],
+  );
+}
+
 class _Gas {
   int _n = 1;
   int issued = 0;
@@ -586,6 +603,18 @@ DemoHouseData _build() {
     exportEnergyKwh: 3102.4,
     solarEnergyKwh: 8420.5,
     gasM3: 842.4,
+    todayImportKwh: 3.6,
+    todayExportKwh: 8.1,
+    todaySolarKwh: 14.2,
+    todayGasM3: 0.8,
+    todayCostEur: 1.04,
+    todayFeedInEur: 0.65,
+    todayNetEur: 0.39,
+    todayGasCostEur: 0.96,
+    importPriceEurPerKwh: 0.266,
+    exportPriceEurPerKwh: 0.08,
+    gasPriceEurPerM3: 1.246,
+    tempoEurPerHour: -0.064,
   );
 
   final json = {

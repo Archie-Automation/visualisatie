@@ -26,11 +26,11 @@ export class LogStore {
   private readonly insertStmt: Database.Statement;
   private readonly inRangeStmt: Database.Statement;
   private readonly anchorStmt: Database.Statement;
+  private readonly deleteAtStmt: Database.Statement;
   /** Latest numeric value per GA — used to dedupe unchanged telegrams. */
   private readonly lastValue = new Map<string, number>();
 
-  constructor() {
-    const file = dbPath();
+  constructor(file = dbPath()) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     this.db = new Database(file);
     this.db.pragma("journal_mode = WAL");
@@ -51,6 +51,9 @@ export class LogStore {
     );
     this.anchorStmt = this.db.prepare(
       "SELECT ts, value FROM samples WHERE ga = ? AND ts < ? ORDER BY ts DESC LIMIT 1"
+    );
+    this.deleteAtStmt = this.db.prepare(
+      "DELETE FROM samples WHERE ga = ? AND ts = ?"
     );
 
     // Seed the dedupe cache with the most recent value per GA.
@@ -101,6 +104,28 @@ export class LogStore {
       out[ga] = downsample(points, maxPoints);
     }
     return out;
+  }
+
+  /**
+   * Raw points in [from, to], plus the last point before `from` when one
+   * exists. Not averaged. Meter deltas and hourly prices need every sample,
+   * including hours that repeat the same price.
+   */
+  series(ga: string, from: number, to: number): LogSample[] {
+    const rows = this.inRangeStmt.all(ga, from, to) as LogSample[];
+    const anchor = this.anchorStmt.get(ga, from) as LogSample | undefined;
+    return anchor ? [anchor, ...rows] : rows;
+  }
+
+  /** Insert or replace the sample at this exact timestamp. */
+  putAt(ga: string, ts: number, value: number): void {
+    if (!Number.isFinite(ts) || !Number.isFinite(value)) return;
+    try {
+      this.deleteAtStmt.run(ga, ts);
+      this.insertStmt.run(ga, ts, value);
+    } catch (err) {
+      logger.warn({ err, ga }, "logStore: punt opslaan mislukt");
+    }
   }
 
   /** Delete samples older than `maxAgeMs`. Returns the number removed. */

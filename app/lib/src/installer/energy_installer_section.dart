@@ -79,6 +79,209 @@ class EnergyInstallerSection extends StatelessWidget {
           ),
           const SizedBox(height: 18),
         ],
+        const SizedBox(height: 8),
+        _PricesEditor(energy: energy, onChanged: onChanged),
+      ],
+    );
+  }
+}
+
+class _PricesEditor extends StatefulWidget {
+  const _PricesEditor({required this.energy, required this.onChanged});
+
+  final Map<String, dynamic> energy;
+  final VoidCallback onChanged;
+
+  @override
+  State<_PricesEditor> createState() => _PricesEditorState();
+}
+
+class _PricesEditorState extends State<_PricesEditor> {
+  late final TextEditingController _importSurcharge;
+  late final TextEditingController _exportFixed;
+  late final TextEditingController _exportSurcharge;
+  late final TextEditingController _gasSurcharge;
+
+  Map<String, dynamic> _prices({bool create = false}) {
+    final raw = widget.energy['prices'];
+    if (raw is Map<String, dynamic>) return raw;
+    if (raw is Map) {
+      final cast = raw.cast<String, dynamic>();
+      widget.energy['prices'] = cast;
+      return cast;
+    }
+    if (!create) return <String, dynamic>{};
+    final created = <String, dynamic>{};
+    widget.energy['prices'] = created;
+    return created;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final prices = _prices();
+    _importSurcharge = TextEditingController(text: _numText(prices['importSurchargeEurPerKwh']));
+    _exportFixed = TextEditingController(text: _numText(prices['exportFixedEurPerKwh']));
+    _exportSurcharge = TextEditingController(text: _numText(prices['exportSurchargeEurPerKwh']));
+    _gasSurcharge = TextEditingController(text: _numText(prices['gasSurchargeEurPerM3']));
+  }
+
+  @override
+  void dispose() {
+    _importSurcharge.dispose();
+    _exportFixed.dispose();
+    _exportSurcharge.dispose();
+    _gasSurcharge.dispose();
+    super.dispose();
+  }
+
+  String _numText(Object? value) => value is num ? '$value' : '';
+
+  void _writeNumber(String key, String text) {
+    final prices = _prices(create: true);
+    final parsed = text.trim().replaceAll(',', '.');
+    if (parsed.isEmpty) {
+      prices.remove(key);
+    } else {
+      final n = double.tryParse(parsed);
+      if (n == null || !n.isFinite) return;
+      prices[key] = n;
+    }
+    widget.onChanged();
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final prices = _prices();
+    final enabled = prices['enabled'] == true;
+    final exportMode = prices['exportMode'] == 'fixed' || prices['exportMode'] == 'market'
+        ? prices['exportMode'] as String
+        : 'none';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Prijzen', style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        Text(
+          'EnergyZero levert de marktprijs excl. btw. De opslag is euro per '
+          'kWh of m³, ook excl. btw. Btw (21%) komt er alleen overheen als je '
+          'dat aanzet. Teruglevering heeft een eigen tarief en wordt nooit de '
+          'afnameprijs. Dagtotalen komen uit de teller sinds lokale middernacht. '
+          'Zonder teller schat de NUC het uit het vermogen.',
+          style: Theme.of(context)
+              .textTheme
+              .bodySmall
+              ?.copyWith(color: LuxeColors.inkFaint),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'EnergyZero-prijzen',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+            LuxeOnOffSwitch(
+              value: enabled,
+              onChanged: (v) {
+                _prices(create: true)['enabled'] = v;
+                widget.onChanged();
+                setState(() {});
+              },
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        const LuxeFieldLabel('Opslag afname (€/kWh, excl. btw)'),
+        TextField(
+          controller: _importSurcharge,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+          decoration: luxeFilledDecoration(hint: '0'),
+          onChanged: (v) => _writeNumber('importSurchargeEurPerKwh', v),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Btw op afname'),
+          value: prices['importVat'] == true,
+          onChanged: (v) {
+            _prices(create: true)['importVat'] = v;
+            widget.onChanged();
+            setState(() {});
+          },
+        ),
+        const LuxeFieldLabel('Teruglevering'),
+        DropdownButtonFormField<String>(
+          key: ValueKey('export-$exportMode'),
+          initialValue: exportMode,
+          isExpanded: true,
+          decoration: luxeFilledDecoration(),
+          items: const [
+            DropdownMenuItem(value: 'none', child: Text('Geen tarief')),
+            DropdownMenuItem(value: 'fixed', child: Text('Vast bedrag')),
+            DropdownMenuItem(value: 'market', child: Text('EnergyZero + opslag')),
+          ],
+          onChanged: (v) {
+            final next = _prices(create: true);
+            if (v == null || v == 'none') {
+              next.remove('exportMode');
+            } else {
+              next['exportMode'] = v;
+            }
+            widget.onChanged();
+            setState(() {});
+          },
+        ),
+        if (exportMode == 'fixed') ...[
+          const SizedBox(height: 8),
+          const LuxeFieldLabel('Terugleververgoeding (€/kWh)'),
+          TextField(
+            controller: _exportFixed,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+            decoration: luxeFilledDecoration(hint: '0,08'),
+            onChanged: (v) => _writeNumber('exportFixedEurPerKwh', v),
+          ),
+        ],
+        if (exportMode == 'market') ...[
+          const SizedBox(height: 8),
+          const LuxeFieldLabel('Opslag teruglevering (€/kWh, excl. btw)'),
+          TextField(
+            controller: _exportSurcharge,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+            decoration: luxeFilledDecoration(hint: '0 of negatief'),
+            onChanged: (v) => _writeNumber('exportSurchargeEurPerKwh', v),
+          ),
+        ],
+        if (exportMode != 'none')
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: const Text('Btw op teruglevering'),
+            value: prices['exportVat'] == true,
+            onChanged: (v) {
+              _prices(create: true)['exportVat'] = v;
+              widget.onChanged();
+              setState(() {});
+            },
+          ),
+        const SizedBox(height: 8),
+        const LuxeFieldLabel('Opslag gas (€/m³, excl. btw)'),
+        TextField(
+          controller: _gasSurcharge,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+          decoration: luxeFilledDecoration(hint: '0'),
+          onChanged: (v) => _writeNumber('gasSurchargeEurPerM3', v),
+        ),
+        SwitchListTile(
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Btw op gas'),
+          value: prices['gasVat'] == true,
+          onChanged: (v) {
+            _prices(create: true)['gasVat'] = v;
+            widget.onChanged();
+            setState(() {});
+          },
+        ),
       ],
     );
   }

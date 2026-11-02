@@ -144,7 +144,6 @@ function main() {
   media.start();
   attachMediaKnxBridge(bus, media);
   attachWtwRuntime(bus);
-  attachEnergyRuntime(bus);
 
   void bus
     .connect(collectAllGAs(cfg))
@@ -162,6 +161,7 @@ function main() {
   lutron.rebuild(cfg);
 
   const logStore = new LogStore();
+  attachEnergyRuntime(bus, logStore);
   const logSampler = startLogSampler(bus, logStore);
 
   const server = http.createServer(app);

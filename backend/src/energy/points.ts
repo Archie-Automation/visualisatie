@@ -38,6 +38,13 @@ export function energyActive(cfg: HouseConfig): boolean {
   return cfg.energy?.enabled === true;
 }
 
+/** Finite, non-zero. Missing scale means ×1. Zero would fake a dead meter. */
+export function energyScale(scale: number | undefined): number | null {
+  if (scale == null) return 1;
+  if (typeof scale !== "number" || !Number.isFinite(scale) || scale === 0) return null;
+  return scale;
+}
+
 export function energyDptRole(dpt: string): string | null {
   if (!Object.prototype.hasOwnProperty.call(DPT_ROLE, dpt)) return null;
   return DPT_ROLE[dpt as EnergyPointDpt];

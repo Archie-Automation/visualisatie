@@ -47,6 +47,8 @@ void main() {
     expect(house.energyEnabled, isTrue);
     expect(demoHouse.energy.housePowerW, 2000);
     expect(demoHouse.energy.gridPowerW, -800);
+    expect(demoHouse.energy.todayImportKwh, 3.6);
+    expect(demoHouse.energy.exportPriceEurPerKwh, isNot(demoHouse.energy.importPriceEurPerKwh));
     expect(
       house.allDevices.where((device) => device.type == DeviceType.ac).map((d) => d.id),
       ['demo-ac-woon', 'demo-ac-sl1', 'demo-ac-sl2', 'demo-ac-sl3'],

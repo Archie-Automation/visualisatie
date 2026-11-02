@@ -1,3 +1,4 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -64,23 +65,43 @@ class EnergyScreen extends ConsumerWidget {
                         snap.batterySoc != null ||
                         snap.housePowerW != null)
                       _PowerBlock(snap: snap),
+                    if (snap.hasToday) ...[
+                      const SizedBox(height: 22),
+                      const _SectionLabel('Vandaag'),
+                      if (snap.todayImportPartial ||
+                          snap.todayExportPartial ||
+                          snap.todaySolarPartial ||
+                          snap.todayGasPartial)
+                        const _Note(
+                          'Sinds de eerste meting vandaag, niet sinds middernacht.',
+                        ),
+                      _TodayWrap(snap: snap),
+                    ],
+                    if (snap.hasPrices) ...[
+                      const SizedBox(height: 22),
+                      const _SectionLabel('Prijzen'),
+                      if (snap.priceStale)
+                        const _Note(
+                          'EnergyZero reageert niet. Dit is de laatste prijslijn. '
+                          'De bedragen zijn niet op nul gezet.',
+                        ),
+                      _PriceWrap(snap: snap),
+                      if (snap.priceHours.length >= 2) ...[
+                        const SizedBox(height: 12),
+                        _PriceChart(hours: snap.priceHours),
+                      ],
+                    ],
                     if (snap.importEnergyKwh != null ||
                         snap.exportEnergyKwh != null ||
                         snap.solarEnergyKwh != null ||
                         snap.gasM3 != null) ...[
-                      const SizedBox(height: 18),
-                      Text(
-                        'STANDEN',
-                        style: TextStyle(
-                          fontSize: 11,
-                          letterSpacing: 0.9,
-                          fontWeight: FontWeight.w600,
-                          color: LuxeColors.inkSoft,
-                        ),
-                      ),
+                      const SizedBox(height: 22),
+                      const _SectionLabel('Standen'),
                       const SizedBox(height: 6),
                       Text(
-                        'Tellerstand, nog niet het verbruik van vandaag.',
+                        snap.hasToday
+                            ? 'Tellerstand. Het verbruik sinds middernacht staat hierboven.'
+                            : 'Tellerstand, nog niet het verbruik van vandaag.',
                         style: TextStyle(
                           fontSize: 13,
                           color: LuxeColors.inkFaint,
@@ -178,6 +199,241 @@ String _batteryCaption(EnergySnapshot snap) {
   }
   if (snap.batterySoc != null) parts.add(formatSoc(snap.batterySoc!));
   return parts.isEmpty ? 'accu' : parts.join(' · ');
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Text(
+        text.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          letterSpacing: 0.9,
+          fontWeight: FontWeight.w600,
+          color: LuxeColors.inkSoft,
+        ),
+      ),
+    );
+  }
+}
+
+String _todayCaption({required bool estimated, required bool partial}) {
+  if (estimated) return 'schatting uit vermogen';
+  if (partial) return 'sinds eerste meting';
+  return 'sinds middernacht';
+}
+
+class _TodayWrap extends StatelessWidget {
+  const _TodayWrap({required this.snap});
+  final EnergySnapshot snap;
+
+  @override
+  Widget build(BuildContext context) {
+    return _MetricWrap(
+      children: [
+        if (snap.todayImportKwh != null)
+          _Metric(
+            icon: Icons.south_west_outlined,
+            label: 'Afname',
+            value: formatKwh(snap.todayImportKwh!),
+            caption: _todayCaption(
+              estimated: snap.todayImportEstimated,
+              partial: snap.todayImportPartial,
+            ),
+          ),
+        if (snap.todayExportKwh != null)
+          _Metric(
+            icon: Icons.north_east_outlined,
+            label: 'Teruglevering',
+            value: formatKwh(snap.todayExportKwh!),
+            caption: _todayCaption(
+              estimated: snap.todayExportEstimated,
+              partial: snap.todayExportPartial,
+            ),
+          ),
+        if (snap.todaySolarKwh != null)
+          _Metric(
+            icon: Icons.solar_power_outlined,
+            label: 'PV',
+            value: formatKwh(snap.todaySolarKwh!),
+            caption: _todayCaption(
+              estimated: snap.todaySolarEstimated,
+              partial: snap.todaySolarPartial,
+            ),
+          ),
+        if (snap.todayGasM3 != null)
+          _Metric(
+            icon: Icons.local_fire_department_outlined,
+            label: 'Gas',
+            value: formatGas(snap.todayGasM3!),
+            caption: _todayCaption(
+              estimated: false,
+              partial: snap.todayGasPartial,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _PriceWrap extends StatelessWidget {
+  const _PriceWrap({required this.snap});
+  final EnergySnapshot snap;
+
+  @override
+  Widget build(BuildContext context) {
+    final open = _openHour(snap);
+    return _MetricWrap(
+      children: [
+        if (snap.importPriceEurPerKwh != null)
+          _Metric(
+            icon: Icons.payments_outlined,
+            label: 'Afnameprijs',
+            value: formatUnitPrice(snap.importPriceEurPerKwh!, 'kWh'),
+            caption: 'dit uur',
+          ),
+        if (snap.exportPriceEurPerKwh != null)
+          _Metric(
+            icon: Icons.currency_exchange_outlined,
+            label: 'Terugleverprijs',
+            value: formatUnitPrice(snap.exportPriceEurPerKwh!, 'kWh'),
+            caption: 'eigen tarief',
+          ),
+        if (snap.gasPriceEurPerM3 != null)
+          _Metric(
+            icon: Icons.local_fire_department_outlined,
+            label: 'Gasprijs',
+            value: formatUnitPrice(snap.gasPriceEurPerM3!, 'm³'),
+            caption: 'dit uur',
+          ),
+        if (snap.tempoEurPerHour != null)
+          _Metric(
+            icon: Icons.speed_outlined,
+            label: 'Tempo',
+            value: formatEur(snap.tempoEurPerHour!.abs()),
+            caption: snap.tempoEurPerHour! < 0 ? 'per uur terug' : 'per uur',
+          ),
+        if (snap.todayCostEur != null)
+          _Metric(
+            icon: Icons.receipt_long_outlined,
+            label: 'Stroomkosten',
+            value: formatEur(snap.todayCostEur!),
+            caption: 'afgeronde uren',
+          ),
+        if (snap.todayFeedInEur != null)
+          _Metric(
+            icon: Icons.savings_outlined,
+            label: 'Teruglevering',
+            value: formatEur(snap.todayFeedInEur!),
+            caption: 'afgeronde uren',
+          ),
+        if (snap.todayNetEur != null)
+          _Metric(
+            icon: Icons.account_balance_outlined,
+            label: 'Netto stroom',
+            value: formatEur(snap.todayNetEur!),
+            caption: 'kosten min teruglevering',
+          ),
+        if (snap.todayGasCostEur != null)
+          _Metric(
+            icon: Icons.local_fire_department_outlined,
+            label: 'Gaskosten',
+            value: formatEur(snap.todayGasCostEur!),
+            caption: 'afgeronde uren',
+          ),
+        if (open != null)
+          _Metric(
+            icon: Icons.timelapse_outlined,
+            label: 'Dit uur',
+            value: formatEur(open),
+            caption: 'schatting, nog niet af',
+          ),
+      ],
+    );
+  }
+}
+
+double? _openHour(EnergySnapshot snap) {
+  var sum = 0.0;
+  var any = false;
+  for (final part in [
+    snap.openHourImportEur,
+    if (snap.openHourFeedInEur != null) -snap.openHourFeedInEur!,
+    snap.openHourGasEur,
+  ]) {
+    if (part == null) continue;
+    sum += part;
+    any = true;
+  }
+  if (!any || sum.abs() < 0.005) return null;
+  return sum;
+}
+
+class _PriceChart extends StatelessWidget {
+  const _PriceChart({required this.hours});
+  final List<EnergyPriceHour> hours;
+
+  @override
+  Widget build(BuildContext context) {
+    final today = DateTime.now();
+    final spots = <FlSpot>[];
+    for (final hour in hours) {
+      final start = DateTime.fromMillisecondsSinceEpoch(hour.fromMs);
+      if (start.year != today.year ||
+          start.month != today.month ||
+          start.day != today.day) {
+        continue;
+      }
+      final price = hour.importEur;
+      if (price == null) continue;
+      spots.add(FlSpot(start.hour.toDouble(), price));
+    }
+    if (spots.length < 2) return const SizedBox.shrink();
+    return GlassCard(
+      padding: const EdgeInsets.fromLTRB(8, 16, 16, 8),
+      child: SizedBox(
+        height: 160,
+        child: LineChart(
+          LineChartData(
+            minX: 0,
+            maxX: 23,
+            gridData: const FlGridData(show: false),
+            borderData: FlBorderData(show: false),
+            titlesData: FlTitlesData(
+              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              rightTitles:
+                  const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  interval: 6,
+                  getTitlesWidget: (value, meta) => Text(
+                    '${value.toInt()}u',
+                    style: TextStyle(fontSize: 11, color: LuxeColors.inkFaint),
+                  ),
+                ),
+              ),
+            ),
+            lineBarsData: [
+              LineChartBarData(
+                spots: spots,
+                color: LuxeColors.brass,
+                barWidth: 2,
+                dotData: const FlDotData(show: false),
+                isCurved: true,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _MeterWrap extends StatelessWidget {

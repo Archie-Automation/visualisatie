@@ -11,6 +11,7 @@
 
 import { setpointControlOf } from "./climateSetpoint";
 import { walkDevices } from "./config";
+import { configuredEnergyPoints } from "./energy/points";
 import { isStaffRole } from "./roles";
 import type { GA, HouseConfig, User } from "./types";
 import { userMayUseDevice } from "./userAccess";
@@ -135,5 +136,7 @@ export function computeTrackedGas(cfg: HouseConfig): Set<GA> {
   for (const def of listLogDefs(cfg)) {
     for (const s of def.series) set.add(s.ga);
   }
+  // Day totals need the meter (and a power fallback) even without a graph.
+  for (const point of configuredEnergyPoints(cfg)) set.add(point.point.ga);
   return set;
 }

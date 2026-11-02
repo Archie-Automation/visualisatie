@@ -1,7 +1,9 @@
 import type { EnergyKnxPoint, HouseEnergyConfig } from "../types";
+import { emptyEnergyDay, type EnergyDay } from "./day";
 import {
   ENERGY_POINT_KEYS,
   ENERGY_POWER_KEYS,
+  energyScale,
   type EnergyPointKey
 } from "./points";
 
@@ -18,7 +20,7 @@ import {
  * coerced to 0. House load stays null until every configured power point
  * has a value. Unconfigured power points are left out of the sum.
  */
-export interface EnergySnapshot {
+export interface EnergySnapshot extends EnergyDay {
   enabled: boolean;
   stale: boolean;
   gridPowerW: number | null;
@@ -44,7 +46,8 @@ export function emptyEnergySnapshot(): EnergySnapshot {
     importEnergyKwh: null,
     exportEnergyKwh: null,
     solarEnergyKwh: null,
-    gasM3: null
+    gasM3: null,
+    ...emptyEnergyDay()
   };
 }
 
@@ -54,13 +57,6 @@ function lookup(
 ): unknown {
   if (values instanceof Map) return values.get(ga);
   return (values as Record<string, unknown>)[ga];
-}
-
-/** Finite, non-zero. Missing scale means ×1. Zero would fake a dead meter. */
-function scaleOf(scale: number | undefined): number | null {
-  if (scale == null) return 1;
-  if (typeof scale !== "number" || !Number.isFinite(scale) || scale === 0) return null;
-  return scale;
 }
 
 function round3(n: number): number {
@@ -73,7 +69,7 @@ function readPoint(
 ): { configured: boolean; value: number | null } {
   const ga = point?.ga?.trim() ?? "";
   if (!point || !ga) return { configured: false, value: null };
-  const scale = scaleOf(point.scale);
+  const scale = energyScale(point.scale);
   if (scale == null) return { configured: true, value: null };
   const raw = lookup(values, ga);
   if (typeof raw !== "number" || !Number.isFinite(raw)) {
@@ -114,6 +110,7 @@ export function buildEnergySnapshot(input: {
     importEnergyKwh: reads.importEnergyKwh.value,
     exportEnergyKwh: reads.exportEnergyKwh.value,
     solarEnergyKwh: reads.solarEnergyKwh.value,
-    gasM3: reads.gasM3.value
+    gasM3: reads.gasM3.value,
+    ...emptyEnergyDay()
   };
 }

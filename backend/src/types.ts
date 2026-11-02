@@ -1524,12 +1524,32 @@ export interface EnergyKnxPoint {
   scale?: number;
 }
 
+/** EnergyZero import/export/gas tariff. Export is never copied from import. */
+export interface EnergyPriceConfig {
+  enabled?: boolean;
+  /** EUR/kWh added to the EnergyZero price, before VAT. */
+  importSurchargeEurPerKwh?: number;
+  /** When true, (market + surcharge) is multiplied by 1.21. */
+  importVat?: boolean;
+  /**
+   * fixed = a feed-in fee. market = EnergyZero plus the export surcharge.
+   * Absent = no export tariff. Never copied from the import tariff.
+   */
+  exportMode?: "fixed" | "market";
+  exportFixedEurPerKwh?: number;
+  exportSurchargeEurPerKwh?: number;
+  exportVat?: boolean;
+  gasSurchargeEurPerM3?: number;
+  gasVat?: boolean;
+}
+
 /**
  * House-level KNX energy source. Not a room device.
  * Power signs: grid > 0 import, battery > 0 discharging.
  */
 export interface HouseEnergyConfig {
   enabled?: boolean;
+  prices?: EnergyPriceConfig;
   knx?: {
     gridPowerW?: EnergyKnxPoint;
     solarPowerW?: EnergyKnxPoint;

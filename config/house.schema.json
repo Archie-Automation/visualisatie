@@ -121,6 +121,21 @@
       "description": "Huisbrede KNX-energie. Live snapshot, geen kamerapparaat.",
       "properties": {
         "enabled": { "type": "boolean", "default": false },
+        "prices": {
+          "type": "object",
+          "description": "EnergyZero uurprijzen. Teruglevering is een apart tarief.",
+          "properties": {
+            "enabled": { "type": "boolean", "default": false },
+            "importSurchargeEurPerKwh": { "type": "number" },
+            "importVat": { "type": "boolean" },
+            "exportMode": { "type": "string", "enum": ["fixed", "market"] },
+            "exportFixedEurPerKwh": { "type": "number" },
+            "exportSurchargeEurPerKwh": { "type": "number" },
+            "exportVat": { "type": "boolean" },
+            "gasSurchargeEurPerM3": { "type": "number" },
+            "gasVat": { "type": "boolean" }
+          }
+        },
         "knx": {
           "type": "object",
           "properties": {
