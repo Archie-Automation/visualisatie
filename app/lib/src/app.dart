@@ -26,6 +26,7 @@ import 'ui/settings_screen.dart';
 import 'installer/house_editor_screen.dart';
 import 'intercom/intercom_sip_providers.dart';
 import 'ui/alarm_screen.dart';
+import 'ui/energy_screen.dart';
 import 'ui/widgets/inactivity_layer.dart';
 import 'ui/widgets/media_tile.dart';
 import 'ui/widgets/melding_alert_sound_layer.dart';
@@ -221,6 +222,18 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
           path: '/media/:id',
           pageBuilder: (_, s) => CustomTransitionPage(
             child: MediaPlayerScreen(deviceId: s.pathParameters['id']!),
+            transitionDuration: const Duration(milliseconds: 300),
+            transitionsBuilder: (_, anim, __, child) => FadeTransition(
+              opacity:
+                  CurvedAnimation(parent: anim, curve: Curves.easeOutCubic),
+              child: child,
+            ),
+          ),
+        ),
+        GoRoute(
+          path: '/energy',
+          pageBuilder: (_, __) => CustomTransitionPage(
+            child: const EnergyScreen(),
             transitionDuration: const Duration(milliseconds: 300),
             transitionsBuilder: (_, anim, __, child) => FadeTransition(
               opacity:

@@ -1,4 +1,5 @@
 import '../ac_mode_config.dart';
+import '../energy_state.dart';
 import '../models.dart';
 
 /// Vast demohuis. Eén keer opgebouwd, daarna alleen de buswaarden veranderen.
@@ -10,6 +11,7 @@ class DemoHouseData {
     required this.livingMediaId,
     required this.wtwId,
     required this.issuedGas,
+    required this.energy,
   });
 
   final HouseConfig config;
@@ -18,6 +20,7 @@ class DemoHouseData {
   final String livingMediaId;
   final String wtwId;
   final int issuedGas;
+  final EnergySnapshot energy;
 }
 
 DemoHouseData? _cached;
@@ -562,12 +565,48 @@ DemoHouseData _build() {
     },
   ];
 
+  // Live demo snapshot. Scale is 1, so the bus value is the shown value.
+  // House = grid + solar + battery = -800 + 3200 + -400.
+  final gridGa = g.hold(-800);
+  final solarGa = g.hold(3200);
+  final batteryGa = g.hold(-400);
+  final socGa = g.hold(76);
+  final importGa = g.hold(12450.2);
+  final exportGa = g.hold(3102.4);
+  final solarKwhGa = g.hold(8420.5);
+  final gasGa = g.hold(842.4);
+  const energySnap = EnergySnapshot(
+    enabled: true,
+    gridPowerW: -800,
+    solarPowerW: 3200,
+    batteryPowerW: -400,
+    batterySoc: 76,
+    housePowerW: 2000,
+    importEnergyKwh: 12450.2,
+    exportEnergyKwh: 3102.4,
+    solarEnergyKwh: 8420.5,
+    gasM3: 842.4,
+  );
+
   final json = {
     'project': {
       'id': 'demo-woning',
       'name': 'Demo Archie',
       'timezone': 'Europe/Amsterdam',
       'location': {'lat': 52.09, 'lon': 5.12},
+    },
+    'energy': {
+      'enabled': true,
+      'knx': {
+        'gridPowerW': {'ga': gridGa, 'dpt': 'float4'},
+        'solarPowerW': {'ga': solarGa, 'dpt': 'float4'},
+        'batteryPowerW': {'ga': batteryGa, 'dpt': 'float4'},
+        'batterySoc': {'ga': socGa, 'dpt': 'percent'},
+        'importEnergyKwh': {'ga': importGa, 'dpt': 'float4'},
+        'exportEnergyKwh': {'ga': exportGa, 'dpt': 'float4'},
+        'solarEnergyKwh': {'ga': solarKwhGa, 'dpt': 'float4'},
+        'gasM3': {'ga': gasGa, 'dpt': 'float2'},
+      },
     },
     'displayPanel': {
       'enabled': true,
@@ -762,5 +801,6 @@ DemoHouseData _build() {
     livingMediaId: livingMedia,
     wtwId: 'demo-wtw',
     issuedGas: g.issued,
+    energy: energySnap,
   );
 }

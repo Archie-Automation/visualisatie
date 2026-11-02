@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api.dart';
+import '../energy_state.dart';
 import '../media_api.dart';
 import '../models.dart';
 import '../satel_api.dart';
@@ -25,10 +26,12 @@ void registerDemoHooks() {
     if (!active) {
       ref.read(mediaStateProvider.notifier).snapshot(const []);
       ref.read(wtwLogicProvider.notifier).snapshot(const []);
+      ref.read(energyStateProvider.notifier).clear();
       DemoAlarm.instance.reset();
       return;
     }
     _seedMedia(ref);
+    ref.read(energyStateProvider.notifier).show(demoHouse.energy);
     DemoAlarm.instance.reset();
   };
   demoCommandHook = (ref, command, readBus, writeBus) {

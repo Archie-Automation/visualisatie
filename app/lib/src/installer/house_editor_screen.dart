@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
 import '../ac_mode_config.dart';
+import 'energy_installer_section.dart';
 import '../api.dart';
 import '../fireplace_step_ranges.dart';
 import '../models.dart';
@@ -443,6 +444,7 @@ enum _FocusKind {
   logs,
   backup,
   satel,
+  energy,
   floors,
   floor,
   room,
@@ -527,6 +529,12 @@ class _Focus {
         ri = -1,
         di = -1,
         ci = null;
+  const _Focus.energy()
+      : kind = _FocusKind.energy,
+        fi = -1,
+        ri = -1,
+        di = -1,
+        ci = null;
   const _Focus.floors()
       : kind = _FocusKind.floors,
         fi = -1,
@@ -573,6 +581,22 @@ class _Focus {
   final int ri;
   final int di;
   final int? ci;
+}
+
+/// Apparaat dat versleept of verplaatst wordt. [id] blijft geldig als de
+/// lijst intussen verschuift (dialoog, andere verdieping).
+class _DeviceDrag {
+  const _DeviceDrag({
+    required this.fi,
+    required this.ri,
+    required this.di,
+    required this.id,
+  });
+
+  final int fi;
+  final int ri;
+  final int di;
+  final String id;
 }
 
 class HouseEditorScreen extends ConsumerStatefulWidget {
@@ -835,6 +859,23 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     return sl;
   }
 
+  Map<String, dynamic> _ensureEnergy() {
+    final h = _house!;
+    final e = h['energy'];
+    if (e is Map<String, dynamic>) {
+      if (e['knx'] is! Map<String, dynamic>) {
+        e['knx'] = <String, dynamic>{};
+      }
+      return e;
+    }
+    final m = <String, dynamic>{
+      'enabled': false,
+      'knx': <String, dynamic>{},
+    };
+    h['energy'] = m;
+    return m;
+  }
+
   Map<String, dynamic> _ensureKnx() {
     final h = _house!;
     final k = h['knx'];
@@ -958,12 +999,308 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   Widget _rowTrash({
     required String tooltip,
     required VoidCallback onPressed,
+    bool compact = false,
   }) {
     return IconButton(
       tooltip: tooltip,
+      visualDensity: compact ? VisualDensity.compact : null,
+      padding: compact ? EdgeInsets.zero : null,
+      constraints: compact
+          ? const BoxConstraints(minWidth: 36, minHeight: 36)
+          : null,
       icon: const Icon(Icons.delete_outline),
       onPressed: onPressed,
     );
+  }
+
+  Widget _deviceDragFeedback(String name) {
+    return Material(
+      color: LuxeColors.surface,
+      elevation: 8,
+      borderRadius: const BorderRadius.all(Radius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.tune_outlined, size: 18, color: LuxeColors.ink),
+            const SizedBox(width: 8),
+            Text(
+              name,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                color: LuxeColors.ink,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Grip: tik opent de kamerkeuze, vasthouden sleept naar een kamerrij.
+  Widget _deviceMoveHandle(
+    _DeviceDrag drag,
+    String name, {
+    bool compact = false,
+    bool draggable = true,
+  }) {
+    Widget button() => IconButton(
+          tooltip:
+              'Sleep naar een andere kamer, of tik om een kamer te kiezen',
+          visualDensity: compact ? VisualDensity.compact : null,
+          padding: compact ? EdgeInsets.zero : null,
+          constraints: compact
+              ? const BoxConstraints(minWidth: 36, minHeight: 36)
+              : null,
+          onPressed: () => _pickRoomAndMove(drag),
+          icon: const Icon(Icons.drag_indicator),
+        );
+    if (!draggable) return button();
+    return LongPressDraggable<_DeviceDrag>(
+      data: drag,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      hapticFeedbackOnStart: true,
+      feedback: _deviceDragFeedback(name),
+      childWhenDragging: Opacity(opacity: 0.35, child: button()),
+      child: button(),
+    );
+  }
+
+  Widget _deviceDragRow({
+    required int fi,
+    required int ri,
+    required int di,
+    required Map<String, dynamic> device,
+    required bool selected,
+    required bool rounded,
+  }) {
+    final name = _namedOr(device, 'Apparaat');
+    final drag = _DeviceDrag(
+      fi: fi,
+      ri: ri,
+      di: di,
+      id: '${device['id'] ?? ''}',
+    );
+    Widget row() {
+      return LuxeNavRow(
+        icon: Icons.tune_outlined,
+        title: name,
+        subtitle: _deviceRowSubtitle(device),
+        selectedTextMatchesIcon: true,
+        selected: selected,
+        rounded: rounded,
+        onTap: () => _selectFocus(_Focus.device(fi, ri, di)),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _deviceMoveHandle(drag, name, compact: true, draggable: false),
+            _rowTrash(
+              tooltip: 'Apparaat verwijderen',
+              compact: true,
+              onPressed: () => _deleteDeviceAt(fi, ri, di),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return LongPressDraggable<_DeviceDrag>(
+      data: drag,
+      dragAnchorStrategy: pointerDragAnchorStrategy,
+      hapticFeedbackOnStart: true,
+      feedback: _deviceDragFeedback(name),
+      childWhenDragging: Opacity(opacity: 0.35, child: row()),
+      child: row(),
+    );
+  }
+
+  Widget _roomPasteButton(int fi, int ri) {
+    final armed = _copiedDevice != null;
+    final copiedName =
+        armed ? _namedOr(_copiedDevice!, 'apparaat') : null;
+    return IconButton(
+      tooltip: armed
+          ? 'Plak $copiedName in deze kamer'
+          : 'Plakken in deze kamer',
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+      icon: Icon(
+        Icons.content_paste_outlined,
+        color: armed ? LuxeColors.brass : null,
+      ),
+      onPressed: () => _pasteIntoRoom(fi, ri),
+    );
+  }
+
+  Widget _dropHighlight({required bool hot, required Widget child}) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: const BorderRadius.all(Radius.circular(12)),
+        border: hot ? Border.all(color: LuxeColors.brass, width: 1.5) : null,
+        color: hot ? LuxeColors.brass.withValues(alpha: 0.12) : null,
+      ),
+      child: child,
+    );
+  }
+
+  Widget _roomDropRow({
+    required int fi,
+    required int ri,
+    required bool selected,
+    required bool rounded,
+  }) {
+    final title = _namedOr(_roomList(fi)[ri], 'Kamer');
+    return DragTarget<_DeviceDrag>(
+      onWillAcceptWithDetails: (d) => d.data.fi != fi || d.data.ri != ri,
+      onAcceptWithDetails: (d) => _moveDeviceToRoom(d.data, fi, ri),
+      builder: (context, candidate, rejected) {
+        return _dropHighlight(
+          hot: candidate.isNotEmpty,
+          child: LuxeNavRow(
+            icon: Icons.meeting_room_outlined,
+            title: title,
+            subtitle: _countLabel(
+              _deviceList(fi, ri).length,
+              'apparaat',
+              'apparaten',
+            ),
+            selectedTextMatchesIcon: true,
+            selected: selected,
+            rounded: rounded,
+            onTap: () => _selectFocus(_Focus.room(fi, ri)),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _roomPasteButton(fi, ri),
+                _rowTrash(
+                  tooltip: 'Kamer verwijderen',
+                  compact: true,
+                  onPressed: () => _deleteRoomAt(fi, ri),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _floorDropRow({required int fi, required bool selected}) {
+    return DragTarget<_DeviceDrag>(
+      onWillAcceptWithDetails: (d) => d.data.fi != fi,
+      onAcceptWithDetails: (d) => _pickRoomAndMove(d.data, onlyFi: fi),
+      builder: (context, candidate, rejected) {
+        return _dropHighlight(
+          hot: candidate.isNotEmpty,
+          child: LuxeNavRow(
+            icon: Icons.layers_outlined,
+            title: _namedOr(_floors()[fi], 'Verdieping'),
+            subtitle: _countLabel(_roomList(fi).length, 'kamer', 'kamers'),
+            selectedTextMatchesIcon: true,
+            selected: selected,
+            rounded: true,
+            trailing: _rowTrash(
+              tooltip: 'Verdieping verwijderen',
+              onPressed: () => _deleteFloorAt(fi),
+            ),
+            onTap: () => _selectFocus(_Focus.floor(fi)),
+          ),
+        );
+      },
+    );
+  }
+
+  void _moveDeviceToRoom(_DeviceDrag drag, int toFi, int toRi) {
+    if (drag.fi == toFi && drag.ri == toRi) return;
+    final source = _deviceList(drag.fi, drag.ri);
+    var index = drag.di;
+    if (index < 0 ||
+        index >= source.length ||
+        '${source[index]['id'] ?? ''}' != drag.id) {
+      index = source.indexWhere((d) => '${d['id'] ?? ''}' == drag.id);
+    }
+    if (index < 0) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Apparaat niet gevonden')),
+      );
+      return;
+    }
+    final device = source.removeAt(index);
+    final dest = _deviceList(toFi, toRi);
+    dest.add(device);
+    _selectFocus(_Focus.device(toFi, toRi, dest.length - 1));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('${_namedOr(device, 'Apparaat')} verplaatst')),
+    );
+  }
+
+  Future<void> _pickRoomAndMove(_DeviceDrag drag, {int? onlyFi}) async {
+    final floors = _floors();
+    final options = <(int, int, String)>[];
+    for (var fi = 0; fi < floors.length; fi++) {
+      if (onlyFi != null && fi != onlyFi) continue;
+      if (onlyFi == null && !_onActiveBuilding(floors[fi])) continue;
+      final rooms = _roomList(fi);
+      for (var ri = 0; ri < rooms.length; ri++) {
+        if (fi == drag.fi && ri == drag.ri) continue;
+        final roomName = _namedOr(rooms[ri], 'Kamer');
+        final label = onlyFi == null
+            ? '${_namedOr(floors[fi], 'Verdieping')} · $roomName'
+            : roomName;
+        options.add((fi, ri, label));
+      }
+    }
+    if (!mounted) return;
+    if (options.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            onlyFi == null
+                ? 'Geen andere kamer'
+                : 'Deze verdieping heeft nog geen kamer',
+          ),
+        ),
+      );
+      return;
+    }
+    final title = onlyFi == null
+        ? 'Verplaatsen naar kamer'
+        : 'Verplaatsen naar ${_namedOr(floors[onlyFi], 'verdieping')}';
+    final picked = await showDialog<(int, int)>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(
+          width: 420,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(ctx).height * 0.5,
+            ),
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                for (final o in options)
+                  ListTile(
+                    title: Text(o.$3),
+                    onTap: () => Navigator.pop(ctx, (o.$1, o.$2)),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Annuleren'),
+          ),
+        ],
+      ),
+    );
+    if (picked == null || !mounted) return;
+    _moveDeviceToRoom(drag, picked.$1, picked.$2);
   }
 
   void _deleteFloorAt(int fi) {
@@ -2308,7 +2645,8 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          '${device['name'] ?? device['id']} gekopieerd',
+          '${device['name'] ?? device['id']} gekopieerd. '
+          'Open de andere kamer en tik op Plakken.',
         ),
       ),
     );
@@ -2367,6 +2705,13 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     );
   }
 
+  Future<void> _pasteIntoRoom(int fi, int ri) {
+    return _pasteDeviceIntoList(
+      _deviceList(fi, ri),
+      onPasted: (i) => _selectFocus(_Focus.device(fi, ri, i)),
+    );
+  }
+
   void _tryCopyFocusedDevice() {
     switch (_sel.kind) {
       case _FocusKind.device:
@@ -2422,7 +2767,9 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Selecteer een apparaat of kamer om te plakken'),
+            content: Text(
+              'Open een kamer en tik op Plakken, of gebruik het plak-icoon bij de kamer.',
+            ),
           ),
         );
     }
@@ -2450,6 +2797,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         _FocusKind.logs => 'Logs / grafieken',
         _FocusKind.backup => 'Backup',
         _FocusKind.satel => 'Satel alarm',
+        _FocusKind.energy => 'Energie',
         _FocusKind.floors => 'Kamergebonden devices',
         _FocusKind.floor => 'Verdieping',
         _FocusKind.room => 'Kamer',
@@ -2694,6 +3042,14 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   enabled: (_house?['knx']?['enabled'] as bool?) != false &&
                       _house?['knx'] != null),
               onTap: () => _selectFocus(const _Focus.knx()),
+            ),
+            LuxeNavRow(
+              icon: Icons.electric_bolt_outlined,
+              title: 'Energie',
+              selected: _sel.kind == _FocusKind.energy,
+              trailing: _IntegrationBadge(
+                  enabled: (_house?['energy']?['enabled'] as bool?) == true),
+              onTap: () => _selectFocus(const _Focus.energy()),
             ),
             LuxeNavRow(
               icon: Icons.tune_outlined,
@@ -2998,21 +3354,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       emptyText: visible.isEmpty ? _emptyFloorLabel() : null,
       children: [
         for (final i in visible)
-          LuxeNavRow(
-            icon: Icons.layers_outlined,
-            title: _namedOr(floors[i], 'Verdieping'),
-            subtitle: _countLabel(_roomList(i).length, 'kamer', 'kamers'),
-            selectedTextMatchesIcon: true,
+          _floorDropRow(
+            fi: i,
             selected: _sel.fi == i &&
                 (_sel.kind == _FocusKind.floor ||
                     _sel.kind == _FocusKind.room ||
                     _sel.kind == _FocusKind.device),
-            trailing: _rowTrash(
-              tooltip: 'Verdieping verwijderen',
-              onPressed: () => _deleteFloorAt(i),
-            ),
-            rounded: true,
-            onTap: () => _selectFocus(_Focus.floor(i)),
           ),
       ],
       footer: LuxeAddRow(
@@ -3045,21 +3392,13 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       emptyText: rooms.isEmpty ? 'Nog geen kamer' : null,
       children: [
         for (var ri = 0; ri < rooms.length; ri++)
-          LuxeNavRow(
-            icon: Icons.meeting_room_outlined,
-            title: _namedOr(rooms[ri], 'Kamer'),
-            subtitle: _countLabel(
-                _deviceList(fi, ri).length, 'apparaat', 'apparaten'),
-            selectedTextMatchesIcon: true,
+          _roomDropRow(
+            fi: fi,
+            ri: ri,
+            rounded: true,
             selected: _sel.ri == ri &&
                 (_sel.kind == _FocusKind.room ||
                     _sel.kind == _FocusKind.device),
-            trailing: _rowTrash(
-              tooltip: 'Kamer verwijderen',
-              onPressed: () => _deleteRoomAt(fi, ri),
-            ),
-            rounded: true,
-            onTap: () => _selectFocus(_Focus.room(fi, ri)),
           ),
       ],
       footer: LuxeAddRow(
@@ -3088,30 +3427,17 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       context: context,
       title: 'Apparaat',
       icon: Icons.tune_outlined,
-      trailing: IconButton(
-        tooltip: 'Apparaat plakken',
-        icon: const Icon(Icons.content_paste_outlined),
-        onPressed: () => _pasteDeviceIntoList(
-          devices,
-          onPasted: (i) => _selectFocus(_Focus.device(fi, ri, i)),
-        ),
-      ),
+      trailing: _roomPasteButton(fi, ri),
       emptyText: devices.isEmpty ? 'Nog geen apparaat' : null,
       children: [
         for (var di = 0; di < devices.length; di++)
-          LuxeNavRow(
-            icon: Icons.tune_outlined,
-            title: _namedOr(devices[di], 'Apparaat'),
-            subtitle: _deviceRowSubtitle(devices[di]),
-            selectedTextMatchesIcon: true,
-            selected:
-                _sel.kind == _FocusKind.device && _sel.di == di,
-            trailing: _rowTrash(
-              tooltip: 'Apparaat verwijderen',
-              onPressed: () => _deleteDeviceAt(fi, ri, di),
-            ),
+          _deviceDragRow(
+            fi: fi,
+            ri: ri,
+            di: di,
+            device: devices[di],
             rounded: true,
-            onTap: () => _selectFocus(_Focus.device(fi, ri, di)),
+            selected: _sel.kind == _FocusKind.device && _sel.di == di,
           ),
       ],
       footer: LuxeAddRow(
@@ -3142,11 +3468,21 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           ],
         );
       case _FocusKind.device:
+        final device = _deviceList(_sel.fi, _sel.ri)[_sel.di];
         return _DeviceForm(
-          device: _deviceList(_sel.fi, _sel.ri)[_sel.di],
+          device: device,
           house: _house!,
+          headerActions: _deviceMoveHandle(
+            _DeviceDrag(
+              fi: _sel.fi,
+              ri: _sel.ri,
+              di: _sel.di,
+              id: '${device['id'] ?? ''}',
+            ),
+            _namedOr(device, 'Apparaat'),
+          ),
           onChanged: () => setState(() {}),
-          onCopy: () => _copyDevice(_deviceList(_sel.fi, _sel.ri)[_sel.di]),
+          onCopy: () => _copyDevice(device),
           onPaste: () => _pasteDeviceIntoList(
             _deviceList(_sel.fi, _sel.ri),
             afterIndex: _sel.di,
@@ -3558,14 +3894,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             child: LuxeSectionTitle(
               icon: Icons.tune_outlined,
               title: 'Apparaten',
-              trailing: IconButton(
-                tooltip: 'Apparaat plakken',
-                icon: const Icon(Icons.content_paste_outlined),
-                onPressed: () => _pasteDeviceIntoList(
-                  devices,
-                  onPasted: (i) => _selectFocus(_Focus.device(fi, ri, i)),
-                ),
-              ),
+              trailing: _roomPasteButton(fi, ri),
             ),
           ),
           if (devices.isEmpty)
@@ -3578,20 +3907,16 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             ),
           for (var di = 0; di < devices.length; di++) ...[
             if (di > 0) Divider(height: 1, color: LuxeColors.lineSoft),
-            LuxeNavRow(
-              icon: Icons.tune_outlined,
-              title: _namedOr(devices[di], 'Apparaat'),
-              subtitle: _deviceRowSubtitle(devices[di]),
-              selectedTextMatchesIcon: true,
+            _deviceDragRow(
+              fi: fi,
+              ri: ri,
+              di: di,
+              device: devices[di],
+              rounded: false,
               selected: _sel.kind == _FocusKind.device &&
                   _sel.fi == fi &&
                   _sel.ri == ri &&
                   _sel.di == di,
-              trailing: _rowTrash(
-                tooltip: 'Apparaat verwijderen',
-                onPressed: () => _deleteDeviceAt(fi, ri, di),
-              ),
-              onTap: () => _selectFocus(_Focus.device(fi, ri, di)),
             ),
           ],
           if (devices.isNotEmpty)
@@ -3631,7 +3956,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   }
 
   Widget _roomFieldsCard() {
-    final room = _roomList(_sel.fi)[_sel.ri];
+    final fi = _sel.fi;
+    final ri = _sel.ri;
+    final room = _roomList(fi)[ri];
+    final armed = _copiedDevice != null;
     return LuxeListCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -3642,6 +3970,18 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             trailing: LuxeInfoIconButton(
               title: 'Kamer',
               body: 'Naam zoals in de app.',
+            ),
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              style: TextButton.styleFrom(
+                foregroundColor: armed ? LuxeColors.brass : null,
+                visualDensity: VisualDensity.compact,
+              ),
+              onPressed: () => _pasteIntoRoom(fi, ri),
+              icon: const Icon(Icons.content_paste_outlined, size: 18),
+              label: const Text('Plak apparaat in deze kamer'),
             ),
           ),
           _BoundStrField('name', room, () => setState(() {}),
@@ -3680,19 +4020,13 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                 ),
               for (var ri = 0; ri < rooms.length; ri++) ...[
                 if (ri > 0) Divider(height: 1, color: LuxeColors.lineSoft),
-                LuxeNavRow(
-                  icon: Icons.meeting_room_outlined,
-                  title: _namedOr(rooms[ri], 'Kamer'),
-                  subtitle: _countLabel(
-                      _deviceList(fi, ri).length, 'apparaat', 'apparaten'),
-                  selectedTextMatchesIcon: true,
-                  selected:
-                      _sel.kind == _FocusKind.room && _sel.fi == fi && _sel.ri == ri,
-                  trailing: _rowTrash(
-                    tooltip: 'Kamer verwijderen',
-                    onPressed: () => _deleteRoomAt(fi, ri),
-                  ),
-                  onTap: () => _selectFocus(_Focus.room(fi, ri)),
+                _roomDropRow(
+                  fi: fi,
+                  ri: ri,
+                  rounded: false,
+                  selected: _sel.kind == _FocusKind.room &&
+                      _sel.fi == fi &&
+                      _sel.ri == ri,
                 ),
               ],
               if (rooms.isNotEmpty)
@@ -4047,6 +4381,11 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         );
       case _FocusKind.satel:
         return const _SatelInstallerPanel();
+      case _FocusKind.energy:
+        return EnergyInstallerSection(
+          energy: _ensureEnergy(),
+          onChanged: () => setState(() {}),
+        );
       case _FocusKind.floors:
         return _floorsInstallerPanel(context);
       case _FocusKind.houseSystems:
@@ -6988,6 +7327,7 @@ class _DeviceForm extends StatelessWidget {
     required this.onChanged,
     this.onCopy,
     this.onPaste,
+    this.headerActions,
     this.getInstallerToken,
     this.leading = const [],
     this.showSystemTile = false,
@@ -6997,6 +7337,7 @@ class _DeviceForm extends StatelessWidget {
   final VoidCallback onChanged;
   final VoidCallback? onCopy;
   final VoidCallback? onPaste;
+  final Widget? headerActions;
   final Future<String?> Function()? getInstallerToken;
   final List<Widget> leading;
   final bool showSystemTile;
@@ -7048,6 +7389,7 @@ class _DeviceForm extends StatelessWidget {
                 trailing: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (headerActions != null) headerActions!,
                     if (onCopy != null)
                       IconButton(
                         tooltip: 'Kopiëren (Ctrl+C)',
@@ -7055,7 +7397,8 @@ class _DeviceForm extends StatelessWidget {
                         onPressed: onCopy,
                       ),
                     IconButton(
-                      tooltip: 'Plakken eronder (Ctrl+V)',
+                      tooltip:
+                          'Plakken in deze kamer, onder dit apparaat (Ctrl+V)',
                       icon: const Icon(Icons.content_paste_outlined),
                       onPressed: onPaste,
                     ),

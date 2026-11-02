@@ -10,6 +10,7 @@ import type { Device, HouseConfig, GA } from "./types";
 import { catalogSceneAddresses, configuredSceneAddresses } from "./knxScene";
 import { normalizeVoip } from "./voip/normalize";
 import { collectZehnderSubscriptions, collectDucoSubscriptions, collectMvSubscriptions, collectModbusSubscriptions } from "./wtw";
+import { configuredEnergyPoints, energyDptRole } from "./energy/points";
 
 let cached: HouseConfig | null = null;
 let configVersion = 0;
@@ -249,6 +250,8 @@ export function collectAllGAs(cfg: HouseConfig): GA[] {
   for (const ga of catalogSceneAddresses()) add(ga);
   for (const ga of configuredSceneAddresses(cfg)) add(ga);
 
+  for (const { point } of configuredEnergyPoints(cfg)) add(point.ga);
+
   return [...out];
 }
 
@@ -258,7 +261,7 @@ export function collectAllGAs(cfg: HouseConfig): GA[] {
  */
 export interface GARole {
   deviceId: string;
-  deviceType: Device["type"];
+  deviceType: Device["type"] | "energy";
   role: string;
 }
 
@@ -267,7 +270,7 @@ function pushGA(
   ga: GA | undefined,
   role: string,
   deviceId: string,
-  deviceType: Device["type"]
+  deviceType: Device["type"] | "energy"
 ) {
   if (!ga) return;
   const list = index.get(ga) ?? [];
@@ -454,6 +457,11 @@ export function buildGAIndex(cfg: HouseConfig): Map<GA, GARole[]> {
   }
   for (const ga of configuredSceneAddresses(cfg)) {
     pushGA(index, ga, "scene", "config:scene", "universal");
+  }
+
+  for (const { point } of configuredEnergyPoints(cfg)) {
+    const role = energyDptRole(point.dpt);
+    if (role) pushGA(index, point.ga, role, "energy", "energy");
   }
 
   return index;

@@ -44,6 +44,7 @@ import type { LogSamplerHandle } from "./logSampler";
 import { hvacSwitchLock } from "./hvacSwitchLock";
 import { fireplaceVirtual } from "./fireplaceVirtual";
 import { wtwRuntime } from "./wtwRuntime";
+import { energyRuntime } from "./energy/runtime";
 import { probeSonos } from "./media/sonos";
 import * as spotify from "./media/spotify";
 import type { KnxBus } from "./knxBus";
@@ -1108,6 +1109,7 @@ export function buildRouter(
     } catch (err) {
       logger.warn({ err }, "KNX GA refresh after reload failed");
     }
+    energyRuntime.refresh();
     ws.broadcastConfigChanged(getConfigVersion());
     res.json({
       ok: true,
@@ -1230,6 +1232,7 @@ export function buildRouter(
     } catch (err) {
       logger.warn({ err }, `KNX GA refresh after ${action} failed`);
     }
+    energyRuntime.refresh();
     const version = getConfigVersion();
     ws.broadcastConfigChanged(version);
     logger.warn({ action, version }, "house.json vervangen");
@@ -1330,6 +1333,7 @@ export function buildRouter(
     } catch (err) {
       logger.warn({ err }, "KNX GA refresh after installer save failed");
     }
+    energyRuntime.refresh();
     const version = getConfigVersion();
     ws.broadcastConfigChanged(version);
     res.json({ ok: true, version });
@@ -2506,7 +2510,8 @@ export function buildRouter(
       states: bus.getAll(),
       hvacLocks: hvacSwitchLock.getAll(),
       fireplaceVirtual: fireplaceVirtual.getAll(),
-      wtwLogics: wtwRuntime.getAll()
+      wtwLogics: wtwRuntime.getAll(),
+      energy: energyRuntime.getSnapshot()
     });
   });
 

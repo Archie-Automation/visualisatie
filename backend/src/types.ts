@@ -1508,6 +1508,40 @@ export interface User {
   };
 }
 
+export type EnergyPointDpt =
+  | "float2"
+  | "float4"
+  | "int16"
+  | "uint16"
+  | "int32"
+  | "uint32"
+  | "percent";
+
+/** One KNX value. `scale` is applied after DPT decode. Omit = ×1. */
+export interface EnergyKnxPoint {
+  ga: GA;
+  dpt: EnergyPointDpt;
+  scale?: number;
+}
+
+/**
+ * House-level KNX energy source. Not a room device.
+ * Power signs: grid > 0 import, battery > 0 discharging.
+ */
+export interface HouseEnergyConfig {
+  enabled?: boolean;
+  knx?: {
+    gridPowerW?: EnergyKnxPoint;
+    solarPowerW?: EnergyKnxPoint;
+    batteryPowerW?: EnergyKnxPoint;
+    batterySoc?: EnergyKnxPoint;
+    importEnergyKwh?: EnergyKnxPoint;
+    exportEnergyKwh?: EnergyKnxPoint;
+    solarEnergyKwh?: EnergyKnxPoint;
+    gasM3?: EnergyKnxPoint;
+  };
+}
+
 export interface HouseConfig {
   project: {
     id: string;
@@ -1527,6 +1561,8 @@ export interface HouseConfig {
   };
   /** Lutron Homeworks telnet + optionele knop→KNX mappings. */
   lutron?: HouseLutronConfig;
+  /** KNX-energiemeter / omvormer / accu. Live snapshot via WebSocket. */
+  energy?: HouseEnergyConfig;
   /** Extra dashboard-tegels onder Systemen (naam + icoon). */
   houseSystems?: Array<{
     id: string;

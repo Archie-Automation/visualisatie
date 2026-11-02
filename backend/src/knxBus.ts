@@ -53,6 +53,16 @@ export const ROLE_DPT: Record<string, string> = {
   uint32: "DPT12.001",       // 0..4 294 967 295
   int32: "DPT13.001",        // signed 32-bit int
   float4byte: "DPT14.019",   // 4-byte IEEE-754 float (DPT14.x)
+
+  // Energy points. Encodings match the existing DPT families; the role name
+  // keeps a watt value from being treated as a temperature.
+  energy_float2: "DPT9.001",
+  energy_float4: "DPT14.019",
+  energy_int16: "DPT8.001",
+  energy_uint16: "DPT7.001",
+  energy_int32: "DPT13.001",
+  energy_uint32: "DPT12.001",
+  energy_percent: "DPT5.001",
   scene_number: "DPT17.001", // 0..63 scene number
   flame: "DPT5.010",
   flame_status: "DPT5.010",
@@ -122,7 +132,14 @@ const READ_PRIORITY_ROLES = new Set([
   "heat_demand",
   "cool_demand",
   "flame_status",
-  "temperature"
+  "temperature",
+  "energy_float2",
+  "energy_float4",
+  "energy_int16",
+  "energy_uint16",
+  "energy_int32",
+  "energy_uint32",
+  "energy_percent"
 ]);
 
 export class KnxBus extends EventEmitter {

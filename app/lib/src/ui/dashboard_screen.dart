@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../api.dart';
+import '../energy_state.dart';
 import '../demo/demo_session.dart';
 import '../device_activity.dart';
 import '../fireplace_virtual.dart';
@@ -1817,6 +1818,16 @@ class _Systemen extends ConsumerWidget {
       ));
     }
 
+    final energy = ref.watch(energyStateProvider);
+    if (cfg.energyEnabled) {
+      chips.add(_SystemChipData(
+        name: 'Energie',
+        icon: Icons.electric_bolt_outlined,
+        devices: const [],
+        detail: energyChipLabel(energy),
+      ));
+    }
+
     final customLogs = ref.watch(logsListProvider).maybeWhen(
           data: (logs) =>
               logs.where((l) => l.kind == 'custom').toList(growable: false),
@@ -2131,6 +2142,7 @@ class _SystemChipData {
     this.accent,
     this.shortcuts = const [],
     this.alarmState,
+    this.detail,
   });
   final String name;
   final IconData icon;
@@ -2141,6 +2153,8 @@ class _SystemChipData {
   final List<FavoriteShortcut> shortcuts;
   /// Pre-computed alarm state (only used for the Alarm chip).
   final SatelPartitionState? alarmState;
+  /// Optional second line (Energie).
+  final String? detail;
 }
 
 class _SystemChip extends ConsumerStatefulWidget {
@@ -2255,6 +2269,10 @@ class _SystemChipState extends ConsumerState<_SystemChip>
     }
     if (data.name == 'Alarm') {
       appOpen(context, '/alarm');
+      return;
+    }
+    if (data.name == 'Energie') {
+      appOpen(context, '/energy');
       return;
     }
     final slug = data.slug;
@@ -2501,6 +2519,18 @@ class _SystemChipState extends ConsumerState<_SystemChip>
                           color: alarmAccent,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.3,
+                        ),
+                      )
+                    else if (widget.data.detail != null)
+                      Text(
+                        widget.data.detail!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: LuxeColors.inkFaint,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
                         ),
                       ),
                   ],

@@ -44,6 +44,9 @@ void main() {
       hasLength(2),
     );
     expect(house.projectName, 'Demo Archie');
+    expect(house.energyEnabled, isTrue);
+    expect(demoHouse.energy.housePowerW, 2000);
+    expect(demoHouse.energy.gridPowerW, -800);
     expect(
       house.allDevices.where((device) => device.type == DeviceType.ac).map((d) => d.id),
       ['demo-ac-woon', 'demo-ac-sl1', 'demo-ac-sl2', 'demo-ac-sl3'],

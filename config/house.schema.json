@@ -116,6 +116,26 @@
       "items": { "$ref": "#/definitions/logDef" },
       "description": "Custom logs (graphs) of arbitrary group addresses, recorded server-side."
     },
+    "energy": {
+      "type": "object",
+      "description": "Huisbrede KNX-energie. Live snapshot, geen kamerapparaat.",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "knx": {
+          "type": "object",
+          "properties": {
+            "gridPowerW": { "$ref": "#/definitions/energyPoint" },
+            "solarPowerW": { "$ref": "#/definitions/energyPoint" },
+            "batteryPowerW": { "$ref": "#/definitions/energyPoint" },
+            "batterySoc": { "$ref": "#/definitions/energyPoint" },
+            "importEnergyKwh": { "$ref": "#/definitions/energyPoint" },
+            "exportEnergyKwh": { "$ref": "#/definitions/energyPoint" },
+            "solarEnergyKwh": { "$ref": "#/definitions/energyPoint" },
+            "gasM3": { "$ref": "#/definitions/energyPoint" }
+          }
+        }
+      }
+    },
     "knxSceneLearn": {
       "type": "object",
       "description": "KNX-scene inlezen vanaf een muurknop. Standaard uit. Alleen installer/superuser.",
@@ -180,6 +200,22 @@
     }
   },
   "definitions": {
+    "energyPoint": {
+      "type": "object",
+      "required": ["ga", "dpt"],
+      "properties": {
+        "ga": { "$ref": "#/definitions/gaPattern" },
+        "dpt": {
+          "type": "string",
+          "enum": ["float2", "float4", "int16", "uint16", "int32", "uint32", "percent"]
+        },
+        "scale": {
+          "type": "number",
+          "not": { "const": 0 },
+          "description": "After DPT decode. Omit = 1. 1000 turns kW into W. -1 flips sign. 0 is rejected."
+        }
+      }
+    },
     "gaPattern": {
       "type": "string",
       "pattern": "^([0-9]{1,2})/([0-9]{1,2})/([0-9]{1,3})$"

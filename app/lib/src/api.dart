@@ -11,6 +11,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'demo/demo_bus.dart';
 import 'demo/demo_house.dart';
 import 'demo/demo_session.dart';
+import 'energy_state.dart';
 import 'media_api.dart';
 import 'server_route.dart';
 import 'hvac_switch_lock.dart';
@@ -610,6 +611,7 @@ class BusController extends Notifier<BusState> {
           _demoSeeded = false;
           demoSessionHook?.call(ref, active: false);
         }
+        ref.read(energyStateProvider.notifier).clear();
         _socketLive = false;
         _reconnectTimer?.cancel();
         _sub?.cancel();
@@ -735,6 +737,12 @@ class BusController extends Notifier<BusState> {
             (data['wtwLogics'] as List?)?.cast<Map<String, dynamic>>() ??
                 const [];
         ref.read(wtwLogicProvider.notifier).snapshot(wtwLogics);
+        final energy = data['energy'];
+        if (energy is Map) {
+          ref.read(energyStateProvider.notifier).apply(
+                Map<String, dynamic>.from(energy),
+              );
+        }
       } else if (snap.statusCode == 401) {
         // Access-token verlopen? Eerst stil vernieuwen; pas daarna uitloggen.
         final ok = await ref.read(authProvider.notifier).tryRefresh();
@@ -816,6 +824,13 @@ class BusController extends Notifier<BusState> {
                   (msg['payload'] as List?)?.cast<Map<String, dynamic>>() ??
                       const [];
               ref.read(wtwLogicProvider.notifier).snapshot(wtwList);
+            case 'energy.state':
+              final energy = msg['payload'];
+              if (energy is Map) {
+                ref.read(energyStateProvider.notifier).apply(
+                      Map<String, dynamic>.from(energy),
+                    );
+              }
             case 'intercom.ring':
               final p = msg['payload'] as Map<String, dynamic>;
               ref.read(intercomRingProvider.notifier).push(IntercomRing(
