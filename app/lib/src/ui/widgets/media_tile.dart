@@ -540,35 +540,43 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
             final sectionGap = tight ? 12.0 : 20.0;
             final titleGap = tight ? 12.0 : 20.0;
 
-            // Geen verticale scroll over de hoes. De pagina was altijd een
-            // stukje hoger dan het scherm, waardoor op/neer de hoes verschoof
-            // zonder iets te doen. Alleen volume/favorieten scrollen als ze
-            // echt niet passen, en die scroll neemt de hoes niet mee.
+            // Hoes krimpt. Favorieten blijven volledig op het scherm;
+            // alleen de volumeregels scrollen als groep + zones niet passen.
+            // Een gedeelde flex zette de favorieten net onder de rand zodra
+            // de groepsslider erbij kwam, en die rij vangt de sleep op.
+            final hasPresets = state.presets.isNotEmpty;
             return Padding(
               padding: const EdgeInsets.fromLTRB(28, 4, 28, 12),
-              child: Column(
-                  children: [
-                    Expanded(
-                      child: LayoutBuilder(
-                        builder: (context, artBox) {
-                          final side = math.min(
-                            artBox.maxWidth,
-                            artBox.maxHeight,
-                          );
-                          final artSize = side.clamp(48.0, 380.0);
-                          return Center(
-                            child: _Artwork(
-                              state: state,
-                              size: artSize,
-                              hero: true,
-                              artOverride: _presetArtUrl(pending),
-                            ),
-                          );
-                        },
-                      ),
+              child: CustomMultiChildLayout(
+                delegate: _PlayerBodyDelegate(
+                  titleGap: titleGap,
+                  sectionGap: sectionGap,
+                  hasPresets: hasPresets,
+                ),
+                children: [
+                  LayoutId(
+                    id: _PlayerSlot.art,
+                    child: LayoutBuilder(
+                      builder: (context, artBox) {
+                        final side = math.min(
+                          artBox.maxWidth,
+                          artBox.maxHeight,
+                        );
+                        final artSize = side.clamp(0.0, 380.0);
+                        return Center(
+                          child: _Artwork(
+                            state: state,
+                            size: artSize,
+                            hero: true,
+                            artOverride: _presetArtUrl(pending),
+                          ),
+                        );
+                      },
                     ),
-                    SizedBox(height: titleGap),
-                    _MediaMetadataGate(
+                  ),
+                  LayoutId(
+                    id: _PlayerSlot.meta,
+                    child: _MediaMetadataGate(
                       state: state,
                       builder: (ctx, reveal) {
                         final title = pending != null
@@ -578,35 +586,39 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                             ? 'Starten…'
                             : state.metaLine(revealMetadata: reveal);
                         return Column(
-                        children: [
-                          Text(
-                            title,
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: _archieNowPlayingStyle(
-                              context,
-                              fontSize: tight ? 26 : 32,
-                              color: Colors.white,
+                          children: [
+                            Text(
+                              title,
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: _archieNowPlayingStyle(
+                                context,
+                                fontSize: tight ? 26 : 32,
+                                color: Colors.white,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            meta,
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style:
-                                Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      color: Colors.white60,
-                                    ),
-                          ),
-                        ],
-                      );
+                            const SizedBox(height: 6),
+                            Text(
+                              meta,
+                              textAlign: TextAlign.center,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: Colors.white60,
+                                  ),
+                            ),
+                          ],
+                        );
                       },
                     ),
-                    SizedBox(height: sectionGap),
-                    Row(
+                  ),
+                  LayoutId(
+                    id: _PlayerSlot.controls,
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         _DarkCtl(
@@ -627,56 +639,52 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                         _DarkCtl(
                           icon: DeviceControlIcons.skipNext,
                           size: _playerCtlSize,
-                          onTap:
-                              state.online ? () => api.next(deviceId) : null,
+                          onTap: state.online
+                              ? () => api.next(deviceId)
+                              : null,
                         ),
                       ],
                     ),
-                    SizedBox(height: sectionGap),
-                    Flexible(
-                      child: SingleChildScrollView(
-                        physics: const ClampingScrollPhysics(),
-                        primary: false,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            if (state.groupRole.isGrouped)
-                              _GroupedPlayerVolumes(
-                                deviceId: deviceId,
-                                state: state,
-                                cfg: cfg,
-                                api: api,
-                                online: state.online,
-                                all: ref.watch(mediaStateProvider),
-                              )
-                            else
-                              _VolumeSlider.dark(
-                                value: (state.volume ?? 0).toDouble(),
-                                muted: state.muted ?? false,
-                                onChanged: state.online
-                                    ? (v) =>
-                                        api.setVolume(deviceId, v.round())
-                                    : null,
-                                onToggleMute: state.online
-                                    ? () => api.setMuted(
-                                          deviceId,
-                                          !(state.muted ?? false),
-                                        )
-                                    : null,
-                              ),
-                            if (state.presets.isNotEmpty) ...[
-                              SizedBox(height: sectionGap),
-                              _Presets(
-                                presets: state.presets,
-                                pendingId: pending?.id,
-                                onTap: (p) => _playPreset(p, state),
-                              ),
-                            ],
-                          ],
-                        ),
+                  ),
+                  LayoutId(
+                    id: _PlayerSlot.volume,
+                    child: SingleChildScrollView(
+                      physics: const ClampingScrollPhysics(),
+                      primary: false,
+                      child: state.groupRole.isGrouped
+                          ? _GroupedPlayerVolumes(
+                              deviceId: deviceId,
+                              state: state,
+                              cfg: cfg,
+                              api: api,
+                              online: state.online,
+                              all: ref.watch(mediaStateProvider),
+                            )
+                          : _VolumeSlider.dark(
+                              value: (state.volume ?? 0).toDouble(),
+                              muted: state.muted ?? false,
+                              onChanged: state.online
+                                  ? (v) => api.setVolume(deviceId, v.round())
+                                  : null,
+                              onToggleMute: state.online
+                                  ? () => api.setMuted(
+                                        deviceId,
+                                        !(state.muted ?? false),
+                                      )
+                                  : null,
+                            ),
+                    ),
+                  ),
+                  if (hasPresets)
+                    LayoutId(
+                      id: _PlayerSlot.presets,
+                      child: _Presets(
+                        presets: state.presets,
+                        pendingId: pending?.id,
+                        onTap: (p) => _playPreset(p, state),
                       ),
                     ),
-                  ],
+                ],
               ),
             );
           },
@@ -684,6 +692,93 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
       ),
     );
   }
+}
+
+enum _PlayerSlot { art, meta, controls, volume, presets }
+
+/// Hoes krijgt wat overblijft. Favorieten worden op hun eigen hoogte
+/// neergezet, zodat een groepsslider ze niet onder de rand duwt.
+/// Volumeregels scrollen pas als de hoes anders onder 72 px zou zakken.
+class _PlayerBodyDelegate extends MultiChildLayoutDelegate {
+  _PlayerBodyDelegate({
+    required this.titleGap,
+    required this.sectionGap,
+    required this.hasPresets,
+  });
+
+  final double titleGap;
+  final double sectionGap;
+  final bool hasPresets;
+
+  static const _minArt = 72.0;
+
+  @override
+  void performLayout(Size size) {
+    final fullWidth = BoxConstraints(
+      minWidth: size.width,
+      maxWidth: size.width,
+      maxHeight: size.height,
+    );
+    final meta = layoutChild(_PlayerSlot.meta, fullWidth);
+    final controls = layoutChild(_PlayerSlot.controls, fullWidth);
+    final presets = hasPresets
+        ? layoutChild(_PlayerSlot.presets, fullWidth)
+        : Size.zero;
+
+    final fixed = titleGap +
+        meta.height +
+        sectionGap +
+        controls.height +
+        sectionGap +
+        (hasPresets ? sectionGap + presets.height : 0);
+    final minArt = math.min(_minArt, math.max(0.0, size.height - fixed));
+    var volumeMax = math.max(0.0, size.height - fixed - minArt);
+    var volume = layoutChild(
+      _PlayerSlot.volume,
+      BoxConstraints(
+        minWidth: size.width,
+        maxWidth: size.width,
+        maxHeight: volumeMax,
+      ),
+    );
+    var artH = size.height - fixed - volume.height;
+    if (artH < 0) {
+      volumeMax = math.max(0.0, volume.height + artH);
+      volume = layoutChild(
+        _PlayerSlot.volume,
+        BoxConstraints(
+          minWidth: size.width,
+          maxWidth: size.width,
+          maxHeight: volumeMax,
+        ),
+      );
+      artH = math.max(0.0, size.height - fixed - volume.height);
+    }
+
+    layoutChild(
+      _PlayerSlot.art,
+      BoxConstraints.tightFor(width: size.width, height: artH),
+    );
+
+    var y = 0.0;
+    positionChild(_PlayerSlot.art, Offset.zero);
+    y += artH + titleGap;
+    positionChild(_PlayerSlot.meta, Offset(0, y));
+    y += meta.height + sectionGap;
+    positionChild(_PlayerSlot.controls, Offset(0, y));
+    y += controls.height + sectionGap;
+    positionChild(_PlayerSlot.volume, Offset(0, y));
+    if (hasPresets) {
+      y += volume.height + sectionGap;
+      positionChild(_PlayerSlot.presets, Offset(0, y));
+    }
+  }
+
+  @override
+  bool shouldRelayout(_PlayerBodyDelegate oldDelegate) =>
+      titleGap != oldDelegate.titleGap ||
+      sectionGap != oldDelegate.sectionGap ||
+      hasPresets != oldDelegate.hasPresets;
 }
 
 /// Groepslider altijd zichtbaar; per-zone sliders inklapbaar (standaard dicht).
@@ -818,30 +913,72 @@ const _presetArtSize = 64.0;
 
 /// Decode at ≥2× so cheap 1.0-density PoE panels don't show blocky upscales.
 /// Always [BoxFit.contain] so non-square logos (NPO 2) stay intact.
-class _SharpNetworkArt extends StatelessWidget {
+///
+/// Sonos `/getaa` often 404s for a few seconds after a playlist starts, while
+/// the track title is already there. [Image.network] stays on that error until
+/// the URL changes, so a failed cover never appears until the player is
+/// opened again. Retry with a cache-buster; stop after [_maxAttempts].
+class _SharpNetworkArt extends StatefulWidget {
   const _SharpNetworkArt({
     required this.url,
     required this.size,
     required this.errorBuilder,
-    this.imageKey,
   });
 
   final String url;
   final double size;
   final ImageErrorWidgetBuilder errorBuilder;
-  final Key? imageKey;
+
+  @override
+  State<_SharpNetworkArt> createState() => _SharpNetworkArtState();
+}
+
+class _SharpNetworkArtState extends State<_SharpNetworkArt> {
+  static const _maxAttempts = 8;
+
+  int _attempt = 0;
+  Timer? _retry;
+
+  @override
+  void didUpdateWidget(covariant _SharpNetworkArt oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _retry?.cancel();
+      _retry = null;
+      _attempt = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _retry?.cancel();
+    super.dispose();
+  }
+
+  void _scheduleRetry() {
+    if (_retry != null || _attempt >= _maxAttempts) return;
+    final n = _attempt + 1;
+    final delayMs = math.min(2000, 500 * n);
+    _retry = Timer(Duration(milliseconds: delayMs), () {
+      _retry = null;
+      if (!mounted) return;
+      setState(() => _attempt = n);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final dpr = MediaQuery.devicePixelRatioOf(context);
-    final px = (size * math.max(dpr, 2.0)).round().clamp(64, 1024);
+    final px = (widget.size * math.max(dpr, 2.0)).round().clamp(64, 1024);
+    final sep = widget.url.contains('?') ? '&' : '?';
+    final url = _attempt == 0 ? widget.url : '${widget.url}${sep}r=$_attempt';
     return ColoredBox(
       color: const Color(0xFF141414),
       child: Image.network(
         url,
-        key: imageKey,
-        width: size,
-        height: size,
+        key: ValueKey(url),
+        width: widget.size,
+        height: widget.size,
         fit: BoxFit.contain,
         alignment: Alignment.center,
         gaplessPlayback: true,
@@ -849,7 +986,10 @@ class _SharpNetworkArt extends StatelessWidget {
         isAntiAlias: true,
         // Only one cache dimension — setting both stretches non-square logos.
         cacheWidth: px,
-        errorBuilder: errorBuilder,
+        errorBuilder: (context, error, stack) {
+          _scheduleRetry();
+          return widget.errorBuilder(context, error, stack);
+        },
       ),
     );
   }
@@ -932,7 +1072,6 @@ class _ArtworkState extends State<_Artwork> {
     if (art != null && art.isNotEmpty) {
       child = _SharpNetworkArt(
         url: art,
-        imageKey: ValueKey(art),
         size: tileSize,
         errorBuilder: (_, __, ___) => _placeholder(),
       );

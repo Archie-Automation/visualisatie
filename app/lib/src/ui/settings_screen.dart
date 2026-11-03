@@ -811,7 +811,10 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                   label: 'Scherm uit in plaats van screensaver',
                   hint: settings.screensaverMinutes <= 0
                       ? 'Zet eerst een tijd bij Screensaver.'
-                      : 'Backlight uit. Aanraken zet het scherm weer aan.',
+                      : null,
+                  infoTitle: 'Scherm uit',
+                  infoBody:
+                      'Backlight uit. Aanraken zet het scherm weer aan.',
                   value: settings.standbyInsteadOfScreensaver,
                   onChanged: settings.enabled &&
                           !_saving &&
@@ -927,18 +930,6 @@ class _DisplayPanelSectionState extends ConsumerState<_DisplayPanelSection> {
                               : null,
                         ),
                     ],
-                  ),
-                ),
-                const SizedBox(height: _kWandtabletFunctionGap),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    onPressed: _saving
-                        ? null
-                        : () => ref
-                            .read(displayPanelSettingsProvider.notifier)
-                            .resetToHouseDefaults(),
-                    child: const Text('Herstel house.json defaults'),
                   ),
                 ),
               ],
@@ -2386,24 +2377,37 @@ class _SettingsToggle extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.hint,
+    this.infoTitle,
+    this.infoBody,
   });
 
   final String label;
   final bool value;
   final ValueChanged<bool>? onChanged;
   final String? hint;
+  final String? infoTitle;
+  final String? infoBody;
 
   @override
   Widget build(BuildContext context) {
+    final info = infoTitle != null && infoBody != null;
     return _LabeledBox(
       label: label,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Switch(
-            value: value,
-            onChanged: onChanged,
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          Row(
+            children: [
+              Switch(
+                value: value,
+                onChanged: onChanged,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              if (info) ...[
+                const Spacer(),
+                LuxeInfoIconButton(title: infoTitle!, body: infoBody!),
+              ],
+            ],
           ),
           if (hint != null) ...[
             const SizedBox(height: 2),

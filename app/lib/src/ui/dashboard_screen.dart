@@ -113,11 +113,14 @@ class _DashboardBody extends ConsumerStatefulWidget {
   ConsumerState<_DashboardBody> createState() => _DashboardBodyState();
 }
 
-class _DashboardBodyState extends ConsumerState<_DashboardBody> {
+class _DashboardBodyState extends ConsumerState<_DashboardBody>
+    with SingleTickerProviderStateMixin {
   int _buildingIndex = 0;
   int _floorIndex = 0;
   /// Tablet/desktop: false = startscherm (geen kamers); true = verdieping open.
   bool _floorBrowsing = false;
+  bool _pageSwapLock = false;
+  late final AnimationController _pageFade;
   late final ScrollController _mainScroll;
   late final ScrollController _buildingScroll;
   late final ScrollController _floorScroll;
@@ -134,10 +137,16 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
     _systemScroll = ScrollController();
     _sceneScroll = ScrollController();
     _roomsScroll = ScrollController();
+    _pageFade = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 140),
+      value: 1,
+    );
   }
 
   @override
   void dispose() {
+    _pageFade.dispose();
     _mainScroll.dispose();
     _buildingScroll.dispose();
     _floorScroll.dispose();
@@ -154,16 +163,48 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
     if (_systemScroll.hasClients) _systemScroll.jumpTo(0);
     if (_sceneScroll.hasClients) _sceneScroll.jumpTo(0);
     if (_roomsScroll.hasClients) _roomsScroll.jumpTo(0);
-    if (_buildingIndex != 0 || _floorIndex != 0 || _floorBrowsing) {
-      setState(() {
-        _buildingIndex = 0;
-        _floorIndex = 0;
-        _floorBrowsing = false;
-      });
+    final leaveFloor = _floorBrowsing;
+    void apply() {
+      if (_buildingIndex != 0 || _floorIndex != 0 || _floorBrowsing) {
+        setState(() {
+          _buildingIndex = 0;
+          _floorIndex = 0;
+          _floorBrowsing = false;
+        });
+      }
+      final floorQ = _routeQuery(context, 'floor');
+      if (floorQ != null && floorQ.isNotEmpty) {
+        context.go('/');
+      }
     }
-    final floorQ = _routeQuery(context, 'floor');
-    if (floorQ != null && floorQ.isNotEmpty) {
-      context.go('/');
+
+    if (leaveFloor) {
+      _fadeSwap(apply);
+    } else {
+      apply();
+    }
+  }
+
+  /// Korte fade-out, dan de nieuwe pagina, dan fade-in. Eén kind tegelijk,
+  /// zodat de scrollcontrollers niet aan twee lijsten hangen.
+  Future<void> _fadeSwap(VoidCallback apply) async {
+    if (_pageSwapLock) return;
+    _pageSwapLock = true;
+    try {
+      await _pageFade.animateTo(
+        0,
+        duration: const Duration(milliseconds: 110),
+        curve: Curves.easeOut,
+      );
+      if (!mounted) return;
+      apply();
+      await _pageFade.animateTo(
+        1,
+        duration: const Duration(milliseconds: 140),
+        curve: Curves.easeOut,
+      );
+    } finally {
+      _pageSwapLock = false;
     }
   }
 
@@ -219,25 +260,36 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
 
   void _openFloor(List<Floor> floors, int i, String? buildingId) {
     if (i < 0 || i >= floors.length) return;
-    setState(() {
-      _floorIndex = i;
-      _floorBrowsing = true;
-      if (_roomsScroll.hasClients) _roomsScroll.jumpTo(0);
-    });
-    final q = <String, String>{
-      if (buildingId != null && buildingId.isNotEmpty) 'building': buildingId,
-      'floor': floors[i].id,
-    };
-    context.replace(Uri(path: '/', queryParameters: q).toString());
+    final entering = !_floorBrowsing;
+    void apply() {
+      setState(() {
+        _floorIndex = i;
+        _floorBrowsing = true;
+        if (_roomsScroll.hasClients) _roomsScroll.jumpTo(0);
+      });
+      final q = <String, String>{
+        if (buildingId != null && buildingId.isNotEmpty) 'building': buildingId,
+        'floor': floors[i].id,
+      };
+      context.replace(Uri(path: '/', queryParameters: q).toString());
+    }
+
+    if (entering) {
+      _fadeSwap(apply);
+    } else {
+      apply();
+    }
   }
 
   void _closeFloorBrowse(String? buildingId) {
-    setState(() => _floorBrowsing = false);
-    if (buildingId != null && buildingId.isNotEmpty) {
-      context.replace('/?building=${Uri.encodeComponent(buildingId)}');
-    } else {
-      context.replace('/');
-    }
+    _fadeSwap(() {
+      setState(() => _floorBrowsing = false);
+      if (buildingId != null && buildingId.isNotEmpty) {
+        context.replace('/?building=${Uri.encodeComponent(buildingId)}');
+      } else {
+        context.replace('/');
+      }
+    });
   }
 
   @override
@@ -310,17 +362,17 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
     final isPanel = !context.isPhone;
 
     // Wall tablet / desktop: floor drill-down — header als systemen (hoogte + honeycomb).
-    if (isPanel &&
+    final browsing = isPanel &&
         selectedFloor != null &&
-        (_floorBrowsing || routeFloorId == selectedFloor.id)) {
-      return Column(
+        (_floorBrowsing || routeFloorId == selectedFloor.id);
+    final Widget page;
+    if (browsing) {
+      final floor = selectedFloor;
+      page = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _FloorBrowseHeader(
-            buildings: showBuildings ? buildings : const [],
-            selectedBuildingIndex: selectedBuildingIndex,
-            buildingScrollController: _buildingScroll,
-            onSelectBuilding: (i) => _selectBuilding(buildings, i),
+            buildingName: showBuildings ? selectedBuilding?.name : null,
             floors: floors,
             selectedIndex: selectedIndex,
             scrollController: _floorScroll,
@@ -335,11 +387,11 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
               ),
               children: [
                 _FloorRoomsBlock(
-                  floor: selectedFloor,
+                  floor: floor,
                   showTopBorder: false,
                   onOpenRoom: (room) => appOpen(
                         context,
-                        '/floor/${selectedFloor.id}/room/${room.id}',
+                        '/floor/${floor.id}/room/${room.id}',
                       ),
                 ),
                 const SizedBox(height: 64),
@@ -348,9 +400,8 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
           ),
         ],
       );
-    }
-
-    return CustomScrollView(
+    } else {
+      page = CustomScrollView(
       controller: _mainScroll,
       physics: const ClampingScrollPhysics(
           parent: AlwaysScrollableScrollPhysics()),
@@ -423,10 +474,13 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody> {
         ],
       ],
     );
+    }
+    return FadeTransition(opacity: _pageFade, child: page);
   }
 }
 
-/// Sticky header bij kamer-browse: terug + gebouw boven de verdiepingen.
+/// Sticky header bij kamer-browse. Terug staat in de bovenste rij, naast
+/// het gekozen gebouw. Gebouw wisselen kan alleen op het startscherm.
 class _FloorBrowseHeader extends StatelessWidget {
   const _FloorBrowseHeader({
     required this.floors,
@@ -434,10 +488,7 @@ class _FloorBrowseHeader extends StatelessWidget {
     required this.onSelect,
     required this.onBack,
     this.scrollController,
-    this.buildings = const [],
-    this.selectedBuildingIndex = 0,
-    this.onSelectBuilding,
-    this.buildingScrollController,
+    this.buildingName,
   });
 
   final List<Floor> floors;
@@ -445,15 +496,13 @@ class _FloorBrowseHeader extends StatelessWidget {
   final ValueChanged<int> onSelect;
   final VoidCallback onBack;
   final ScrollController? scrollController;
-  final List<Building> buildings;
-  final int selectedBuildingIndex;
-  final ValueChanged<int>? onSelectBuilding;
-  final ScrollController? buildingScrollController;
+  final String? buildingName;
 
   @override
   Widget build(BuildContext context) {
-    final showBuildings = buildings.length >= 2 && onSelectBuilding != null;
-    final buildingExtra = showBuildings ? HeaderIconButton.size + 8 : 0.0;
+    final name = buildingName?.trim();
+    final showBuilding = name != null && name.isNotEmpty;
+    final buildingExtra = showBuilding ? HeaderIconButton.size + 8 : 0.0;
     return StickyHeaderSurface(
       height: context.roomStickyHeaderExtent + buildingExtra,
       child: Padding(
@@ -465,25 +514,38 @@ class _FloorBrowseHeader extends StatelessWidget {
         ),
         child: Column(
           children: [
-            if (showBuildings)
-              _BuildingTabBar(
-                buildings: buildings,
-                selectedIndex: selectedBuildingIndex,
-                scrollController: buildingScrollController,
-                onSelect: onSelectBuilding!,
-                bottomPadding: 8,
-                listPadding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+            if (showBuilding)
+              SizedBox(
+                height: HeaderIconButton.size,
+                child: Row(
+                  children: [
+                    HeaderIconButton(
+                      icon: Icons.arrow_back_ios_new,
+                      onTap: onBack,
+                      tooltip: 'Terug',
+                    ),
+                    const SizedBox(width: 10),
+                    Flexible(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: _SelectedBuildingChip(name: name),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+            if (showBuilding) const SizedBox(height: 8),
             Expanded(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  HeaderIconButton(
-                    icon: Icons.arrow_back_ios_new,
-                    onTap: onBack,
-                    tooltip: 'Terug',
-                    hitSize: 68,
-                  ),
+                  if (!showBuilding)
+                    HeaderIconButton(
+                      icon: Icons.arrow_back_ios_new,
+                      onTap: onBack,
+                      tooltip: 'Terug',
+                      hitSize: 68,
+                    ),
                   Expanded(
                     child: _FloorTabBar(
                       floors: floors,
@@ -491,13 +553,51 @@ class _FloorBrowseHeader extends StatelessWidget {
                       scrollController: scrollController,
                       onSelect: onSelect,
                       bottomPadding: 0,
-                      listPadding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+                      listPadding: EdgeInsets.fromLTRB(
+                        showBuilding ? 0 : 12,
+                        0,
+                        12,
+                        0,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Gebouw op de verdiepingspagina: zelfde chip als op home, niet aantikbaar.
+class _SelectedBuildingChip extends StatelessWidget {
+  const _SelectedBuildingChip({required this.name});
+
+  final String name;
+
+  @override
+  Widget build(BuildContext context) {
+    return LuxeRimBox(
+      height: HeaderIconButton.size,
+      radius: 12,
+      rimWidth: 2,
+      rimColor: LuxeBorders.solid(LuxeColors.brass),
+      fillColor: LuxeChipChrome.tileFill(context, pressed: true),
+      shadows: LuxeShadows.soft,
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      child: Center(
+        child: Text(
+          name.toUpperCase(),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          textAlign: TextAlign.center,
+          textHeightBehavior: const TextHeightBehavior(
+            applyHeightToFirstAscent: false,
+            applyHeightToLastDescent: false,
+          ),
+          style: _scopeChipLabel(),
         ),
       ),
     );
@@ -523,7 +623,6 @@ class _BuildingTabBar extends ConsumerWidget {
     required this.onSelect,
     this.scrollController,
     this.bottomPadding = 0,
-    this.listPadding,
   });
 
   final List<Building> buildings;
@@ -531,7 +630,6 @@ class _BuildingTabBar extends ConsumerWidget {
   final ValueChanged<int> onSelect;
   final ScrollController? scrollController;
   final double bottomPadding;
-  final EdgeInsetsGeometry? listPadding;
 
   void _openReorderSheet(BuildContext context, WidgetRef ref) {
     showModalBottomSheet<void>(
@@ -546,9 +644,8 @@ class _BuildingTabBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     const chipH = HeaderIconButton.size;
-    final pad = listPadding ??
-        EdgeInsets.fromLTRB(context.hPad, 8, context.hPad, 8);
-    final vPadTotal = pad is EdgeInsets ? pad.vertical : 16.0;
+    final pad = EdgeInsets.fromLTRB(context.hPad, 8, context.hPad, 8);
+    final vPadTotal = pad.vertical;
     return Padding(
       padding: EdgeInsets.only(bottom: bottomPadding),
       child: SizedBox(
@@ -1312,7 +1409,7 @@ class _RoomDashboardRow extends ConsumerWidget {
           padding: EdgeInsets.fromLTRB(hp, 16, hp, segments.isEmpty ? 16 : 10),
           child: Row(
             children: [
-              // Drag handle — pakt meteen, zodat je niet hoeft vast te houden.
+              // Pas na vasthouden. Een slide over het icoon moet blijven scrollen.
               Builder(builder: (context) {
                 Widget handle = MouseRegion(
                   cursor: SystemMouseCursors.grab,
@@ -1326,7 +1423,7 @@ class _RoomDashboardRow extends ConsumerWidget {
                   ),
                 );
                 if (inlineReorder) {
-                  return ReorderableDragStartListener(
+                  return ReorderableDelayedDragStartListener(
                     index: index,
                     child: handle,
                   );
@@ -2491,6 +2588,18 @@ class _SystemChipState extends ConsumerState<_SystemChip>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (widget.data.detail != null)
+                      Text(
+                        widget.data.detail!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: LuxeColors.inkFaint,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
                     FittedBox(
                       fit: BoxFit.scaleDown,
                       alignment: Alignment.centerLeft,
@@ -2519,18 +2628,6 @@ class _SystemChipState extends ConsumerState<_SystemChip>
                           color: alarmAccent,
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.3,
-                        ),
-                      )
-                    else if (widget.data.detail != null)
-                      Text(
-                        widget.data.detail!,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: LuxeColors.inkFaint,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.2,
                         ),
                       ),
                   ],

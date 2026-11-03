@@ -704,9 +704,16 @@ export function buildRouter(
    *  Image.network kan geen JWT meesturen, dus geen requireAuth.
    *  SSRF: privé-adressen blijven dicht, behalve Sonos/BluOS-artwork op de speler. */
   r.get("/media-art", async (req, res) => {
+    const fail = (status: number, body: string) => {
+      // Sonos /getaa 404s while a playlist is still loading, then serves the
+      // cover at the same URL. A cached error keeps the player on the
+      // placeholder until the screen is opened again.
+      res.setHeader("Cache-Control", "no-store");
+      return res.status(status).send(body);
+    };
     const u = req.query["u"];
     if (typeof u !== "string" || !u.startsWith("http")) {
-      return res.status(400).send("bad url");
+      return fail(400, "bad url");
     }
     let current = u;
     for (let hop = 0; hop < 3; hop++) {
@@ -714,10 +721,10 @@ export function buildRouter(
       try {
         parsed = new URL(current);
       } catch {
-        return res.status(400).send("bad url");
+        return fail(400, "bad url");
       }
       if (isBlockedArtHost(parsed) && !isPlayerArtworkUrl(parsed)) {
-        return res.status(403).send("private address blocked");
+        return fail(403, "private address blocked");
       }
       try {
         const upstream = await fetch(current, {
@@ -727,21 +734,21 @@ export function buildRouter(
         });
         if (upstream.status >= 300 && upstream.status < 400) {
           const loc = upstream.headers.get("location");
-          if (!loc) return res.status(404).send("not found");
+          if (!loc) return fail(404, "not found");
           current = new URL(loc, current).toString();
           continue;
         }
         if (!upstream.ok) {
-          return res.status(404).send("not found");
+          return fail(404, "not found");
         }
         const ct = upstream.headers.get("content-type") ?? "";
         const buf = await upstream.arrayBuffer();
         if (buf.byteLength === 0 || buf.byteLength > 2_000_000) {
-          return res.status(404).send("no image");
+          return fail(404, "no image");
         }
         const sniffed = sniffImageContentType(buf, ct);
         if (!sniffed) {
-          return res.status(404).send("no image");
+          return fail(404, "no image");
         }
         res.setHeader("Content-Type", sniffed);
         const isSonosGetaa = /\/getaa(?:\?|$)/i.test(current);
@@ -752,10 +759,10 @@ export function buildRouter(
         res.send(Buffer.from(buf));
         return;
       } catch {
-        return res.status(502).send("upstream error");
+        return fail(502, "upstream error");
       }
     }
-    return res.status(404).send("not found");
+    return fail(404, "not found");
   });
 
   // ── Satel integration config (enabled + partitions) ─────────────────────
