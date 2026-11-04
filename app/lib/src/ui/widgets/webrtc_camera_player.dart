@@ -26,6 +26,7 @@ class WebRTCCameraPlayer extends ConsumerStatefulWidget {
     this.maxAttempts = 5,
     this.onFailed,
     this.onConnected,
+    this.onIntrinsicAspect,
   });
 
   final String signallingPath;
@@ -42,6 +43,8 @@ class WebRTCCameraPlayer extends ConsumerStatefulWidget {
   final int maxAttempts;
   final VoidCallback? onFailed;
   final VoidCallback? onConnected;
+  /// Real frame width/height. Used to drop the black bars around [fit].
+  final ValueChanged<double>? onIntrinsicAspect;
 
   @override
   ConsumerState<WebRTCCameraPlayer> createState() =>
@@ -58,13 +61,32 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
   bool _failedNotified = false;
   int _attempt = 0;
   bool _rendererReady = false;
+  double? _reportedAspect;
 
   static const _retryDelay = Duration(seconds: 2);
 
   @override
   void initState() {
     super.initState();
+    _renderer.onResize = _publishAspect;
     _start();
+  }
+
+  void _publishAspect() {
+    if (!mounted) return;
+    final w = _renderer.videoWidth;
+    final h = _renderer.videoHeight;
+    if (w <= 0 || h <= 0) return;
+    final aspect = w / h;
+    final prev = _reportedAspect;
+    if (prev != null && (prev - aspect).abs() < 0.02) return;
+    _reportedAspect = aspect;
+    final cb = widget.onIntrinsicAspect;
+    if (cb == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.onIntrinsicAspect?.call(aspect);
+    });
   }
 
   @override
@@ -72,6 +94,7 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
     super.didUpdateWidget(old);
     if (old.signallingPath != widget.signallingPath) {
       _attempt = 0;
+      _reportedAspect = null;
       _restart();
     }
   }
@@ -154,6 +177,7 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
           _connectTimeout?.cancel();
           setState(() => _connected = true);
           widget.onConnected?.call();
+          _publishAspect();
         }
       };
       pc.onConnectionState = (s) {
@@ -222,6 +246,7 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
   void dispose() {
     _connectTimeout?.cancel();
     _iceWatchdog?.cancel();
+    _renderer.onResize = null;
     try {
       _renderer.srcObject = null;
     } catch (_) {}

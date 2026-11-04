@@ -115,7 +115,12 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
       refreshListenable: _routerRefresh,
       routes: [
         GoRoute(path: '/splash', builder: (_, __) => const SplashScreen()),
-        GoRoute(path: '/login', builder: (_, __) => const LoginScreen()),
+        GoRoute(
+          path: '/login',
+          builder: (_, s) => LoginScreen(
+            addHouse: s.uri.queryParameters['add'] == '1',
+          ),
+        ),
         GoRoute(
           path: '/pair',
           builder: (_, s) => PairScreen(

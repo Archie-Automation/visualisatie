@@ -188,12 +188,14 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
                                 textAlign: TextAlign.center,
                                 style: TextStyle(color: LuxeColors.inkSoft)),
                           ),
-                          data: (i) => LiveVideoFittedStage(
-                            aspectRatio: i.aspectRatio,
-                            child: CameraLivePlayer(
+                          data: (i) => LiveVideoHuggingStage(
+                            identity: i.id,
+                            fallbackAspect: i.aspectRatio,
+                            builder: (onAspect) => CameraLivePlayer(
                               info: i,
                               fit: BoxFit.contain,
                               expand: true,
+                              onIntrinsicAspect: onAspect,
                             ),
                           ),
                         ),
@@ -399,31 +401,33 @@ class _ThumbStripItem extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
-              child: AnimatedContainer(
-                duration: Duration(milliseconds: 200),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: selected ? LuxeColors.brass : LuxeColors.line,
-                    width: selected ? 2.5 : 1,
+              child: Center(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: selected ? LuxeColors.brass : LuxeColors.line,
+                      width: selected ? 2.5 : 1,
+                    ),
+                    boxShadow: selected
+                        ? [
+                            BoxShadow(
+                              color: LuxeColors.brass.withValues(alpha: 0.35),
+                              blurRadius: 12,
+                            ),
+                          ]
+                        : null,
                   ),
-                  boxShadow: selected
-                      ? [
-                          BoxShadow(
-                            color: LuxeColors.brass.withValues(alpha: 0.35),
-                            blurRadius: 12,
-                          ),
-                        ]
-                      : null,
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: CameraSnapshot(
-                    cameraId: device.id,
-                    aspectRatio: 16 / 9,
-                    fit: BoxFit.contain,
-                    showLiveBadge: false,
-                    refresh: const Duration(seconds: 10),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: CameraSnapshot(
+                      cameraId: device.id,
+                      aspectRatio: 16 / 9,
+                      fit: BoxFit.contain,
+                      showLiveBadge: false,
+                      refresh: const Duration(seconds: 10),
+                    ),
                   ),
                 ),
               ),

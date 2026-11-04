@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,9 +34,11 @@ import 'widgets/function_screen_header.dart';
 import 'widgets/glass_card.dart';
 import 'widgets/luxe_backdrop.dart';
 import 'widgets/luxe_form.dart';
+import 'house_switch_section.dart';
 import 'installer_nav.dart';
 
 enum _SettingsTopic {
+  houses,
   appearance,
   doorbell,
   schedules,
@@ -135,6 +138,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               padding: EdgeInsets.zero,
               child: Column(
                 children: [
+                  if (!kIsWeb) ...[
+                    _SettingsMenuTile(
+                      icon: Icons.home_work_outlined,
+                      title: 'Woningen',
+                      subtitle: cfg.projectName.trim().isEmpty
+                          ? 'Wisselen tussen servers'
+                          : cfg.projectName,
+                      onTap: () =>
+                          setState(() => _topic = _SettingsTopic.houses),
+                    ),
+                    Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
+                  ],
                   _SettingsMenuTile(
                     icon: Icons.palette_outlined,
                     title: 'Weergave',
@@ -252,6 +267,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final showThemeSchedules = showThemeAutoSchedules(themeMode);
 
     final title = switch (topic) {
+      _SettingsTopic.houses => 'Woningen',
       _SettingsTopic.appearance => 'Weergave',
       _SettingsTopic.doorbell => 'Deurbel',
       _SettingsTopic.schedules => 'Tijdschema\'s',
@@ -263,6 +279,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     };
     final infoTitle = title;
     final infoBody = switch (topic) {
+      _SettingsTopic.houses =>
+        'Elke woning is een eigen server. Deze telefoon onthoudt het adres '
+            'en de sessie.\n\n'
+            'Een woning toevoegen is een adres invullen of een koppelcode uit '
+            'dat huis. Het huis zelf wordt niet hier aangemaakt.',
       _SettingsTopic.appearance =>
         'Kies licht, donker of automatisch.\n\n${showThemeSchedules ? 'Auto wisselt volgens de licht- en donkertijden hieronder.' : 'Licht of donker blijft vast tot je Auto kiest.'}',
       _SettingsTopic.doorbell =>
@@ -331,6 +352,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             padding: const EdgeInsets.only(bottom: 36),
             children: [
               switch (topic) {
+                _SettingsTopic.houses => const HouseSwitchSection(),
                 _SettingsTopic.appearance =>
                   _AppearanceSection(showTitle: false, config: cfg),
                 _SettingsTopic.doorbell =>

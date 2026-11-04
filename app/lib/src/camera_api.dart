@@ -52,9 +52,8 @@ class CameraInfo {
 final cameraInfoProvider =
     FutureProvider.family<CameraInfo, String>((ref, id) async {
   ref.keepAlive();
-  final isAuthed = ref.watch(authProvider.select((a) => a.isAuthed));
-  if (!isAuthed) throw StateError('not authenticated');
-  final token = ref.read(authProvider).token;
+  final token = ref.watch(authProvider.select((a) => a.token));
+  if (token == null) throw StateError('not authenticated');
   if (isDemoToken(token)) {
     final name = ref.read(configProvider).value?.deviceById(id)?.name ?? 'Camera';
     return CameraInfo(

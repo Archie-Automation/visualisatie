@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 
 import '../../theme.dart';
 
-/// Shared live-frame size on tablet/desktop. Camera and intercom stay in sync.
-const kLiveVideoStageFactor = 0.75;
+/// How much of the parent the camera frame may use.
+/// 1 sizes the picture to the largest box that still fits, with no inset.
+const kLiveVideoStageFactor = 1.0;
 
 /// Full-bleed camera/intercom stage: fills the parent, clips to a rounded
 /// frame, shadow outside the clip so the picture can run edge-to-edge.
@@ -39,6 +40,9 @@ class LiveVideoStage extends StatelessWidget {
 
 /// Rounded live frame: at most [factor] of the parent, sized to [aspectRatio]
 /// so the picture is fully visible and not stretched or cropped.
+///
+/// Pass the stream's real ratio once it is known. A configured 16:9 box
+/// around a different stream is what leaves the black bars.
 class LiveVideoFittedStage extends StatelessWidget {
   const LiveVideoFittedStage({
     super.key,
@@ -74,6 +78,58 @@ class LiveVideoFittedStage extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Keeps [LiveVideoFittedStage] on [fallbackAspect] until the player reports
+/// the real frame size, then resizes the frame to that ratio.
+///
+/// [BoxFit.contain] inside a matching frame has no leftover black and does
+/// not crop or stretch.
+class LiveVideoHuggingStage extends StatefulWidget {
+  const LiveVideoHuggingStage({
+    super.key,
+    required this.fallbackAspect,
+    required this.builder,
+    this.identity,
+    this.heroTag,
+    this.factor = kLiveVideoStageFactor,
+  });
+
+  final double fallbackAspect;
+  final Widget Function(ValueChanged<double> onIntrinsicAspect) builder;
+  final Object? identity;
+  final String? heroTag;
+  final double factor;
+
+  @override
+  State<LiveVideoHuggingStage> createState() => _LiveVideoHuggingStageState();
+}
+
+class _LiveVideoHuggingStageState extends State<LiveVideoHuggingStage> {
+  double? _intrinsic;
+
+  @override
+  void didUpdateWidget(covariant LiveVideoHuggingStage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.identity != widget.identity) _intrinsic = null;
+  }
+
+  void _onIntrinsic(double aspect) {
+    if (!aspect.isFinite || aspect < 0.2 || aspect > 5) return;
+    final current = _intrinsic;
+    if (current != null && (current - aspect).abs() < 0.02) return;
+    setState(() => _intrinsic = aspect);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return LiveVideoFittedStage(
+      aspectRatio: _intrinsic ?? widget.fallbackAspect,
+      heroTag: widget.heroTag,
+      factor: widget.factor,
+      child: widget.builder(_onIntrinsic),
     );
   }
 }

@@ -96,6 +96,8 @@ class _PairScreenState extends ConsumerState<PairScreen> {
     }
 
     if (!kIsWeb) {
+      await parkActiveHouse();
+      await ref.read(authProvider.notifier).clearLocal();
       await setApiBase(claim.localUrl);
       await setRemoteApiBase(claim.remoteUrl);
       await chooseServerRoute();

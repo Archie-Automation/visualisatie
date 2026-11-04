@@ -124,10 +124,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   Future<void> _applyServer() async {
     if (_savingServer) return;
     setState(() => _savingServer = true);
-    await setApiBase(
-      _server.text,
-      auth: ref.read(authProvider.notifier),
-    );
+    final next = normalizeApiBase(_server.text);
+    if (next != localApiBase) {
+      // Ander LAN-adres: dit huis uitloggen vóór de wissel, op de oude server.
+      await ref.read(authProvider.notifier).logout();
+    }
+    await setApiBase(_server.text);
     await setRemoteApiBase(
       _remote.text.trim().isEmpty ? null : _remote.text,
     );

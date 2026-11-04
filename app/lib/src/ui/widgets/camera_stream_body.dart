@@ -17,12 +17,15 @@ class CameraLivePlayer extends ConsumerStatefulWidget {
     required this.info,
     this.fit = BoxFit.contain,
     this.expand = false,
+    this.onIntrinsicAspect,
   });
 
   final CameraInfo info;
   final BoxFit fit;
   /// Fill the parent instead of locking to [CameraInfo.aspectRatio].
   final bool expand;
+  /// Real frame width/height once the stream has a picture.
+  final ValueChanged<double>? onIntrinsicAspect;
 
   @override
   ConsumerState<CameraLivePlayer> createState() => _CameraLivePlayerState();
@@ -116,6 +119,7 @@ class _CameraLivePlayerState extends ConsumerState<CameraLivePlayer> {
         expand: widget.expand,
         videoOnly: true,
         onFailed: _onWebRtcFailed,
+        onIntrinsicAspect: widget.onIntrinsicAspect,
       );
     }
 
@@ -128,6 +132,7 @@ class _CameraLivePlayerState extends ConsumerState<CameraLivePlayer> {
         fit: widget.fit,
         expand: widget.expand,
         interactive: true,
+        onIntrinsicAspect: widget.onIntrinsicAspect,
       );
     }
 

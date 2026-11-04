@@ -59,9 +59,7 @@ Future<void> runScheduleNow({
 /// Fetches the current schedule list and caches it. The editor invalidates
 /// this after every save so the list re-fetches.
 final schedulesProvider = FutureProvider<List<Schedule>>((ref) async {
-  final isAuthed = ref.watch(authProvider.select((a) => a.isAuthed));
-  if (!isAuthed) return const [];
-  final token = ref.read(authProvider).token;
+  final token = ref.watch(authProvider.select((a) => a.token));
   if (token == null) return const [];
   if (isDemoToken(token)) return demoOutdoorSchedules();
   return fetchSchedules(token: token);

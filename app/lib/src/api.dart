@@ -12,6 +12,7 @@ import 'demo/demo_bus.dart';
 import 'demo/demo_house.dart';
 import 'demo/demo_session.dart';
 import 'energy_state.dart';
+import 'saved_houses.dart';
 import 'media_api.dart';
 import 'server_route.dart';
 import 'hvac_switch_lock.dart';
@@ -99,18 +100,93 @@ Future<RouteKind> chooseServerRoute() {
   return probeServerRoute(localApiBase);
 }
 
-/// Persist and apply a new server URL. Clears auth if the host changed.
-Future<void> setApiBase(String raw, {AuthController? auth}) async {
+/// Persist and apply a new LAN URL.
+///
+/// Wisselt alleen het adres. De sessie blijft staan tot de aanroeper die
+/// parkeert of intrekt. Zo gaat een token van huis A niet naar huis B, en
+/// wordt een andere woning niet uitgelogd.
+Future<void> setApiBase(String raw) async {
   final next = normalizeApiBase(raw);
   final prev = localApiBase;
   _apiBaseOverride = next;
   final sp = await SharedPreferences.getInstance();
   await sp.setString(_kApiBasePrefKey, next);
   if (next != prev) {
-    // Ander huis: cloud-URL en server-id horen bij de oude NUC.
     await clearServerRoute();
-    if (auth != null) await auth.logout();
   }
+}
+
+/// Huidige server + sessie in de lokale lijst zetten. Lege [name] laat een
+/// bestaande naam staan. Demo en web slaan niets op.
+Future<void> rememberActiveHouse({String name = ''}) async {
+  if (kIsWeb) return;
+  final session = await _sessionFromPrefs();
+  if (session == null && name.trim().isEmpty) {
+    final sp = await SharedPreferences.getInstance();
+    final hasBase = sp.getString(_kApiBasePrefKey)?.trim().isNotEmpty == true;
+    if (!hasBase) return;
+  }
+  if (session != null && isDemoToken(session.token)) return;
+  final house = await HouseStore.upsert(
+    localUrl: localApiBase,
+    remoteUrl: remoteApiBase,
+    serverId: knownServerId,
+    name: name,
+  );
+  await HouseStore.setActive(house.key);
+  if (session != null && !isDemoToken(session.token)) {
+    await HouseStore.saveSession(house.key, session);
+  }
+}
+
+/// Sessie van het huis dat nu actief is bewaren vóór een wissel.
+Future<void> parkActiveHouse() => rememberActiveHouse();
+
+/// Na de eerste route-keuze: bestaande installatie in de lijst opnemen.
+Future<void> adoptCurrentServer() => rememberActiveHouse();
+
+/// Ander huis actief maken. True als er een sessie klaarstond.
+///
+/// Het vorige huis blijft in de lijst, met zijn eigen token. Die sturen we
+/// niet naar de nieuwe server.
+Future<bool> openSavedHouse(SavedHouse house, AuthController auth) async {
+  if (kIsWeb) return false;
+  await parkActiveHouse();
+  // Eerst lokaal uitloggen, dan het adres. Anders gaat het token van het
+  // vorige huis nog één keer naar de nieuwe server.
+  await auth.clearLocal();
+  await setApiBase(house.localUrl);
+  await setRemoteApiBase(house.remoteUrl);
+  if (house.serverId != null) await setKnownServerId(house.serverId);
+  await HouseStore.setActive(house.key);
+  await chooseServerRoute();
+  final session = await HouseStore.sessionFor(house.key);
+  if (session == null) {
+    await auth.clearLocal();
+    return false;
+  }
+  await auth.applySession(session.toApplyBody());
+  return true;
+}
+
+Future<HouseSession?> _sessionFromPrefs() async {
+  final sp = await SharedPreferences.getInstance();
+  final token = sp.getString('token');
+  if (token == null || token.isEmpty || isDemoToken(token)) return null;
+  final role = sp.getString('role')?.trim();
+  return HouseSession(
+    token: token,
+    username: sp.getString('username') ?? '',
+    role: (role == null || role.isEmpty) ? null : role,
+    refreshToken: _blank(sp.getString('refresh_token')),
+    sessionId: _blank(sp.getString(kSessionIdPrefKey)),
+  );
+}
+
+String? _blank(String? v) {
+  final t = v?.trim();
+  if (t == null || t.isEmpty) return null;
+  return t;
 }
 
 /// JWT payload `role` (SharedPreferences / API may omit it on web).
@@ -386,8 +462,22 @@ class AuthController extends Notifier<AuthState> {
     });
   }
 
+  /// Actieve sessie weg, lokaal. Andere woningen blijven bewaard.
+  /// Geen server-call: gebruiken bij een wissel naar een huis zonder sessie.
+  Future<void> clearLocal() async {
+    _refreshTimer?.cancel();
+    final sp = await SharedPreferences.getInstance();
+    await sp.remove('token');
+    await sp.remove('username');
+    await sp.remove('role');
+    await sp.remove(_kRefreshPrefKey);
+    await sp.remove(kSessionIdPrefKey);
+    state = const AuthState(restoreComplete: true);
+  }
+
   Future<void> logout() async {
     _refreshTimer?.cancel();
+    final houseKey = kIsWeb ? null : await HouseStore.activeKey();
     final sp = await SharedPreferences.getInstance();
     final rt = sp.getString(_kRefreshPrefKey);
     await sp.remove('token');
@@ -395,9 +485,10 @@ class AuthController extends Notifier<AuthState> {
     await sp.remove('role');
     await sp.remove(_kRefreshPrefKey);
     await sp.remove(kSessionIdPrefKey);
+    if (houseKey != null) await HouseStore.dropSession(houseKey);
     state = const AuthState(restoreComplete: true);
     if (rt != null && rt.isNotEmpty) {
-      // Best effort: apparaat intrekken op de server.
+      // Best effort: apparaat intrekken op déze server, niet op een andere.
       unawaited(http
           .post(
             Uri.parse('$apiBase/api/auth/logout'),
@@ -446,9 +537,9 @@ final authProvider =
 /// ------------------------------- Config -------------------------------
 
 final configProvider = FutureProvider<HouseConfig>((ref) async {
-  final isAuthed = ref.watch(authProvider.select((a) => a.isAuthed));
-  if (!isAuthed) throw StateError('not authenticated');
-  final token = ref.read(authProvider).token;
+  // Token, niet alleen "ingelogd": wissel van woning moet dit huis opnieuw laden.
+  final token = ref.watch(authProvider.select((a) => a.token));
+  if (token == null) throw StateError('not authenticated');
   if (isDemoToken(token)) return demoHouse.config;
   final res = await http.get(
     Uri.parse('$apiBase/api/config'),
@@ -462,7 +553,11 @@ final configProvider = FutureProvider<HouseConfig>((ref) async {
   if (res.statusCode != 200) {
     throw StateError('config fetch failed: ${res.statusCode}');
   }
-  return HouseConfig.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+  final cfg = HouseConfig.fromJson(jsonDecode(res.body) as Map<String, dynamic>);
+  if (!kIsWeb) {
+    unawaited(rememberActiveHouse(name: cfg.projectName));
+  }
+  return cfg;
 });
 
 /// ------------------------------- Bus ----------------------------------
@@ -605,7 +700,14 @@ class BusController extends Notifier<BusState> {
       }
       if (next.restoreComplete && next.isAuthed) {
         final wasReady = (prev?.restoreComplete ?? false) && (prev?.isAuthed ?? false);
-        if (!wasReady) reconnectNow();
+        final switched = wasReady && prev?.token != next.token;
+        if (!wasReady || switched) {
+          if (switched) {
+            state = const BusState({});
+            ref.read(energyStateProvider.notifier).clear();
+          }
+          reconnectNow();
+        }
       } else if (prev?.isAuthed == true && !next.isAuthed) {
         if (isDemoToken(prev?.token)) {
           _demoSeeded = false;

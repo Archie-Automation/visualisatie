@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -49,6 +50,7 @@ class _CameraSnapshotState extends ConsumerState<CameraSnapshot> {
   bool _fetching = false;  // guard against overlapping requests
   int _failStreak = 0;     // consecutive failures (used to slow retries)
   int _frameGen = 0;       // unique key so equal-sized JPEGs still swap
+  double? _intrinsic;      // decoded frame ratio, so the box hugs the picture
 
   @override
   void initState() {
@@ -97,10 +99,14 @@ class _CameraSnapshotState extends ConsumerState<CameraSnapshot> {
       if (!mounted) return;
 
       if (res.statusCode == 200 && res.bodyBytes.isNotEmpty) {
+        final bytes = res.bodyBytes;
+        final intrinsic = _intrinsic ?? await _jpegAspect(bytes);
+        if (!mounted) return;
         setState(() {
-          _frame = res.bodyBytes;
+          _frame = bytes;
           _frameGen++;
           _failStreak = 0;
+          if (intrinsic != null) _intrinsic = intrinsic;
         });
       } else {
         // Non-200: keep old frame visible, slow down retries.
@@ -160,10 +166,27 @@ class _CameraSnapshotState extends ConsumerState<CameraSnapshot> {
     return ClipRRect(
       borderRadius: BorderRadius.circular(18),
       child: AspectRatio(
-        aspectRatio: widget.aspectRatio,
+        aspectRatio: _intrinsic ?? widget.aspectRatio,
         child: stack,
       ),
     );
+  }
+}
+
+/// Width/height of a JPEG without painting it. Null when the bytes are not
+/// a decodable image.
+Future<double?> _jpegAspect(Uint8List bytes) async {
+  try {
+    final codec = await ui.instantiateImageCodec(bytes);
+    final frame = await codec.getNextFrame();
+    final w = frame.image.width;
+    final h = frame.image.height;
+    frame.image.dispose();
+    codec.dispose();
+    if (w <= 0 || h <= 0) return null;
+    return w / h;
+  } catch (_) {
+    return null;
   }
 }
 

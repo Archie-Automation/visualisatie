@@ -39,6 +39,7 @@ Future<void> main() async {
   debugPrint('[boot] server-route');
   // LAN of cloud? Max ~1,5 s, thuis <200 ms. Splash pingt daarna de keuze.
   await chooseServerRoute();
+  await adoptCurrentServer();
   debugPrint('[boot] fonts');
   try {
     await preloadLuxeFonts();

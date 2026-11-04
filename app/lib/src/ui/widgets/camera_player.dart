@@ -19,6 +19,7 @@ class CameraPlayer extends ConsumerStatefulWidget {
     this.interactive = false,
     this.showLiveBadge = true,
     this.expand = false,
+    this.onIntrinsicAspect,
   });
 
   final String hlsUrl;
@@ -29,6 +30,8 @@ class CameraPlayer extends ConsumerStatefulWidget {
   final bool showLiveBadge;
   /// Fill the parent instead of locking to [aspectRatio].
   final bool expand;
+  /// Real frame width/height once the HLS picture is ready.
+  final ValueChanged<double>? onIntrinsicAspect;
 
   @override
   ConsumerState<CameraPlayer> createState() => _CameraPlayerState();
@@ -75,11 +78,23 @@ class _CameraPlayerState extends ConsumerState<CameraPlayer> {
         _ctrl = c;
         _ready = true;
       });
+      _reportAspect(c.value.size);
       _startLiveChase(c);
     } catch (e) {
       if (!mounted) return;
       setState(() => _err = '$e');
     }
+  }
+
+  void _reportAspect(Size size) {
+    if (size.width <= 0 || size.height <= 0) return;
+    final aspect = size.width / size.height;
+    final cb = widget.onIntrinsicAspect;
+    if (cb == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.onIntrinsicAspect?.call(aspect);
+    });
   }
 
   void _startLiveChase(VideoPlayerController c) {
