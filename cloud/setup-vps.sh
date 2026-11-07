@@ -73,7 +73,7 @@ ok "wg0 actief"
 # toe op de host en staan forwarding binnen het wg-subnet toe.
 cat > /etc/nftables.conf <<EOF
 #!/usr/sbin/nft -f
-flush ruleset
+destroy table inet archie
 table inet archie {
   chain input {
     type filter hook input priority 0; policy drop;

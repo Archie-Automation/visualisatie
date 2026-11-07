@@ -154,7 +154,7 @@ fi
 # ── Remote toegang via Archie Cloud (optioneel) ─────────────────────────────
 # Eén eenmalige code van de beheerder; daarna houdt deze NUC zelf een
 # WireGuard-verbinding naar de VPS open. Geen poorten, geen VPN-app.
-ARCHIE_CLOUD_ENROLL="${ARCHIE_CLOUD_ENROLL:-https://enroll.archiecloud.nl}"
+ARCHIE_CLOUD_ENROLL="${ARCHIE_CLOUD_ENROLL:-https://enroll.archie-cloud.com}"
 enroll_cloud() {
   if ! command -v wg >/dev/null 2>&1; then
     warn "WireGuard ontbreekt — installeren…"

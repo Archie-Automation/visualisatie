@@ -34,7 +34,7 @@ services:
       --realm=${DOMAIN}
       --use-auth-secret --static-auth-secret=${TURN_SECRET}
       --min-port=49160 --max-port=49400
-      --fingerprint --no-cli --no-tlsv1 --no-tlsv1_1
+      --fingerprint --no-cli --no-tlsv1
       --no-multicast-peers
       --denied-peer-ip=0.0.0.0-10.79.255.255
       --denied-peer-ip=10.81.0.0-255.255.255.255
