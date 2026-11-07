@@ -199,7 +199,11 @@ export function buildCaddyfile(r) {
   const out = [];
   out.push("{");
   if (env.acmeEmail) out.push(`\temail ${env.acmeEmail}`);
-  out.push("\tadmin 0.0.0.0:2019");
+  // 0.0.0.0 omdat de admin-poort via Docker binnenkomt, niet als loopback.
+  // Zonder origins weigert Caddy dan elke reload (403, lege Origin).
+  out.push("\tadmin 0.0.0.0:2019 {");
+  out.push("\t\torigins http://127.0.0.1:2019");
+  out.push("\t}");
   out.push("}");
   out.push("");
   // Zelfde .well-known op het hoofddomein (Android verifieert *.domein daar)
@@ -253,7 +257,10 @@ export async function syncCaddy(r) {
   try {
     const res = await fetch(`${env.caddyAdmin}/load`, {
       method: "POST",
-      headers: { "content-type": "text/caddyfile" },
+      headers: {
+        "content-type": "text/caddyfile",
+        origin: "http://127.0.0.1:2019"
+      },
       body: text,
       signal: AbortSignal.timeout(10_000)
     });
