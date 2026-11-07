@@ -146,14 +146,14 @@ class _RemoteEnrollCardState extends ConsumerState<RemoteEnrollCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Buitenshuis', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 6),
-          Text(
-            linked == null
-                ? 'Plak de eenmalige code. Die is 10 minuten geldig.'
-                : 'Gekoppeld: $linked',
-            style: Theme.of(context).textTheme.bodySmall,
-          ),
+          Text('Remote verbinding', style: Theme.of(context).textTheme.titleSmall),
+          if (linked != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              'Gekoppeld: $linked',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
           const SizedBox(height: 12),
           TextField(
             controller: _code,
