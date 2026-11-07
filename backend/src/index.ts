@@ -27,6 +27,7 @@ import {
   logStartupConnectivityReport
 } from "./startupConnectivity";
 import { appVersionInfo } from "./version";
+import { releaseStuckRemoteEnroll } from "./remoteEnroll";
 import {
   setVoipBus,
   setVoipHub,
@@ -35,6 +36,7 @@ import {
 } from "./voip/manager";
 
 function main() {
+  releaseStuckRemoteEnroll();
   const cfg = loadConfig();
   let go2rtcYaml: string | null = null;
   try {

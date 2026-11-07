@@ -374,20 +374,34 @@ run_update() {
 }
 
 write_enroll_status() {
+  # Vervang het bestand. De app schrijft het als root; overschrijven lukt dan niet,
+  # vervangen via de map wel.
   python3 - "$DATA/enroll-status.json" <<'PY' || true
 import json, os, sys
+from datetime import datetime
 from pathlib import Path
 p = Path(sys.argv[1])
 def env(k):
     v = os.environ.get(k)
     return v if v else None
+old = {}
+if p.exists():
+    try:
+        old = json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        old = {}
 out = {
     "state": env("ST_STATE") or "idle",
     "message": os.environ.get("ST_MESSAGE") or "",
     "error": env("ST_ERROR"),
-    "remoteUrl": env("ST_REMOTE"),
+    "remoteUrl": env("ST_REMOTE") or old.get("remoteUrl"),
+    "requestedAt": old.get("requestedAt"),
+    "updatedAt": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
 }
-p.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
+tmp = p.with_name(p.name + ".tmp")
+tmp.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
+os.chmod(tmp, 0o666)
+os.replace(tmp, p)
 PY
 }
 
@@ -419,10 +433,10 @@ print(c)
 PY
 )" || rc=$?
   if [ "${rc:-0}" != 0 ]; then
+    rm -f "$req" 2>/dev/null || true
     if [ "${rc:-0}" = 3 ]; then
-      ST_STATE=error ST_MESSAGE="De server kon de code niet lezen. Werk de server bij en vraag een nieuwe code." ST_ERROR=unreadable write_enroll_status
+      ST_STATE=error ST_MESSAGE="De server kon de code niet lezen. Vraag een nieuwe code." ST_ERROR=unreadable write_enroll_status
     else
-      rm -f "$req"
       ST_STATE=error ST_MESSAGE="Code klopt niet. Verwacht vier tekens, een streepje, vier tekens." ST_ERROR=bad_code write_enroll_status
     fi
     return 1
@@ -520,6 +534,10 @@ if [ -d "$LOCK" ]; then
   rmdir "$LOCK" 2>/dev/null || true
   log "cleared stale lock"
 fi
+if [ -d "$DATA/enroll.lock" ]; then
+  rmdir "$DATA/enroll.lock" 2>/dev/null || true
+  log "cleared stale enroll lock"
+fi
 # Do not clobber a just-finished success: tablets poll this file and the
 # previous line used to reset to idle immediately after re-exec.
 python3 - "$STATUS" <<'PY' || true
@@ -553,12 +571,8 @@ if [ -f "$STATUS.want-idle" ]; then
 fi
 
 while true; do
-  if [ -f "$DATA/enroll-request.json" ]; then
-    if mkdir "$DATA/enroll.lock" 2>/dev/null; then
-      run_enroll || true
-      rmdir "$DATA/enroll.lock" 2>/dev/null || true
-    fi
-  elif [ -f "$REQUEST" ]; then
+  # Update gaat vóór een koppeling. Een blijven liggen request mag bijwerken niet blokkeren.
+  if [ -f "$REQUEST" ]; then
     if mkdir "$LOCK" 2>/dev/null; then
       requested_by="$(python3 - "$REQUEST" <<'PY' 2>/dev/null || echo admin
 import json, sys
@@ -579,6 +593,11 @@ PY
         log "re-exec agent so next tablet update uses the new script"
         exec /bin/sh "$DOCKER_DIR/update-agent.sh"
       fi
+    fi
+  elif [ -f "$DATA/enroll-request.json" ]; then
+    if mkdir "$DATA/enroll.lock" 2>/dev/null; then
+      run_enroll || true
+      rmdir "$DATA/enroll.lock" 2>/dev/null || true
     fi
   else
     heartbeat
