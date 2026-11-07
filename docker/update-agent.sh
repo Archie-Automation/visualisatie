@@ -373,6 +373,134 @@ run_update() {
   return 0
 }
 
+write_enroll_status() {
+  python3 - "$DATA/enroll-status.json" <<'PY' || true
+import json, os, sys
+from pathlib import Path
+p = Path(sys.argv[1])
+def env(k):
+    v = os.environ.get(k)
+    return v if v else None
+out = {
+    "state": env("ST_STATE") or "idle",
+    "message": os.environ.get("ST_MESSAGE") or "",
+    "error": env("ST_ERROR"),
+    "remoteUrl": env("ST_REMOTE"),
+}
+p.write_text(json.dumps(out, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
+as_root() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+  else
+    sudo -n "$@"
+  fi
+}
+
+run_enroll() {
+  ENROLL_ERR=
+  req="$DATA/enroll-request.json"
+  code="$(python3 - "$req" <<'PY'
+import json, re, sys
+from pathlib import Path
+d = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+c = str(d.get("code") or "").strip().upper()
+if not re.fullmatch(r"[A-Z0-9]{4}-[A-Z0-9]{4}", c):
+    sys.exit(2)
+print(c)
+PY
+)" || {
+    rm -f "$req"
+    ST_STATE=error ST_MESSAGE="Code klopt niet. Verwacht vier tekens, een streepje, vier tekens." ST_ERROR=bad_code write_enroll_status
+    return 1
+  }
+  rm -f "$req"
+  ST_STATE=running ST_MESSAGE="Koppelen…" ST_ERROR= write_enroll_status
+  log "enroll start"
+  if ! command -v wg >/dev/null 2>&1; then
+    as_root apt-get update -y >>"$LOG" 2>&1 && as_root apt-get install -y wireguard-tools >>"$LOG" 2>&1 || {
+      ST_STATE=error ST_MESSAGE="WireGuard ontbreekt en kon niet worden geïnstalleerd." ST_ERROR=no_wg write_enroll_status
+      return 1
+    }
+  fi
+  command -v python3 >/dev/null 2>&1 || {
+    ST_STATE=error ST_MESSAGE="python3 ontbreekt op de server." ST_ERROR=no_python write_enroll_status
+    return 1
+  }
+  umask 077
+  priv="$(wg genkey)"
+  pub="$(printf '%s' "$priv" | wg pubkey)"
+  hostn="$(hostname 2>/dev/null || echo nuc)"
+  body="$(printf '{"code":"%s","publicKey":"%s","hostname":"%s"}' "$code" "$pub" "$hostn")"
+  enroll_url="${ARCHIE_CLOUD_ENROLL:-https://enroll.archie-cloud.com}"
+  resp="$(curl -fsS --max-time 20 -H 'content-type: application/json' -d "$body" "${enroll_url}/enroll" 2>&1)" || {
+    ST_STATE=error ST_MESSAGE="Aanmelden mislukt. De code is ongeldig of verlopen." ST_ERROR=enroll_failed write_enroll_status
+    log "enroll http fail"
+    return 1
+  }
+  eval "$(printf '%s' "$resp" | python3 -c '
+import json, sys, shlex
+d = json.load(sys.stdin)
+if "error" in d:
+    print("ENROLL_ERR=" + shlex.quote(d["error"])); sys.exit(0)
+wg = d["wg"]; turn = d.get("turn", {})
+for k, v in {
+  "E_SERVER_ID": d["serverId"], "E_REMOTE_URL": d["remoteUrl"],
+  "E_WG_ADDR": wg["address"], "E_WG_PUB": wg["serverPublicKey"],
+  "E_WG_EP": wg["endpoint"], "E_WG_ALLOWED": wg["allowedIps"],
+  "E_WG_KA": str(wg.get("persistentKeepalive", 25)),
+  "E_TURN_HOST": turn.get("host", ""), "E_TURN_SECRET": turn.get("secret", ""),
+}.items():
+    print(k + "=" + shlex.quote(str(v)))
+')"
+  if [ -n "${ENROLL_ERR:-}" ]; then
+    ST_STATE=error ST_MESSAGE="Code geweigerd: ${ENROLL_ERR}" ST_ERROR=rejected write_enroll_status
+    return 1
+  fi
+  as_root mkdir -p /etc/wireguard
+  as_root sh -c "umask 077; cat > /etc/wireguard/wg0.conf" <<EOF
+[Interface]
+PrivateKey = ${priv}
+Address = ${E_WG_ADDR}
+
+[Peer]
+PublicKey = ${E_WG_PUB}
+Endpoint = ${E_WG_EP}
+AllowedIPs = ${E_WG_ALLOWED}
+PersistentKeepalive = ${E_WG_KA}
+EOF
+  as_root systemctl enable --now wg-quick@wg0 >>"$LOG" 2>&1 || true
+  as_root systemctl restart wg-quick@wg0 >>"$LOG" 2>&1 || {
+    ST_STATE=error ST_MESSAGE="Tunnel starten mislukt." ST_ERROR=wg_start write_enroll_status
+    return 1
+  }
+  set_env_var() {
+    key="$1"; val="$2"
+    envf="$DOCKER_DIR/.env"
+    touch "$envf"
+    if grep -q "^${key}=" "$envf" 2>/dev/null; then
+      sed -i.bak "s|^${key}=.*|${key}=${val}|" "$envf"
+      rm -f "$envf.bak"
+    else
+      printf '%s=%s\n' "$key" "$val" >> "$envf"
+    fi
+  }
+  set_env_var REMOTE_URL "$E_REMOTE_URL"
+  set_env_var WG_ADDRESS "${E_WG_ADDR%/*}"
+  set_env_var TURN_HOST "$E_TURN_HOST"
+  set_env_var TURN_SECRET "$E_TURN_SECRET"
+  ST_STATE=success ST_MESSAGE="Gekoppeld." ST_ERROR= ST_REMOTE="$E_REMOTE_URL" write_enroll_status
+  log "enroll ok url=$E_REMOTE_URL"
+  DOCKER="$(detect_docker)"
+  if [ -n "$DOCKER" ]; then
+    ( cd "$DOCKER_DIR" && $DOCKER compose --env-file .env up -d --no-deps knx-stack >>"$LOG" 2>&1 ) || \
+      log "enroll compose reload failed"
+  fi
+  return 0
+}
+
 log "agent start root=$ROOT"
 if [ -d "$LOCK" ]; then
   rmdir "$LOCK" 2>/dev/null || true
@@ -411,7 +539,12 @@ if [ -f "$STATUS.want-idle" ]; then
 fi
 
 while true; do
-  if [ -f "$REQUEST" ]; then
+  if [ -f "$DATA/enroll-request.json" ]; then
+    if mkdir "$DATA/enroll.lock" 2>/dev/null; then
+      run_enroll || true
+      rmdir "$DATA/enroll.lock" 2>/dev/null || true
+    fi
+  elif [ -f "$REQUEST" ]; then
     if mkdir "$LOCK" 2>/dev/null; then
       requested_by="$(python3 - "$REQUEST" <<'PY' 2>/dev/null || echo admin
 import json, sys

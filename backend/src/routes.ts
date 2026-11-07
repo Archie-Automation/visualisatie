@@ -82,6 +82,11 @@ import {
 } from "./apkCache";
 import { readServerUpdateStatus, requestServerUpdate } from "./serverUpdate";
 import {
+  normalizeEnrollCode,
+  readRemoteEnrollStatus,
+  requestRemoteEnroll
+} from "./remoteEnroll";
+import {
   cameraPath,
   collectCameras,
   collectIntercoms,
@@ -1135,6 +1140,27 @@ export function buildRouter(
     res.on("finish", () => {
       scheduleAdminProcessRestart();
     });
+  });
+
+  r.get("/installer/remote", requireAuth, requireInstaller, (_req, res) => {
+    res.json(readRemoteEnrollStatus());
+  });
+
+  r.post("/installer/remote", requireAuth, requireInstaller, (req: AuthedRequest, res) => {
+    const code = normalizeEnrollCode((req.body as { code?: unknown })?.code);
+    if (!code) {
+      res.status(400).json({
+        error: "bad_code",
+        message: "Code klopt niet. Verwacht vier tekens, een streepje, vier tekens."
+      });
+      return;
+    }
+    const result = requestRemoteEnroll(code, req.user?.username || "installer");
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error, message: result.message });
+      return;
+    }
+    res.json(result.status);
   });
 
   r.get("/admin/update", requireAuth, requireInstaller, (_req, res) => {

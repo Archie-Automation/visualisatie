@@ -47,6 +47,7 @@ import '../ui/responsive.dart';
 import '../ui/user_access_editor.dart';
 import '../ui/widgets/admin_full_restart_card.dart';
 import '../ui/widgets/admin_server_update_card.dart';
+import '../ui/widgets/remote_enroll_card.dart';
 import '../ui/widgets/back_pill.dart';
 import '../ui/widgets/confirm_dialog.dart';
 import '../ui/widgets/function_screen_header.dart';
@@ -5058,6 +5059,8 @@ class _ProjectForm extends ConsumerWidget {
         _BoundStrField('lon', locMap, onChanged, number: true),
         if (showRestart) ...[
           const SizedBox(height: 28),
+          const RemoteEnrollCard(),
+          const SizedBox(height: 16),
           const AdminServerUpdateCard(),
           const SizedBox(height: 16),
           const AdminFullRestartCard(),
