@@ -91,7 +91,7 @@ export function requestRemoteEnroll(code: string, requestedBy: string):
     fs.writeFileSync(
       requestPath(),
       `${JSON.stringify({ code, requestedBy, requestedAt: now }, null, 2)}\n`,
-      { encoding: "utf-8", mode: 0o600 }
+      { encoding: "utf-8", mode: 0o644 }
     );
     fs.writeFileSync(
       statusPath(),

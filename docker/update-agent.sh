@@ -402,20 +402,31 @@ as_root() {
 run_enroll() {
   ENROLL_ERR=
   req="$DATA/enroll-request.json"
+  rc=0
   code="$(python3 - "$req" <<'PY'
 import json, re, sys
 from pathlib import Path
-d = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+p = Path(sys.argv[1])
+try:
+    raw = p.read_text(encoding="utf-8")
+except OSError:
+    sys.exit(3)
+d = json.loads(raw)
 c = str(d.get("code") or "").strip().upper()
 if not re.fullmatch(r"[A-Z0-9]{4}-[A-Z0-9]{4}", c):
     sys.exit(2)
 print(c)
 PY
-)" || {
-    rm -f "$req"
-    ST_STATE=error ST_MESSAGE="Code klopt niet. Verwacht vier tekens, een streepje, vier tekens." ST_ERROR=bad_code write_enroll_status
+)" || rc=$?
+  if [ "${rc:-0}" != 0 ]; then
+    if [ "${rc:-0}" = 3 ]; then
+      ST_STATE=error ST_MESSAGE="De server kon de code niet lezen. Werk de server bij en vraag een nieuwe code." ST_ERROR=unreadable write_enroll_status
+    else
+      rm -f "$req"
+      ST_STATE=error ST_MESSAGE="Code klopt niet. Verwacht vier tekens, een streepje, vier tekens." ST_ERROR=bad_code write_enroll_status
+    fi
     return 1
-  }
+  fi
   rm -f "$req"
   ST_STATE=running ST_MESSAGE="Koppelen…" ST_ERROR= write_enroll_status
   log "enroll start"
@@ -459,7 +470,10 @@ for k, v in {
     ST_STATE=error ST_MESSAGE="Code geweigerd: ${ENROLL_ERR}" ST_ERROR=rejected write_enroll_status
     return 1
   fi
-  as_root mkdir -p /etc/wireguard
+  as_root mkdir -p /etc/wireguard || {
+    ST_STATE=error ST_MESSAGE="Geen rechten om de tunnel aan te maken." ST_ERROR=no_root write_enroll_status
+    return 1
+  }
   as_root sh -c "umask 077; cat > /etc/wireguard/wg0.conf" <<EOF
 [Interface]
 PrivateKey = ${priv}
