@@ -43,20 +43,14 @@ class _CameraLivePlayerState extends ConsumerState<CameraLivePlayer> {
   }
 
   Future<void> _prewarmStream() async {
-    if (isDemoToken(ref.read(authProvider).token)) {
-      if (mounted) setState(() => _streamReady = true);
-      return;
-    }
-    final auth = ref.read(authProvider);
-    try {
-      await warmCameraStream(
-        cameraId: widget.info.id,
-        token: auth.token,
-      ).timeout(const Duration(seconds: 14));
-    } catch (_) {
-      /* proceed even if warm-up fails — WebRTC/HLS will retry */
-    }
     if (mounted) setState(() => _streamReady = true);
+    if (isDemoToken(ref.read(authProvider).token)) return;
+    final auth = ref.read(authProvider);
+    // Niet op dit verzoek wachten: de recorder levert het eerste beeld
+    // pas na een keyframe, en dat hield het scherm seconden leeg.
+    warmCameraStream(cameraId: widget.info.id, token: auth.token).catchError(
+      (_) => false,
+    );
   }
 
   void _onWebRtcFailed() {

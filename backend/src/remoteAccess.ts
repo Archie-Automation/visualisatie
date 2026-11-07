@@ -156,6 +156,13 @@ export function extraGo2rtcCandidates(): string[] {
   const wg = wgAddress();
   if (wg) out.push(`${wg}:8555`);
   const relay = env("GO2RTC_RELAY_CANDIDATE");
-  if (relay) out.push(relay);
+  if (relay) {
+    out.push(relay);
+  } else {
+    // Eén gedeelde poort op de VPS, doorgestuurd naar deze NUC :8555.
+    // Een tweede huis heeft een eigen poort nodig; die zet je in GO2RTC_RELAY_CANDIDATE.
+    const turn = env("TURN_HOST");
+    if (turn && wg) out.push(`${turn}:8555`);
+  }
   return out;
 }
