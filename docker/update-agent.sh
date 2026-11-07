@@ -405,12 +405,31 @@ os.replace(tmp, p)
 PY
 }
 
-as_root() {
+# De agent draait niet als root en heeft geen wachtwoordloze sudo.
+# Docker mag hij wel (zelfde rechten als Server bijwerken). Daarmee een
+# kort script op de host zelf uitvoeren.
+run_host_script() {
+  script="$1"
+  chmod 700 "$script" 2>/dev/null || true
   if [ "$(id -u)" -eq 0 ]; then
-    "$@"
-  else
-    sudo -n "$@"
+    /bin/sh "$script" >>"$LOG" 2>&1
+    return $?
   fi
+  if command -v sudo >/dev/null 2>&1 && sudo -n /bin/sh "$script" >>"$LOG" 2>&1; then
+    return 0
+  fi
+  log "sudo geweigerd, vervolg via docker"
+  DOCKER="$(detect_docker)"
+  if [ -z "$DOCKER" ]; then
+    log "geen docker beschikbaar"
+    return 1
+  fi
+  # archie-os-stack is alpine; entrypoint overslaan, anders start de app.
+  # shellcheck disable=SC2086
+  $DOCKER run --rm --privileged --pid=host --network host \
+    --entrypoint /bin/busybox \
+    archie-os-stack:latest \
+    chroot /proc/1/root /bin/sh "$script" >>"$LOG" 2>&1
 }
 
 run_enroll() {
@@ -444,19 +463,40 @@ PY
   rm -f "$req"
   ST_STATE=running ST_MESSAGE="Koppelen…" ST_ERROR= write_enroll_status
   log "enroll start"
-  if ! command -v wg >/dev/null 2>&1; then
-    as_root apt-get update -y >>"$LOG" 2>&1 && as_root apt-get install -y wireguard-tools >>"$LOG" 2>&1 || {
-      ST_STATE=error ST_MESSAGE="WireGuard ontbreekt en kon niet worden geïnstalleerd." ST_ERROR=no_wg write_enroll_status
+  if ! command -v wg >/dev/null 2>&1 && ! [ -x /usr/bin/wg ]; then
+    script="$DATA/wg-install.sh"
+    cat > "$script" <<'EOF'
+#!/bin/sh
+set -eu
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
+apt-get install -y wireguard-tools
+command -v wg >/dev/null 2>&1
+EOF
+    if ! run_host_script "$script"; then
+      rm -f "$script"
+      ST_STATE=error ST_MESSAGE="WireGuard kon niet worden geïnstalleerd." ST_ERROR=no_wg write_enroll_status
+      log "enroll wg install failed"
       return 1
-    }
+    fi
+    rm -f "$script"
+  fi
+  if ! command -v wg >/dev/null 2>&1 && ! [ -x /usr/bin/wg ]; then
+    ST_STATE=error ST_MESSAGE="WireGuard is geïnstalleerd maar niet gevonden." ST_ERROR=no_wg write_enroll_status
+    return 1
   fi
   command -v python3 >/dev/null 2>&1 || {
     ST_STATE=error ST_MESSAGE="python3 ontbreekt op de server." ST_ERROR=no_python write_enroll_status
     return 1
   }
   umask 077
-  priv="$(wg genkey)"
-  pub="$(printf '%s' "$priv" | wg pubkey)"
+  if [ -x /usr/bin/wg ]; then
+    WG=/usr/bin/wg
+  else
+    WG=wg
+  fi
+  priv="$("$WG" genkey)"
+  pub="$(printf '%s' "$priv" | "$WG" pubkey)"
   hostn="$(hostname 2>/dev/null || echo nuc)"
   body="$(printf '{"code":"%s","publicKey":"%s","hostname":"%s"}' "$code" "$pub" "$hostn")"
   enroll_url="${ARCHIE_CLOUD_ENROLL:-https://enroll.archie-cloud.com}"
@@ -484,11 +524,13 @@ for k, v in {
     ST_STATE=error ST_MESSAGE="Code geweigerd: ${ENROLL_ERR}" ST_ERROR=rejected write_enroll_status
     return 1
   fi
-  as_root mkdir -p /etc/wireguard || {
-    ST_STATE=error ST_MESSAGE="Geen rechten om de tunnel aan te maken." ST_ERROR=no_root write_enroll_status
-    return 1
-  }
-  as_root sh -c "umask 077; cat > /etc/wireguard/wg0.conf" <<EOF
+  script="$DATA/wg-up.sh"
+  cat > "$script" <<EOF
+#!/bin/sh
+set -eu
+mkdir -p /etc/wireguard
+umask 077
+cat > /etc/wireguard/wg0.conf <<'CFG'
 [Interface]
 PrivateKey = ${priv}
 Address = ${E_WG_ADDR}
@@ -498,12 +540,18 @@ PublicKey = ${E_WG_PUB}
 Endpoint = ${E_WG_EP}
 AllowedIPs = ${E_WG_ALLOWED}
 PersistentKeepalive = ${E_WG_KA}
+CFG
+chmod 600 /etc/wireguard/wg0.conf
+systemctl enable wg-quick@wg0 || true
+systemctl restart wg-quick@wg0
 EOF
-  as_root systemctl enable --now wg-quick@wg0 >>"$LOG" 2>&1 || true
-  as_root systemctl restart wg-quick@wg0 >>"$LOG" 2>&1 || {
+  if ! run_host_script "$script"; then
+    rm -f "$script"
     ST_STATE=error ST_MESSAGE="Tunnel starten mislukt." ST_ERROR=wg_start write_enroll_status
+    log "enroll wg start failed"
     return 1
-  }
+  fi
+  rm -f "$script"
   set_env_var() {
     key="$1"; val="$2"
     envf="$DOCKER_DIR/.env"
