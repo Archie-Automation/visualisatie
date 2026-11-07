@@ -240,6 +240,8 @@ export function buildCaddyfile(r) {
     importWk();
     out.push("\tencode zstd gzip");
     out.push(`\treverse_proxy ${s.wgAddress}:4000 {`);
+    out.push("\t\theader_up Host {host}");
+    out.push("\t\theader_up X-Forwarded-Host {host}");
     out.push("\t\ttransport http {");
     out.push("\t\t\tdial_timeout 5s");
     out.push("\t\t}");

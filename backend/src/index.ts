@@ -28,6 +28,7 @@ import {
 } from "./startupConnectivity";
 import { appVersionInfo } from "./version";
 import { releaseStuckRemoteEnroll } from "./remoteEnroll";
+import { remoteUrl } from "./remoteAccess";
 import {
   setVoipBus,
   setVoipHub,
@@ -55,6 +56,41 @@ function main() {
   const app = express();
   app.use(cors());
   app.use(express.json({ limit: "10mb" }));
+
+  // iPhone-webapp die op het LAN-adres is opgeslagen, kan buiten niet laden.
+  // Thuis doorsturen naar het cloudadres, zodat het beginscherm-icoon dáár
+  // opgezet kan worden. API en websocket blijven met rust. 10.80 is de tunnel.
+  app.use((req, res, next) => {
+    if (req.method !== "GET" && req.method !== "HEAD") return next();
+    const accept = String(req.headers.accept || "");
+    if (!accept.includes("text/html")) return next();
+    const ua = String(req.headers["user-agent"] || "");
+    if (!/iPhone|iPod/i.test(ua)) return next();
+    if (String(req.query.local || "") === "1") return next();
+    const remote = remoteUrl();
+    if (!remote) return next();
+    let target: URL;
+    try {
+      target = new URL(remote);
+    } catch {
+      return next();
+    }
+    const forwarded = String(req.headers["x-forwarded-host"] || "").split(",")[0]?.trim() || "";
+    const raw = (forwarded || String(req.headers.host || "")).trim().toLowerCase();
+    const host = raw.replace(/:\d+$/, "").replace(/^\[|\]$/g, "");
+    if (host === target.hostname.toLowerCase()) return next();
+    const ten = /^10\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(host);
+    const lan =
+      host === "localhost" ||
+      /^192\.168\.\d{1,3}\.\d{1,3}$/.test(host) ||
+      /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(host) ||
+      (ten != null && ten[1] !== "80");
+    if (!lan) return next();
+    const dest = new URL(req.originalUrl || "/", target.origin);
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Vary", "User-Agent");
+    res.redirect(302, dest.toString());
+  });
 
   // ── Serve Flutter web build ────────────────────────────────────────────────
   // WEB_ROOT: absolute path in Docker (/app/web). Dev default: ../app/build/web.
