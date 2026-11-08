@@ -23,9 +23,8 @@ void openTechnischeConfiguratie(BuildContext context, AuthState auth) {
           'installer. Super user beheert gebruikers via Instellingen → Gebruikers.\n\n'
           'U bent nu ingelogd als: $user\n'
           'Rol: $rol\n\n'
-          'Log uit en meld u aan met een installer-account. In de meegeleverde '
-          'demo-configuratie is dat vaak gebruikersnaam admin en wachtwoord admin '
-          '(zolang het bootstrap-wachtwoord nog niet is gewijzigd).',
+          'Log uit en meld u aan met het installer-account. Bij een nieuw huis is '
+          'dat eenmalig admin / admin; de app vraagt dan meteen een eigen wachtwoord.',
         ),
       ),
       actions: [

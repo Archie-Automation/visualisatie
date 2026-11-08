@@ -93,9 +93,8 @@ Als het script zegt dat je opnieuw moet inloggen na Docker: VM even herstarten o
 
 1. Telefoon of PC op **dezelfde wifi/LAN**.
 2. Browser: het adres uit het script (`http://…:4000/`).
-3. Nieuw huis: login **admin** / **admin**.
-4. Direct wachtwoord wijzigen via de Installer in de app.
-5. iPhone: deel-menu → **Zet op beginscherm**.
+3. Nieuw huis: eenmalig **admin** / **admin**. De app eist meteen een eigen wachtwoord. Daarna werkt admin/admin niet meer. Kwijt: op de NUC `cd docker && ./wachtwoord.sh admin`.
+4. iPhone: deel-menu → **Zet op beginscherm**.
 
 ---
 

@@ -6,7 +6,7 @@ import type { KnxBus } from "./knxBus";
 import type { GAState, HouseConfig, MediaState } from "./types";
 import { getConfig, getConfigVersion } from "./config";
 import { buildDoorbellIndex } from "./intercoms";
-import type { TokenPayload } from "./auth";
+import { factoryPasswordActive, type TokenPayload } from "./auth";
 import { collectIntercoms } from "./cameras";
 import type { IntercomDevice } from "./types";
 import type { MediaManager } from "./media/manager";
@@ -159,6 +159,11 @@ export function attachWebSocket(
     }
     try {
       const decoded = jwt.verify(token, SECRET) as TokenPayload;
+      const live = (getConfig().users ?? []).find((u) => u.id === decoded.sub);
+      if (live && factoryPasswordActive(live.passwordHash)) {
+        ws.close(4403, "password change required");
+        return;
+      }
       if (decoded.sub) wsUser.set(ws, decoded.sub);
     } catch {
       ws.close(4401, "invalid token");

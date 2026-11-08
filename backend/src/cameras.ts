@@ -310,7 +310,7 @@ export function resolveWebRtcCandidates(): string[] {
 
   const lan = detectLanIPv4();
   if (lan) out.add(`${lan}:8555`);
-  // Buitenshuis: WireGuard-adres (ETS-laptop, hub) en VPS-relay naar :8555.
+  // Buitenshuis: WireGuard-adres voor de VPN. Telefoons gebruiken TURN, geen publieke 8555.
   for (const c of extraGo2rtcCandidates()) out.add(c);
   return [...out];
 }

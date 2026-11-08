@@ -18,6 +18,7 @@ import 'ui/intercom_screen.dart';
 import 'ui/log_screen.dart';
 import 'ui/login_screen.dart';
 import 'ui/pair_screen.dart';
+import 'ui/password_change_screen.dart';
 import 'ui/splash_screen.dart';
 import 'ui/room_category_screen.dart';
 import 'ui/room_screen.dart';
@@ -95,6 +96,7 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
         final loc = state.matchedLocation;
         final onSplash = loc == '/splash';
         final onLogin = loc == '/login';
+        final onPassword = loc == '/wachtwoord';
         // Koppelen via QR/code mag altijd, ook al is er al een sessie
         // (ander account op dezelfde telefoon).
         final onPair = loc == '/pair';
@@ -104,10 +106,14 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
         // Zolang restore niet klaar is, terug naar splash.
         // Bewaar het adres: anders valt ?floor= weg en zijn de ruimtenamen
         // na F5 weg tot je de verdieping opnieuw opent.
-        if (!auth.restoreComplete && !onLogin) {
+        if (!auth.restoreComplete && !onLogin && !onPassword) {
           return splashLocationPreserving(state.uri);
         }
         if (!auth.isAuthed && !onLogin) return '/login';
+        if (auth.isAuthed && auth.mustChangePassword && !onPassword) {
+          return '/wachtwoord';
+        }
+        if (auth.isAuthed && onPassword && !auth.mustChangePassword) return '/';
         if (auth.isAuthed && onLogin) return '/';
         if (installer && auth.isAuthed && !auth.isInstaller) return '/';
         return null;
@@ -120,6 +126,10 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
           builder: (_, s) => LoginScreen(
             addHouse: s.uri.queryParameters['add'] == '1',
           ),
+        ),
+        GoRoute(
+          path: '/wachtwoord',
+          builder: (_, __) => const PasswordChangeScreen(),
         ),
         GoRoute(
           path: '/pair',

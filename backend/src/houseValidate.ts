@@ -49,6 +49,12 @@ export function assertUserLoginCredentials(
   for (const u of users) {
     const name = (u.username ?? "").trim();
     const plain = u.password;
+    if (typeof plain === "string" && plain.length > 0) {
+      const low = plain.trim().toLowerCase();
+      if (low === "admin" || low === "guest" || low === "gast") {
+        return `wachtwoord van "${name}" mag niet het fabriekswachtwoord zijn`;
+      }
+    }
     if (
       typeof plain === "string" &&
       plain.length > 0 &&

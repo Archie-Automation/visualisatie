@@ -1,0 +1,14 @@
+[Unit]
+Description=Archie Cloud: go2rtc 8555 tussen WireGuard-peers door de Docker-firewall
+After=docker.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# setup-vps.sh vult @WG_SUBNET@ en @SCRIPT@ in bij installatie.
+Environment=WG_SUBNET=@WG_SUBNET@
+ExecStart=/bin/sh @SCRIPT@
+
+[Install]
+WantedBy=multi-user.target

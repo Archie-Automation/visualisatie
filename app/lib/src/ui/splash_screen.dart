@@ -111,6 +111,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       _failCount = 0;
       _retryTimer?.cancel();
       if (_showServerField) setState(() => _showServerField = false);
+      final authNow = ref.read(authProvider);
+      if (authNow.isAuthed && !isDemoToken(authNow.token)) {
+        await ref.read(authProvider.notifier).syncPasswordRequirement();
+      }
+      if (!mounted) return;
       _tryNavigate();
     } else {
       _failCount++;

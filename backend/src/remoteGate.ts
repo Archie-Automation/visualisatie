@@ -22,6 +22,12 @@ export function normalizeIp(raw: string | undefined | null): string {
   return ip;
 }
 
+/** Alleen processen op de NUC zelf. Niet het huis-LAN en niet de tunnel. */
+export function isLoopbackAddress(ip: string | undefined | null): boolean {
+  const n = normalizeIp(ip);
+  return n === "127.0.0.1" || n === "::1";
+}
+
 /** Huis-LAN of deze machine. 10.80/16 is de WireGuard-tunnel naar de cloud, geen LAN. */
 export function isLanAddress(ip: string): boolean {
   const n = normalizeIp(ip);

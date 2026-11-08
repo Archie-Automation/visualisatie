@@ -74,6 +74,8 @@ ok "wg0 actief"
 cat > /etc/nftables.conf <<EOF
 #!/usr/sbin/nft -f
 destroy table inet archie
+# Rest van een eerdere publieke forward naar één NUC op :8555.
+destroy table ip archie_relay
 table inet archie {
   chain input {
     type filter hook input priority 0; policy drop;
@@ -87,6 +89,9 @@ table inet archie {
     udp dport { 3478, ${WG_PORT} } accept
     tcp dport 3478 accept
     udp dport 49160-49400 accept
+    # 8555 bewust dicht op het publieke adres: go2rtc heeft geen login.
+    # Buitenshuis loopt beeld via coturn. Installateurs naar :8555 regelt
+    # relay-8555.sh in DOCKER-USER, alleen op wg0.
     # Caddy (docker-bridge) -> enrollment-API op de host
     iifname { "docker0", "br-*" } tcp dport { 8090, 2019 } accept
     iifname "wg0" tcp dport 8090 accept
@@ -121,6 +126,16 @@ fi
 bold "Stack starten…"
 docker compose up -d --build
 ok "Caddy, coturn en enroll draaien"
+
+# Docker dropt FORWARD tussen wg-peers. De unit zet na elke Docker-start
+# alleen :8555 open van installateurs naar NUC's, op wg0. Niet vanaf internet.
+bold "Camera-pad door de Docker-firewall"
+script_path="$(pwd)/relay-8555.sh"
+sed -e "s|@SCRIPT@|${script_path}|g" -e "s|@WG_SUBNET@|${WG_SUBNET}|g" \
+  archie-relay-8555.service > /etc/systemd/system/archie-relay-8555.service
+systemctl daemon-reload
+systemctl enable --now archie-relay-8555.service
+ok "8555 alleen van installateurs naar NUC's, via wg0"
 
 bold "=== Klaar ==="
 echo ""

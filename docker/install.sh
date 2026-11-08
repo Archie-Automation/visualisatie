@@ -363,12 +363,14 @@ if [ -n "${REMOTE_URL_SHOWN:-}" ]; then
   echo ""
 fi
 if [ "$NEW_HOUSE" -eq 1 ]; then
-  echo "  Eerste login:"
+  echo "  Eerste login (eenmalig):"
   echo "      gebruiker:  admin"
   echo "      wachtwoord: admin"
   echo ""
-  echo "  Daarna: Instellingen / Installer → wachtwoord wijzigen,"
-  echo "  etages en apparaten toevoegen."
+  echo "  De app vraagt meteen een eigen wachtwoord."
+  echo "  admin/admin werkt daarna niet meer."
+  echo "  Kwijt? Op deze NUC:  cd docker && ./wachtwoord.sh admin"
+  echo "  Daarna: etages en apparaten toevoegen."
 else
   echo "  Gebruik je bestaande login uit dit huis."
 fi

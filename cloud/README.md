@@ -11,6 +11,17 @@ Telefoon 4G ──TURN───▶ coturn ─wg0──▶ NUC :8555  (camera/int
 ETS laptop  ──wg0────▶ hub ───wg0──▶ NUC :3671  (knxd, optioneel)
 ```
 
+Poort 8555 staat niet open op het publieke adres van de VPS. go2rtc heeft
+geen login, dus een doorstuur van internet naar één NUC is één huis én een
+open gat. Een telefoon buitenshuis krijgt beeld via coturn: tijdelijk
+wachtwoord, en coturn mag alleen naar `10.80.0.0/16`.
+
+Docker dropt doorgestuurd verkeer tussen WireGuard-peers. `setup-vps.sh`
+installeert `archie-relay-8555` zodat na elke Docker-start alleen dit pad
+door mag: installateurs (`10.80.255.0/24`) naar `:8555` op de NUC's, en
+alleen `wg0` → `wg0`. Andere poorten tussen peers (ETS op 3671) blijven door
+Docker geblokkeerd; nftables laat die wel toe.
+
 ## Wat je nodig hebt
 
 - Een VPS (Hetzner CX22 of vergelijkbaar, Ubuntu 24.04), vast IPv4.
@@ -67,7 +78,7 @@ PushKit/VoIP-push rechtstreeks via APNs. Nog niet gebouwd.
 ```bash
 git clone <deze repo> archie && cd archie/cloud
 cp .env.example .env            # vul PUBLIC_IP, DOMAIN, TURN_SECRET, ENROLL_ADMIN_TOKEN
-sudo ./setup-vps.sh             # docker, wireguard (wg0 = 10.80.0.1/16), ip_forward, nftables
+sudo ./setup-vps.sh             # docker, wireguard (wg0 = 10.80.0.1/16), ip_forward, nftables, relay-8555
 docker compose up -d --build
 ```
 
@@ -75,6 +86,14 @@ docker compose up -d --build
 forwarding aan. Peers worden daarna door de enrollment-service toegevoegd met
 `wg set`; het script schrijft ze ook weg naar `data/peers/` zodat een reboot
 ze terugzet.
+
+Op een VPS die al draait installeert dit de firewallregel zonder `wg0` te
+herstarten (`setup-vps.sh` zelf doet dat wel):
+
+```bash
+cd archie/cloud
+sudo sh -c 'sed -e "s|@SCRIPT@|$(pwd)/relay-8555.sh|g" -e "s|@WG_SUBNET@|${WG_SUBNET:-10.80.0.0/16}|g" archie-relay-8555.service > /etc/systemd/system/archie-relay-8555.service && systemctl daemon-reload && systemctl enable --now archie-relay-8555.service'
+```
 
 ## Een klant toevoegen
 

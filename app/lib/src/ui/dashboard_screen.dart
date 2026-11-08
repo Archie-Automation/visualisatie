@@ -23,7 +23,6 @@ import '../user_favorite_shortcuts.dart';
 import 'responsive.dart';
 import 'widgets/back_pill.dart';
 import 'widgets/device_tile_shell.dart';
-import 'widgets/glass_card.dart';
 import 'widgets/campfire_icon.dart';
 import 'widgets/equalizer_icon.dart';
 import 'widgets/light_status_icon.dart';
@@ -503,9 +502,9 @@ class _FloorBrowseHeader extends StatelessWidget {
     final name = buildingName?.trim();
     final showBuilding = name != null && name.isNotEmpty;
     final top = MediaQuery.paddingOf(context).top;
-    final buildingBlock = showBuilding ? _scopeChipSize + 8 : 0.0;
+    final buildingBlock = showBuilding ? _scopeBarHeight + 8 : 0.0;
     return StickyHeaderSurface(
-      height: top + 14 + buildingBlock + _scopeChipSize + 14,
+      height: top + 14 + buildingBlock + _scopeBarHeight + 14,
       child: Padding(
         padding: EdgeInsets.fromLTRB(
           context.hPad - 4,
@@ -517,7 +516,7 @@ class _FloorBrowseHeader extends StatelessWidget {
           children: [
             if (showBuilding)
               SizedBox(
-                height: _scopeChipSize,
+                height: _scopeBarHeight,
                 child: Row(
                   children: [
                     HeaderIconButton(
@@ -545,7 +544,6 @@ class _FloorBrowseHeader extends StatelessWidget {
                       icon: Icons.arrow_back_ios_new,
                       onTap: onBack,
                       tooltip: 'Terug',
-                      hitSize: 68,
                     ),
                   Expanded(
                     child: _FloorTabBar(
@@ -572,7 +570,7 @@ class _FloorBrowseHeader extends StatelessWidget {
   }
 }
 
-/// Gebouw op de verdiepingspagina: zelfde tegel als op home, niet aantikbaar.
+/// Gebouw op de verdiepingspagina: dezelfde pil als op home, niet aantikbaar.
 class _SelectedBuildingChip extends StatelessWidget {
   const _SelectedBuildingChip({required this.name});
 
@@ -580,16 +578,16 @@ class _SelectedBuildingChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _ScopeSquareChip(label: name, selected: true);
+    return _ScopeChip(label: name, selected: true);
   }
 }
 
-/// Zelfde vierkant als scenes en systemen (118, ronde hoeken).
-const double _scopeChipSize = 118;
-const double _scopeChipRadius = 22;
+/// Navigatie, geen tegel. Hoogte gelijk aan de terugknop, breedte volgt de naam.
+const double _scopeBarHeight = 48;
+const double _scopeChipRadius = 24;
 
-class _ScopeSquareChip extends StatelessWidget {
-  const _ScopeSquareChip({
+class _ScopeChip extends StatelessWidget {
+  const _ScopeChip({
     required this.label,
     required this.selected,
     this.onTap,
@@ -604,23 +602,29 @@ class _ScopeSquareChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final box = LuxeRimBox(
-      width: _scopeChipSize,
-      height: _scopeChipSize,
+      height: _scopeBarHeight,
       radius: _scopeChipRadius,
-      rimWidth: selected ? 2 : 1,
+      rimWidth: selected ? 1.5 : 1,
       rimColor: selected
           ? LuxeBorders.solid(LuxeColors.brass)
           : LuxeColors.glassRim,
       fillColor: LuxeChipChrome.tileFill(context, pressed: selected),
       shadows: selected ? LuxeShadows.soft : LuxeShadows.chip(context),
-      padding: const EdgeInsets.all(12),
-      child: Center(
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      child: Align(
+        widthFactor: 1,
+        alignment: Alignment.center,
         child: Text(
-          label.toUpperCase(),
-          maxLines: 3,
+          label,
+          maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: _scopeChipLabel(),
+          style: TextStyle(
+            color: selected ? LuxeColors.ink : LuxeColors.inkSoft,
+            fontSize: 15,
+            height: 1.1,
+            letterSpacing: 0.2,
+            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+          ),
         ),
       ),
     );
@@ -635,17 +639,6 @@ class _ScopeSquareChip extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Zelfde als de namen in de systeemtegels, één punt groter (12 i.p.v. 11).
-TextStyle _scopeChipLabel() {
-  return TextStyle(
-    color: LuxeColors.ink,
-    fontSize: 12,
-    height: 1.2,
-    letterSpacing: 0.5,
-    fontWeight: FontWeight.w600,
-  );
 }
 
 /// Horizontale gebouwkiezer. Zelfde chips als verdiepingen, erboven.
@@ -676,7 +669,7 @@ class _BuildingTabBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    const chipH = _scopeChipSize;
+    const chipH = _scopeBarHeight;
     final pad = EdgeInsets.fromLTRB(context.hPad, 8, context.hPad, 8);
     final vPadTotal = pad.vertical;
     return Padding(
@@ -693,10 +686,10 @@ class _BuildingTabBar extends ConsumerWidget {
           addRepaintBoundaries: false,
           addAutomaticKeepAlives: false,
           itemCount: buildings.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 14),
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
           itemBuilder: (context, i) {
             final building = buildings[i];
-            return _ScopeSquareChip(
+            return _ScopeChip(
               label: building.name,
               selected: i == selectedIndex,
               onTap: () => onSelect(i),
@@ -831,7 +824,7 @@ class _FloorTabBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    const chipH = _scopeChipSize;
+    const chipH = _scopeBarHeight;
     final pad = listPadding ??
         EdgeInsets.fromLTRB(context.hPad, 8, context.hPad, 8);
     final vPadTotal = pad is EdgeInsets ? pad.vertical : 16.0;
@@ -849,10 +842,10 @@ class _FloorTabBar extends ConsumerWidget {
           addRepaintBoundaries: false,
           addAutomaticKeepAlives: false,
           itemCount: floors.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 14),
+          separatorBuilder: (_, __) => const SizedBox(width: 8),
           itemBuilder: (context, i) {
             final floor = floors[i];
-            return _ScopeSquareChip(
+            return _ScopeChip(
               label: floor.name,
               selected: i == selectedIndex,
               onTap: () => onSelect(i),
@@ -914,7 +907,7 @@ class _FloorsHomeBand extends StatelessWidget {
           else
             // Zelfde hoogte als de verdiepingsbalk, anders schuift
             // de gecentreerde gebouwenrij omhoog.
-            const SizedBox(height: _scopeChipSize + 16),
+            const SizedBox(height: _scopeBarHeight + 16),
         ],
       ),
     );

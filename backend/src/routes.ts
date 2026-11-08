@@ -5,7 +5,9 @@ import { Router } from "express";
 import { z } from "zod";
 import {
   authenticate,
+  factoryPasswordActive,
   peekToken,
+  setOwnPassword,
   canEditScenes,
   canLearnKnxScenes,
   canReleaseIntercom,
@@ -115,7 +117,7 @@ import {
 import { syncGo2rtcProcessAfterConfigWritten } from "./go2rtcSpawn";
 import { doorbirdMakeCall } from "./doorbirdRelease";
 import { iceBundleFor, remoteUrl, serverId } from "./remoteAccess";
-import { isRemoteFacing } from "./remoteGate";
+import { isLoopbackAddress, isRemoteFacing } from "./remoteGate";
 import {
   claimPairCode,
   createPairCode,
@@ -653,7 +655,8 @@ export function buildRouter(
   r.get("/health", (req, res) => {
     const pub = { ok: true, serverId: serverId(), remoteUrl: remoteUrl() };
     // Zonder login geen KNX-adres, medianamen of VoIP-status.
-    if (!peekToken(req)) return res.json(pub);
+    const tok = peekToken(req);
+    if (!tok) return res.json(pub);
     const connectivity = getConnectivitySnapshot(bus, media, lutron);
     const warnings: string[] = [];
     if (!connectivity.knx.disabled && !connectivity.knx.simulate && !connectivity.knx.connected) {
@@ -698,7 +701,10 @@ export function buildRouter(
         calls: voipRecentCalls(),
         // Alleen bij een kapotte PBX: startfout zonder login te kunnen lezen.
         pbxLog: pbx.running ? [] : pbx.recent.slice(-8)
-      }
+      },
+      mustChangePassword: factoryPasswordActive(
+        (cfgNow.users ?? []).find((u) => u.id === tok.sub)?.passwordHash
+      )
     });
   });
 
@@ -820,6 +826,32 @@ export function buildRouter(
       refreshToken: session?.refreshToken ?? null,
       sessionId: session?.sessionId ?? null
     });
+  });
+
+  /**
+   * Wachtwoord kwijt: alleen een commando op de NUC (127.0.0.1).
+   * Het huis-LAN en het cloud-adres krijgen hier geen antwoord.
+   */
+  r.post("/auth/local-password", async (req, res) => {
+    if (!isLoopbackAddress(req.socket.remoteAddress)) {
+      return res.status(404).json({ error: "niet gevonden" });
+    }
+    const username = String(req.body?.username ?? "").trim();
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+    const me = (getConfig().users ?? []).find((u) => u.username === username);
+    if (!me) return res.status(404).json({ error: "onbekend account" });
+    const result = await setOwnPassword(me.id, password);
+    if (!result.ok) return res.status(400).json({ error: result.error });
+    revokeAllForUser(me.id);
+    res.json({ ok: true });
+  });
+
+  /** Eerste login: vervangt het fabriekswachtwoord. Daarna werkt admin/admin niet meer. */
+  r.post("/auth/password", requireAuth, async (req: AuthedRequest, res) => {
+    const password = typeof req.body?.password === "string" ? req.body.password : "";
+    const result = await setOwnPassword(req.user!.sub, password);
+    if (!result.ok) return res.status(400).json({ error: result.error });
+    res.json({ ok: true, mustChangePassword: false });
   });
 
   /* ------------------------- Koppelen (QR) en refresh ------------------ */

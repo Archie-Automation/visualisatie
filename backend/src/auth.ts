@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import type { NextFunction, Request, Response } from "express";
 import type { User } from "./types";
-import { getConfig } from "./config";
+import { getConfig, updateConfig } from "./config";
 import { aclAllows } from "./userAccess";
 import { logger } from "./logger";
 import {
@@ -45,11 +45,49 @@ export function remoteLoginBlocked(username: string, password: string, passwordH
   return false;
 }
 
+/** Nog het meegeleverde placeholder-hash. admin/admin (of guest) werkt tot het vervangen is. */
+export function factoryPasswordActive(passwordHash: string | undefined): boolean {
+  return !!passwordHash && passwordHash.includes("REPLACE_ME");
+}
+
+/** Geweigerd wachtwoord, of null als het opgeslagen mag worden. */
+export function rejectedLoginPassword(username: string, password: string): string | null {
+  if (password.length < 8) return "Kies minstens 8 tekens.";
+  const low = password.trim().toLowerCase();
+  if (low === "admin" || low === "guest" || low === "gast") {
+    return "Dit wachtwoord is niet toegestaan.";
+  }
+  if (low.length > 0 && low === username.trim().toLowerCase()) {
+    return "Het wachtwoord mag niet gelijk zijn aan de gebruikersnaam.";
+  }
+  return null;
+}
+
+export async function setOwnPassword(
+  userId: string,
+  password: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const me = (getConfig().users ?? []).find((u) => u.id === userId);
+  if (!me) return { ok: false, error: "onbekend account" };
+  const reason = rejectedLoginPassword(me.username, password);
+  if (reason) return { ok: false, error: reason };
+  const passwordHash = await bcrypt.hash(password, 10);
+  updateConfig((draft) => {
+    const user = draft.users?.find((u) => u.id === userId);
+    if (user) user.passwordHash = passwordHash;
+  });
+  return { ok: true };
+}
+
 export async function authenticate(
   username: string,
   password: string,
   opts?: { remote?: boolean }
-): Promise<{ token: string; user: Omit<User, "passwordHash"> } | null> {
+): Promise<{
+  token: string;
+  user: Omit<User, "passwordHash">;
+  mustChangePassword: boolean;
+} | null> {
   const users = getConfig().users ?? [];
   const user = users.find((u) => u.username === username);
   if (!user) return null;
@@ -81,7 +119,11 @@ export async function authenticate(
     role,
     enabled: isUserEnabled(user)
   };
-  return { token, user: publicUser };
+  return {
+    token,
+    user: publicUser,
+    mustChangePassword: factoryPasswordActive(user.passwordHash)
+  };
 }
 
 /** Geldige Bearer, of null. Faalt zacht: health blijft bruikbaar zonder login. */
@@ -110,6 +152,15 @@ export function requireAuth(
     const live = (getConfig().users ?? []).find((u) => u.id === decoded.sub);
     if (live && !isUserEnabled(live)) {
       return res.status(401).json({ error: "account disabled" });
+    }
+    if (live && factoryPasswordActive(live.passwordHash)) {
+      const path = req.originalUrl.split("?")[0];
+      const allow =
+        req.method === "POST" &&
+        (path.endsWith("/auth/password") || path.endsWith("/auth/logout"));
+      if (!allow) {
+        return res.status(403).json({ error: "password_change_required" });
+      }
     }
     next();
   } catch {

@@ -32,8 +32,14 @@ class InstallerAuthController extends Notifier<InstallerAuthState> {
     if (t != null) state = InstallerAuthState(token: t, username: u);
   }
 
-  /// Returns true only for admin accounts.
+  /// Gezet als de login klopt maar het fabriekswachtwoord nog vervangen moet worden.
+  String? pendingToken;
+  String? pendingUsername;
+
+  /// Returns true only for admin accounts that al een eigen wachtwoord hebben.
   Future<bool> login(String username, String password) async {
+    pendingToken = null;
+    pendingUsername = null;
     final res = await http.post(
       Uri.parse('$apiBase/api/auth/login'),
       headers: {'content-type': 'application/json'},
@@ -45,11 +51,20 @@ class InstallerAuthController extends Notifier<InstallerAuthState> {
     if (user['role'] != 'admin' && user['role'] != 'installer') return false;
 
     final token = body['token'] as String;
+    if (body['mustChangePassword'] == true) {
+      pendingToken = token;
+      pendingUsername = user['username'] as String;
+      return false;
+    }
+    await adopt(token, user['username'] as String);
+    return true;
+  }
+
+  Future<void> adopt(String token, String username) async {
     final sp = await SharedPreferences.getInstance();
     await sp.setString(_kToken, token);
-    await sp.setString(_kUser, user['username'] as String);
-    state = InstallerAuthState(token: token, username: user['username'] as String);
-    return true;
+    await sp.setString(_kUser, username);
+    state = InstallerAuthState(token: token, username: username);
   }
 
   Future<void> logout() async {

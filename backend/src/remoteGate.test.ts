@@ -4,6 +4,7 @@ import type { NextFunction, Request, Response } from "express";
 import { remoteLoginBlocked } from "./auth";
 import {
   isLanAddress,
+  isLoopbackAddress,
   isRemoteFacingPeer,
   remoteApiAllowed,
   remoteGate,
@@ -144,6 +145,14 @@ describe("gate cookie and factory password", () => {
     assert.equal(gateTicketValid(gateTicket), true);
     assert.equal(claimPairCode(code, "telefoon"), null);
     assert.equal(gateTicketValid(gateTicket), false);
+  });
+
+  it("treats only this machine as loopback", () => {
+    assert.equal(isLoopbackAddress("127.0.0.1"), true);
+    assert.equal(isLoopbackAddress("::1"), true);
+    assert.equal(isLoopbackAddress("::ffff:127.0.0.1"), true);
+    assert.equal(isLoopbackAddress("192.168.1.20"), false);
+    assert.equal(isLoopbackAddress("10.80.0.2"), false);
   });
 
   it("refuses admin/admin and placeholder hashes from remote", () => {

@@ -9,7 +9,8 @@
  *   TURN_SECRET    gedeeld geheim met coturn (use-auth-secret)
  *   TURN_TTL       geldigheid van tijdelijke TURN-credentials in s (3600)
  *   WG_ADDRESS     10.80.x.y  WireGuard-adres van deze NUC (voor ICE/local_net)
- *   GO2RTC_RELAY_CANDIDATE  host:port op de VPS die naar deze NUC:8555 forwardt
+ *   GO2RTC_RELAY_CANDIDATE  optioneel, één huis: eigen VPS-poort naar deze NUC:8555.
+ *                          Standaard leeg. Niet turn:8555; die poort staat niet open.
  */
 import crypto from "node:crypto";
 import os from "node:os";
@@ -150,19 +151,19 @@ export function iceBundleFor(user: string): IceBundle {
   };
 }
 
-/** Extra go2rtc-candidates buiten het LAN: WireGuard-adres en VPS-relay. */
+/**
+ * Extra go2rtc-candidates buiten het LAN.
+ * WireGuard-adres: een installateur op de VPN bereikt de NUC direct.
+ * GO2RTC_RELAY_CANDIDATE alleen als je zelf een eigen poort naar deze ene NUC
+ * forwardt. TURN_HOST:8555 wordt niet geadverteerd: die poort is gedeeld,
+ * niet geauthenticeerd, en de firewall laat hem dicht. Telefoons buitenshuis
+ * gebruiken coturn.
+ */
 export function extraGo2rtcCandidates(): string[] {
   const out: string[] = [];
   const wg = wgAddress();
   if (wg) out.push(`${wg}:8555`);
   const relay = env("GO2RTC_RELAY_CANDIDATE");
-  if (relay) {
-    out.push(relay);
-  } else {
-    // Eén gedeelde poort op de VPS, doorgestuurd naar deze NUC :8555.
-    // Een tweede huis heeft een eigen poort nodig; die zet je in GO2RTC_RELAY_CANDIDATE.
-    const turn = env("TURN_HOST");
-    if (turn && wg) out.push(`${turn}:8555`);
-  }
+  if (relay) out.push(relay);
   return out;
 }

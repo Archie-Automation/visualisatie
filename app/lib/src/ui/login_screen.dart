@@ -188,7 +188,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         _err = l10n.loginErrorBadCredentials;
       }
     });
-    if (ok && mounted) context.go('/');
+    if (ok && mounted) {
+      final must = ref.read(authProvider).mustChangePassword;
+      context.go(must ? '/wachtwoord' : '/');
+    }
   }
 
   Future<void> _demo() async {

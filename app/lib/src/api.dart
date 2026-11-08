@@ -225,11 +225,14 @@ class AuthState {
   final String? role;
   /// False until [AuthController.build] finishes (SharedPreferences on web).
   final bool restoreComplete;
+  /// Fabriekswachtwoord is nog actief. De app blijft op het wachtwoordscherm.
+  final bool mustChangePassword;
   const AuthState({
     this.token,
     this.username,
     this.role,
     this.restoreComplete = false,
+    this.mustChangePassword = false,
   });
 
   bool get isAuthed => token != null;
@@ -333,6 +336,7 @@ class AuthController extends Notifier<AuthState> {
       username: u,
       role: r,
       restoreComplete: true,
+      mustChangePassword: t != null && (sp.getBool('must_change_password') ?? false),
     );
     if (kDebugMode && t != null) {
       debugPrint(
@@ -386,13 +390,77 @@ class AuthController extends Notifier<AuthState> {
     }
     if (res.statusCode != 200) return false;
     final body = jsonDecode(res.body) as Map<String, dynamic>;
-    await applySession(body);
+    await applySession(
+      body,
+      mustChangePassword: body['mustChangePassword'] == true,
+    );
     return true;
+  }
+
+  /// null = opgeslagen. Anders de fouttekst van de server.
+  Future<String?> changePassword(String password) async {
+    final token = state.token;
+    if (token == null || isDemoToken(token)) return 'Niet ingelogd.';
+    final res = await http.post(
+      Uri.parse('$apiBase/api/auth/password'),
+      headers: {
+        'content-type': 'application/json',
+        'authorization': 'Bearer $token',
+      },
+      body: jsonEncode({'password': password}),
+    );
+    if (res.statusCode == 200) {
+      await _setMustChange(false);
+      return null;
+    }
+    try {
+      final err = (jsonDecode(res.body) as Map)['error'];
+      if (err is String && err.isNotEmpty) return err;
+    } catch (_) {}
+    return 'Wachtwoord niet opgeslagen.';
+  }
+
+  /// Health met dit token zegt of het fabriekswachtwoord nog weg moet.
+  Future<void> syncPasswordRequirement() async {
+    final token = state.token;
+    if (token == null || isDemoToken(token)) return;
+    try {
+      final res = await http
+          .get(
+            Uri.parse('$apiBase/api/health'),
+            headers: {'authorization': 'Bearer $token'},
+          )
+          .timeout(const Duration(seconds: 3));
+      if (res.statusCode != 200) return;
+      final body = jsonDecode(res.body);
+      if (body is! Map || !body.containsKey('mustChangePassword')) return;
+      await _setMustChange(body['mustChangePassword'] == true);
+    } catch (_) {}
+  }
+
+  Future<void> _setMustChange(bool value) async {
+    final sp = await SharedPreferences.getInstance();
+    if (value) {
+      await sp.setBool('must_change_password', true);
+    } else {
+      await sp.remove('must_change_password');
+    }
+    final cur = state;
+    state = AuthState(
+      token: cur.token,
+      username: cur.username,
+      role: cur.role,
+      restoreComplete: cur.restoreComplete,
+      mustChangePassword: value,
+    );
   }
 
   /// Sessie uit een login- of koppel-antwoord overnemen:
   /// `{ token, user: {username, role}, refreshToken? }`.
-  Future<void> applySession(Map<String, dynamic> body) async {
+  Future<void> applySession(
+    Map<String, dynamic> body, {
+    bool mustChangePassword = false,
+  }) async {
     final token = body['token'] as String;
     final user = (body['user'] as Map?)?.cast<String, dynamic>() ?? const {};
     final storedUsername = (user['username'] as String?) ?? '';
@@ -416,11 +484,17 @@ class AuthController extends Notifier<AuthState> {
     if (sid != null && sid.isNotEmpty) {
       await sp.setString(kSessionIdPrefKey, sid);
     }
+    if (mustChangePassword) {
+      await sp.setBool('must_change_password', true);
+    } else {
+      await sp.remove('must_change_password');
+    }
     state = AuthState(
       token: token,
       username: storedUsername,
       role: roleStr,
       restoreComplete: true,
+      mustChangePassword: mustChangePassword,
     );
     _scheduleRefreshCheck();
   }
@@ -491,6 +565,7 @@ class AuthController extends Notifier<AuthState> {
     await sp.remove('role');
     await sp.remove(_kRefreshPrefKey);
     await sp.remove(kSessionIdPrefKey);
+    await sp.remove('must_change_password');
     state = const AuthState(restoreComplete: true);
   }
 
@@ -504,6 +579,7 @@ class AuthController extends Notifier<AuthState> {
     await sp.remove('role');
     await sp.remove(_kRefreshPrefKey);
     await sp.remove(kSessionIdPrefKey);
+    await sp.remove('must_change_password');
     if (houseKey != null) await HouseStore.dropSession(houseKey);
     state = const AuthState(restoreComplete: true);
     if (rt != null && rt.isNotEmpty) {
