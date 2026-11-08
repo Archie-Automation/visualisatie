@@ -3949,7 +3949,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             trailing: LuxeInfoIconButton(
               title: 'Verdieping',
               body:
-                  'Naam en icoon zoals op de balk in de app. Standaard is een verdieping.',
+                  'Naam en icoon zoals op de balk. De lange streep is de begane grond; kelder zit eronder, de verdiepingen erboven.',
             ),
           ),
           _BoundStrField('name', floor, () => setState(() {}),

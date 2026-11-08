@@ -577,7 +577,7 @@ class _FloorBrowseHeader extends StatelessWidget {
   }
 }
 
-/// Gebouw op de verdiepingspagina: dezelfde pil als op home, niet aantikbaar.
+/// Gebouw op de verdiepingspagina: dezelfde knop als op home, niet aantikbaar.
 class _SelectedBuildingChip extends StatelessWidget {
   const _SelectedBuildingChip({required this.name, this.iconKey});
 
@@ -588,16 +588,16 @@ class _SelectedBuildingChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return _ScopeChip(
       label: name,
-      icon: scopeBuildingIcon(iconKey),
+      icon: (color) => scopeBuildingGlyph(iconKey, size: 20, color: color),
       selected: true,
     );
   }
 }
 
-/// Rechthoek met ronde hoeken: icoon boven, naam eronder.
-const double _scopeTileW = 112;
-const double _scopeTileH = 96;
-const double _scopeChipRadius = 20;
+/// Gelijke rechthoek met ronde hoeken: icoon en naam op één regel.
+const double _scopeTileW = 168;
+const double _scopeTileH = 48;
+const double _scopeChipRadius = 14;
 
 class _ScopeChip extends StatelessWidget {
   const _ScopeChip({
@@ -609,7 +609,7 @@ class _ScopeChip extends StatelessWidget {
   });
 
   final String label;
-  final IconData icon;
+  final Widget Function(Color color) icon;
   final bool selected;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
@@ -627,22 +627,22 @@ class _ScopeChip extends StatelessWidget {
           : LuxeColors.glassRim,
       fillColor: LuxeChipChrome.tileFill(context, pressed: selected),
       shadows: selected ? LuxeShadows.soft : LuxeShadows.chip(context),
-      padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Row(
         children: [
-          Icon(icon, size: 26, color: selected ? LuxeColors.brassDeep : ink),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: ink,
-              fontSize: 12,
-              height: 1.15,
-              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+          icon(selected ? LuxeColors.brassDeep : ink),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: ink,
+                fontSize: 14,
+                height: 1.1,
+                fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              ),
             ),
           ),
         ],
@@ -711,7 +711,8 @@ class _BuildingTabBar extends ConsumerWidget {
             final building = buildings[i];
             return _ScopeChip(
               label: building.name,
-              icon: scopeBuildingIcon(building.icon),
+              icon: (color) =>
+                  scopeBuildingGlyph(building.icon, size: 20, color: color),
               selected: i == selectedIndex,
               onTap: () => onSelect(i),
               onLongPress: () => _openReorderSheet(context, ref),
@@ -868,7 +869,11 @@ class _FloorTabBar extends ConsumerWidget {
             final floor = floors[i];
             return _ScopeChip(
               label: floor.name,
-              icon: scopeFloorIcon(floor.icon),
+              icon: (color) => scopeFloorGlyph(
+                floor.icon,
+                size: 20,
+                color: color,
+              ),
               selected: i == selectedIndex,
               onTap: () => onSelect(i),
               onLongPress: () => _openReorderSheet(context, ref),
