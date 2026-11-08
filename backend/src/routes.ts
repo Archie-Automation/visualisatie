@@ -116,6 +116,7 @@ import {
   warmGo2rtcProducer
 } from "./cameraSnapshot";
 import { syncGo2rtcProcessAfterConfigWritten } from "./go2rtcSpawn";
+import { rewriteHlsPlaylist } from "./hlsRewrite";
 import { doorbirdMakeCall } from "./doorbirdRelease";
 import { iceBundleFor, remoteUrl, serverId } from "./remoteAccess";
 import { invitedGateId, isLoopbackAddress, isRemoteFacing } from "./remoteGate";
@@ -1642,6 +1643,11 @@ export function buildRouter(
   const clientApiBase = (req: import("express").Request) => {
     const env = apiBase();
     if (env) return env;
+    return hlsClientBase(req);
+  };
+  // Playlist-URL's volgen de host van dit verzoek. PUBLIC_API_BASE kan het
+  // LAN-adres zijn; een telefoon buitenshuis kan die segmenten niet ophalen.
+  const hlsClientBase = (req: import("express").Request) => {
     const proto = (req.get("x-forwarded-proto") ?? req.protocol ?? "http")
       .split(",")[0]
       ?.trim();
@@ -1701,11 +1707,11 @@ export function buildRouter(
       const body = rewriteHlsPlaylist(
         await upstream.text(),
         cam.id,
-        clientApiBase(req),
-        mediaBase()
+        hlsClientBase(req),
+        url
       );
       res.setHeader("content-type", "application/vnd.apple.mpegurl");
-      res.setHeader("cache-control", "no-cache");
+      res.setHeader("cache-control", "no-store");
       return res.send(body);
     } catch (err) {
       logger.warn({ err, id: cam.id }, "hls manifest proxy failed");
@@ -1721,9 +1727,12 @@ export function buildRouter(
     if (!cam) return res.status(404).end();
     const rest = typeof req.params[0] === "string" ? req.params[0] : "";
     if (!rest) return res.status(404).end();
-    const upstreamUrl = `${mediaBase()}/api/${rest}`;
+    const q = req.originalUrl.includes("?")
+      ? req.originalUrl.slice(req.originalUrl.indexOf("?"))
+      : "";
+    const upstreamUrl = `${mediaBase()}/api/${rest}${q}`;
     try {
-      await proxyHlsBody(res, upstreamUrl);
+      await proxyHlsBody(res, upstreamUrl, cam.id, hlsClientBase(req));
     } catch (err) {
       logger.warn({ err, id: cam.id, path: rest }, "hls segment proxy failed");
       res.status(502).json({ error: "hls segment unavailable" });
@@ -2972,38 +2981,11 @@ async function forwardSignalling(
   }
 }
 
-/** Rewrite go2rtc segment URLs so clients only talk to the backend. */
-function rewriteHlsPlaylist(
-  body: string,
-  camId: string,
-  clientBase: string,
-  mediaBase: string
-): string {
-  const segBase = `${clientBase.replace(/\/+$/, "")}/api/cameras/${camId}/hls-seg`;
-  const mediaOrigin = mediaBase.replace(/\/+$/, "");
-
-  return body
-    .split("\n")
-    .map((line) => {
-      const t = line.trim();
-      if (!t || t.startsWith("#")) return line;
-      if (t.startsWith("http://") || t.startsWith("https://")) {
-        if (t.startsWith(`${mediaOrigin}/api/`)) {
-          return `${segBase}${t.slice(mediaOrigin.length + 4)}`;
-        }
-        return line;
-      }
-      if (t.startsWith("/api/")) {
-        return `${segBase}${t.slice(4)}`;
-      }
-      return line;
-    })
-    .join("\n");
-}
-
 async function proxyHlsBody(
   res: import("express").Response,
-  upstreamUrl: string
+  upstreamUrl: string,
+  camId: string,
+  clientBase: string
 ) {
   const upstream = await fetch(upstreamUrl, {
     signal: AbortSignal.timeout(15_000)
@@ -3012,9 +2994,17 @@ async function proxyHlsBody(
     res.status(upstream.status).end();
     return;
   }
-  const ct = upstream.headers.get("content-type");
+  const buf = Buffer.from(await upstream.arrayBuffer());
+  const ct = upstream.headers.get("content-type") ?? "";
+  const head = buf.subarray(0, 7).toString("utf8");
+  if (head === "#EXTM3U" || ct.includes("mpegurl") || ct.includes("m3u8")) {
+    res.setHeader("content-type", "application/vnd.apple.mpegurl");
+    res.setHeader("cache-control", "no-store");
+    res.send(rewriteHlsPlaylist(buf.toString("utf8"), camId, clientBase, upstreamUrl));
+    return;
+  }
   if (ct) res.setHeader("content-type", ct);
   const cc = upstream.headers.get("cache-control");
   if (cc) res.setHeader("cache-control", cc);
-  res.end(Buffer.from(await upstream.arrayBuffer()));
+  res.end(buf);
 }

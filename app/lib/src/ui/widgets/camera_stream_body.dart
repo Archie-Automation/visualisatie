@@ -76,14 +76,10 @@ class _CameraLivePlayerState extends ConsumerState<CameraLivePlayer> {
     return activeRoute == RouteKind.remote;
   }
 
-  /// Prefer backend-proxied HLS so tablets never need direct go2rtc access.
-  String get _effectiveHlsUrl {
-    if (widget.info.hlsUrl.contains('/api/cameras/') &&
-        widget.info.hlsUrl.contains('/hls.m3u8')) {
-      return widget.info.hlsUrl;
-    }
-    return '$apiBase/api/cameras/${widget.info.id}/hls.m3u8';
-  }
+  /// Altijd via de host waar de app nu op zit. De API kan een LAN-adres
+  /// teruggeven; dat haalt een telefoon buitenshuis niet op.
+  String get _effectiveHlsUrl =>
+      '$apiBase/api/cameras/${widget.info.id}/hls.m3u8';
 
   @override
   Widget build(BuildContext context) {
@@ -143,10 +139,10 @@ class _CameraLivePlayerState extends ConsumerState<CameraLivePlayer> {
         key: ValueKey('hls-${widget.info.id}'),
         hlsUrl: _effectiveHlsUrl,
         aspectRatio: widget.info.aspectRatio,
-        muted: false,
+        // Safari speelt alleen automatisch af zonder geluid. Geen knop erop.
+        muted: true,
         fit: widget.fit,
         expand: widget.expand,
-        interactive: true,
         onIntrinsicAspect: widget.onIntrinsicAspect,
       );
     }
