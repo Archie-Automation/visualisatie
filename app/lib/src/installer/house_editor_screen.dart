@@ -1187,31 +1187,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     );
   }
 
-  Widget _floorDropRow({required int fi, required bool selected}) {
-    return DragTarget<_DeviceDrag>(
-      onWillAcceptWithDetails: (d) => d.data.fi != fi,
-      onAcceptWithDetails: (d) => _pickRoomAndMove(d.data, onlyFi: fi),
-      builder: (context, candidate, rejected) {
-        return _dropHighlight(
-          hot: candidate.isNotEmpty,
-          child: LuxeNavRow(
-            icon: Icons.layers_outlined,
-            title: _namedOr(_floors()[fi], 'Verdieping'),
-            subtitle: _countLabel(_roomList(fi).length, 'kamer', 'kamers'),
-            selectedTextMatchesIcon: true,
-            selected: selected,
-            rounded: true,
-            trailing: _rowTrash(
-              tooltip: 'Verdieping verwijderen',
-              onPressed: () => _deleteFloorAt(fi),
-            ),
-            onTap: () => _selectFocus(_Focus.floor(fi)),
-          ),
-        );
-      },
-    );
-  }
-
   void _moveDeviceToRoom(_DeviceDrag drag, int toFi, int toRi) {
     if (drag.fi == toFi && drag.ri == toRi) return;
     final source = _deviceList(drag.fi, drag.ri);
@@ -2956,9 +2931,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                       if (_mobileShowDetail) return _buildDetail(ctx);
                       return tree;
                     }
-                    if (_isBuildingFocus) {
-                      return _buildingStructureWide(ctx, tree);
-                    }
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -3122,7 +3094,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   List<Widget> _visualizationNavRows() {
     return [
       _vizBuildingMenu(),
-      ..._vizStructureRows(),
+      LuxeAddRow(
+        label: 'Gebouw toevoegen',
+        onTap: _addBuilding,
+      ),
       ..._vizSectionRows(),
     ];
   }
@@ -3169,76 +3144,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     );
   }
 
-  int? _structureFloorIndex() {
-    if (_sel.kind != _FocusKind.floor &&
-        _sel.kind != _FocusKind.room &&
-        _sel.kind != _FocusKind.device) {
-      return null;
-    }
-    final floors = _floors();
-    final fi = _sel.fi;
-    if (fi < 0 || fi >= floors.length || !_onActiveBuilding(floors[fi])) {
-      return null;
-    }
-    return fi;
-  }
-
-  List<Widget> _vizStructureRows() {
-    final floors = _floors();
-    final visible = <int>[
-      for (var i = 0; i < floors.length; i++)
-        if (_onActiveBuilding(floors[i])) i,
-    ];
-    final fi = _structureFloorIndex();
-    final rooms = fi == null ? const <Map<String, dynamic>>[] : _roomList(fi);
-    return [
-      LuxeAddRow(
-        label: 'Gebouw toevoegen',
-        onTap: _addBuilding,
-      ),
-      if (_activeBuildingMap() != null)
-        LuxeNavRow(
-          icon: Icons.home_work_outlined,
-          title: _activeBuildingName(),
-          selected: _sel.kind == _FocusKind.floors,
-          onTap: () => _selectFocus(const _Focus.floors()),
-        ),
-      for (final i in visible)
-        LuxeNavRow(
-          icon: Icons.layers_outlined,
-          title: _namedOr(floors[i], 'Verdieping'),
-          subtitle: _countLabel(_roomList(i).length, 'kamer', 'kamers'),
-          selected: fi == i,
-          onTap: () => _selectFocus(_Focus.floor(i)),
-        ),
-      LuxeAddRow(
-        label: 'Verdieping toevoegen',
-        onTap: _addFloor,
-      ),
-      if (fi != null) ...[
-        for (var ri = 0; ri < rooms.length; ri++)
-          Padding(
-            padding: const EdgeInsets.only(left: 16),
-            child: LuxeNavRow(
-              icon: Icons.meeting_room_outlined,
-              title: _namedOr(rooms[ri], 'Kamer'),
-              selected: _sel.ri == ri &&
-                  (_sel.kind == _FocusKind.room ||
-                      _sel.kind == _FocusKind.device),
-              onTap: () => _selectFocus(_Focus.room(fi, ri)),
-            ),
-          ),
-        Padding(
-          padding: const EdgeInsets.only(left: 16),
-          child: LuxeAddRow(
-            label: 'Kamer toevoegen',
-            onTap: () => _addRoom(fi),
-          ),
-        ),
-      ],
-    ];
-  }
-
   List<Widget> _vizSectionRows() {
     return [
       LuxeNavRow(
@@ -3271,284 +3176,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   String _namedOr(Map<String, dynamic> m, String fallback) {
     final n = (m['name'] as String?)?.trim();
     return (n != null && n.isNotEmpty) ? n : fallback;
-  }
-
-  Widget _buildingStructureWide(BuildContext context, Widget tree) {
-    return LayoutBuilder(
-      builder: (ctx, c) {
-        final w = c.maxWidth;
-        // Tablet: a 280px menu plus the inspector left each column ~150px,
-        // so floor/room/device names collapsed to a few letters.
-        final navW = w >= 1600 ? 280.0 : 240.0;
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            SizedBox(width: navW, child: tree),
-            Expanded(
-              flex: 3,
-              child: _millerRow(context),
-            ),
-            Expanded(
-              flex: 2,
-              child: _buildingInspector(context),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _millerRow(BuildContext context) {
-    return LayoutBuilder(
-      builder: (ctx, c) {
-        const colMin = 300.0;
-        final floors = _millerFloorsColumn(context);
-        final rooms = _millerRoomsColumn(context);
-        final devices = _millerDevicesColumn(context);
-        if (c.maxWidth >= colMin * 3) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: floors),
-              Expanded(child: rooms),
-              Expanded(child: devices),
-            ],
-          );
-        }
-        return SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SizedBox(width: colMin, child: floors),
-              SizedBox(width: colMin, child: rooms),
-              SizedBox(width: colMin, child: devices),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _millerColumn({
-    required BuildContext context,
-    required String title,
-    required IconData icon,
-    Widget? trailing,
-    required List<Widget> children,
-    String? emptyText,
-    Widget? footer,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 4, 0),
-          child: LuxeSectionTitle(
-            icon: icon,
-            title: title,
-            trailing: trailing,
-          ),
-        ),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(2, 4, 2, 8),
-            children: [
-              if (children.isEmpty && emptyText != null)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 12),
-                  child: Text(
-                    emptyText,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: LuxeColors.inkSoft,
-                        ),
-                  ),
-                ),
-              ...children,
-            ],
-          ),
-        ),
-        if (footer != null) footer,
-      ],
-    );
-  }
-
-  Widget _millerFloorsColumn(BuildContext context) {
-    final floors = _floors();
-    final visible = <int>[
-      for (var i = 0; i < floors.length; i++)
-        if (_onActiveBuilding(floors[i])) i,
-    ];
-    return _millerColumn(
-      context: context,
-      title: 'Verdieping',
-      icon: Icons.layers_outlined,
-      emptyText: visible.isEmpty ? _emptyFloorLabel() : null,
-      children: [
-        for (final i in visible)
-          _floorDropRow(
-            fi: i,
-            selected: _sel.fi == i &&
-                (_sel.kind == _FocusKind.floor ||
-                    _sel.kind == _FocusKind.room ||
-                    _sel.kind == _FocusKind.device),
-          ),
-      ],
-      footer: LuxeAddRow(
-        label: 'Verdieping toevoegen',
-        onTap: _addFloor,
-      ),
-    );
-  }
-
-  Widget _millerRoomsColumn(BuildContext context) {
-    final hasFloor = _sel.fi >= 0 &&
-        (_sel.kind == _FocusKind.floor ||
-            _sel.kind == _FocusKind.room ||
-            _sel.kind == _FocusKind.device);
-    if (!hasFloor) {
-      return _millerColumn(
-        context: context,
-        title: 'Kamer',
-        icon: Icons.meeting_room_outlined,
-        emptyText: 'Kies een verdieping',
-        children: const [],
-      );
-    }
-    final fi = _sel.fi;
-    final rooms = _roomList(fi);
-    return _millerColumn(
-      context: context,
-      title: 'Kamer',
-      icon: Icons.meeting_room_outlined,
-      emptyText: rooms.isEmpty ? 'Nog geen kamer' : null,
-      children: [
-        for (var ri = 0; ri < rooms.length; ri++)
-          _roomDropRow(
-            fi: fi,
-            ri: ri,
-            rounded: true,
-            selected: _sel.ri == ri &&
-                (_sel.kind == _FocusKind.room ||
-                    _sel.kind == _FocusKind.device),
-          ),
-      ],
-      footer: LuxeAddRow(
-        label: 'Kamer toevoegen',
-        onTap: () => _addRoom(fi),
-      ),
-    );
-  }
-
-  Widget _millerDevicesColumn(BuildContext context) {
-    final hasRoom = _sel.ri >= 0 &&
-        (_sel.kind == _FocusKind.room || _sel.kind == _FocusKind.device);
-    if (!hasRoom) {
-      return _millerColumn(
-        context: context,
-        title: 'Apparaat',
-        icon: Icons.tune_outlined,
-        emptyText: 'Kies een kamer',
-        children: const [],
-      );
-    }
-    final fi = _sel.fi;
-    final ri = _sel.ri;
-    final devices = _deviceList(fi, ri);
-    return _millerColumn(
-      context: context,
-      title: 'Apparaat',
-      icon: Icons.tune_outlined,
-      trailing: _roomPasteButton(fi, ri),
-      emptyText: devices.isEmpty ? 'Nog geen apparaat' : null,
-      children: [
-        for (var di = 0; di < devices.length; di++)
-          _deviceDragRow(
-            fi: fi,
-            ri: ri,
-            di: di,
-            device: devices[di],
-            rounded: true,
-            selected: _sel.kind == _FocusKind.device && _sel.di == di,
-          ),
-      ],
-      footer: LuxeAddRow(
-        label: 'Apparaat toevoegen',
-        onTap: () async {
-          final pick = await showPickDeviceTypeSheet(context);
-          if (!context.mounted) return;
-          if (pick != null) _addDevice(fi, ri, pick);
-        },
-      ),
-    );
-  }
-
-  Widget _buildingInspector(BuildContext context) {
-    switch (_sel.kind) {
-      case _FocusKind.floors:
-      case _FocusKind.buildings:
-        return ListView(
-          padding: const EdgeInsets.only(bottom: 36),
-          children: [
-            _buildingSettingsCard(),
-          ],
-        );
-      case _FocusKind.floor:
-        return ListView(
-          padding: const EdgeInsets.only(bottom: 36),
-          children: [
-            _floorNameCard(),
-          ],
-        );
-      case _FocusKind.room:
-        return ListView(
-          padding: const EdgeInsets.only(bottom: 36),
-          children: [
-            _roomFieldsCard(),
-          ],
-        );
-      case _FocusKind.device:
-        final device = _deviceList(_sel.fi, _sel.ri)[_sel.di];
-        return _DeviceForm(
-          device: device,
-          house: _house!,
-          headerActions: _deviceMoveHandle(
-            _DeviceDrag(
-              fi: _sel.fi,
-              ri: _sel.ri,
-              di: _sel.di,
-              id: '${device['id'] ?? ''}',
-            ),
-            _namedOr(device, 'Apparaat'),
-          ),
-          onChanged: () => setState(() {}),
-          onCopy: () => _copyDevice(device),
-          onPaste: () => _pasteDeviceIntoList(
-            _deviceList(_sel.fi, _sel.ri),
-            afterIndex: _sel.di,
-            onPasted: (i) => _selectFocus(_Focus.device(_sel.fi, _sel.ri, i)),
-          ),
-          getInstallerToken: () async {
-            if (widget.useCustomerSession) {
-              return ref.read(authProvider).token;
-            }
-            return ref.read(installerAuthProvider).token;
-          },
-        );
-      default:
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(28),
-            child: Text(
-              'Kies links een gebouw, verdieping of kamer.',
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: LuxeColors.inkSoft,
-                  ),
-            ),
-          ),
-        );
-    }
   }
 
   Widget _floorsPathCard() {
@@ -3612,68 +3239,134 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     );
   }
 
-  Widget _floorsInstallerPanel(BuildContext context) {
+  Widget _buildingStructurePanel(BuildContext context) {
     final floors = _floors();
     final visible = <int>[
       for (var i = 0; i < floors.length; i++)
         if (_onActiveBuilding(floors[i])) i,
     ];
+    final openRoom = _sel.kind == _FocusKind.room &&
+        visible.contains(_sel.fi);
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
       children: [
         _buildingSettingsCard(),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
+        if (visible.isEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(22, 0, 22, 12),
+            child: Text(
+              _emptyFloorLabel(),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: LuxeColors.inkSoft,
+                  ),
+            ),
+          ),
+        for (final fi in visible) ...[
+          _floorStructureCard(fi),
+          if (openRoom && _sel.fi == fi) ...[
+            const SizedBox(height: 8),
+            _roomDevicesCard(fi, _sel.ri),
+          ],
+          const SizedBox(height: 12),
+        ],
         LuxeListCard(
           padding: EdgeInsets.zero,
-          child: Column(
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 12, 8, 4),
-                child: LuxeSectionTitle(
-                  icon: Icons.layers_outlined,
-                  title: 'Kamergebonden devices',
-                  trailing: LuxeInfoIconButton(
-                    title: 'Kamergebonden devices',
-                    body:
-                        'Eerst een verdieping, daarna een kamer, daarna het apparaat.',
-                  ),
-                ),
-              ),
-              if (visible.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
-                  child: Text(
-                    _emptyFloorLabel(),
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
-              for (final i in visible) ...[
-                if (i != visible.first)
-                  Divider(height: 1, color: LuxeColors.lineSoft),
-                LuxeNavRow(
-                  icon: Icons.layers_outlined,
-                  title: _namedOr(floors[i], 'Verdieping'),
-                  subtitle:
-                      _countLabel(_roomList(i).length, 'kamer', 'kamers'),
-                  selectedTextMatchesIcon: true,
-                  selected: _sel.kind == _FocusKind.floor && _sel.fi == i,
-                  trailing: _rowTrash(
-                    tooltip: 'Verdieping verwijderen',
-                    onPressed: () => _deleteFloorAt(i),
-                  ),
-                  onTap: () => _selectFocus(_Focus.floor(i)),
-                ),
-              ],
-              if (visible.isNotEmpty)
-                Divider(height: 1, color: LuxeColors.lineSoft),
-              LuxeAddRow(
-                label: 'Verdieping toevoegen',
-                onTap: _addFloor,
-              ),
-            ],
+          child: LuxeAddRow(
+            label: 'Verdieping toevoegen',
+            onTap: _addFloor,
           ),
         ),
       ],
+    );
+  }
+
+  Widget _floorStructureCard(int fi) {
+    final floor = _floors()[fi];
+    final rooms = _roomList(fi);
+    final floorSelected = _sel.kind == _FocusKind.floor && _sel.fi == fi;
+    return LuxeListCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          LuxeNavRow(
+            icon: Icons.layers_outlined,
+            title: _namedOr(floor, 'Verdieping'),
+            subtitle: _countLabel(rooms.length, 'kamer', 'kamers'),
+            selectedTextMatchesIcon: true,
+            selected: floorSelected,
+            trailing: _rowTrash(
+              tooltip: 'Verdieping verwijderen',
+              onPressed: () => _deleteFloorAt(fi),
+            ),
+            onTap: () => _selectFocus(_Focus.floor(fi)),
+          ),
+          if (floorSelected)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _BoundStrField(
+                    'name',
+                    floor,
+                    () => setState(() {}),
+                    labelOverride: 'Naam',
+                  ),
+                  const SizedBox(height: 12),
+                  ScopeIconField(
+                    kind: ScopeIconKind.floor,
+                    value: floor['icon'] as String?,
+                    onChanged: (v) {
+                      if (v == null) {
+                        floor.remove('icon');
+                      } else {
+                        floor['icon'] = v;
+                      }
+                      setState(() {});
+                    },
+                  ),
+                ],
+              ),
+            ),
+          for (var ri = 0; ri < rooms.length; ri++) ...[
+            Divider(height: 1, color: LuxeColors.lineSoft),
+            Padding(
+              padding: const EdgeInsets.only(left: 12),
+              child: _roomDropRow(
+                fi: fi,
+                ri: ri,
+                rounded: false,
+                selected: _sel.fi == fi &&
+                    _sel.ri == ri &&
+                    (_sel.kind == _FocusKind.room ||
+                        _sel.kind == _FocusKind.device),
+              ),
+            ),
+            if (_sel.kind == _FocusKind.room &&
+                _sel.fi == fi &&
+                _sel.ri == ri)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(28, 0, 16, 12),
+                child: _BoundStrField(
+                  'name',
+                  rooms[ri],
+                  () => setState(() {}),
+                  labelOverride: 'Naam',
+                ),
+              ),
+          ],
+          Divider(height: 1, color: LuxeColors.lineSoft),
+          Padding(
+            padding: const EdgeInsets.only(left: 12),
+            child: LuxeAddRow(
+              label: 'Kamer toevoegen',
+              onTap: () => _addRoom(fi),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -4028,141 +3721,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     );
   }
 
-  Widget _floorNameCard() {
-    final floor = _floors()[_sel.fi];
-    return LuxeListCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const LuxeSectionTitle(
-            icon: Icons.layers_outlined,
-            title: 'Verdieping',
-            trailing: LuxeInfoIconButton(
-              title: 'Verdieping',
-              body:
-                  'Naam en icoon zoals op de balk. De lange streep is de begane grond; kelder zit eronder, de verdiepingen erboven.',
-            ),
-          ),
-          _BoundStrField('name', floor, () => setState(() {}),
-              labelOverride: 'Naam'),
-          const SizedBox(height: 12),
-          ScopeIconField(
-            kind: ScopeIconKind.floor,
-            value: floor['icon'] as String?,
-            onChanged: (v) {
-              if (v == null) {
-                floor.remove('icon');
-              } else {
-                floor['icon'] = v;
-              }
-              setState(() {});
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _roomFieldsCard() {
-    final fi = _sel.fi;
-    final ri = _sel.ri;
-    final room = _roomList(fi)[ri];
-    final armed = _copiedDevice != null;
-    return LuxeListCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const LuxeSectionTitle(
-            icon: Icons.meeting_room_outlined,
-            title: 'Kamer',
-            trailing: LuxeInfoIconButton(
-              title: 'Kamer',
-              body: 'Naam zoals in de app.',
-            ),
-          ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton.icon(
-              style: TextButton.styleFrom(
-                foregroundColor: armed ? LuxeColors.brass : null,
-                visualDensity: VisualDensity.compact,
-              ),
-              onPressed: () => _pasteIntoRoom(fi, ri),
-              icon: const Icon(Icons.content_paste_outlined, size: 18),
-              label: const Text('Plak apparaat in deze kamer'),
-            ),
-          ),
-          _BoundStrField('name', room, () => setState(() {}),
-              labelOverride: 'Naam'),
-        ],
-      ),
-    );
-  }
-
-  Widget _floorInstallerPanel(BuildContext context) {
-    final fi = _sel.fi;
-    final rooms = _roomList(fi);
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 36),
-      children: [
-        _floorsPathCard(),
-        _floorNameCard(),
-        LuxeListCard(
-          padding: EdgeInsets.zero,
-          child: Column(
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 12, 14, 4),
-                child: LuxeSectionTitle(
-                  icon: Icons.meeting_room_outlined,
-                  title: 'Kamers',
-                ),
-              ),
-              if (rooms.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
-                  child: Text(
-                    'Nog geen kamer',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ),
-              for (var ri = 0; ri < rooms.length; ri++) ...[
-                if (ri > 0) Divider(height: 1, color: LuxeColors.lineSoft),
-                _roomDropRow(
-                  fi: fi,
-                  ri: ri,
-                  rounded: false,
-                  selected: _sel.kind == _FocusKind.room &&
-                      _sel.fi == fi &&
-                      _sel.ri == ri,
-                ),
-              ],
-              if (rooms.isNotEmpty)
-                Divider(height: 1, color: LuxeColors.lineSoft),
-              LuxeAddRow(
-                label: 'Kamer toevoegen',
-                onTap: () => _addRoom(fi),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _roomInstallerPanel(BuildContext context) {
-    final fi = _sel.fi;
-    final ri = _sel.ri;
-    return ListView(
-      padding: const EdgeInsets.only(bottom: 36),
-      children: [
-        _floorsPathCard(),
-        _roomFieldsCard(),
-        _roomDevicesCard(fi, ri),
-      ],
-    );
-  }
-
   Widget _houseBackupPanel(BuildContext context) {
     final busy = _backupBusy;
     return ListView(
@@ -4495,21 +4053,28 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           onChanged: () => setState(() {}),
         );
       case _FocusKind.floors:
-        return _floorsInstallerPanel(context);
+      case _FocusKind.buildings:
+      case _FocusKind.floor:
+      case _FocusKind.room:
+        return _buildingStructurePanel(context);
       case _FocusKind.houseSystems:
         return _houseSystemsInstallerPanel(context);
-      case _FocusKind.buildings:
-        return _floorsInstallerPanel(context);
       case _FocusKind.globalDevices:
         return _globalDevicesInstallerPanel(context);
-      case _FocusKind.floor:
-        return _floorInstallerPanel(context);
-      case _FocusKind.room:
-        return _roomInstallerPanel(context);
       case _FocusKind.device:
+        final device = _deviceList(_sel.fi, _sel.ri)[_sel.di];
         return _DeviceForm(
-          device: _deviceList(_sel.fi, _sel.ri)[_sel.di],
+          device: device,
           house: _house!,
+          headerActions: _deviceMoveHandle(
+            _DeviceDrag(
+              fi: _sel.fi,
+              ri: _sel.ri,
+              di: _sel.di,
+              id: '${device['id'] ?? ''}',
+            ),
+            _namedOr(device, 'Apparaat'),
+          ),
           onChanged: () => setState(() {}),
           onCopy: () => _copyDevice(_deviceList(_sel.fi, _sel.ri)[_sel.di]),
           onPaste: () => _pasteDeviceIntoList(
