@@ -53,6 +53,7 @@ import '../ui/widgets/confirm_dialog.dart';
 import '../ui/widgets/function_screen_header.dart';
 import '../ui/widgets/luxe_backdrop.dart';
 import '../ui/widgets/luxe_form.dart';
+import '../ui/scope_icons.dart';
 import '../ui/widgets/heater_icon.dart';
 import 'installer_api.dart';
 import 'installer_auth.dart';
@@ -981,6 +982,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       'id': 'fl-${_uuid.v4()}',
       'name': 'Nieuwe verdieping',
       'order': _floors().length,
+      'icon': 'floor',
       'rooms': <Map<String, dynamic>>[],
       if (scope != null) 'buildingId': scope,
     });
@@ -3171,7 +3173,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             DropdownMenuItem(
               value: _vizRenameBuilding,
               child: Text(
-                'Naam wijzigen',
+                'Naam en icoon',
                 style: TextStyle(color: LuxeColors.inkSoft),
               ),
             ),
@@ -3946,11 +3948,25 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             title: 'Verdieping',
             trailing: LuxeInfoIconButton(
               title: 'Verdieping',
-              body: 'Naam zoals in de app.',
+              body:
+                  'Naam en icoon zoals op de balk in de app. Standaard is een verdieping.',
             ),
           ),
           _BoundStrField('name', floor, () => setState(() {}),
               labelOverride: 'Naam'),
+          const SizedBox(height: 12),
+          ScopeIconField(
+            kind: ScopeIconKind.floor,
+            value: floor['icon'] as String?,
+            onChanged: (v) {
+              if (v == null) {
+                floor.remove('icon');
+              } else {
+                floor['icon'] = v;
+              }
+              setState(() {});
+            },
+          ),
         ],
       ),
     );
@@ -4526,6 +4542,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       'id': id,
       'name': 'Nieuw gebouw',
       'order': list.length,
+      'icon': 'house',
     });
     _vizBuildingId = id;
     _clampVizFocus();
@@ -4537,33 +4554,52 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     if (building == null || !mounted) return;
     final raw = (building['name'] as String?)?.trim() ?? '';
     final controller = TextEditingController(text: raw);
-    final name = await showDialog<String>(
+    var icon = building['icon'] as String?;
+    final saved = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Gebouw'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: luxeFilledDecoration(hint: 'Naam'),
-          onSubmitted: (v) => Navigator.pop(ctx, v),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Gebouw'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: controller,
+                autofocus: true,
+                decoration: luxeFilledDecoration(hint: 'Naam'),
+                onSubmitted: (_) => Navigator.pop(ctx, true),
+              ),
+              const SizedBox(height: 14),
+              ScopeIconField(
+                kind: ScopeIconKind.building,
+                value: icon,
+                onChanged: (v) => setLocal(() => icon = v),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuleren'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Opslaan'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Annuleren'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Opslaan'),
-          ),
-        ],
       ),
     );
+    final trimmed = controller.text.trim();
     controller.dispose();
-    if (!mounted || name == null) return;
-    final trimmed = name.trim();
-    if (trimmed.isEmpty) return;
+    if (!mounted || saved != true || trimmed.isEmpty) return;
     building['name'] = trimmed;
+    if (icon == null || icon!.isEmpty) {
+      building.remove('icon');
+    } else {
+      building['icon'] = icon;
+    }
     setState(() => _vizMenuEpoch++);
   }
 

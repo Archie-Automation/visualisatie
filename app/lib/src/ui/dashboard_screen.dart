@@ -29,6 +29,7 @@ import 'widgets/light_status_icon.dart';
 import 'widgets/heater_icon.dart';
 import 'widgets/split_unit_icon.dart';
 import 'widgets/room_category_strip.dart';
+import 'scope_icons.dart';
 import 'widgets/luxe_backdrop.dart';
 import 'widgets/scene_strip.dart';
 import '../floor_order.dart';
@@ -372,6 +373,7 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody>
         children: [
           _FloorBrowseHeader(
             buildingName: showBuildings ? selectedBuilding?.name : null,
+            buildingIcon: showBuildings ? selectedBuilding?.icon : null,
             floors: floors,
             selectedIndex: selectedIndex,
             scrollController: _floorScroll,
@@ -488,6 +490,7 @@ class _FloorBrowseHeader extends StatelessWidget {
     required this.onBack,
     this.scrollController,
     this.buildingName,
+    this.buildingIcon,
   });
 
   final List<Floor> floors;
@@ -496,15 +499,16 @@ class _FloorBrowseHeader extends StatelessWidget {
   final VoidCallback onBack;
   final ScrollController? scrollController;
   final String? buildingName;
+  final String? buildingIcon;
 
   @override
   Widget build(BuildContext context) {
     final name = buildingName?.trim();
     final showBuilding = name != null && name.isNotEmpty;
     final top = MediaQuery.paddingOf(context).top;
-    final buildingBlock = showBuilding ? _scopeBarHeight + 8 : 0.0;
+    final buildingBlock = showBuilding ? _scopeTileH + 8 : 0.0;
     return StickyHeaderSurface(
-      height: top + 14 + buildingBlock + _scopeBarHeight + 14,
+      height: top + 14 + buildingBlock + _scopeTileH + 14,
       child: Padding(
         padding: EdgeInsets.fromLTRB(
           context.hPad - 4,
@@ -516,7 +520,7 @@ class _FloorBrowseHeader extends StatelessWidget {
           children: [
             if (showBuilding)
               SizedBox(
-                height: _scopeBarHeight,
+                height: _scopeTileH,
                 child: Row(
                   children: [
                     HeaderIconButton(
@@ -528,7 +532,10 @@ class _FloorBrowseHeader extends StatelessWidget {
                     Flexible(
                       child: Align(
                         alignment: Alignment.centerLeft,
-                        child: _SelectedBuildingChip(name: name),
+                        child: _SelectedBuildingChip(
+                          name: name,
+                          iconKey: buildingIcon,
+                        ),
                       ),
                     ),
                   ],
@@ -572,37 +579,47 @@ class _FloorBrowseHeader extends StatelessWidget {
 
 /// Gebouw op de verdiepingspagina: dezelfde pil als op home, niet aantikbaar.
 class _SelectedBuildingChip extends StatelessWidget {
-  const _SelectedBuildingChip({required this.name});
+  const _SelectedBuildingChip({required this.name, this.iconKey});
 
   final String name;
+  final String? iconKey;
 
   @override
   Widget build(BuildContext context) {
-    return _ScopeChip(label: name, selected: true);
+    return _ScopeChip(
+      label: name,
+      icon: scopeBuildingIcon(iconKey),
+      selected: true,
+    );
   }
 }
 
-/// Navigatie, geen tegel. Hoogte gelijk aan de terugknop, breedte volgt de naam.
-const double _scopeBarHeight = 48;
-const double _scopeChipRadius = 24;
+/// Rechthoek met ronde hoeken: icoon boven, naam eronder.
+const double _scopeTileW = 112;
+const double _scopeTileH = 96;
+const double _scopeChipRadius = 20;
 
 class _ScopeChip extends StatelessWidget {
   const _ScopeChip({
     required this.label,
+    required this.icon,
     required this.selected,
     this.onTap,
     this.onLongPress,
   });
 
   final String label;
+  final IconData icon;
   final bool selected;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
+    final ink = selected ? LuxeColors.ink : LuxeColors.inkSoft;
     final box = LuxeRimBox(
-      height: _scopeBarHeight,
+      width: _scopeTileW,
+      height: _scopeTileH,
       radius: _scopeChipRadius,
       rimWidth: selected ? 1.5 : 1,
       rimColor: selected
@@ -610,22 +627,25 @@ class _ScopeChip extends StatelessWidget {
           : LuxeColors.glassRim,
       fillColor: LuxeChipChrome.tileFill(context, pressed: selected),
       shadows: selected ? LuxeShadows.soft : LuxeShadows.chip(context),
-      padding: const EdgeInsets.symmetric(horizontal: 18),
-      child: Align(
-        widthFactor: 1,
-        alignment: Alignment.center,
-        child: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: selected ? LuxeColors.ink : LuxeColors.inkSoft,
-            fontSize: 15,
-            height: 1.1,
-            letterSpacing: 0.2,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+      padding: const EdgeInsets.fromLTRB(8, 12, 8, 8),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 26, color: selected ? LuxeColors.brassDeep : ink),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: ink,
+              fontSize: 12,
+              height: 1.15,
+              fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+            ),
           ),
-        ),
+        ],
       ),
     );
     if (onTap == null && onLongPress == null) return box;
@@ -669,7 +689,7 @@ class _BuildingTabBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    const chipH = _scopeBarHeight;
+    const chipH = _scopeTileH;
     final pad = EdgeInsets.fromLTRB(context.hPad, 8, context.hPad, 8);
     final vPadTotal = pad.vertical;
     return Padding(
@@ -691,6 +711,7 @@ class _BuildingTabBar extends ConsumerWidget {
             final building = buildings[i];
             return _ScopeChip(
               label: building.name,
+              icon: scopeBuildingIcon(building.icon),
               selected: i == selectedIndex,
               onTap: () => onSelect(i),
               onLongPress: () => _openReorderSheet(context, ref),
@@ -824,7 +845,7 @@ class _FloorTabBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    const chipH = _scopeBarHeight;
+    const chipH = _scopeTileH;
     final pad = listPadding ??
         EdgeInsets.fromLTRB(context.hPad, 8, context.hPad, 8);
     final vPadTotal = pad is EdgeInsets ? pad.vertical : 16.0;
@@ -847,6 +868,7 @@ class _FloorTabBar extends ConsumerWidget {
             final floor = floors[i];
             return _ScopeChip(
               label: floor.name,
+              icon: scopeFloorIcon(floor.icon),
               selected: i == selectedIndex,
               onTap: () => onSelect(i),
               onLongPress: () => _openReorderSheet(context, ref),
@@ -907,7 +929,7 @@ class _FloorsHomeBand extends StatelessWidget {
           else
             // Zelfde hoogte als de verdiepingsbalk, anders schuift
             // de gecentreerde gebouwenrij omhoog.
-            const SizedBox(height: _scopeBarHeight + 16),
+            const SizedBox(height: _scopeTileH + 16),
         ],
       ),
     );
