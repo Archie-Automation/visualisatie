@@ -206,7 +206,8 @@ export function issueSessionForUser(userId: string, device: string): IssuedSessi
 
 /** Nieuw access-token op een geldig refresh-token; verlengt de sessie schuivend. */
 export function refreshAccess(
-  refreshToken: string
+  refreshToken: string,
+  device?: string
 ): { accessToken: string; user: Omit<User, "passwordHash">; sessionId: string } | null {
   if (!refreshToken || refreshToken.length < 20) return null;
   const store = load();
@@ -219,6 +220,8 @@ export function refreshAccess(
   const now = new Date();
   rec.lastUsedAt = now.toISOString();
   rec.expiresAt = new Date(now.getTime() + REFRESH_DAYS * 86_400_000).toISOString();
+  const nextDevice = device?.trim().slice(0, 64);
+  if (nextDevice) rec.device = nextDevice;
   save(store);
   return { accessToken: signAccess(user), user: publicUser(user), sessionId: rec.id };
 }

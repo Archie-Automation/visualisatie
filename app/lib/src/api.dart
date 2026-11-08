@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import 'device_label.dart';
 import 'demo/demo_bus.dart';
 import 'demo/demo_house.dart';
 import 'demo/demo_session.dart';
@@ -20,6 +21,8 @@ import 'fireplace_virtual.dart';
 import 'wtw_logic.dart';
 import 'models.dart';
 import 'roles.dart';
+
+export 'device_label.dart' show deviceLabel;
 
 /// Gezet vanuit [registerDemoHooks]. De bus zelf blijft vrij van media/alarm.
 typedef DemoSessionHook = void Function(Ref ref, {required bool active});
@@ -439,7 +442,10 @@ class AuthController extends Notifier<AuthState> {
           .post(
             Uri.parse('$apiBase/api/auth/refresh'),
             headers: {'content-type': 'application/json'},
-            body: jsonEncode({'refreshToken': rt}),
+            body: jsonEncode({
+              'refreshToken': rt,
+              'device': deviceLabel(),
+            }),
           )
           .timeout(const Duration(seconds: 6));
       if (res.statusCode == 401) {
@@ -522,12 +528,6 @@ Future<String?> storedSessionId() async {
   final sp = await SharedPreferences.getInstance();
   final v = sp.getString(kSessionIdPrefKey);
   return (v == null || v.isEmpty) ? null : v;
-}
-
-/// Korte apparaatomschrijving voor de sessielijst op de server.
-String deviceLabel() {
-  if (kIsWeb) return 'browser';
-  return defaultTargetPlatform.name;
 }
 
 DateTime? _parseJwtExp(String jwt) {

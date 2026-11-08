@@ -892,7 +892,10 @@ export function buildRouter(
   });
 
   r.post("/auth/refresh", (req, res) => {
-    const out = refreshAccess(String(req.body?.refreshToken ?? ""));
+    const out = refreshAccess(
+      String(req.body?.refreshToken ?? ""),
+      typeof req.body?.device === "string" ? req.body.device : undefined
+    );
     if (!out) return res.status(401).json({ error: "refresh invalid" });
     res.setHeader("cache-control", "no-store");
     res.json({ token: out.accessToken, user: out.user, sessionId: out.sessionId });

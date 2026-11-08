@@ -178,7 +178,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
                   _SettingsMenuTile(
                     icon: Icons.qr_code_2_outlined,
-                    title: 'Telefoon koppelen',
+                    title: 'Apparaat koppelen',
                     subtitle: 'QR of code, zonder wachtwoord',
                     onTap: () =>
                         setState(() => _topic = _SettingsTopic.pairing),
@@ -271,7 +271,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _SettingsTopic.appearance => 'Weergave',
       _SettingsTopic.doorbell => 'Deurbel',
       _SettingsTopic.schedules => 'Tijdschema\'s',
-      _SettingsTopic.pairing => 'Telefoon koppelen',
+      _SettingsTopic.pairing => 'Apparaat koppelen',
       _SettingsTopic.tablet => 'Wandtablet',
       _SettingsTopic.spotify => 'Spotify',
       _SettingsTopic.knxScenes => 'KNX-scenes',
@@ -295,10 +295,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             'Met dit account mag u geen tijdschema\'s wijzigen. Vraag een beheerder.',
         ].join('\n\n'),
       _SettingsTopic.pairing =>
-        'Een koppelcode zet een nieuwe telefoon op dit huis met jouw account, '
-            'zonder wachtwoord. Tien minuten geldig, eenmalig.\n\n'
-            'De telefoon blijft daarna ingelogd en wisselt zelf tussen thuis (wifi) '
-            'en onderweg (Archie Cloud, als dat op de server aanstaat).',
+        'Een koppelcode zet een apparaat op dit huis met jouw account, '
+            'zonder wachtwoord. Dat kan een telefoon, een tablet of een browser '
+            'op een computer zijn. De code is tien minuten geldig en eenmalig.\n\n'
+            'Scan de QR of typ de code in de app bij "Ik heb een koppelcode". '
+            'Het apparaat blijft daarna ingelogd, thuis en onderweg als Archie Cloud aanstaat.\n\n'
+            'Het adres buitenshuis is dicht. Alleen wie de link opent, komt in de browser.\n\n'
+            'Iemand anders koppelen? Ga naar Gebruikers, open die persoon en stuur de link.',
       _SettingsTopic.tablet =>
         'Deze instellingen gelden alleen voor dit apparaat. '
             'Op telefoon of in de browser hebben ze geen effect op het wandtablet.\n\n'

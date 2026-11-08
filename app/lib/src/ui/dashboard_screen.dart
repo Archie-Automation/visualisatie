@@ -502,9 +502,10 @@ class _FloorBrowseHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = buildingName?.trim();
     final showBuilding = name != null && name.isNotEmpty;
-    final buildingExtra = showBuilding ? HeaderIconButton.size + 8 : 0.0;
+    final top = MediaQuery.paddingOf(context).top;
+    final buildingBlock = showBuilding ? _scopeChipSize + 8 : 0.0;
     return StickyHeaderSurface(
-      height: context.roomStickyHeaderExtent + buildingExtra,
+      height: top + 14 + buildingBlock + _scopeChipSize + 14,
       child: Padding(
         padding: EdgeInsets.fromLTRB(
           context.hPad - 4,
@@ -516,7 +517,7 @@ class _FloorBrowseHeader extends StatelessWidget {
           children: [
             if (showBuilding)
               SizedBox(
-                height: HeaderIconButton.size,
+                height: _scopeChipSize,
                 child: Row(
                   children: [
                     HeaderIconButton(
@@ -571,7 +572,7 @@ class _FloorBrowseHeader extends StatelessWidget {
   }
 }
 
-/// Gebouw op de verdiepingspagina: zelfde chip als op home, niet aantikbaar.
+/// Gebouw op de verdiepingspagina: zelfde tegel als op home, niet aantikbaar.
 class _SelectedBuildingChip extends StatelessWidget {
   const _SelectedBuildingChip({required this.name});
 
@@ -579,26 +580,58 @@ class _SelectedBuildingChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LuxeRimBox(
-      height: HeaderIconButton.size,
-      radius: 12,
-      rimWidth: 2,
-      rimColor: LuxeBorders.solid(LuxeColors.brass),
-      fillColor: LuxeChipChrome.tileFill(context, pressed: true),
-      shadows: LuxeShadows.soft,
-      padding: const EdgeInsets.symmetric(horizontal: 18),
+    return _ScopeSquareChip(label: name, selected: true);
+  }
+}
+
+/// Zelfde vierkant als scenes en systemen (118, ronde hoeken).
+const double _scopeChipSize = 118;
+const double _scopeChipRadius = 22;
+
+class _ScopeSquareChip extends StatelessWidget {
+  const _ScopeSquareChip({
+    required this.label,
+    required this.selected,
+    this.onTap,
+    this.onLongPress,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+
+  @override
+  Widget build(BuildContext context) {
+    final box = LuxeRimBox(
+      width: _scopeChipSize,
+      height: _scopeChipSize,
+      radius: _scopeChipRadius,
+      rimWidth: selected ? 2 : 1,
+      rimColor: selected
+          ? LuxeBorders.solid(LuxeColors.brass)
+          : LuxeColors.glassRim,
+      fillColor: LuxeChipChrome.tileFill(context, pressed: selected),
+      shadows: selected ? LuxeShadows.soft : LuxeShadows.chip(context),
+      padding: const EdgeInsets.all(12),
       child: Center(
         child: Text(
-          name.toUpperCase(),
-          maxLines: 1,
+          label.toUpperCase(),
+          maxLines: 3,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
-          textHeightBehavior: const TextHeightBehavior(
-            applyHeightToFirstAscent: false,
-            applyHeightToLastDescent: false,
-          ),
           style: _scopeChipLabel(),
         ),
+      ),
+    );
+    if (onTap == null && onLongPress == null) return box;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        borderRadius: BorderRadius.circular(_scopeChipRadius),
+        child: box,
       ),
     );
   }
@@ -643,7 +676,7 @@ class _BuildingTabBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    const chipH = HeaderIconButton.size;
+    const chipH = _scopeChipSize;
     final pad = EdgeInsets.fromLTRB(context.hPad, 8, context.hPad, 8);
     final vPadTotal = pad.vertical;
     return Padding(
@@ -660,44 +693,14 @@ class _BuildingTabBar extends ConsumerWidget {
           addRepaintBoundaries: false,
           addAutomaticKeepAlives: false,
           itemCount: buildings.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 10),
+          separatorBuilder: (_, __) => const SizedBox(width: 14),
           itemBuilder: (context, i) {
             final building = buildings[i];
-            final selected = i == selectedIndex;
-            return Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => onSelect(i),
-                onLongPress: () => _openReorderSheet(context, ref),
-                borderRadius: BorderRadius.circular(12),
-                child: LuxeRimBox(
-                  height: chipH,
-                  radius: 12,
-                  rimWidth: selected ? 2 : 1,
-                  rimColor: selected
-                      ? LuxeBorders.solid(LuxeColors.brass)
-                      : LuxeColors.glassRim,
-                  fillColor: LuxeChipChrome.tileFill(
-                    context,
-                    pressed: selected,
-                  ),
-                  shadows: selected ? LuxeShadows.soft : null,
-                  padding: const EdgeInsets.symmetric(horizontal: 18),
-                  child: Center(
-                    child: Text(
-                      building.name.toUpperCase(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      textHeightBehavior: const TextHeightBehavior(
-                        applyHeightToFirstAscent: false,
-                        applyHeightToLastDescent: false,
-                      ),
-                      style: _scopeChipLabel(),
-                    ),
-                  ),
-                ),
-              ),
+            return _ScopeSquareChip(
+              label: building.name,
+              selected: i == selectedIndex,
+              onTap: () => onSelect(i),
+              onLongPress: () => _openReorderSheet(context, ref),
             );
           },
         ),
@@ -828,7 +831,7 @@ class _FloorTabBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    const chipH = HeaderIconButton.size;
+    const chipH = _scopeChipSize;
     final pad = listPadding ??
         EdgeInsets.fromLTRB(context.hPad, 8, context.hPad, 8);
     final vPadTotal = pad is EdgeInsets ? pad.vertical : 16.0;
@@ -846,44 +849,14 @@ class _FloorTabBar extends ConsumerWidget {
           addRepaintBoundaries: false,
           addAutomaticKeepAlives: false,
           itemCount: floors.length,
-          separatorBuilder: (_, __) => const SizedBox(width: 10),
+          separatorBuilder: (_, __) => const SizedBox(width: 14),
           itemBuilder: (context, i) {
             final floor = floors[i];
-            final selected = i == selectedIndex;
-            return Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () => onSelect(i),
-                onLongPress: () => _openReorderSheet(context, ref),
-                borderRadius: BorderRadius.circular(12),
-                child: LuxeRimBox(
-                  height: chipH,
-                  radius: 12,
-                  rimWidth: selected ? 2 : 1,
-                  rimColor: selected
-                      ? LuxeBorders.solid(LuxeColors.brass)
-                      : LuxeColors.glassRim,
-                  fillColor: LuxeChipChrome.tileFill(
-                    context,
-                    pressed: selected,
-                  ),
-                  shadows: selected ? LuxeShadows.soft : null,
-                  padding: const EdgeInsets.symmetric(horizontal: 18),
-                  child: Center(
-                    child: Text(
-                      floor.name.toUpperCase(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      textHeightBehavior: const TextHeightBehavior(
-                        applyHeightToFirstAscent: false,
-                        applyHeightToLastDescent: false,
-                      ),
-                      style: _scopeChipLabel(),
-                    ),
-                  ),
-                ),
-              ),
+            return _ScopeSquareChip(
+              label: floor.name,
+              selected: i == selectedIndex,
+              onTap: () => onSelect(i),
+              onLongPress: () => _openReorderSheet(context, ref),
             );
           },
         ),
@@ -941,7 +914,7 @@ class _FloorsHomeBand extends StatelessWidget {
           else
             // Zelfde hoogte als de verdiepingsbalk, anders schuift
             // de gecentreerde gebouwenrij omhoog.
-            const SizedBox(height: HeaderIconButton.size + 16),
+            const SizedBox(height: _scopeChipSize + 16),
         ],
       ),
     );

@@ -108,11 +108,11 @@ class _DeviceSessionsListState extends ConsumerState<DeviceSessionsList> {
   }
 
   static String _label(DeviceSession s) {
-    switch (s.device.toLowerCase()) {
+    switch (s.device.trim().toLowerCase()) {
       case 'android':
-        return 'Android-telefoon';
+        return 'Android-app';
       case 'ios':
-        return 'iPhone';
+        return 'iOS-app';
       case 'browser':
         return 'Browser';
       case 'windows':
@@ -120,24 +120,35 @@ class _DeviceSessionsListState extends ConsumerState<DeviceSessionsList> {
       case 'linux':
         return 'Computer';
       default:
-        return s.device.isEmpty ? 'Apparaat' : s.device;
+        return s.device.trim().isEmpty ? 'Apparaat' : s.device.trim();
     }
   }
 
   static IconData _icon(DeviceSession s) {
-    switch (s.device.toLowerCase()) {
-      case 'android':
-      case 'ios':
-        return Icons.phone_iphone_outlined;
-      case 'browser':
-        return Icons.language_outlined;
-      case 'windows':
-      case 'macos':
-      case 'linux':
-        return Icons.laptop_outlined;
-      default:
-        return Icons.devices_other_outlined;
+    final d = s.device.toLowerCase();
+    if (d.contains('ipad') || d.contains('tablet')) {
+      return Icons.tablet_outlined;
     }
+    if (d.contains('iphone') ||
+        d.contains('telefoon') ||
+        d == 'ios' ||
+        d == 'android') {
+      return Icons.phone_iphone_outlined;
+    }
+    if (d.contains('windows') ||
+        d.contains('mac') ||
+        d.contains('linux') ||
+        d.contains('chromebook')) {
+      return Icons.laptop_outlined;
+    }
+    if (d.contains('browser') ||
+        d.contains('chrome') ||
+        d.contains('safari') ||
+        d.contains('edge') ||
+        d.contains('firefox')) {
+      return Icons.language_outlined;
+    }
+    return Icons.devices_other_outlined;
   }
 
   static String _ago(DateTime t) {

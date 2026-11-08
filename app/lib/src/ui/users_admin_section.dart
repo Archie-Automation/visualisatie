@@ -687,8 +687,8 @@ class _UserEditor extends StatelessWidget {
                   ? (user['displayName'] as String).trim()
                   : (user['username'] as String? ?? ''),
             ),
-            icon: const Icon(Icons.phone_iphone_outlined),
-            label: const Text('Telefoon koppelen (link of QR)'),
+            icon: const Icon(Icons.devices_outlined),
+            label: const Text('Apparaat koppelen'),
           ),
           const SizedBox(height: 14),
           Text(

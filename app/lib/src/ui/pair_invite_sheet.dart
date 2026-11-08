@@ -10,9 +10,10 @@ import 'package:url_launcher/url_launcher.dart';
 import '../api.dart';
 import '../pairing_api.dart';
 import '../theme.dart';
+import 'widgets/confirm_dialog.dart';
 
-/// Koppellink voor een gebruiker die alleen een telefoon heeft: de beheerder
-/// stuurt de link per sms/WhatsApp/mail. Tikken opent de app en logt in.
+/// Koppellink voor een gebruiker: de beheerder stuurt de link per
+/// sms/WhatsApp/mail. Tikken opent de app of de browser en logt in.
 /// Ter plekke kan de QR ook gewoon gescand worden.
 Future<void> showPairInviteSheet(
   BuildContext context, {
@@ -78,7 +79,7 @@ class _PairInviteSheetState extends ConsumerState<_PairInviteSheet> {
   }
 
   String _message(PairStart p) =>
-      'Archie OS – telefoon koppelen voor ${widget.label}.\n'
+      'Archie OS – apparaat koppelen voor ${widget.label}.\n'
       'Tik op deze link (10 minuten geldig):\n${p.qr}\n\n'
       'Of open de app, kies "Ik heb een koppelcode" en typ: ${p.code}\n\n'
       'Zonder deze link is het huis van buitenaf dicht.';
@@ -130,18 +131,17 @@ class _PairInviteSheetState extends ConsumerState<_PairInviteSheet> {
                       child: Text('Koppellink voor ${widget.label}',
                           style: t.titleLarge),
                     ),
+                    const LuxeInfoIconButton(
+                      title: 'Apparaat koppelen',
+                      body: 'Stuur de link naar een telefoon, tablet of computer. '
+                          'Tikken opent de app of de browser en logt in, thuis en onderweg. '
+                          'Staat de persoon naast je, laat dan de QR scannen.',
+                    ),
                     IconButton(
                       onPressed: () => Navigator.of(context).maybePop(),
                       icon: const Icon(Icons.close),
                     ),
                   ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Heeft deze persoon alleen een telefoon? Stuur de link. '
-                  'Tikken opent de app en logt in, thuis en onderweg. '
-                  'Staat de persoon naast je, laat dan de QR scannen.',
-                  style: t.bodyMedium?.copyWith(color: LuxeColors.inkSoft),
                 ),
                 const SizedBox(height: 18),
                 if (p == null && _err == null)

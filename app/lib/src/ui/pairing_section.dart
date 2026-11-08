@@ -11,8 +11,8 @@ import '../theme.dart';
 import 'device_sessions_list.dart';
 import 'widgets/glass_card.dart';
 
-/// Instellingen → Telefoon koppelen: QR + code voor een nieuwe telefoon van
-/// dezelfde gebruiker. Tien minuten geldig, eenmalig.
+/// Instellingen → Apparaat koppelen: QR + code voor telefoon, tablet of browser.
+/// Tien minuten geldig, eenmalig. Uitleg staat in het i-icoon van de kop.
 class PairingSection extends ConsumerStatefulWidget {
   const PairingSection({super.key});
 
@@ -80,19 +80,6 @@ class _PairingSectionState extends ConsumerState<PairingSection> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Zet een nieuwe telefoon op dit huis zonder wachtwoord. '
-              'Scan de QR met de camera van de telefoon, of typ de code in de app '
-              'bij "Ik heb een koppelcode". De telefoon blijft daarna ingelogd, '
-              'thuis én onderweg.\n\n'
-              'Het adres buitenshuis is dicht. Alleen wie deze link opent, '
-              'ziet de woning in de browser. Een vreemde komt niet op het '
-              'inlogscherm.\n\n'
-              'Iemand anders koppelen die alleen een telefoon heeft? Ga naar '
-              'Gebruikers → die persoon → "Telefoon koppelen" en stuur de link.',
-              style: t.bodyMedium,
-            ),
-            const SizedBox(height: 18),
             if (p == null)
               FilledButton(
                 style: FilledButton.styleFrom(
@@ -176,13 +163,6 @@ class _PairingSectionState extends ConsumerState<PairingSection> {
                     ),
                   ),
                 ],
-              ),
-              const SizedBox(height: 10),
-              Text(
-                p.remoteUrl != null
-                    ? 'Werkt thuis (${p.localUrl}) en onderweg (${p.remoteUrl}).'
-                    : 'Alleen thuis: ${p.localUrl}. Buitenshuis vraagt om Archie Cloud op de server.',
-                style: t.bodySmall?.copyWith(color: LuxeColors.inkSoft),
               ),
             ],
             if (_err != null) ...[

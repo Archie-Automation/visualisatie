@@ -10,7 +10,7 @@ import '../theme.dart';
 import 'widgets/glass_card.dart';
 import 'widgets/luxe_backdrop.dart';
 
-/// Telefoon koppelen met een code of gescande link. Geen wachtwoord nodig.
+/// Apparaat koppelen met een code of gescande link. Geen wachtwoord nodig.
 /// Via de koppellink komt dit scherm binnen als `/pair?code=…&local=…&remote=…`
 /// (native via App Links; op web stuurt de server door naar `/#/pair?…`).
 class PairScreen extends ConsumerStatefulWidget {
@@ -131,12 +131,12 @@ class _PairScreenState extends ConsumerState<PairScreen> {
                         Text('ARCHIE OS',
                             style: Theme.of(context).textTheme.labelLarge),
                         const SizedBox(height: 14),
-                        Text('Telefoon koppelen',
+                        Text('Apparaat koppelen',
                             style: Theme.of(context).textTheme.displayMedium),
                         const SizedBox(height: 10),
                         Text(
-                          'Vraag op een ingelogd scherm (Instellingen → Telefoon '
-                          'koppelen) een koppelcode. Scan de QR of typ de code.',
+                          'Vraag op een ingelogd scherm (Instellingen → Apparaat '
+                          'koppelen) een code. Scan de QR of typ de code.',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         const SizedBox(height: 32),
