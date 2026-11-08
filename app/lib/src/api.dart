@@ -438,6 +438,8 @@ class AuthController extends Notifier<AuthState> {
     } catch (_) {}
   }
 
+  Future<void> requirePasswordChange() => _setMustChange(true);
+
   Future<void> _setMustChange(bool value) async {
     final sp = await SharedPreferences.getInstance();
     if (value) {
@@ -623,6 +625,15 @@ DateTime? _parseJwtExp(String jwt) {
 final authProvider =
     NotifierProvider<AuthController, AuthState>(AuthController.new);
 
+bool passwordChangeRequired(http.Response res) {
+  if (res.statusCode != 403) return false;
+  try {
+    return (jsonDecode(res.body) as Map)['error'] == 'password_change_required';
+  } catch (_) {
+    return false;
+  }
+}
+
 /// ------------------------------- Config -------------------------------
 
 final configProvider = FutureProvider<HouseConfig>((ref) async {
@@ -638,6 +649,10 @@ final configProvider = FutureProvider<HouseConfig>((ref) async {
     // Token verlopen of ongeldig — uitloggen zodat het loginscherm verschijnt.
     ref.read(authProvider.notifier).logout();
     throw StateError('session expired');
+  }
+  if (passwordChangeRequired(res)) {
+    await ref.read(authProvider.notifier).requirePasswordChange();
+    throw StateError('password change required');
   }
   if (res.statusCode != 200) {
     throw StateError('config fetch failed: ${res.statusCode}');
@@ -892,6 +907,12 @@ class BusController extends Notifier<BusState> {
     if (_disposed) return;
     final auth = ref.read(authProvider);
     if (!auth.isAuthed || !auth.restoreComplete) return;
+    if (auth.mustChangePassword) {
+      // De server weigert de bus tot het fabriekswachtwoord weg is.
+      // Dat is geen storing.
+      ref.read(serverLinkProvider.notifier).online();
+      return;
+    }
     _connectInFlight = true;
     try {
     if (isDemoToken(auth.token)) {
@@ -934,6 +955,11 @@ class BusController extends Notifier<BusState> {
                 Map<String, dynamic>.from(energy),
               );
         }
+      } else if (passwordChangeRequired(snap)) {
+        await ref.read(authProvider.notifier).requirePasswordChange();
+        if (gen != _connectGen || _disposed) return;
+        ref.read(serverLinkProvider.notifier).online();
+        return;
       } else if (snap.statusCode == 401) {
         // Access-token verlopen? Eerst stil vernieuwen; pas daarna uitloggen.
         final ok = await ref.read(authProvider.notifier).tryRefresh();
@@ -1093,6 +1119,11 @@ class BusController extends Notifier<BusState> {
     // Server rejected the JWT — force re-login instead of hammering.
     if (closeCode == 4401) {
       ref.read(authProvider.notifier).logout();
+      return;
+    }
+    if (closeCode == 4403) {
+      unawaited(ref.read(authProvider.notifier).requirePasswordChange());
+      ref.read(serverLinkProvider.notifier).online();
       return;
     }
     final auth = ref.read(authProvider);
