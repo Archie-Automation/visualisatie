@@ -12,6 +12,7 @@ import {
   normalizeRole,
   type AppRole
 } from "./roles";
+import { sessionLive } from "./sessions";
 
 const SECRET = process.env.JWT_SECRET ?? "dev-secret-change-me";
 if (
@@ -29,6 +30,8 @@ export interface TokenPayload {
   sub: string;
   username: string;
   role: AppRole;
+  /** Sessie die dit token mag gebruiken. Zonder geldige sessie is het token dood. */
+  sid?: string;
 }
 
 export interface AuthedRequest extends Request {
@@ -131,7 +134,9 @@ export function peekToken(req: Request): TokenPayload | null {
   const hdr = req.header("authorization");
   if (!hdr?.startsWith("Bearer ")) return null;
   try {
-    return jwt.verify(hdr.slice(7), SECRET) as TokenPayload;
+    const decoded = jwt.verify(hdr.slice(7), SECRET) as TokenPayload;
+    if (!sessionLive(decoded.sid)) return null;
+    return decoded;
   } catch {
     return null;
   }
@@ -148,6 +153,9 @@ export function requireAuth(
   }
   try {
     const decoded = jwt.verify(hdr.slice(7), SECRET) as TokenPayload;
+    if (!sessionLive(decoded.sid)) {
+      return res.status(401).json({ error: "session revoked" });
+    }
     req.user = decoded;
     const live = (getConfig().users ?? []).find((u) => u.id === decoded.sub);
     if (live && !isUserEnabled(live)) {

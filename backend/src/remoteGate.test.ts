@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
+import os from "node:os";
+import path from "node:path";
 import { describe, it } from "node:test";
 import type { NextFunction, Request, Response } from "express";
+
+process.env.SESSIONS_STORE_PATH = path.join(
+  os.tmpdir(),
+  `archie-sessions-test-${process.pid}.json`
+);
+
 import { remoteLoginBlocked } from "./auth";
 import {
   isLanAddress,
@@ -11,7 +19,7 @@ import {
   signGate,
   verifyGate
 } from "./remoteGate";
-import { claimPairCode, createPairCode, gateTicketValid } from "./sessions";
+import { claimPairCode, createPairCode, forgetGate, gateTicketValid, rememberGate } from "./sessions";
 
 process.env.REMOTE_URL = "https://huis.example";
 process.env.JWT_SECRET = "test-gate-secret";
@@ -107,7 +115,8 @@ describe("remote gate middleware", () => {
     assert.equal(forged.nexted, false);
 
     const exp = Math.floor(Date.now() / 1000) + 60;
-    const cookie = `archie_gate=${encodeURIComponent(signGate("test-gate-secret", exp))}`;
+    rememberGate("invite-browser");
+    const cookie = `archie_gate=${encodeURIComponent(signGate("test-gate-secret", exp, "invite-browser"))}`;
     assert.equal(run("10.80.0.1", "/api/auth/login", { method: "POST", cookie }).nexted, true);
   });
 
@@ -132,12 +141,24 @@ describe("remote gate middleware", () => {
 describe("gate cookie and factory password", () => {
   it("rejects a tampered or expired cookie", () => {
     const now = 1_700_000_000;
-    const token = signGate("s", now + 10);
+    rememberGate("g1");
+    const token = signGate("s", now + 10, "g1");
     assert.equal(verifyGate("s", token, now), true);
     assert.equal(verifyGate("s", token, now + 11), false);
     assert.equal(verifyGate("other", token, now), false);
     const flipped = `${token.slice(0, -2)}aa`;
     assert.equal(verifyGate("s", flipped, now), false);
+  });
+
+  it("closes the cloud page when that invite is withdrawn", () => {
+    const exp = Math.floor(Date.now() / 1000) + 60;
+    rememberGate("phone-gate");
+    const cookie = `archie_gate=${encodeURIComponent(signGate("test-gate-secret", exp, "phone-gate"))}`;
+    assert.equal(run("10.80.0.1", "/", { cookie }).nexted, true);
+    forgetGate("phone-gate");
+    const closed = run("10.80.0.1", "/", { cookie });
+    assert.equal(closed.nexted, false);
+    assert.match(String(closed.body), /Deze pagina is niet openbaar/);
   });
 
   it("drops the invite ticket once the code is claimed", () => {

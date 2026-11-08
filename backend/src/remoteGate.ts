@@ -10,7 +10,7 @@
 import crypto from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 import { remoteUrl } from "./remoteAccess";
-import { gateTicketValid } from "./sessions";
+import { gateGrantLive, gateTicketValid, rememberGate } from "./sessions";
 
 const COOKIE = "archie_gate";
 const GATE_MAX_AGE_SEC = 400 * 24 * 60 * 60;
@@ -66,8 +66,8 @@ function gateSecret(): string {
   return process.env.JWT_SECRET ?? "dev-secret-change-me";
 }
 
-export function signGate(secret: string, expSec: number): string {
-  const body = Buffer.from(JSON.stringify({ v: 1, exp: expSec }), "utf8").toString("base64url");
+export function signGate(secret: string, expSec: number, gid: string): string {
+  const body = Buffer.from(JSON.stringify({ v: 1, exp: expSec, gid }), "utf8").toString("base64url");
   const mac = crypto.createHmac("sha256", secret).update(body).digest("base64url");
   return `${body}.${mac}`;
 }
@@ -82,8 +82,12 @@ export function verifyGate(secret: string, token: string, nowSec: number): boole
   const b = Buffer.from(expected);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return false;
   try {
-    const parsed = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as { exp?: unknown };
-    return typeof parsed.exp === "number" && parsed.exp > nowSec;
+    const parsed = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as {
+      exp?: unknown;
+      gid?: unknown;
+    };
+    if (typeof parsed.exp !== "number" || parsed.exp <= nowSec) return false;
+    return typeof parsed.gid === "string" && gateGrantLive(parsed.gid);
   } catch {
     return false;
   }
@@ -111,9 +115,27 @@ export function gateCookieValid(req: Request, nowSec = Math.floor(Date.now() / 1
   return verifyGate(gateSecret(), raw, nowSec);
 }
 
+/** Id van de cloud-uitnodiging in deze browser, of null. */
+export function invitedGateId(req: Request): string | null {
+  const raw = readCookie(req, COOKIE);
+  if (!raw || !verifyGate(gateSecret(), raw, Math.floor(Date.now() / 1000))) return null;
+  const dot = raw.indexOf(".");
+  if (dot <= 0) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(raw.slice(0, dot), "base64url").toString("utf8")) as {
+      gid?: unknown;
+    };
+    return typeof parsed.gid === "string" ? parsed.gid : null;
+  } catch {
+    return null;
+  }
+}
+
 function setGateCookie(res: Response): void {
+  const gid = crypto.randomBytes(16).toString("base64url");
+  rememberGate(gid);
   const exp = Math.floor(Date.now() / 1000) + GATE_MAX_AGE_SEC;
-  const value = encodeURIComponent(signGate(gateSecret(), exp));
+  const value = encodeURIComponent(signGate(gateSecret(), exp, gid));
   res.append(
     "Set-Cookie",
     `${COOKIE}=${value}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${GATE_MAX_AGE_SEC}`

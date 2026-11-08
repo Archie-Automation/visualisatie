@@ -34,10 +34,13 @@ export interface SessionRecord {
   lastUsedAt: string;
   expiresAt: string;
   revoked?: boolean;
+  /** Cloud-uitnodiging die dit apparaat openzette. Weg bij afmelden. */
+  gateId?: string;
 }
 
 interface SessionStore {
   sessions: SessionRecord[];
+  gates: string[];
 }
 
 interface PairCode {
@@ -64,9 +67,12 @@ function load(): SessionStore {
   try {
     const raw = fs.readFileSync(storePath(), "utf-8");
     const parsed = JSON.parse(raw) as SessionStore;
-    cache = { sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [] };
+    const gates = Array.isArray(parsed.gates)
+      ? parsed.gates.filter((g): g is string => typeof g === "string" && g.length > 0)
+      : [];
+    cache = { sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [], gates };
   } catch {
-    cache = { sessions: [] };
+    cache = { sessions: [], gates: [] };
   }
   return cache;
 }
@@ -139,13 +145,63 @@ function findUser(userId: string): User | undefined {
   return (getConfig().users ?? []).find((u) => u.id === userId);
 }
 
-function signAccess(user: User): string {
+function signAccess(user: User, sessionId: string): string {
   const payload: TokenPayload = {
     sub: user.id,
     username: user.username,
-    role: normalizeRole(user.role) as AppRole
+    role: normalizeRole(user.role) as AppRole,
+    sid: sessionId
   };
   return jwt.sign(payload, SECRET, { expiresIn: ACCESS_TTL as jwt.SignOptions["expiresIn"] });
+}
+
+const revokedListeners = new Set<(ids: string[]) => void>();
+
+/** Websocket sluit de verbinding van een afgemeld apparaat meteen. */
+export function onSessionsRevoked(fn: (ids: string[]) => void): void {
+  revokedListeners.add(fn);
+}
+
+function emitRevoked(ids: string[]): void {
+  if (!ids.length) return;
+  for (const fn of revokedListeners) fn(ids);
+}
+
+/** Cookie-id van een geopende koppellink. Zonder dit blijft het cloudadres dicht. */
+export function rememberGate(gid: string): void {
+  if (!gid) return;
+  const store = load();
+  if (store.gates.includes(gid)) return;
+  store.gates.push(gid);
+  save(store);
+}
+
+export function gateGrantLive(gid: string | undefined | null): boolean {
+  if (!gid) return false;
+  return load().gates.includes(gid);
+}
+
+export function forgetGate(gid: string): void {
+  const store = load();
+  const next = store.gates.filter((g) => g !== gid);
+  if (next.length === store.gates.length) return;
+  store.gates = next;
+  save(store);
+}
+
+function releaseGate(store: SessionStore, gid: string | undefined): void {
+  if (!gid) return;
+  const still = store.sessions.some((s) => !s.revoked && s.gateId === gid);
+  if (still) return;
+  store.gates = store.gates.filter((g) => g !== gid);
+}
+
+/** Access-token hoort bij een levende sessie. Oude tokens zonder sessie zijn dicht. */
+export function sessionLive(sessionId: string | undefined | null): boolean {
+  if (!sessionId) return false;
+  const rec = load().sessions.find((s) => s.id === sessionId);
+  if (!rec || rec.revoked) return false;
+  return new Date(rec.expiresAt).getTime() > Date.now();
 }
 
 function publicUser(user: User): Omit<User, "passwordHash"> {
@@ -160,7 +216,7 @@ export interface IssuedSession {
   sessionId: string;
 }
 
-function issue(user: User, device: string): IssuedSession {
+function issue(user: User, device: string, gateId?: string): IssuedSession {
   const store = load();
   const refreshToken = crypto.randomBytes(32).toString("base64url");
   const now = new Date();
@@ -172,7 +228,8 @@ function issue(user: User, device: string): IssuedSession {
     device: device.slice(0, 64),
     createdAt: now.toISOString(),
     lastUsedAt: now.toISOString(),
-    expiresAt: new Date(now.getTime() + REFRESH_DAYS * 86_400_000).toISOString()
+    expiresAt: new Date(now.getTime() + REFRESH_DAYS * 86_400_000).toISOString(),
+    gateId: gateId || undefined
   };
   store.sessions.push(rec);
   // Oude/ingetrokken sessies opruimen.
@@ -181,11 +238,16 @@ function issue(user: User, device: string): IssuedSession {
     (s) => !s.revoked && new Date(s.expiresAt).getTime() > cutoff
   );
   save(store);
-  return { accessToken: signAccess(user), refreshToken, user: publicUser(user), sessionId: rec.id };
+  return {
+    accessToken: signAccess(user, rec.id),
+    refreshToken,
+    user: publicUser(user),
+    sessionId: rec.id
+  };
 }
 
 /** Koppelcode inwisselen. Null = ongeldig/verlopen/gebruiker uit. */
-export function claimPairCode(rawCode: string, device: string): IssuedSession | null {
+export function claimPairCode(rawCode: string, device: string, gateId?: string): IssuedSession | null {
   pruneCodes();
   const code = normalizeCode(rawCode ?? "");
   const pc = pairCodes.get(code);
@@ -194,14 +256,14 @@ export function claimPairCode(rawCode: string, device: string): IssuedSession | 
   const user = findUser(pc.userId);
   if (!user || !isUserEnabled(user)) return null;
   logger.info({ user: user.username, device, by: pc.createdBy }, "telefoon gekoppeld");
-  return issue(user, device || "telefoon");
+  return issue(user, device || "telefoon", gateId);
 }
 
 /** Sessie na wachtwoord-login (zelfde refresh-mechanisme als koppelen). */
-export function issueSessionForUser(userId: string, device: string): IssuedSession | null {
+export function issueSessionForUser(userId: string, device: string, gateId?: string): IssuedSession | null {
   const user = findUser(userId);
   if (!user || !isUserEnabled(user)) return null;
-  return issue(user, device || "app");
+  return issue(user, device || "app", gateId);
 }
 
 /** Nieuw access-token op een geldig refresh-token; verlengt de sessie schuivend. */
@@ -223,25 +285,29 @@ export function refreshAccess(
   const nextDevice = device?.trim().slice(0, 64);
   if (nextDevice) rec.device = nextDevice;
   save(store);
-  return { accessToken: signAccess(user), user: publicUser(user), sessionId: rec.id };
+  return { accessToken: signAccess(user, rec.id), user: publicUser(user), sessionId: rec.id };
 }
 
 export function revokeRefreshToken(refreshToken: string): boolean {
   const store = load();
   const h = sha256(refreshToken);
   const rec = store.sessions.find((s) => s.tokenHash === h);
-  if (!rec) return false;
+  if (!rec || rec.revoked) return false;
   rec.revoked = true;
+  releaseGate(store, rec.gateId);
   save(store);
+  emitRevoked([rec.id]);
   return true;
 }
 
 export function revokeSession(sessionId: string, userId: string | null): boolean {
   const store = load();
   const rec = store.sessions.find((s) => s.id === sessionId && (userId === null || s.userId === userId));
-  if (!rec) return false;
+  if (!rec || rec.revoked) return false;
   rec.revoked = true;
+  releaseGate(store, rec.gateId);
   save(store);
+  emitRevoked([rec.id]);
   return true;
 }
 
@@ -252,15 +318,20 @@ export function revokeSession(sessionId: string, userId: string | null): boolean
  */
 export function revokeAllForUser(userId: string, keepSessionId?: string | null): number {
   const store = load();
-  let n = 0;
+  const ids: string[] = [];
   for (const s of store.sessions) {
     if (s.userId !== userId || s.revoked) continue;
     if (keepSessionId && s.id === keepSessionId) continue;
     s.revoked = true;
-    n += 1;
+    ids.push(s.id);
   }
-  if (n > 0) save(store);
-  return n;
+  if (!ids.length) return 0;
+  for (const s of store.sessions) {
+    if (ids.includes(s.id)) releaseGate(store, s.gateId);
+  }
+  save(store);
+  emitRevoked(ids);
+  return ids.length;
 }
 
 export function listSessions(userId: string | null): Array<Omit<SessionRecord, "tokenHash">> {

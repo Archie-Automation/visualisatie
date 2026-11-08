@@ -71,8 +71,9 @@ class _DeviceSessionsListState extends ConsumerState<DeviceSessionsList> {
         title: Text(isMe ? 'Dit apparaat afmelden?' : 'Apparaat afmelden?'),
         content: Text(
           isMe
-              ? 'Je wordt op dit apparaat uitgelogd.'
-              : '${_label(s)} moet daarna opnieuw inloggen of gekoppeld worden.',
+              ? 'Je wordt op dit apparaat meteen uitgelogd.'
+              : '${_label(s)} wordt meteen uitgelogd. Het cloudadres op dat '
+                  'apparaat gaat dicht tot een nieuwe koppellink.',
         ),
         actions: [
           TextButton(

@@ -7,6 +7,7 @@ import type { GAState, HouseConfig, MediaState } from "./types";
 import { getConfig, getConfigVersion } from "./config";
 import { buildDoorbellIndex } from "./intercoms";
 import { factoryPasswordActive, type TokenPayload } from "./auth";
+import { onSessionsRevoked, sessionLive } from "./sessions";
 import { collectIntercoms } from "./cameras";
 import type { IntercomDevice } from "./types";
 import type { MediaManager } from "./media/manager";
@@ -124,6 +125,33 @@ export function attachWebSocket(
   media: MediaManager
 ): WsHub {
   const wss = new WebSocketServer({ server, path: "/ws" });
+  const socketsBySession = new Map<string, Set<WebSocket>>();
+  const trackSession = (ws: WebSocket, sid: string) => {
+    let set = socketsBySession.get(sid);
+    if (!set) {
+      set = new Set();
+      socketsBySession.set(sid, set);
+    }
+    set.add(ws);
+    ws.on("close", () => {
+      set?.delete(ws);
+      if (set && set.size === 0) socketsBySession.delete(sid);
+    });
+  };
+  onSessionsRevoked((ids) => {
+    for (const id of ids) {
+      const set = socketsBySession.get(id);
+      if (!set) continue;
+      for (const client of set) {
+        try {
+          client.close(4401, "session revoked");
+        } catch {
+          /* socket al weg */
+        }
+      }
+      socketsBySession.delete(id);
+    }
+  });
 
   const broadcastAll = (msg: Outgoing) => {
     const data = JSON.stringify(msg);
@@ -159,6 +187,11 @@ export function attachWebSocket(
     }
     try {
       const decoded = jwt.verify(token, SECRET) as TokenPayload;
+      if (!sessionLive(decoded.sid)) {
+        ws.close(4401, "session revoked");
+        return;
+      }
+      if (decoded.sid) trackSession(ws, decoded.sid);
       const live = (getConfig().users ?? []).find((u) => u.id === decoded.sub);
       if (live && factoryPasswordActive(live.passwordHash)) {
         ws.close(4403, "password change required");

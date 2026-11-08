@@ -117,7 +117,7 @@ import {
 import { syncGo2rtcProcessAfterConfigWritten } from "./go2rtcSpawn";
 import { doorbirdMakeCall } from "./doorbirdRelease";
 import { iceBundleFor, remoteUrl, serverId } from "./remoteAccess";
-import { isLoopbackAddress, isRemoteFacing } from "./remoteGate";
+import { invitedGateId, isLoopbackAddress, isRemoteFacing } from "./remoteGate";
 import {
   claimPairCode,
   createPairCode,
@@ -820,11 +820,14 @@ export function buildRouter(
     // Naast het lange login-token ook een refresh-token, zodat de app stil kan
     // vernieuwen en per apparaat ingetrokken kan worden.
     const device = String(req.body?.device ?? req.get("user-agent") ?? "app").slice(0, 64);
-    const session = issueSessionForUser(result.user.id, device);
+    const session = issueSessionForUser(result.user.id, device, invitedGateId(req) ?? undefined);
+    if (!session) return res.status(500).json({ error: "session" });
+    // Het token is aan dit apparaat gebonden. Afmelden maakt het meteen ongeldig.
     res.json({
       ...result,
-      refreshToken: session?.refreshToken ?? null,
-      sessionId: session?.sessionId ?? null
+      token: session.accessToken,
+      refreshToken: session.refreshToken,
+      sessionId: session.sessionId
     });
   });
 
@@ -899,7 +902,7 @@ export function buildRouter(
     if (f.until > now) return res.status(429).json({ error: "te veel pogingen" });
     const code = String(req.body?.code ?? "");
     const device = String(req.body?.device ?? req.get("user-agent") ?? "telefoon").slice(0, 64);
-    const issued = claimPairCode(code, device);
+    const issued = claimPairCode(code, device, invitedGateId(req) ?? undefined);
     if (!issued) {
       if (now - f.first > 60_000) {
         f.n = 0;
