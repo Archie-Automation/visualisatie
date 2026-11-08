@@ -29,6 +29,7 @@ class CameraSnapshot extends ConsumerStatefulWidget {
     this.kind = SnapshotKind.camera,
     this.showLiveBadge = true,
     this.expand = false,
+    this.radius = 18,
   });
 
   final String cameraId;
@@ -39,6 +40,8 @@ class CameraSnapshot extends ConsumerStatefulWidget {
   final bool showLiveBadge;
   /// Fill the parent instead of locking to [aspectRatio].
   final bool expand;
+  /// Eigen afronding. 0 = de ouder knipt, zodat er geen tweede rand in de tegel zit.
+  final double radius;
 
   @override
   ConsumerState<CameraSnapshot> createState() => _CameraSnapshotState();
@@ -133,6 +136,7 @@ class _CameraSnapshotState extends ConsumerState<CameraSnapshot> {
         expand: widget.expand,
         aspectRatio: widget.aspectRatio,
         doorStation: widget.kind == SnapshotKind.intercom,
+        radius: widget.radius,
       );
     }
     final stack = Stack(
@@ -162,13 +166,16 @@ class _CameraSnapshotState extends ConsumerState<CameraSnapshot> {
           ),
       ],
     );
-    if (widget.expand) return stack;
+    final frame = widget.expand
+        ? stack
+        : AspectRatio(
+            aspectRatio: _intrinsic ?? widget.aspectRatio,
+            child: stack,
+          );
+    if (widget.radius <= 0) return frame;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: AspectRatio(
-        aspectRatio: _intrinsic ?? widget.aspectRatio,
-        child: stack,
-      ),
+      borderRadius: BorderRadius.circular(widget.radius),
+      child: frame,
     );
   }
 }

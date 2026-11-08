@@ -9,6 +9,7 @@ class DemoCameraView extends StatelessWidget {
     this.expand = false,
     this.aspectRatio = 16 / 9,
     this.doorStation = false,
+    this.radius = 18,
   });
 
   final String label;
@@ -18,6 +19,7 @@ class DemoCameraView extends StatelessWidget {
 
   /// Deuropname van een intercom, in plaats van het getekende camerabeeld.
   final bool doorStation;
+  final double radius;
 
   @override
   Widget build(BuildContext context) {
@@ -58,10 +60,13 @@ class DemoCameraView extends StatelessWidget {
         ],
       ),
     );
-    if (expand) return view;
+    final frame = expand
+        ? view
+        : AspectRatio(aspectRatio: aspectRatio, child: view);
+    if (radius <= 0) return frame;
     return ClipRRect(
-      borderRadius: BorderRadius.circular(18),
-      child: AspectRatio(aspectRatio: aspectRatio, child: view),
+      borderRadius: BorderRadius.circular(radius),
+      child: frame,
     );
   }
 }

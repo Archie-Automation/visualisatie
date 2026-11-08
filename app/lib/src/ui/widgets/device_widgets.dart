@@ -2539,15 +2539,16 @@ class CameraTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final info = ref.watch(cameraInfoProvider(device.id));
+    final pad = DeviceTileLayout.padding(context);
     return GlassCard(
-      padding: DeviceTileLayout.padding(context),
+      padding: EdgeInsets.zero,
       radius: 26,
       onTap: () => appOpen(context, '/camera/${device.id}'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: EdgeInsets.only(bottom: 14),
+            padding: EdgeInsets.fromLTRB(pad.left, pad.top, pad.right, 12),
             child: Row(
               children: [
                 Icon(Icons.videocam_outlined,
@@ -2565,14 +2566,16 @@ class CameraTile extends ConsumerWidget {
           Hero(
             tag: 'cam-${device.id}',
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(18),
+              borderRadius:
+                  const BorderRadius.vertical(bottom: Radius.circular(26)),
               child: info.when(
                 loading: () => _placeholderBox(16 / 9),
                 error: (_, __) => _errorBox(16 / 9),
                 data: (i) => CameraSnapshot(
                   cameraId: i.id,
                   aspectRatio: i.aspectRatio,
-                  fit: BoxFit.contain,
+                  fit: BoxFit.cover,
+                  radius: 0,
                 ),
               ),
             ),
@@ -2608,8 +2611,9 @@ class IntercomTile extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final pad = DeviceTileLayout.padding(context);
     return GlassCard(
-      padding: DeviceTileLayout.padding(context),
+      padding: EdgeInsets.zero,
       radius: 26,
       onTap: () => appOpen(context, '/intercom/${device.id}'),
       shadows: LuxeShadows.brassGlow,
@@ -2617,7 +2621,7 @@ class IntercomTile extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Padding(
-            padding: EdgeInsets.only(bottom: 14),
+            padding: EdgeInsets.fromLTRB(pad.left, pad.top, pad.right, 12),
             child: Row(
               children: [
                 Icon(Icons.notifications_outlined,
@@ -2649,12 +2653,14 @@ class IntercomTile extends ConsumerWidget {
           Hero(
             tag: 'intercom-${device.id}',
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(18),
+              borderRadius:
+                  const BorderRadius.vertical(bottom: Radius.circular(26)),
               child: CameraSnapshot(
                 cameraId: device.id,
                 aspectRatio: _intercomTileAspect(device),
                 kind: SnapshotKind.intercom,
-                fit: BoxFit.contain,
+                fit: BoxFit.cover,
+                radius: 0,
               ),
             ),
           ),
