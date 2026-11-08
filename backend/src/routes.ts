@@ -16,6 +16,7 @@ import {
   requireAuth,
   requireInstaller,
   requireStaff,
+  writeSessionCookie,
   type AuthedRequest
 } from "./auth";
 import { isStaffRole, normalizeRole } from "./roles";
@@ -824,6 +825,7 @@ export function buildRouter(
     const session = issueSessionForUser(result.user.id, device, invitedGateId(req) ?? undefined);
     if (!session) return res.status(500).json({ error: "session" });
     // Het token is aan dit apparaat gebonden. Afmelden maakt het meteen ongeldig.
+    writeSessionCookie(req, res, session.accessToken);
     res.json({
       ...result,
       token: session.accessToken,
@@ -924,6 +926,7 @@ export function buildRouter(
     }
     pairFails.delete(ip);
     res.setHeader("cache-control", "no-store");
+    writeSessionCookie(req, res, issued.accessToken);
     res.json({
       token: issued.accessToken,
       refreshToken: issued.refreshToken,
@@ -942,11 +945,13 @@ export function buildRouter(
     );
     if (!out) return res.status(401).json({ error: "refresh invalid" });
     res.setHeader("cache-control", "no-store");
+    writeSessionCookie(req, res, out.accessToken);
     res.json({ token: out.accessToken, user: out.user, sessionId: out.sessionId });
   });
 
   r.post("/auth/logout", (req, res) => {
     const rt = String(req.body?.refreshToken ?? "");
+    writeSessionCookie(req, res, null);
     res.json({ ok: rt ? revokeRefreshToken(rt) : false });
   });
 

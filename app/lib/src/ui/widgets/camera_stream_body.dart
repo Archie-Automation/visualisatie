@@ -1,8 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api.dart';
 import '../../camera_api.dart';
+import '../../server_route.dart';
 import '../../demo/demo_camera_view.dart';
 import '../../demo/demo_session.dart';
 import '../../models.dart';
@@ -58,6 +60,22 @@ class _CameraLivePlayerState extends ConsumerState<CameraLivePlayer> {
     setState(() => _useHlsFallback = true);
   }
 
+  /// Cloudadres of de app-route buitenshuis. Thuis blijft WebRTC.
+  bool get _offLan {
+    if (kIsWeb) {
+      final host = Uri.base.host.toLowerCase();
+      if (host == 'localhost' || host == '127.0.0.1') return false;
+      if (RegExp(r'^192\.168\.\d{1,3}\.\d{1,3}$').hasMatch(host)) return false;
+      if (RegExp(r'^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$').hasMatch(host)) {
+        return false;
+      }
+      final ten = RegExp(r'^10\.(\d{1,3})\.\d{1,3}\.\d{1,3}$').firstMatch(host);
+      if (ten != null && ten.group(1) != '80') return false;
+      return true;
+    }
+    return activeRoute == RouteKind.remote;
+  }
+
   /// Prefer backend-proxied HLS so tablets never need direct go2rtc access.
   String get _effectiveHlsUrl {
     if (widget.info.hlsUrl.contains('/api/cameras/') &&
@@ -101,8 +119,11 @@ class _CameraLivePlayerState extends ConsumerState<CameraLivePlayer> {
       );
     }
 
-    final tryWebRtc =
-        widget.info.webrtcUrl.isNotEmpty && !_useHlsFallback;
+    // Buitenshuis is UDP 8555 dicht. De stream komt dan via de server (HLS),
+    // niet via een directe WebRTC-kandidaat die de telefoon niet kan bereiken.
+    final tryWebRtc = widget.info.webrtcUrl.isNotEmpty &&
+        !_useHlsFallback &&
+        !_offLan;
 
     if (tryWebRtc) {
       return WebRTCCameraPlayer(

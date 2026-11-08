@@ -130,11 +130,55 @@ export async function authenticate(
 }
 
 /** Geldige Bearer, of null. Faalt zacht: health blijft bruikbaar zonder login. */
-export function peekToken(req: Request): TokenPayload | null {
+const SESSION_COOKIE = "archie_session";
+
+function readSessionCookie(req: Request): string | null {
+  const header = req.headers.cookie;
+  if (!header) return null;
+  for (const part of header.split(";")) {
+    const i = part.indexOf("=");
+    if (i < 0) continue;
+    if (part.slice(0, i).trim() !== SESSION_COOKIE) continue;
+    try {
+      const value = decodeURIComponent(part.slice(i + 1).trim());
+      return value || null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function requestToken(req: Request): string | null {
   const hdr = req.header("authorization");
-  if (!hdr?.startsWith("Bearer ")) return null;
+  if (hdr?.startsWith("Bearer ")) {
+    const token = hdr.slice(7).trim();
+    if (token) return token;
+  }
+  return readSessionCookie(req);
+}
+
+/** De videospeler in de browser kan geen Authorization-header sturen.
+ *  Zelfde login, als cookie, zodat HLS op het cloudadres wel laadt. */
+export function writeSessionCookie(req: Request, res: Response, token: string | null): void {
+  const proto = String(req.headers["x-forwarded-proto"] || "").split(",")[0]?.trim();
+  const secure = req.secure || proto === "https";
+  const parts = [
+    `${SESSION_COOKIE}=${token ? encodeURIComponent(token) : ""}`,
+    "HttpOnly",
+    "SameSite=Lax",
+    "Path=/",
+    `Max-Age=${token ? 24 * 60 * 60 : 0}`
+  ];
+  if (secure) parts.push("Secure");
+  res.append("Set-Cookie", parts.join("; "));
+}
+
+export function peekToken(req: Request): TokenPayload | null {
+  const token = requestToken(req);
+  if (!token) return null;
   try {
-    const decoded = jwt.verify(hdr.slice(7), SECRET) as TokenPayload;
+    const decoded = jwt.verify(token, SECRET) as TokenPayload;
     if (!sessionLive(decoded.sid)) return null;
     return decoded;
   } catch {
@@ -147,12 +191,12 @@ export function requireAuth(
   res: Response,
   next: NextFunction
 ) {
-  const hdr = req.header("authorization");
-  if (!hdr?.startsWith("Bearer ")) {
+  const token = requestToken(req);
+  if (!token) {
     return res.status(401).json({ error: "missing token" });
   }
   try {
-    const decoded = jwt.verify(hdr.slice(7), SECRET) as TokenPayload;
+    const decoded = jwt.verify(token, SECRET) as TokenPayload;
     if (!sessionLive(decoded.sid)) {
       return res.status(401).json({ error: "session revoked" });
     }
