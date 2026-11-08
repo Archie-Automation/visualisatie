@@ -992,7 +992,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       'rooms': <Map<String, dynamic>>[],
       if (scope != null) 'buildingId': scope,
     });
-    _selectFocus(_Focus.floor(_floors().length - 1));
+    final fi = _floors().length - 1;
+    if (_sel.kind == _FocusKind.buildings) {
+      _selectFocus(_Focus.buildings(fi: fi));
+    } else {
+      _selectFocus(_Focus.floor(fi));
+    }
   }
 
   void _addRoom(int fi) {
@@ -1002,7 +1007,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       'name': 'Nieuwe ruimte',
       'devices': <Map<String, dynamic>>[],
     });
-    _selectFocus(_Focus.room(fi, rooms.length - 1));
+    final ri = rooms.length - 1;
+    if (_sel.kind == _FocusKind.buildings) {
+      _selectFocus(_Focus.buildings(fi: fi, ri: ri));
+    } else {
+      _selectFocus(_Focus.room(fi, ri));
+    }
   }
 
   Widget _rowTrash({
@@ -1196,6 +1206,31 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     );
   }
 
+  Widget _floorDropRow({required int fi, required bool selected}) {
+    return DragTarget<_DeviceDrag>(
+      onWillAcceptWithDetails: (d) => d.data.fi != fi,
+      onAcceptWithDetails: (d) => _pickRoomAndMove(d.data, onlyFi: fi),
+      builder: (context, candidate, rejected) {
+        return _dropHighlight(
+          hot: candidate.isNotEmpty,
+          child: LuxeNavRow(
+            icon: Icons.layers_outlined,
+            title: _namedOr(_floors()[fi], 'Verdieping'),
+            subtitle: _countLabel(_roomList(fi).length, 'kamer', 'kamers'),
+            selectedTextMatchesIcon: true,
+            selected: selected,
+            rounded: true,
+            trailing: _rowTrash(
+              tooltip: 'Verdieping verwijderen',
+              onPressed: () => _deleteFloorAt(fi),
+            ),
+            onTap: () => _selectFocus(_Focus.floor(fi)),
+          ),
+        );
+      },
+    );
+  }
+
   void _moveDeviceToRoom(_DeviceDrag drag, int toFi, int toRi) {
     if (drag.fi == toFi && drag.ri == toRi) return;
     final source = _deviceList(drag.fi, drag.ri);
@@ -1294,7 +1329,11 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     final di = _sel.di;
     _floors().removeAt(fi);
     setState(() {
-      if (selFi == fi &&
+      if (selFi == fi && kind == _FocusKind.buildings) {
+        _sel = const _Focus.buildings();
+      } else if (selFi > fi && kind == _FocusKind.buildings) {
+        _sel = _Focus.buildings(fi: selFi - 1, ri: ri);
+      } else if (selFi == fi &&
           (kind == _FocusKind.floor ||
               kind == _FocusKind.room ||
               kind == _FocusKind.device)) {
@@ -1319,6 +1358,14 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     _roomList(fi).removeAt(ri);
     setState(() {
       if (selFi != fi) return;
+      if (kind == _FocusKind.buildings) {
+        if (selRi == ri) {
+          _sel = _Focus.buildings(fi: fi);
+        } else if (selRi > ri) {
+          _sel = _Focus.buildings(fi: fi, ri: selRi - 1);
+        }
+        return;
+      }
       if (selRi == ri &&
           (kind == _FocusKind.room || kind == _FocusKind.device)) {
         _sel = _Focus.floor(fi);
@@ -2950,6 +2997,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                       if (_mobileShowDetail) return _buildDetail(ctx);
                       return tree;
                     }
+                    if (_sel.kind == _FocusKind.buildings) {
+                      return _waterfallWide(ctx, tree, _topologyMillerRow(ctx));
+                    }
+                    if (_isBuildingFocus) {
+                      return _waterfallWide(ctx, tree, _deviceMillerRow(ctx));
+                    }
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -3214,6 +3267,422 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           ],
         ],
       ),
+    );
+  }
+
+  Widget _waterfallWide(BuildContext context, Widget tree, Widget columns) {
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        final navW = c.maxWidth >= 1600 ? 280.0 : 240.0;
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            SizedBox(width: navW, child: tree),
+            Expanded(flex: 3, child: columns),
+            Expanded(flex: 2, child: _waterfallInspector(context)),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _millerColumns(BuildContext context, List<Widget> columns) {
+    return LayoutBuilder(
+      builder: (ctx, c) {
+        const colMin = 300.0;
+        if (c.maxWidth >= colMin * columns.length) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [for (final col in columns) Expanded(child: col)],
+          );
+        }
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final col in columns) SizedBox(width: colMin, height: c.maxHeight, child: col),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _millerColumn({
+    required BuildContext context,
+    required String title,
+    required IconData icon,
+    Widget? trailing,
+    required List<Widget> children,
+    String? emptyText,
+    Widget? footer,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 10, 4, 0),
+          child: LuxeSectionTitle(
+            icon: icon,
+            title: title,
+            trailing: trailing,
+          ),
+        ),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(2, 4, 2, 8),
+            children: [
+              if (children.isEmpty && emptyText != null)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 4, 14, 12),
+                  child: Text(
+                    emptyText,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: LuxeColors.inkSoft,
+                        ),
+                  ),
+                ),
+              ...children,
+            ],
+          ),
+        ),
+        if (footer != null) footer,
+      ],
+    );
+  }
+
+  Widget _deviceMillerRow(BuildContext context) {
+    return _millerColumns(context, [
+      _millerFloorsColumn(context),
+      _millerRoomsColumn(context),
+      _millerDevicesColumn(context),
+    ]);
+  }
+
+  Widget _millerFloorsColumn(BuildContext context) {
+    final floors = _floors();
+    final visible = <int>[
+      for (var i = 0; i < floors.length; i++)
+        if (_onActiveBuilding(floors[i])) i,
+    ];
+    return _millerColumn(
+      context: context,
+      title: 'Verdieping',
+      icon: Icons.layers_outlined,
+      emptyText: visible.isEmpty ? _emptyFloorLabel() : null,
+      children: [
+        for (final i in visible)
+          _floorDropRow(
+            fi: i,
+            selected: _sel.fi == i &&
+                (_sel.kind == _FocusKind.floor ||
+                    _sel.kind == _FocusKind.room ||
+                    _sel.kind == _FocusKind.device),
+          ),
+      ],
+      footer: LuxeAddRow(
+        label: 'Verdieping toevoegen',
+        onTap: _addFloor,
+      ),
+    );
+  }
+
+  Widget _millerRoomsColumn(BuildContext context) {
+    final hasFloor = _sel.fi >= 0 &&
+        (_sel.kind == _FocusKind.floor ||
+            _sel.kind == _FocusKind.room ||
+            _sel.kind == _FocusKind.device);
+    if (!hasFloor) {
+      return _millerColumn(
+        context: context,
+        title: 'Kamer',
+        icon: Icons.meeting_room_outlined,
+        emptyText: 'Kies een verdieping',
+        children: const [],
+      );
+    }
+    final fi = _sel.fi;
+    final rooms = _roomList(fi);
+    return _millerColumn(
+      context: context,
+      title: 'Kamer',
+      icon: Icons.meeting_room_outlined,
+      emptyText: rooms.isEmpty ? 'Nog geen kamer' : null,
+      children: [
+        for (var ri = 0; ri < rooms.length; ri++)
+          _roomDropRow(
+            fi: fi,
+            ri: ri,
+            rounded: true,
+            selected: _sel.ri == ri &&
+                (_sel.kind == _FocusKind.room ||
+                    _sel.kind == _FocusKind.device),
+          ),
+      ],
+      footer: LuxeAddRow(
+        label: 'Kamer toevoegen',
+        onTap: () => _addRoom(fi),
+      ),
+    );
+  }
+
+  Widget _millerDevicesColumn(BuildContext context) {
+    final hasRoom = _sel.ri >= 0 &&
+        (_sel.kind == _FocusKind.room || _sel.kind == _FocusKind.device);
+    if (!hasRoom) {
+      return _millerColumn(
+        context: context,
+        title: 'Apparaat',
+        icon: Icons.tune_outlined,
+        emptyText: 'Kies een kamer',
+        children: const [],
+      );
+    }
+    final fi = _sel.fi;
+    final ri = _sel.ri;
+    final devices = _deviceList(fi, ri);
+    return _millerColumn(
+      context: context,
+      title: 'Apparaat',
+      icon: Icons.tune_outlined,
+      trailing: _roomPasteButton(fi, ri),
+      emptyText: devices.isEmpty ? 'Nog geen apparaat' : null,
+      children: [
+        for (var di = 0; di < devices.length; di++)
+          _deviceDragRow(
+            fi: fi,
+            ri: ri,
+            di: di,
+            device: devices[di],
+            rounded: true,
+            selected: _sel.kind == _FocusKind.device && _sel.di == di,
+          ),
+      ],
+      footer: LuxeAddRow(
+        label: 'Apparaat toevoegen',
+        onTap: () async {
+          final pick = await showPickDeviceTypeSheet(context);
+          if (!context.mounted) return;
+          if (pick != null) _addDevice(fi, ri, pick);
+        },
+      ),
+    );
+  }
+
+  Widget _topologyMillerRow(BuildContext context) {
+    return _millerColumns(context, [
+      _topologyBuildingsColumn(context),
+      _topologyFloorsColumn(context),
+      _topologyRoomsColumn(context),
+    ]);
+  }
+
+  Widget _topologyBuildingsColumn(BuildContext context) {
+    final buildings = _buildingsSorted();
+    final active = _activeVizBuildingId;
+    return _millerColumn(
+      context: context,
+      title: 'Gebouw',
+      icon: Icons.home_work_outlined,
+      emptyText: buildings.isEmpty ? 'Nog geen gebouw' : null,
+      children: [
+        for (final b in buildings)
+          if ((b['id'] as String?)?.isNotEmpty == true)
+            LuxeNavRow(
+              icon: Icons.home_work_outlined,
+              title: _namedOr(b, 'Gebouw'),
+              selected: b['id'] == active,
+              rounded: true,
+              trailing: _rowTrash(
+                tooltip: 'Gebouw verwijderen',
+                onPressed: () {
+                  _setVizBuilding(b['id'] as String);
+                  _confirmDeleteActiveBuilding();
+                },
+              ),
+              onTap: () {
+                _setVizBuilding(b['id'] as String);
+                _selectFocus(const _Focus.buildings());
+              },
+            ),
+      ],
+      footer: LuxeAddRow(
+        label: 'Gebouw toevoegen',
+        onTap: _addBuilding,
+      ),
+    );
+  }
+
+  Widget _topologyFloorsColumn(BuildContext context) {
+    if (_activeVizBuildingId == null) {
+      return _millerColumn(
+        context: context,
+        title: 'Verdieping',
+        icon: Icons.layers_outlined,
+        emptyText: 'Kies een gebouw',
+        children: const [],
+      );
+    }
+    final floors = _floors();
+    final visible = <int>[
+      for (var i = 0; i < floors.length; i++)
+        if (_onActiveBuilding(floors[i])) i,
+    ];
+    return _millerColumn(
+      context: context,
+      title: 'Verdieping',
+      icon: Icons.layers_outlined,
+      emptyText: visible.isEmpty ? _emptyFloorLabel() : null,
+      children: [
+        for (final fi in visible)
+          LuxeNavRow(
+            icon: Icons.layers_outlined,
+            title: _namedOr(floors[fi], 'Verdieping'),
+            subtitle: _countLabel(_roomList(fi).length, 'kamer', 'kamers'),
+            selectedTextMatchesIcon: true,
+            selected: _sel.kind == _FocusKind.buildings && _sel.fi == fi,
+            rounded: true,
+            trailing: _rowTrash(
+              tooltip: 'Verdieping verwijderen',
+              onPressed: () => _deleteFloorAt(fi),
+            ),
+            onTap: () => _selectFocus(_Focus.buildings(fi: fi)),
+          ),
+      ],
+      footer: LuxeAddRow(
+        label: 'Verdieping toevoegen',
+        onTap: _addFloor,
+      ),
+    );
+  }
+
+  Widget _topologyRoomsColumn(BuildContext context) {
+    final hasFloor = _sel.kind == _FocusKind.buildings && _sel.fi >= 0;
+    if (!hasFloor) {
+      return _millerColumn(
+        context: context,
+        title: 'Kamer',
+        icon: Icons.meeting_room_outlined,
+        emptyText: 'Kies een verdieping',
+        children: const [],
+      );
+    }
+    final fi = _sel.fi;
+    final rooms = _roomList(fi);
+    return _millerColumn(
+      context: context,
+      title: 'Kamer',
+      icon: Icons.meeting_room_outlined,
+      emptyText: rooms.isEmpty ? 'Nog geen kamer' : null,
+      children: [
+        for (var ri = 0; ri < rooms.length; ri++)
+          LuxeNavRow(
+            icon: Icons.meeting_room_outlined,
+            title: _namedOr(rooms[ri], 'Kamer'),
+            selectedTextMatchesIcon: true,
+            selected: _sel.fi == fi && _sel.ri == ri,
+            rounded: true,
+            trailing: _rowTrash(
+              tooltip: 'Kamer verwijderen',
+              compact: true,
+              onPressed: () => _deleteRoomAt(fi, ri),
+            ),
+            onTap: () => _selectFocus(_Focus.buildings(fi: fi, ri: ri)),
+          ),
+      ],
+      footer: LuxeAddRow(
+        label: 'Kamer toevoegen',
+        onTap: () => _addRoom(fi),
+      ),
+    );
+  }
+
+  Widget _waterfallInspector(BuildContext context) {
+    switch (_sel.kind) {
+      case _FocusKind.buildings:
+        if (_sel.ri >= 0) return _topologyRoomCard();
+        if (_sel.fi >= 0) {
+          return ListView(
+            padding: const EdgeInsets.only(bottom: 36),
+            children: [_floorNameCard()],
+          );
+        }
+        return ListView(
+          padding: const EdgeInsets.only(bottom: 36),
+          children: [_buildingSettingsCard()],
+        );
+      case _FocusKind.floors:
+        return ListView(
+          padding: const EdgeInsets.only(bottom: 36),
+          children: [_buildingSettingsCard()],
+        );
+      case _FocusKind.floor:
+        return ListView(
+          padding: const EdgeInsets.only(bottom: 36),
+          children: [_floorNameCard()],
+        );
+      case _FocusKind.room:
+        return ListView(
+          padding: const EdgeInsets.only(bottom: 36),
+          children: [_roomFieldsCard()],
+        );
+      case _FocusKind.device:
+        final device = _deviceList(_sel.fi, _sel.ri)[_sel.di];
+        return _DeviceForm(
+          device: device,
+          house: _house!,
+          headerActions: _deviceMoveHandle(
+            _DeviceDrag(
+              fi: _sel.fi,
+              ri: _sel.ri,
+              di: _sel.di,
+              id: '${device['id'] ?? ''}',
+            ),
+            _namedOr(device, 'Apparaat'),
+          ),
+          onChanged: () => setState(() {}),
+          onCopy: () => _copyDevice(device),
+          onPaste: () => _pasteDeviceIntoList(
+            _deviceList(_sel.fi, _sel.ri),
+            afterIndex: _sel.di,
+            onPasted: (i) => _selectFocus(_Focus.device(_sel.fi, _sel.ri, i)),
+          ),
+          getInstallerToken: () async {
+            if (widget.useCustomerSession) {
+              return ref.read(authProvider).token;
+            }
+            return ref.read(installerAuthProvider).token;
+          },
+        );
+      default:
+        return const SizedBox.shrink();
+    }
+  }
+
+  Widget _topologyRoomCard() {
+    final room = _roomList(_sel.fi)[_sel.ri];
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 36),
+      children: [
+        LuxeListCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const LuxeSectionTitle(
+                icon: Icons.meeting_room_outlined,
+                title: 'Kamer',
+              ),
+              _BoundStrField(
+                'name',
+                room,
+                () => setState(() {}),
+                labelOverride: 'Naam',
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
