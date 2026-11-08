@@ -163,6 +163,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ok = false;
     } on TypeError catch (_) {
       ok = false;
+    } on StateError catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _busy = false;
+        _err = e.message;
+      });
+      return;
     } catch (e, st) {
       if (kDebugMode) {
         debugPrint('login error: $e\n$st');

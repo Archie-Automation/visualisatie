@@ -368,6 +368,19 @@ class AuthController extends Notifier<AuthState> {
         'device': deviceLabel(),
       }),
     );
+    if (res.statusCode == 403) {
+      try {
+        final err = (jsonDecode(res.body) as Map)['error'];
+        if (err == 'remote_closed') {
+          throw StateError(
+            'Buitenshuis werkt alleen een koppelcode, geen wachtwoord.',
+          );
+        }
+      } catch (e) {
+        if (e is StateError) rethrow;
+      }
+      return false;
+    }
     if (res.statusCode != 200) return false;
     final body = jsonDecode(res.body) as Map<String, dynamic>;
     await applySession(body);

@@ -35,14 +35,26 @@ export interface AuthedRequest extends Request {
   user?: TokenPayload;
 }
 
+/**
+ * Vanaf het cloud-adres: fabriekswachtwoord en het placeholder-hash werken niet.
+ * Thuis blijven ze werken tot het wachtwoord echt gezet is.
+ */
+export function remoteLoginBlocked(username: string, password: string, passwordHash: string): boolean {
+  if (username.trim().toLowerCase() === "admin" && password === "admin") return true;
+  if (passwordHash.includes("REPLACE_ME")) return true;
+  return false;
+}
+
 export async function authenticate(
   username: string,
-  password: string
+  password: string,
+  opts?: { remote?: boolean }
 ): Promise<{ token: string; user: Omit<User, "passwordHash"> } | null> {
   const users = getConfig().users ?? [];
   const user = users.find((u) => u.username === username);
   if (!user) return null;
   if (!isUserEnabled(user)) return null;
+  if (opts?.remote && remoteLoginBlocked(username, password, user.passwordHash)) return null;
   const ok = await bcrypt.compare(password, user.passwordHash).catch(() => false);
 
   const role = normalizeRole(user.role);
@@ -70,6 +82,17 @@ export async function authenticate(
     enabled: isUserEnabled(user)
   };
   return { token, user: publicUser };
+}
+
+/** Geldige Bearer, of null. Faalt zacht: health blijft bruikbaar zonder login. */
+export function peekToken(req: Request): TokenPayload | null {
+  const hdr = req.header("authorization");
+  if (!hdr?.startsWith("Bearer ")) return null;
+  try {
+    return jwt.verify(hdr.slice(7), SECRET) as TokenPayload;
+  } catch {
+    return null;
+  }
 }
 
 export function requireAuth(

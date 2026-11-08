@@ -85,6 +85,9 @@ class _PairingSectionState extends ConsumerState<PairingSection> {
               'Scan de QR met de camera van de telefoon, of typ de code in de app '
               'bij "Ik heb een koppelcode". De telefoon blijft daarna ingelogd, '
               'thuis én onderweg.\n\n'
+              'Het adres buitenshuis is dicht. Alleen wie deze link opent, '
+              'ziet de woning in de browser. Een vreemde komt niet op het '
+              'inlogscherm.\n\n'
               'Iemand anders koppelen die alleen een telefoon heeft? Ga naar '
               'Gebruikers → die persoon → "Telefoon koppelen" en stuur de link.',
               style: t.bodyMedium,

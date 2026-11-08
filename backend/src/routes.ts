@@ -5,6 +5,7 @@ import { Router } from "express";
 import { z } from "zod";
 import {
   authenticate,
+  peekToken,
   canEditScenes,
   canLearnKnxScenes,
   canReleaseIntercom,
@@ -114,6 +115,7 @@ import {
 import { syncGo2rtcProcessAfterConfigWritten } from "./go2rtcSpawn";
 import { doorbirdMakeCall } from "./doorbirdRelease";
 import { iceBundleFor, remoteUrl, serverId } from "./remoteAccess";
+import { isRemoteFacing } from "./remoteGate";
 import {
   claimPairCode,
   createPairCode,
@@ -480,7 +482,6 @@ export function buildRouter(
   const r = Router();
   attachKnxSceneLearn(bus, (p) => ws.broadcastSceneHeard(p));
 
-  /** Publiek: laat zien of KNX/media bereikbaar zijn (geen auth). */
   /** Public: running version + optional newer GitHub release/tag. */
   r.get("/version", async (req, res) => {
     const force = req.query.refresh === "1" || req.query.refresh === "true";
@@ -649,7 +650,10 @@ export function buildRouter(
     }
   });
 
-  r.get("/health", (_req, res) => {
+  r.get("/health", (req, res) => {
+    const pub = { ok: true, serverId: serverId(), remoteUrl: remoteUrl() };
+    // Zonder login geen KNX-adres, medianamen of VoIP-status.
+    if (!peekToken(req)) return res.json(pub);
     const connectivity = getConnectivitySnapshot(bus, media, lutron);
     const warnings: string[] = [];
     if (!connectivity.knx.disabled && !connectivity.knx.simulate && !connectivity.knx.connected) {
@@ -805,7 +809,7 @@ export function buildRouter(
     const { username, password } = req.body ?? {};
     if (!username || !password)
       return res.status(400).json({ error: "username & password required" });
-    const result = await authenticate(username, password);
+    const result = await authenticate(username, password, { remote: isRemoteFacing(req) });
     if (!result) return res.status(401).json({ error: "invalid credentials" });
     // Naast het lange login-token ook een refresh-token, zodat de app stil kan
     // vernieuwen en per apparaat ingetrokken kan worden.
@@ -831,12 +835,16 @@ export function buildRouter(
       if (!exists) return res.status(404).json({ error: "unknown user" });
       userId = wanted;
     }
-    const { code, expiresAt } = createPairCode(userId, me.username);
+    const { code, expiresAt, gateTicket } = createPairCode(userId, me.username);
     const localUrl = clientApiBase(req);
     const remote = remoteUrl();
     const base = remote ?? localUrl;
     const qs = new URLSearchParams({ code, local: localUrl });
-    if (remote) qs.set("remote", remote);
+    if (remote) {
+      qs.set("remote", remote);
+      // Opent het cloud-adres in deze browser. Zonder ticket blijft de pagina dicht.
+      qs.set("ticket", gateTicket);
+    }
     res.setHeader("cache-control", "no-store");
     res.json({
       code,

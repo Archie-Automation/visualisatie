@@ -29,6 +29,7 @@ import {
 import { appVersionInfo } from "./version";
 import { releaseStuckRemoteEnroll } from "./remoteEnroll";
 import { remoteUrl } from "./remoteAccess";
+import { remoteGate } from "./remoteGate";
 import {
   setVoipBus,
   setVoipHub,
@@ -98,14 +99,23 @@ function main() {
     path.join(process.cwd(), "..", "app", "build", "web")).replace(/\/+$/, "");
   const webIndexHtml = path.join(webBuildDir, "index.html");
 
+  // Cloud-adres: geen app en geen wachtwoord-login zonder koppellink.
+  // LAN (TCP-peer in het huis) gaat hier ongemoeid door.
+  app.use(remoteGate);
+
   // Koppellink (`/pair?code=...`) in een browser: de web-app gebruikt
   // hash-routes, dus doorsturen. Met de native app geïnstalleerd komt dit
   // verzoek nooit aan: het OS opent de app via App Links / Universal Links.
+  // `ticket` blijft uit de adresbalk; de cookie is dan al gezet.
   app.get("/pair", (req, res) => {
-    const i = req.originalUrl.indexOf("?");
-    const q = i >= 0 ? req.originalUrl.slice(i) : "";
+    const q = new URLSearchParams();
+    for (const [k, v] of Object.entries(req.query)) {
+      if (k === "ticket" || typeof v !== "string") continue;
+      q.set(k, v);
+    }
+    const s = q.toString();
     res.setHeader("Cache-Control", "no-store");
-    res.redirect(302, `/#/pair${q}`);
+    res.redirect(302, `/#/pair${s ? `?${s}` : ""}`);
   });
 
   if (fs.existsSync(webBuildDir)) {

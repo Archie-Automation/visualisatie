@@ -80,7 +80,8 @@ class _PairInviteSheetState extends ConsumerState<_PairInviteSheet> {
   String _message(PairStart p) =>
       'Archie OS – telefoon koppelen voor ${widget.label}.\n'
       'Tik op deze link (10 minuten geldig):\n${p.qr}\n\n'
-      'Of open de app, kies "Ik heb een koppelcode" en typ: ${p.code}';
+      'Of open de app, kies "Ik heb een koppelcode" en typ: ${p.code}\n\n'
+      'Zonder deze link is het huis van buitenaf dicht.';
 
   Future<void> _open(Uri uri) async {
     try {

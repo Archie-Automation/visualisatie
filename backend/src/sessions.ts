@@ -45,6 +45,8 @@ interface PairCode {
   userId: string;
   createdBy: string;
   expiresAt: number;
+  /** Sha256 van het ticket in de koppellink. Opent het cloud-adres in de browser. */
+  gateTicketHash?: string;
 }
 
 const pairCodes = new Map<string, PairCode>();
@@ -103,13 +105,34 @@ function pruneCodes(): void {
 }
 
 /** Koppelcode voor [userId], aangemaakt door [createdBy]. */
-export function createPairCode(userId: string, createdBy: string): { code: string; expiresAt: number } {
+export function createPairCode(
+  userId: string,
+  createdBy: string
+): { code: string; expiresAt: number; gateTicket: string } {
   pruneCodes();
   let code = randomCode();
   while (pairCodes.has(code)) code = randomCode();
   const expiresAt = Date.now() + PAIR_TTL_MS;
-  pairCodes.set(code, { code, userId, createdBy, expiresAt });
-  return { code, expiresAt };
+  const gateTicket = crypto.randomBytes(32).toString("base64url");
+  pairCodes.set(code, {
+    code,
+    userId,
+    createdBy,
+    expiresAt,
+    gateTicketHash: sha256(gateTicket)
+  });
+  return { code, expiresAt, gateTicket };
+}
+
+/** Ticket uit een koppellink, geldig zolang die code nog niet ingewisseld of verlopen is. */
+export function gateTicketValid(ticket: string): boolean {
+  if (!ticket || ticket.length < 20) return false;
+  pruneCodes();
+  const h = sha256(ticket);
+  for (const pc of pairCodes.values()) {
+    if (pc.gateTicketHash === h) return true;
+  }
+  return false;
 }
 
 function findUser(userId: string): User | undefined {
