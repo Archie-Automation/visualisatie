@@ -21,7 +21,11 @@ class PairStart {
   final String? remoteUrl;
 }
 
-Future<PairStart> startPairing({required String token, String? userId}) async {
+Future<PairStart> startPairing({
+  required String token,
+  String? userId,
+  bool transfer = false,
+}) async {
   final res = await http
       .post(
         Uri.parse('$apiBase/api/auth/pair/start'),
@@ -29,7 +33,10 @@ Future<PairStart> startPairing({required String token, String? userId}) async {
           'content-type': 'application/json',
           'authorization': 'Bearer $token',
         },
-        body: jsonEncode({if (userId != null) 'userId': userId}),
+        body: jsonEncode({
+          if (userId != null) 'userId': userId,
+          if (transfer) 'transfer': true,
+        }),
       )
       .timeout(const Duration(seconds: 8));
   if (res.statusCode != 200) {

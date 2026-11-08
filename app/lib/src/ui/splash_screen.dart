@@ -10,6 +10,7 @@ import '../api.dart';
 import '../demo/demo_session.dart';
 import '../server_route.dart';
 import '../theme.dart';
+import '../web_remote_handoff.dart';
 import 'widgets/luxe_backdrop.dart';
 
 const Duration _kPingInterval = Duration(seconds: 2);
@@ -160,6 +161,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     final next = resumeLocationAfterSplash(
       GoRouterState.of(context).uri.queryParameters['next'],
     );
+    unawaited(_leave(auth, next));
+  }
+
+  /// Lokaal blijven als het cloudadres niet open gaat. Nooit andersom.
+  Future<void> _leave(AuthState auth, String? next) async {
+    if (auth.isAuthed && !auth.mustChangePassword && !isDemoToken(auth.token)) {
+      final left = await handoffWebToRemote(auth.token);
+      if (left || !mounted) return;
+    }
+    if (!mounted) return;
     context.go(auth.isAuthed ? (next ?? '/') : '/login');
   }
 

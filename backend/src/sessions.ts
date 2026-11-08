@@ -50,6 +50,8 @@ interface PairCode {
   expiresAt: number;
   /** Sha256 van het ticket in de koppellink. Opent het cloud-adres in de browser. */
   gateTicketHash?: string;
+  /** Zelfde apparaat meenemen naar het cloudadres. Geen tweede sessie. */
+  transferSessionId?: string;
 }
 
 const pairCodes = new Map<string, PairCode>();
@@ -113,7 +115,8 @@ function pruneCodes(): void {
 /** Koppelcode voor [userId], aangemaakt door [createdBy]. */
 export function createPairCode(
   userId: string,
-  createdBy: string
+  createdBy: string,
+  transferSessionId?: string
 ): { code: string; expiresAt: number; gateTicket: string } {
   pruneCodes();
   let code = randomCode();
@@ -125,7 +128,8 @@ export function createPairCode(
     userId,
     createdBy,
     expiresAt,
-    gateTicketHash: sha256(gateTicket)
+    gateTicketHash: sha256(gateTicket),
+    transferSessionId
   });
   return { code, expiresAt, gateTicket };
 }
@@ -246,6 +250,32 @@ function issue(user: User, device: string, gateId?: string): IssuedSession {
   };
 }
 
+/** Zelfde sessie naar het cloudadres. Geen tweede apparaat in de lijst. */
+function adoptSession(sessionId: string, device: string, gateId?: string): IssuedSession | null {
+  const store = load();
+  const rec = store.sessions.find((s) => s.id === sessionId && !s.revoked);
+  if (!rec || new Date(rec.expiresAt).getTime() <= Date.now()) return null;
+  const user = findUser(rec.userId);
+  if (!user || !isUserEnabled(user)) return null;
+  const previousGate = rec.gateId;
+  const refreshToken = crypto.randomBytes(32).toString("base64url");
+  const now = new Date();
+  rec.tokenHash = sha256(refreshToken);
+  rec.lastUsedAt = now.toISOString();
+  rec.expiresAt = new Date(now.getTime() + REFRESH_DAYS * 86_400_000).toISOString();
+  const nextDevice = device.trim().slice(0, 64);
+  if (nextDevice) rec.device = nextDevice;
+  if (gateId) rec.gateId = gateId;
+  if (previousGate && previousGate !== rec.gateId) releaseGate(store, previousGate);
+  save(store);
+  return {
+    accessToken: signAccess(user, rec.id),
+    refreshToken,
+    user: publicUser(user),
+    sessionId: rec.id
+  };
+}
+
 /** Koppelcode inwisselen. Null = ongeldig/verlopen/gebruiker uit. */
 export function claimPairCode(rawCode: string, device: string, gateId?: string): IssuedSession | null {
   pruneCodes();
@@ -253,6 +283,11 @@ export function claimPairCode(rawCode: string, device: string, gateId?: string):
   const pc = pairCodes.get(code);
   if (!pc) return null;
   pairCodes.delete(code);
+  if (pc.transferSessionId) {
+    const moved = adoptSession(pc.transferSessionId, device || "telefoon", gateId);
+    if (moved) logger.info({ user: moved.user.username, device, session: moved.sessionId }, "cloudadres geopend");
+    return moved;
+  }
   const user = findUser(pc.userId);
   if (!user || !isUserEnabled(user)) return null;
   logger.info({ user: user.username, device, by: pc.createdBy }, "telefoon gekoppeld");

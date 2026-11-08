@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../api.dart';
 import '../theme.dart';
+import '../web_remote_handoff.dart';
 import 'widgets/glass_card.dart';
 import 'widgets/luxe_backdrop.dart';
 
@@ -27,7 +28,12 @@ class PasswordChangeScreen extends ConsumerWidget {
                     final err = await ref
                         .read(authProvider.notifier)
                         .changePassword(password);
-                    if (err == null && context.mounted) context.go('/');
+                    if (err == null && context.mounted) {
+                      final left = await handoffWebToRemote(
+                        ref.read(authProvider).token,
+                      );
+                      if (!left && context.mounted) context.go('/');
+                    }
                     return err;
                   },
                 ),

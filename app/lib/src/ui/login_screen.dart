@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:archie_os/l10n/app_localizations.dart';
 
 import '../api.dart';
+import '../web_remote_handoff.dart';
 import '../saved_houses.dart';
 import '../server_route.dart';
 import '../theme.dart';
@@ -189,8 +190,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
     });
     if (ok && mounted) {
-      final must = ref.read(authProvider).mustChangePassword;
-      context.go(must ? '/wachtwoord' : '/');
+      final auth = ref.read(authProvider);
+      if (!auth.mustChangePassword) {
+        final left = await handoffWebToRemote(auth.token);
+        if (left || !mounted) return;
+      }
+      if (!mounted) return;
+      context.go(auth.mustChangePassword ? '/wachtwoord' : '/');
     }
   }
 

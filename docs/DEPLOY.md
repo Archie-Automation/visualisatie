@@ -94,7 +94,7 @@ Als het script zegt dat je opnieuw moet inloggen na Docker: VM even herstarten o
 1. Telefoon of PC op **dezelfde wifi/LAN**.
 2. Browser: het adres uit het script (`http://…:4000/`).
 3. Nieuw huis: eenmalig **admin** / **admin**. De app eist meteen een eigen wachtwoord. Daarna werkt admin/admin niet meer. Kwijt: op de NUC `cd docker && ./wachtwoord.sh admin`.
-4. iPhone: inloggen op het LAN-adres. Voor onderweg eerst de koppellink openen, en dáárna die pagina op het beginscherm zetten. Het LAN-adres stuurt een iPhone niet meer naar het cloudadres; dat adres is dicht zonder koppellink.
+4. iPhone: open het LAN-adres en log in. Dat blijft werken, ook nadat een apparaat is afgemeld. Na het inloggen gaat die telefoon naar het cloudadres en opent het. `?local=1` achter het LAN-adres blijft thuis en opent het cloudadres niet. Daarna: deel-menu → **Zet op beginscherm**.
 
 ---
 

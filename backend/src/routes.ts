@@ -126,7 +126,8 @@ import {
   refreshAccess,
   revokeAllForUser,
   revokeRefreshToken,
-  revokeSession
+  revokeSession,
+  sessionLive
 } from "./sessions";
 import { pushClientConfig, pushEnabled, pushRing, registerToken, unregisterToken } from "./push";
 import { probeCameraStreams } from "./cameraProbe";
@@ -862,15 +863,23 @@ export function buildRouter(
   /** Koppelcode maken. Zelf, of (staff) voor een andere gebruiker. */
   r.post("/auth/pair/start", requireAuth, (req: AuthedRequest, res) => {
     const me = req.user!;
+    const transfer = req.body?.transfer === true;
     const wanted = typeof req.body?.userId === "string" ? req.body.userId.trim() : "";
     let userId = me.sub;
-    if (wanted && wanted !== me.sub) {
+    let transferSid: string | undefined;
+    if (transfer) {
+      // Zelfde login meenemen naar het cloudadres. Geen tweede apparaat.
+      if (!me.sid || !sessionLive(me.sid)) {
+        return res.status(401).json({ error: "session revoked" });
+      }
+      transferSid = me.sid;
+    } else if (wanted && wanted !== me.sub) {
       if (!isStaffRole(me.role)) return res.status(403).json({ error: "staff only" });
       const exists = (getConfig().users ?? []).some((u) => u.id === wanted);
       if (!exists) return res.status(404).json({ error: "unknown user" });
       userId = wanted;
     }
-    const { code, expiresAt, gateTicket } = createPairCode(userId, me.username);
+    const { code, expiresAt, gateTicket } = createPairCode(userId, me.username, transferSid);
     const localUrl = clientApiBase(req);
     const remote = remoteUrl();
     const base = remote ?? localUrl;
