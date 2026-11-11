@@ -82,10 +82,15 @@ class _SceneApi {
         token: _ref.read(authProvider).token ?? '',
       );
     } catch (e) {
-      if ('$e'.contains('Sessie verlopen')) {
-        _ref.read(authProvider.notifier).logout();
+      if (!_sessionExpired(e)) rethrow;
+      final outcome = await _ref.read(authProvider.notifier).refreshOrLogout();
+      if (outcome != RefreshOutcome.renewed) {
+        throw Exception('Sessie verlopen — log opnieuw in');
       }
-      rethrow;
+      await runScene(
+        sceneId: sceneId,
+        token: _ref.read(authProvider).token ?? '',
+      );
     }
   }
 
@@ -198,18 +203,27 @@ class _SceneApi {
     _ref.invalidate(configProvider);
   }
 
+  bool _sessionExpired(Object e) => '$e'.contains('Sessie verlopen');
+
   Future<void> _post(String path, Map<String, dynamic> body) async {
-    final token = _ref.read(authProvider).token ?? '';
-    final res = await http.post(
-      Uri.parse('$apiBase$path'),
-      headers: {
-        'content-type': 'application/json',
-        'authorization': 'Bearer $token',
-      },
-      body: jsonEncode(body),
-    );
+    Future<http.Response> send() {
+      final token = _ref.read(authProvider).token ?? '';
+      return http.post(
+        Uri.parse('$apiBase$path'),
+        headers: {
+          'content-type': 'application/json',
+          'authorization': 'Bearer $token',
+        },
+        body: jsonEncode(body),
+      );
+    }
+
+    var res = await send();
     if (res.statusCode == 401) {
-      _ref.read(authProvider.notifier).logout();
+      final outcome = await _ref.read(authProvider.notifier).refreshOrLogout();
+      if (outcome == RefreshOutcome.renewed) res = await send();
+    }
+    if (res.statusCode == 401) {
       throw Exception('Sessie verlopen — log opnieuw in');
     }
     if (res.statusCode != 200) {

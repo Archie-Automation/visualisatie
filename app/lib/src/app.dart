@@ -76,13 +76,18 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
     if (state == AppLifecycleState.resumed) {
       // Van wifi naar 4G (of terug) terwijl de app sliep: eerst route kiezen.
       // Een wissel herverbindt zelf; anders gewoon de socket terughalen.
+      // Eerst het toegangstoken vernieuwen. iOS bevriest de timer in de
+      // achtergrond, en een dode token op de socket logde de telefoon uit.
       final before = activeRoute;
-      chooseServerRoute().then((k) {
-        if (!mounted) return;
+      () async {
+        await ref.read(authProvider.notifier).ensureFresh();
+        if (!mounted || !ref.read(authProvider).isAuthed) return;
+        final k = await chooseServerRoute();
+        if (!mounted || !ref.read(authProvider).isAuthed) return;
         if (k == RouteKind.none || k == before) {
           ref.read(busProvider.notifier).reconnectNow();
         }
-      });
+      }();
       applyAndroidKioskSystemUi();
       ref.invalidate(softwareVersionStatusProvider);
     }

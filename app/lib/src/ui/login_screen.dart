@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:archie_os/l10n/app_localizations.dart';
@@ -43,6 +44,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       savedHousesEpoch.addListener(_loadHouses);
       _loadHouses();
     }
+    _prefillUser();
+  }
+
+  Future<void> _prefillUser() async {
+    final name = await rememberedUsername();
+    if (!mounted || name == null || _user.text.isNotEmpty) return;
+    setState(() => _user.text = name);
   }
 
   @override
@@ -190,6 +198,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
     });
     if (ok && mounted) {
+      TextInput.finishAutofillContext(shouldSave: true);
       final auth = ref.read(authProvider);
       if (!auth.mustChangePassword) {
         final left = await handoffWebToRemote(auth.token);
@@ -292,12 +301,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             const SizedBox(height: 8),
                           ],
                         ],
-                        if (_askPassword) ...[
-                          _field(_user, l10n.loginUserLabel),
-                          const SizedBox(height: 22),
-                          _field(_pass, l10n.loginPasswordLabel, obscure: true),
-                          const SizedBox(height: 36),
-                        ] else
+                        if (_askPassword)
+                          AutofillGroup(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _field(
+                                  _user,
+                                  l10n.loginUserLabel,
+                                  autofillHints: const [AutofillHints.username],
+                                  textInputAction: TextInputAction.next,
+                                  textCapitalization: TextCapitalization.none,
+                                  autocorrect: false,
+                                ),
+                                const SizedBox(height: 22),
+                                _field(
+                                  _pass,
+                                  l10n.loginPasswordLabel,
+                                  obscure: true,
+                                  autofillHints: const [AutofillHints.password],
+                                  textInputAction: TextInputAction.done,
+                                  autocorrect: false,
+                                  onSubmitted: (_) {
+                                    if (!_busy) _submit();
+                                  },
+                                ),
+                                const SizedBox(height: 36),
+                              ],
+                            ),
+                          )
+                        else
                           const SizedBox(height: 12),
                         FilledButton(
                           style: FilledButton.styleFrom(
@@ -457,11 +490,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     bool obscure = false,
     String? hint,
     TextInputType? keyboardType,
+    List<String>? autofillHints,
+    TextInputAction? textInputAction,
+    TextCapitalization textCapitalization = TextCapitalization.none,
+    bool autocorrect = true,
+    ValueChanged<String>? onSubmitted,
   }) {
     return TextField(
       controller: c,
       obscureText: obscure,
       keyboardType: keyboardType,
+      autofillHints: autofillHints,
+      textInputAction: textInputAction,
+      textCapitalization: textCapitalization,
+      autocorrect: autocorrect,
+      enableSuggestions: !obscure,
+      onSubmitted: onSubmitted,
       style: TextStyle(fontSize: 15, color: LuxeColors.ink),
       decoration: InputDecoration(
         labelText: label,

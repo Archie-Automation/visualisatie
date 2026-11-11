@@ -331,6 +331,32 @@ class AuthController extends Notifier<AuthState> {
     u = sp.getString('username');
     r = sp.getString('role')?.trim();
     if (r != null && r.isEmpty) r = null;
+    if (u != null && u.isNotEmpty) {
+      await sp.setString(kLastUsernamePrefKey, u);
+    }
+    // Telefoon bevriest de 20-minuten-timer. Vernieuw een verlopen token
+    // vóór het huis laadt, anders ziet /api/config een 401 en trekt logout
+    // het jaartoken in.
+    if (t != null && !isDemoToken(t)) {
+      final exp = _parseJwtExp(t);
+      final due = exp == null ||
+          !exp.isAfter(DateTime.now().add(const Duration(hours: 2)));
+      if (due) {
+        final outcome = await tryRefresh();
+        if (outcome == RefreshOutcome.renewed) {
+          _scheduleRefreshCheck();
+          return;
+        }
+        if (outcome == RefreshOutcome.dead) {
+          await logout();
+          return;
+        }
+        t = sp.getString('token');
+        u = sp.getString('username');
+        r = sp.getString('role')?.trim();
+        if (r != null && r.isEmpty) r = null;
+      }
+    }
     state = AuthState(
       token: t,
       username: u,
@@ -343,10 +369,7 @@ class AuthController extends Notifier<AuthState> {
         'Auth restore: user=$u role=$r isAdmin=${state.isAdmin}',
       );
     }
-    if (t != null) {
-      _scheduleRefreshCheck();
-      unawaited(ensureFresh());
-    }
+    if (t != null) _scheduleRefreshCheck();
   }
 
   /// Prospectsessie: het demohuis staat in de app, er is geen server.
@@ -479,6 +502,9 @@ class AuthController extends Notifier<AuthState> {
     } else {
       await sp.remove('role');
     }
+    if (storedUsername.isNotEmpty) {
+      await sp.setString(kLastUsernamePrefKey, storedUsername);
+    }
     if (refresh != null && refresh.isNotEmpty) {
       await sp.setString(_kRefreshPrefKey, refresh);
     }
@@ -503,17 +529,27 @@ class AuthController extends Notifier<AuthState> {
 
   static const _kRefreshPrefKey = 'refresh_token';
   Timer? _refreshTimer;
-  bool _refreshing = false;
+  Future<RefreshOutcome>? _refreshing;
 
-  /// Nieuw access-token halen op het refresh-token. False = sessie echt weg.
-  Future<bool> tryRefresh() async {
-    if (isDemoToken(state.token)) return true;
-    if (_refreshing) return state.isAuthed;
-    _refreshing = true;
+  /// Nieuw access-token op het refresh-token.
+  /// [RefreshOutcome.dead] = refresh-token weg of ingetrokken. Access-token blijft
+  /// staan tot de aanroeper [logout] doet.
+  Future<RefreshOutcome> tryRefresh() {
+    final inflight = _refreshing;
+    if (inflight != null) return inflight;
+    final run = _tryRefresh();
+    _refreshing = run;
+    return run.whenComplete(() {
+      if (identical(_refreshing, run)) _refreshing = null;
+    });
+  }
+
+  Future<RefreshOutcome> _tryRefresh() async {
+    if (isDemoToken(state.token)) return RefreshOutcome.renewed;
     try {
       final sp = await SharedPreferences.getInstance();
       final rt = sp.getString(_kRefreshPrefKey);
-      if (rt == null || rt.isEmpty) return false;
+      if (rt == null || rt.isEmpty) return RefreshOutcome.dead;
       final res = await http
           .post(
             Uri.parse('$apiBase/api/auth/refresh'),
@@ -526,17 +562,22 @@ class AuthController extends Notifier<AuthState> {
           .timeout(const Duration(seconds: 6));
       if (res.statusCode == 401) {
         await sp.remove(_kRefreshPrefKey);
-        return false;
+        return RefreshOutcome.dead;
       }
-      if (res.statusCode != 200) return state.isAuthed; // netwerk: later nog eens
+      if (res.statusCode != 200) return RefreshOutcome.offline;
       final body = jsonDecode(res.body) as Map<String, dynamic>;
       await applySession({...body, 'refreshToken': rt});
-      return true;
+      return RefreshOutcome.renewed;
     } catch (_) {
-      return state.isAuthed;
-    } finally {
-      _refreshing = false;
+      return RefreshOutcome.offline;
     }
+  }
+
+  /// Na een 401. [RefreshOutcome.dead] logt uit. Offline laat de sessie staan.
+  Future<RefreshOutcome> refreshOrLogout() async {
+    final outcome = await tryRefresh();
+    if (outcome == RefreshOutcome.dead && state.isAuthed) await logout();
+    return outcome;
   }
 
   /// Verloopt het token binnen twee uur (of is het al verlopen)? Dan stil vernieuwen.
@@ -544,10 +585,11 @@ class AuthController extends Notifier<AuthState> {
     final t = state.token;
     if (t == null || isDemoToken(t)) return;
     final exp = _parseJwtExp(t);
-    if (exp == null) return; // oud token zonder exp: niets doen
+    if (exp == null) return;
     final soon = DateTime.now().add(const Duration(hours: 2));
     if (exp.isAfter(soon)) return;
-    await tryRefresh();
+    final outcome = await tryRefresh();
+    if (outcome == RefreshOutcome.dead) await logout();
   }
 
   void _scheduleRefreshCheck() {
@@ -601,6 +643,19 @@ class AuthController extends Notifier<AuthState> {
 /// Pref-sleutel van de server-sessie-id van dit apparaat (zie `/api/auth/sessions`).
 const kSessionIdPrefKey = 'session_id';
 
+/// Laatst gebruikte inlognaam. Blijft staan na uitloggen, zodat het veld gevuld is.
+const kLastUsernamePrefKey = 'last_username';
+
+/// Uitkomst van [AuthController.tryRefresh].
+enum RefreshOutcome { renewed, offline, dead }
+
+Future<String?> rememberedUsername() async {
+  final sp = await SharedPreferences.getInstance();
+  final v = sp.getString(kLastUsernamePrefKey)?.trim();
+  if (v == null || v.isEmpty) return null;
+  return v;
+}
+
 /// Sessie-id van dit apparaat op de server, of null (oude login zonder refresh).
 Future<String?> storedSessionId() async {
   final sp = await SharedPreferences.getInstance();
@@ -641,14 +696,29 @@ final configProvider = FutureProvider<HouseConfig>((ref) async {
   final token = ref.watch(authProvider.select((a) => a.token));
   if (token == null) throw StateError('not authenticated');
   if (isDemoToken(token)) return demoHouse.config;
-  final res = await http.get(
+  var res = await http.get(
     Uri.parse('$apiBase/api/config'),
     headers: {'authorization': 'Bearer $token'},
   );
   if (res.statusCode == 401) {
-    // Token verlopen of ongeldig — uitloggen zodat het loginscherm verschijnt.
-    ref.read(authProvider.notifier).logout();
-    throw StateError('session expired');
+    final outcome = await ref.read(authProvider.notifier).refreshOrLogout();
+    if (outcome == RefreshOutcome.renewed) {
+      final token2 = ref.read(authProvider).token;
+      if (token2 != null) {
+        res = await http.get(
+          Uri.parse('$apiBase/api/config'),
+          headers: {'authorization': 'Bearer $token2'},
+        );
+      }
+    } else if (outcome == RefreshOutcome.offline) {
+      throw StateError('config fetch failed: 401');
+    }
+    if (res.statusCode == 401) {
+      if (ref.read(authProvider).isAuthed) {
+        await ref.read(authProvider.notifier).logout();
+      }
+      throw StateError('session expired');
+    }
   }
   if (passwordChangeRequired(res)) {
     await ref.read(authProvider.notifier).requirePasswordChange();
@@ -706,6 +776,7 @@ class BusController extends Notifier<BusState> {
   int _healthMisses = 0;
   bool _routeProbeInFlight = false;
   int _retryDelay = 2; // seconds, doubles on each failure up to 30s
+  bool _refreshedForSocket = false;
   /// Incremented on every `_connect()` call. Stale calls detect they're
   /// outdated and stop without corrupting the connection.
   int _connectGen = 0;
@@ -961,13 +1032,10 @@ class BusController extends Notifier<BusState> {
         ref.read(serverLinkProvider.notifier).online();
         return;
       } else if (snap.statusCode == 401) {
-        // Access-token verlopen? Eerst stil vernieuwen; pas daarna uitloggen.
-        final ok = await ref.read(authProvider.notifier).tryRefresh();
-        if (!ok) {
-          ref.read(authProvider.notifier).logout();
+        final outcome = await ref.read(authProvider.notifier).refreshOrLogout();
+        if (gen != _connectGen || _disposed || outcome == RefreshOutcome.dead) {
           return;
         }
-        if (gen != _connectGen || _disposed) return;
         _scheduleReconnect();
         return;
       }
@@ -988,6 +1056,7 @@ class BusController extends Notifier<BusState> {
         return;
       }
       _retryDelay = 2; // reset backoff on successful connection
+      _refreshedForSocket = false;
       _socketLive = true;
       _healthMisses = 0;
       ref.read(serverLinkProvider.notifier).online();
@@ -1116,9 +1185,10 @@ class BusController extends Notifier<BusState> {
     _sub = null;
     try { _ch?.sink.close(); } catch (_) {}
     _ch = null;
-    // Server rejected the JWT — force re-login instead of hammering.
+    // Verlopen toegangstoken. Eerst vernieuwen; uitloggen doet refreshOrLogout
+    // alleen als het jaartoken echt dood is.
     if (closeCode == 4401) {
-      ref.read(authProvider.notifier).logout();
+      unawaited(_onSocketRejected());
       return;
     }
     if (closeCode == 4403) {
@@ -1139,6 +1209,18 @@ class BusController extends Notifier<BusState> {
     _reconnectTimer = Timer(Duration(seconds: delay, milliseconds: jitterMs), () {
       if (!_disposed) _connect();
     });
+  }
+
+  Future<void> _onSocketRejected() async {
+    final outcome = await ref.read(authProvider.notifier).refreshOrLogout();
+    if (_disposed || outcome == RefreshOutcome.dead) return;
+    if (outcome == RefreshOutcome.renewed && !_refreshedForSocket) {
+      _refreshedForSocket = true;
+      _retryDelay = 2;
+      _connect();
+      return;
+    }
+    _scheduleReconnect();
   }
 
   /// Reconnect immediately (e.g. after coming back to foreground).
@@ -1173,17 +1255,7 @@ class BusController extends Notifier<BusState> {
       _applyDemoCommand(command);
       return;
     }
-    final res = await http.post(
-      Uri.parse('$apiBase/api/command'),
-      headers: {
-        'content-type': 'application/json',
-        'authorization': 'Bearer ${auth.token}',
-      },
-      body: jsonEncode(command),
-    );
-    if (res.statusCode == 401) {
-      ref.read(authProvider.notifier).logout();
-    }
+    await _postCommand(command);
   }
 
   /// Like [send] but verifies the response and throws the backend error
@@ -1194,16 +1266,8 @@ class BusController extends Notifier<BusState> {
       _applyDemoCommand(command);
       return;
     }
-    final res = await http.post(
-      Uri.parse('$apiBase/api/command'),
-      headers: {
-        'content-type': 'application/json',
-        'authorization': 'Bearer ${auth.token}',
-      },
-      body: jsonEncode(command),
-    );
+    final res = await _postCommand(command);
     if (res.statusCode == 401) {
-      ref.read(authProvider.notifier).logout();
       throw Exception('Sessie verlopen — log opnieuw in');
     }
     if (res.statusCode >= 400) {
@@ -1218,6 +1282,25 @@ class BusController extends Notifier<BusState> {
       }
       throw Exception(msg);
     }
+  }
+
+  Future<http.Response> _postCommand(Map<String, dynamic> command) async {
+    Future<http.Response> post(String? token) {
+      return http.post(
+        Uri.parse('$apiBase/api/command'),
+        headers: {
+          'content-type': 'application/json',
+          'authorization': 'Bearer $token',
+        },
+        body: jsonEncode(command),
+      );
+    }
+
+    var res = await post(ref.read(authProvider).token);
+    if (res.statusCode != 401) return res;
+    final outcome = await ref.read(authProvider.notifier).refreshOrLogout();
+    if (outcome != RefreshOutcome.renewed) return res;
+    return post(ref.read(authProvider).token);
   }
 }
 
