@@ -536,7 +536,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
       }
       _noteLutron(d, (_val * 100).round());
       setState(() {});
-      if (_mode == 'tunable_white') {
+      if (_mode == 'tunable_white' || _whiteOnly) {
         _sendTunableWhite(d);
       } else {
         _sendRgbChannels(d);
@@ -688,25 +688,27 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
   }
 
   Widget _rgbModeSwitch(BuildContext context, Device d, {required bool rgb}) {
-    return Align(
-      alignment: Alignment.centerRight,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text('RGB', style: Theme.of(context).textTheme.labelLarge),
-          Switch(
-            value: rgb,
-            onChanged: (on) {
-              setState(() => _whiteOnly = !on);
-              if (on) {
-                _sendRgbChannels(d);
-              } else {
-                _sendTunableWhite(d);
-              }
-            },
-          ),
-        ],
+    return SegmentedButton<bool>(
+      showSelectedIcon: false,
+      style: SegmentedButton.styleFrom(
+        visualDensity: VisualDensity.compact,
+        textStyle: Theme.of(context).textTheme.labelMedium,
       ),
+      segments: const [
+        ButtonSegment(value: true, label: Text('RGB(W)')),
+        ButtonSegment(value: false, label: Text('Kleurtemperatuur')),
+      ],
+      selected: {rgb},
+      onSelectionChanged: (next) {
+        final color = next.first;
+        if (color == rgb) return;
+        setState(() => _whiteOnly = !color);
+        if (color) {
+          _sendRgbChannels(d);
+        } else {
+          _sendTunableWhite(d);
+        }
+      },
     );
   }
 

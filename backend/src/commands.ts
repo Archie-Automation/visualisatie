@@ -426,7 +426,11 @@ export async function dispatch(
         const kMin = cfg.kelvinMin ?? 2700;
         const kMax = cfg.kelvinMax ?? 6500;
         const kelvin = Math.round(kMin + warmCoolRatio * (kMax - kMin));
-        await lutron.setWhite(lut.integrationId, level, kelvin);
+        if (cfg.mode === "tunable_white") {
+          await lutron.setWhite(lut.integrationId, level, kelvin);
+        } else {
+          await lutron.setSpectrumWhite(lut.integrationId, level, kelvin);
+        }
         return;
       }
       const gaMap = device.ga;

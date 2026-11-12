@@ -403,9 +403,8 @@ export function buildSpectrum(
   };
 }
 
-/** Tunable white op dezelfde processor. Kelvin typisch 2700–6500. */
+/** Tunable white op een zone die alleen wit kan. Kelvin typisch 2700–6500. */
 export function buildWhite(zoneId: number, level: number, kelvin: number): object {
-  const k = Math.max(1000, Math.min(25000, Math.round(kelvin)));
   return {
     CommuniqueType: "CreateRequest",
     Header: { Url: `/zone/${zoneId}/commandprocessor` },
@@ -414,13 +413,37 @@ export function buildWhite(zoneId: number, level: number, kelvin: number): objec
         CommandType: "GoToWhiteTuningLevel",
         WhiteTuningLevelParameters: {
           Level: clampPercent(level),
+          WhiteTuningLevel: { Kelvin: kelvinOf(kelvin) }
+        }
+      }
+    }
+  };
+}
+
+/**
+ * Kleurtemperatuur op een SpectrumTune-zone. GoToWhiteTuningLevel laat die
+ * zone in de laatste HSV-kleur staan.
+ */
+export function buildSpectrumWhite(zoneId: number, level: number, kelvin: number): object {
+  return {
+    CommuniqueType: "CreateRequest",
+    Header: { Url: `/zone/${zoneId}/commandprocessor` },
+    Body: {
+      Command: {
+        CommandType: "GoToSpectrumTuningLevel",
+        SpectrumTuningLevelParameters: {
+          Level: clampPercent(level),
           ColorTuningStatus: {
-            WhiteTuningLevel: { Kelvin: k }
+            WhiteTuningLevel: { Kelvin: kelvinOf(kelvin) }
           }
         }
       }
     }
   };
+}
+
+function kelvinOf(kelvin: number): number {
+  return Math.max(1000, Math.min(25000, Math.round(kelvin)));
 }
 
 function clampPercent(n: number): number {

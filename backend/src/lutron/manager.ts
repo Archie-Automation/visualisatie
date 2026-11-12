@@ -144,6 +144,15 @@ export class LutronIntegrationManager {
     this.rememberZone({ id: zoneId, level, kelvin });
   }
 
+  /** SpectrumTune blijft anders op de laatste kleur, bijvoorbeeld groen. */
+  async setSpectrumWhite(zoneId: number, level: number, kelvin: number): Promise<void> {
+    if (!this.leap) {
+      throw new Error("HomeWorks QSX is nog niet gekoppeld. Tik op Koppelen en druk daarna de processorknop in.");
+    }
+    await this.leap.setSpectrumWhite(zoneId, level, kelvin);
+    this.rememberZone({ id: zoneId, level, kelvin });
+  }
+
   zoneSnapshot(): LeapZoneLive[] {
     return [...this.zones.values()];
   }

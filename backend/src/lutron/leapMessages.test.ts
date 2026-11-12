@@ -5,6 +5,7 @@ import {
   buildPairRequest,
   buildPingResponse,
   buildSpectrum,
+  buildSpectrumWhite,
   buildWhite,
   encodeLeap,
   isLeapTransportPort,
@@ -59,10 +60,24 @@ describe("LEAP-berichten", () => {
       Saturation: 75
     });
     const white = buildWhite(30, 40, 2700) as {
-      Body: { Command: { CommandType: string; WhiteTuningLevelParameters: { Level: number; ColorTuningStatus: { WhiteTuningLevel: { Kelvin: number } } } } };
+      Body: { Command: { CommandType: string; WhiteTuningLevelParameters: { Level: number; WhiteTuningLevel: { Kelvin: number } } } };
     };
     assert.equal(white.Body.Command.CommandType, "GoToWhiteTuningLevel");
-    assert.equal(white.Body.Command.WhiteTuningLevelParameters.ColorTuningStatus.WhiteTuningLevel.Kelvin, 2700);
+    assert.equal(white.Body.Command.WhiteTuningLevelParameters.WhiteTuningLevel.Kelvin, 2700);
+    const spectrumWhite = buildSpectrumWhite(30, 55, 4000) as {
+      Body: {
+        Command: {
+          CommandType: string;
+          SpectrumTuningLevelParameters: { Level: number; ColorTuningStatus: { WhiteTuningLevel: { Kelvin: number } } };
+        };
+      };
+    };
+    assert.equal(spectrumWhite.Body.Command.CommandType, "GoToSpectrumTuningLevel");
+    assert.equal(spectrumWhite.Body.Command.SpectrumTuningLevelParameters.Level, 55);
+    assert.equal(
+      spectrumWhite.Body.Command.SpectrumTuningLevelParameters.ColorTuningStatus.WhiteTuningLevel.Kelvin,
+      4000
+    );
   });
 
   it("leest een keypad-druk als actie 3", () => {

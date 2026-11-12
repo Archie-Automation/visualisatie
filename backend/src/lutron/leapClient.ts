@@ -15,6 +15,7 @@ import {
   buildPingResponse,
   buildReadRequest,
   buildSpectrum,
+  buildSpectrumWhite,
   buildSubscribeRequest,
   buildWhite,
   buildZoneCommand,
@@ -221,6 +222,14 @@ export class LutronLeapSession {
 
   async setWhite(zoneId: number, level: number, kelvin: number): Promise<void> {
     await this.request(buildWhite(zoneId, level, kelvin), `/zone/${zoneId}/commandprocessor`);
+  }
+
+  /** Kleurtemperatuur op een zone die ook kleur kan. */
+  async setSpectrumWhite(zoneId: number, level: number, kelvin: number): Promise<void> {
+    await this.request(
+      buildSpectrumWhite(zoneId, level, kelvin),
+      `/zone/${zoneId}/commandprocessor`
+    );
   }
 
   async listZones(): Promise<LeapZone[]> {
