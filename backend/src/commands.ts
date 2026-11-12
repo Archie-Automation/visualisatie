@@ -322,7 +322,7 @@ export async function dispatch(
       const lut = resolveLutronLoadOutput(device);
       if (lut) {
         if (!lutron) throw new Error("Lutron-integratie niet beschikbaar");
-        lutron.setHomeworksOutputLevel(lut, cmd.on ? 100 : 0);
+        await lutron.setHomeworksOutputLevel(lut, cmd.on ? 100 : 0);
         return;
       }
       const switchGa = (device.ga as any).switch ?? (device.ga as any).on;
@@ -338,7 +338,7 @@ export async function dispatch(
         if (lut.loadType === "shade") {
           throw new Error("Lutron-shade: gebruik zonwering-bediening, geen dimmer");
         }
-        lutron.setHomeworksOutputLevel(lut, cmd.percent);
+        await lutron.setHomeworksOutputLevel(lut, cmd.percent);
         return;
       }
       if (cmd.percent > 0) {
@@ -427,9 +427,9 @@ export async function dispatch(
         if (lut.loadType !== "shade") {
           throw new Error("Lutron-load voor zonwering moet loadType \"shade\" hebben");
         }
-        if (cmd.direction === "stop") lutron.shadeHomeworksStop(lut);
-        else if (cmd.direction === "up") lutron.shadeHomeworksRaise(lut);
-        else lutron.shadeHomeworksLower(lut);
+        if (cmd.direction === "stop") await lutron.shadeHomeworksStop(lut);
+        else if (cmd.direction === "up") await lutron.shadeHomeworksRaise(lut);
+        else await lutron.shadeHomeworksLower(lut);
         return;
       }
       if (cmd.direction === "stop") {
@@ -449,7 +449,7 @@ export async function dispatch(
         if (lut.loadType !== "shade") {
           throw new Error("Lutron-load voor zonwering moet loadType \"shade\" hebben");
         }
-        lutron.setHomeworksOutputLevel(lut, cmd.percent);
+        await lutron.setHomeworksOutputLevel(lut, cmd.percent);
         return;
       }
       if (!device.ga.position) throw new Error("no position GA");
@@ -474,7 +474,7 @@ export async function dispatch(
             "Lutron-shade: stel lutronSlatIntegrationId in voor lamelbesturing"
           );
         }
-        lutron.shadeHomeworksSetSlats(lut, slatId, cmd.percent);
+        await lutron.shadeHomeworksSetSlats(lut, slatId, cmd.percent);
         return;
       }
       if (!device.ga.slat) throw new Error("no slat GA");

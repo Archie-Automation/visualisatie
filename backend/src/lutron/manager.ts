@@ -1,5 +1,5 @@
 import net from "node:net";
-import { getConfig, walkDevices } from "../config";
+import { getConfig, updateConfig, walkDevices } from "../config";
 import { logger } from "../logger";
 import type { KnxBus } from "../knxBus";
 import type {
@@ -16,6 +16,8 @@ import {
   buildOutputSetLevel,
   buildOutputStop
 } from "./outputCommands";
+import { LutronLeapSession, pairWithProcessor } from "./leapClient";
+import { isLeapTransportPort, type LeapZone } from "./leapMessages";
 import { HOUSE_LUTRON_SLOT_ID } from "./resolve";
 
 export type LutronClientStatus = {
@@ -53,8 +55,18 @@ const DEVICE_LINE =
 
 const DEBOUNCE_MS = 450;
 
+export type LutronLeapStatus = {
+  paired: boolean;
+  connected: boolean;
+  host: string;
+  port: number;
+  lastError?: string;
+};
+
 export class LutronIntegrationManager {
   private slots: Slot[] = [];
+  private leap: LutronLeapSession | null = null;
+  private leapHost = "";
   private readonly bus: KnxBus;
 
   constructor(bus: KnxBus) {
@@ -77,14 +89,69 @@ export class LutronIntegrationManager {
     });
   }
 
+  getLeapStatus(): LutronLeapStatus {
+    const paired = this.leap != null;
+    return {
+      paired,
+      connected: this.leap?.connected ?? false,
+      host: this.leapHost,
+      port: 8081,
+      lastError: this.leap?.lastError
+    };
+  }
+
+  /** IP uit de installateur, ook als telnet op 8902 staat en dus niet verbindt. */
+  configuredHost(cfg: HouseConfig = getConfig()): string {
+    const hl = cfg.lutron;
+    return (hl?.telnet?.host ?? hl?.bridgeHost ?? "").trim();
+  }
+
+  async pairProcessor(): Promise<void> {
+    const host = this.configuredHost();
+    if (!host) throw new Error("Vul het IP-adres van de QSX in en sla op.");
+    const secrets = await pairWithProcessor(host);
+    updateConfig((draft) => {
+      draft.lutron = draft.lutron ?? {};
+      draft.lutron.leap = secrets;
+    });
+    this.rebuild(getConfig());
+  }
+
+  listZones(): Promise<LeapZone[]> {
+    if (!this.leap) {
+      return Promise.reject(
+        new Error("HomeWorks QSX is nog niet gekoppeld. Houd de knop op de processor ingedrukt en tik op Koppelen.")
+      );
+    }
+    return this.leap.listZones();
+  }
+
   rebuild(cfg: HouseConfig): void {
+    this.leap?.stop();
+    this.leap = null;
     this.stopAll();
 
     const hl = cfg.lutron;
+    this.leapHost = this.configuredHost(cfg);
+    const leap = hl?.leap;
+    if (
+      this.leapHost &&
+      leap?.privateKey?.includes("PRIVATE KEY") &&
+      leap.certificate?.includes("BEGIN CERTIFICATE")
+    ) {
+      this.leap = new LutronLeapSession(this.leapHost, {
+        paired: true,
+        certificate: leap.certificate,
+        privateKey: leap.privateKey,
+        rootCertificate: leap.rootCertificate ?? ""
+      });
+      this.leap.start();
+    }
+
     if (hl) {
       const tel = hl.telnet;
       const host = (tel?.host ?? hl.bridgeHost ?? "").trim();
-      if (tel?.enabled && host) {
+      if (tel?.enabled && host && !isLeapTransportPort(tel.port)) {
         this.slots.push(this.emptySlot({
           slotId: HOUSE_LUTRON_SLOT_ID,
           displayName: "Lutron QSX/QS Processor",
@@ -100,7 +167,7 @@ export class LutronIntegrationManager {
       const lh = d.lutronHomeworks;
       const tel = lh.telnet;
       const host = (tel?.host ?? lh.bridgeHost ?? "").trim();
-      if (!tel?.enabled || !host) return;
+      if (!tel?.enabled || !host || isLeapTransportPort(tel.port)) return;
       if (this.slots.some((s) => s.slotId === d.id)) return;
       this.slots.push(
         this.emptySlot({
@@ -349,7 +416,12 @@ export class LutronIntegrationManager {
     logger.info({ slot: s.slotId, line: line.slice(0, 160) }, "Lutron telnet commando");
   }
 
-  setHomeworksOutputLevel(binding: LutronLoadOutputBinding, percent: number): void {
+  async setHomeworksOutputLevel(binding: LutronLoadOutputBinding, percent: number): Promise<void> {
+    if (this.leap) {
+      await this.leap.setLevel(binding.integrationId, percent, binding.fadeSeconds);
+      return;
+    }
+    this.assertTelnetPath();
     const s = this.pickSlot(binding);
     this.sendLine(
       s,
@@ -357,35 +429,65 @@ export class LutronIntegrationManager {
     );
   }
 
-  shadeHomeworksRaise(binding: LutronLoadOutputBinding): void {
+  async shadeHomeworksRaise(binding: LutronLoadOutputBinding): Promise<void> {
     if (binding.loadType !== "shade") throw new Error("Lutron-load is geen shade");
+    if (this.leap) {
+      await this.leap.zoneCommand(binding.integrationId, "Raise");
+      return;
+    }
+    this.assertTelnetPath();
     this.sendLine(this.pickSlot(binding), buildOutputRaise(binding.integrationId));
   }
 
-  shadeHomeworksLower(binding: LutronLoadOutputBinding): void {
+  async shadeHomeworksLower(binding: LutronLoadOutputBinding): Promise<void> {
     if (binding.loadType !== "shade") throw new Error("Lutron-load is geen shade");
+    if (this.leap) {
+      await this.leap.zoneCommand(binding.integrationId, "Lower");
+      return;
+    }
+    this.assertTelnetPath();
     this.sendLine(this.pickSlot(binding), buildOutputLower(binding.integrationId));
   }
 
-  shadeHomeworksStop(binding: LutronLoadOutputBinding): void {
+  async shadeHomeworksStop(binding: LutronLoadOutputBinding): Promise<void> {
     if (binding.loadType !== "shade") throw new Error("Lutron-load is geen shade");
+    if (this.leap) {
+      await this.leap.zoneCommand(binding.integrationId, "Stop");
+      return;
+    }
+    this.assertTelnetPath();
     this.sendLine(this.pickSlot(binding), buildOutputStop(binding.integrationId));
   }
 
   /** Stel lamelhoek (tilt) in via een apart Lutron output integration ID. */
-  shadeHomeworksSetSlats(
+  async shadeHomeworksSetSlats(
     binding: LutronLoadOutputBinding,
     slatIntegrationId: number,
     percent: number
-  ): void {
+  ): Promise<void> {
     const slatBinding: LutronLoadOutputBinding = {
       ...binding,
       integrationId: slatIntegrationId,
       loadType: "shade"
     };
+    if (this.leap) {
+      await this.leap.setLevel(slatIntegrationId, percent, binding.fadeSeconds);
+      return;
+    }
+    this.assertTelnetPath();
     this.sendLine(
       this.pickSlot(slatBinding),
       buildOutputSetLevel(slatIntegrationId, percent, binding.fadeSeconds, 0)
     );
+  }
+
+  /** Telnet op 8902 lijkt verbonden maar de QSX voert #OUTPUT daar niet uit. */
+  private assertTelnetPath(): void {
+    const port = getConfig().lutron?.telnet?.port;
+    if (isLeapTransportPort(port)) {
+      throw new Error(
+        "HomeWorks QSX praat niet via telnet op deze poort. Houd de knop op de processor ingedrukt en tik op Koppelen."
+      );
+    }
   }
 }

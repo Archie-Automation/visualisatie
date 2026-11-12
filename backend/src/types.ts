@@ -1303,11 +1303,24 @@ export interface LutronButtonToKnxMapping {
   knx: LutronKnxBinding;
 }
 
+/**
+ * Certificaat van een gekoppelde HomeWorks QSX / RadioRA 3 (LEAP, poort 8081).
+ * `privateKey` blijft op de server; de app krijgt alleen `paired`.
+ */
+export interface LutronLeapConfig {
+  paired?: boolean;
+  certificate?: string;
+  privateKey?: string;
+  rootCertificate?: string;
+}
+
 /** Centrale Lutron Homeworks-koppeling (technische configuratie, zoals `knx`). */
 export interface HouseLutronConfig {
   /** Legacy: gebruikt als `telnet.host` ontbreekt. */
   bridgeHost?: string;
   telnet?: LutronTelnetConfig;
+  /** HomeWorks QSX: LEAP na eenmalig koppelen. Vervangt telnet op poort 23/8902. */
+  leap?: LutronLeapConfig;
   /** Keypad `~DEVICE` → KNX (optioneel). */
   buttonToKnx?: LutronButtonToKnxMapping[];
 }

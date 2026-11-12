@@ -61,6 +61,16 @@
             }
           }
         },
+        "leap": {
+          "type": "object",
+          "description": "HomeWorks QSX LEAP-certificaat. privateKey verlaat de server niet.",
+          "properties": {
+            "paired": { "type": "boolean" },
+            "certificate": { "type": "string" },
+            "privateKey": { "type": "string" },
+            "rootCertificate": { "type": "string" }
+          }
+        },
         "buttonToKnx": {
           "type": "array",
           "maxItems": 128,

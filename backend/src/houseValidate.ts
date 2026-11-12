@@ -430,6 +430,22 @@ const LUTRON_KNX_ROLES = new Set([
   "position"
 ]);
 
+function mergeLeapSecrets(incoming: HouseConfig, previous: HouseConfig): void {
+  const prev = previous.lutron?.leap;
+  if (!prev?.privateKey?.includes("PRIVATE KEY") || !prev.certificate?.includes("BEGIN CERTIFICATE")) {
+    return;
+  }
+  if (!incoming.lutron) return;
+  const next = incoming.lutron.leap;
+  if (next?.privateKey?.includes("PRIVATE KEY")) return;
+  incoming.lutron.leap = {
+    paired: true,
+    certificate: prev.certificate,
+    privateKey: prev.privateKey,
+    rootCertificate: prev.rootCertificate
+  };
+}
+
 function mergeTelnetPassword(
   tel: { password?: string } | undefined,
   prevPw: string | undefined
@@ -442,9 +458,10 @@ function mergeTelnetPassword(
   }
 }
 
-/** Telnet-wachtwoord behouden als de installateur het veld leeg laat (zoals intercom). */
+/** Telnet-wachtwoord en QSX-certificaat behouden als de app ze leeg terugstuurt. */
 export function mergeLutronTelnetPasswords(incoming: HouseConfig, previous: HouseConfig): void {
   mergeTelnetPassword(incoming.lutron?.telnet, previous.lutron?.telnet?.password);
+  mergeLeapSecrets(incoming, previous);
 
   const prevById = new Map<string, LutronHomeworksDevice>();
   walkDevices(previous, (d) => {
@@ -529,7 +546,12 @@ export function validateLutronLoadOutputSemantics(cfg: HouseConfig): string[] {
   });
 
   const houseHost = (cfg.lutron?.telnet?.host ?? cfg.lutron?.bridgeHost ?? "").trim();
-  const houseEnabled = cfg.lutron?.telnet?.enabled === true && houseHost.length > 0;
+  const leapPaired = Boolean(
+    cfg.lutron?.leap?.privateKey?.includes("PRIVATE KEY") &&
+      cfg.lutron?.leap?.certificate?.includes("BEGIN CERTIFICATE")
+  );
+  const houseEnabled =
+    leapPaired || (cfg.lutron?.telnet?.enabled === true && houseHost.length > 0);
 
   walkDevices(cfg, (d) => {
     if (d.type !== "light_switch" && d.type !== "light_dimmer" && d.type !== "shading") return;

@@ -1000,6 +1000,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     }
   }
 
+  Future<void> _addDeviceFromPicker(int fi, int ri) async {
+    final pick = await showPickDeviceTypeSheet(context);
+    if (!mounted) return;
+    if (pick != null) _addDevice(fi, ri, pick);
+  }
+
   void _addRoom(int fi) {
     final rooms = _roomList(fi);
     rooms.add({
@@ -1029,6 +1035,32 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           : null,
       icon: const Icon(Icons.delete_outline),
       onPressed: onPressed,
+    );
+  }
+
+  /// Plus in de kolom van het prullenbakje. Zelfde breedte, zodat het icoon
+  /// er recht onder valt. [rounded] volgt de extra zij-inset van [LuxeNavRow].
+  Widget _plusUnderTrash({
+    required String tooltip,
+    required VoidCallback onPressed,
+    bool compact = false,
+    bool rounded = false,
+  }) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Padding(
+        padding: EdgeInsets.only(right: rounded ? 18 : 12),
+        child: IconButton(
+          tooltip: tooltip,
+          visualDensity: compact ? VisualDensity.compact : null,
+          padding: compact ? EdgeInsets.zero : null,
+          constraints: compact
+              ? const BoxConstraints(minWidth: 36, minHeight: 36)
+              : null,
+          icon: Icon(Icons.add_rounded, color: LuxeColors.brassDeep),
+          onPressed: onPressed,
+        ),
+      ),
     );
   }
 
@@ -3372,19 +3404,29 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       icon: Icons.layers_outlined,
       emptyText: visible.isEmpty ? _emptyFloorLabel() : null,
       children: [
-        for (final i in visible)
-          _floorDropRow(
-            fi: i,
-            selected: _sel.fi == i &&
-                (_sel.kind == _FocusKind.floor ||
-                    _sel.kind == _FocusKind.room ||
-                    _sel.kind == _FocusKind.device),
-          ),
+        if (visible.isEmpty)
+          _plusUnderTrash(
+            tooltip: 'Verdieping toevoegen',
+            onPressed: _addFloor,
+            rounded: true,
+          )
+        else
+          for (final i in visible) ...[
+            _floorDropRow(
+              fi: i,
+              selected: _sel.fi == i &&
+                  (_sel.kind == _FocusKind.floor ||
+                      _sel.kind == _FocusKind.room ||
+                      _sel.kind == _FocusKind.device),
+            ),
+            if (i == visible.first)
+              _plusUnderTrash(
+                tooltip: 'Verdieping toevoegen',
+                onPressed: _addFloor,
+                rounded: true,
+              ),
+          ],
       ],
-      footer: LuxeAddRow(
-        label: 'Verdieping toevoegen',
-        onTap: _addFloor,
-      ),
     );
   }
 
@@ -3410,20 +3452,32 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       icon: Icons.meeting_room_outlined,
       emptyText: rooms.isEmpty ? 'Nog geen kamer' : null,
       children: [
-        for (var ri = 0; ri < rooms.length; ri++)
-          _roomDropRow(
-            fi: fi,
-            ri: ri,
+        if (rooms.isEmpty)
+          _plusUnderTrash(
+            tooltip: 'Kamer toevoegen',
+            onPressed: () => _addRoom(fi),
+            compact: true,
             rounded: true,
-            selected: _sel.ri == ri &&
-                (_sel.kind == _FocusKind.room ||
-                    _sel.kind == _FocusKind.device),
-          ),
+          )
+        else
+          for (var ri = 0; ri < rooms.length; ri++) ...[
+            _roomDropRow(
+              fi: fi,
+              ri: ri,
+              rounded: true,
+              selected: _sel.ri == ri &&
+                  (_sel.kind == _FocusKind.room ||
+                      _sel.kind == _FocusKind.device),
+            ),
+            if (ri == 0)
+              _plusUnderTrash(
+                tooltip: 'Kamer toevoegen',
+                onPressed: () => _addRoom(fi),
+                compact: true,
+                rounded: true,
+              ),
+          ],
       ],
-      footer: LuxeAddRow(
-        label: 'Kamer toevoegen',
-        onTap: () => _addRoom(fi),
-      ),
     );
   }
 
@@ -3449,24 +3503,32 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       trailing: _roomPasteButton(fi, ri),
       emptyText: devices.isEmpty ? 'Nog geen apparaat' : null,
       children: [
-        for (var di = 0; di < devices.length; di++)
-          _deviceDragRow(
-            fi: fi,
-            ri: ri,
-            di: di,
-            device: devices[di],
+        if (devices.isEmpty)
+          _plusUnderTrash(
+            tooltip: 'Apparaat toevoegen',
+            onPressed: () => _addDeviceFromPicker(fi, ri),
+            compact: true,
             rounded: true,
-            selected: _sel.kind == _FocusKind.device && _sel.di == di,
-          ),
+          )
+        else
+          for (var di = 0; di < devices.length; di++) ...[
+            _deviceDragRow(
+              fi: fi,
+              ri: ri,
+              di: di,
+              device: devices[di],
+              rounded: true,
+              selected: _sel.kind == _FocusKind.device && _sel.di == di,
+            ),
+            if (di == 0)
+              _plusUnderTrash(
+                tooltip: 'Apparaat toevoegen',
+                onPressed: () => _addDeviceFromPicker(fi, ri),
+                compact: true,
+                rounded: true,
+              ),
+          ],
       ],
-      footer: LuxeAddRow(
-        label: 'Apparaat toevoegen',
-        onTap: () async {
-          final pick = await showPickDeviceTypeSheet(context);
-          if (!context.mounted) return;
-          if (pick != null) _addDevice(fi, ri, pick);
-        },
-      ),
     );
   }
 
@@ -3479,7 +3541,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   }
 
   Widget _topologyBuildingsColumn(BuildContext context) {
-    final buildings = _buildingsSorted();
+    final buildings = [
+      for (final b in _buildingsSorted())
+        if ((b['id'] as String?)?.isNotEmpty == true) b,
+    ];
     final active = _activeVizBuildingId;
     return _millerColumn(
       context: context,
@@ -3487,30 +3552,39 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       icon: Icons.home_work_outlined,
       emptyText: buildings.isEmpty ? 'Nog geen gebouw' : null,
       children: [
-        for (final b in buildings)
-          if ((b['id'] as String?)?.isNotEmpty == true)
+        if (buildings.isEmpty)
+          _plusUnderTrash(
+            tooltip: 'Gebouw toevoegen',
+            onPressed: _addBuilding,
+            rounded: true,
+          )
+        else
+          for (var i = 0; i < buildings.length; i++) ...[
             LuxeNavRow(
               icon: Icons.home_work_outlined,
-              title: _namedOr(b, 'Gebouw'),
-              selected: b['id'] == active,
+              title: _namedOr(buildings[i], 'Gebouw'),
+              selected: buildings[i]['id'] == active,
               rounded: true,
               trailing: _rowTrash(
                 tooltip: 'Gebouw verwijderen',
                 onPressed: () {
-                  _setVizBuilding(b['id'] as String);
+                  _setVizBuilding(buildings[i]['id'] as String);
                   _confirmDeleteActiveBuilding();
                 },
               ),
               onTap: () {
-                _setVizBuilding(b['id'] as String);
+                _setVizBuilding(buildings[i]['id'] as String);
                 _selectFocus(const _Focus.buildings());
               },
             ),
+            if (i == 0)
+              _plusUnderTrash(
+                tooltip: 'Gebouw toevoegen',
+                onPressed: _addBuilding,
+                rounded: true,
+              ),
+          ],
       ],
-      footer: LuxeAddRow(
-        label: 'Gebouw toevoegen',
-        onTap: _addBuilding,
-      ),
     );
   }
 
@@ -3535,25 +3609,35 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       icon: Icons.layers_outlined,
       emptyText: visible.isEmpty ? _emptyFloorLabel() : null,
       children: [
-        for (final fi in visible)
-          LuxeNavRow(
-            icon: Icons.layers_outlined,
-            title: _namedOr(floors[fi], 'Verdieping'),
-            subtitle: _countLabel(_roomList(fi).length, 'kamer', 'kamers'),
-            selectedTextMatchesIcon: true,
-            selected: _sel.kind == _FocusKind.buildings && _sel.fi == fi,
+        if (visible.isEmpty)
+          _plusUnderTrash(
+            tooltip: 'Verdieping toevoegen',
+            onPressed: _addFloor,
             rounded: true,
-            trailing: _rowTrash(
-              tooltip: 'Verdieping verwijderen',
-              onPressed: () => _deleteFloorAt(fi),
+          )
+        else
+          for (final fi in visible) ...[
+            LuxeNavRow(
+              icon: Icons.layers_outlined,
+              title: _namedOr(floors[fi], 'Verdieping'),
+              subtitle: _countLabel(_roomList(fi).length, 'kamer', 'kamers'),
+              selectedTextMatchesIcon: true,
+              selected: _sel.kind == _FocusKind.buildings && _sel.fi == fi,
+              rounded: true,
+              trailing: _rowTrash(
+                tooltip: 'Verdieping verwijderen',
+                onPressed: () => _deleteFloorAt(fi),
+              ),
+              onTap: () => _selectFocus(_Focus.buildings(fi: fi)),
             ),
-            onTap: () => _selectFocus(_Focus.buildings(fi: fi)),
-          ),
+            if (fi == visible.first)
+              _plusUnderTrash(
+                tooltip: 'Verdieping toevoegen',
+                onPressed: _addFloor,
+                rounded: true,
+              ),
+          ],
       ],
-      footer: LuxeAddRow(
-        label: 'Verdieping toevoegen',
-        onTap: _addFloor,
-      ),
     );
   }
 
@@ -3576,25 +3660,37 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       icon: Icons.meeting_room_outlined,
       emptyText: rooms.isEmpty ? 'Nog geen kamer' : null,
       children: [
-        for (var ri = 0; ri < rooms.length; ri++)
-          LuxeNavRow(
-            icon: Icons.meeting_room_outlined,
-            title: _namedOr(rooms[ri], 'Kamer'),
-            selectedTextMatchesIcon: true,
-            selected: _sel.fi == fi && _sel.ri == ri,
+        if (rooms.isEmpty)
+          _plusUnderTrash(
+            tooltip: 'Kamer toevoegen',
+            onPressed: () => _addRoom(fi),
+            compact: true,
             rounded: true,
-            trailing: _rowTrash(
-              tooltip: 'Kamer verwijderen',
-              compact: true,
-              onPressed: () => _deleteRoomAt(fi, ri),
+          )
+        else
+          for (var ri = 0; ri < rooms.length; ri++) ...[
+            LuxeNavRow(
+              icon: Icons.meeting_room_outlined,
+              title: _namedOr(rooms[ri], 'Kamer'),
+              selectedTextMatchesIcon: true,
+              selected: _sel.fi == fi && _sel.ri == ri,
+              rounded: true,
+              trailing: _rowTrash(
+                tooltip: 'Kamer verwijderen',
+                compact: true,
+                onPressed: () => _deleteRoomAt(fi, ri),
+              ),
+              onTap: () => _selectFocus(_Focus.buildings(fi: fi, ri: ri)),
             ),
-            onTap: () => _selectFocus(_Focus.buildings(fi: fi, ri: ri)),
-          ),
+            if (ri == 0)
+              _plusUnderTrash(
+                tooltip: 'Kamer toevoegen',
+                onPressed: () => _addRoom(fi),
+                compact: true,
+                rounded: true,
+              ),
+          ],
       ],
-      footer: LuxeAddRow(
-        label: 'Kamer toevoegen',
-        onTap: () => _addRoom(fi),
-      ),
     );
   }
 
@@ -3692,7 +3788,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       for (var i = 0; i < floors.length; i++)
         if (_onActiveBuilding(floors[i])) i,
     ];
-    final buildings = _buildingsSorted();
+    final buildings = [
+      for (final b in _buildingsSorted())
+        if ((b['id'] as String?)?.isNotEmpty == true) b,
+    ];
     final active = _activeVizBuildingId;
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
@@ -3701,28 +3800,42 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           padding: EdgeInsets.zero,
           child: Column(
             children: [
-              for (final b in buildings)
-                if ((b['id'] as String?)?.isNotEmpty == true)
+              if (buildings.isEmpty)
+                _plusUnderTrash(
+                  tooltip: 'Gebouw toevoegen',
+                  onPressed: _addBuilding,
+                )
+              else
+                for (var i = 0; i < buildings.length; i++) ...[
                   LuxeNavRow(
                     icon: Icons.home_work_outlined,
-                    title: _namedOr(b, 'Gebouw'),
-                    selected: b['id'] == active,
+                    title: _namedOr(buildings[i], 'Gebouw'),
+                    selected: buildings[i]['id'] == active,
+                    trailing: _rowTrash(
+                      tooltip: 'Gebouw verwijderen',
+                      onPressed: () {
+                        _setVizBuilding(buildings[i]['id'] as String);
+                        _confirmDeleteActiveBuilding();
+                      },
+                    ),
                     onTap: () {
-                      _setVizBuilding(b['id'] as String);
+                      _setVizBuilding(buildings[i]['id'] as String);
                       _selectFocus(const _Focus.buildings());
                     },
                   ),
-              LuxeAddRow(
-                label: 'Gebouw toevoegen',
-                onTap: _addBuilding,
-              ),
+                  if (i == 0)
+                    _plusUnderTrash(
+                      tooltip: 'Gebouw toevoegen',
+                      onPressed: _addBuilding,
+                    ),
+                ],
             ],
           ),
         ),
         const SizedBox(height: 16),
         _buildingSettingsCard(),
         const SizedBox(height: 16),
-        if (visible.isEmpty)
+        if (visible.isEmpty) ...[
           Padding(
             padding: const EdgeInsets.fromLTRB(22, 0, 22, 12),
             child: Text(
@@ -3732,17 +3845,18 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   ),
             ),
           ),
+          Padding(
+            padding: const EdgeInsets.only(right: 22),
+            child: _plusUnderTrash(
+              tooltip: 'Verdieping toevoegen',
+              onPressed: _addFloor,
+            ),
+          ),
+        ],
         for (final fi in visible) ...[
-          _floorStructureCard(fi),
+          _floorStructureCard(fi, addFloor: fi == visible.first),
           const SizedBox(height: 12),
         ],
-        LuxeListCard(
-          padding: EdgeInsets.zero,
-          child: LuxeAddRow(
-            label: 'Verdieping toevoegen',
-            onTap: _addFloor,
-          ),
-        ),
       ],
     );
   }
@@ -3772,7 +3886,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   ),
                 ),
               ),
-              if (visible.isEmpty)
+              if (visible.isEmpty) ...[
                 Padding(
                   padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
                   child: Text(
@@ -3780,6 +3894,11 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
+                _plusUnderTrash(
+                  tooltip: 'Verdieping toevoegen',
+                  onPressed: _addFloor,
+                ),
+              ],
               for (final i in visible) ...[
                 if (i != visible.first)
                   Divider(height: 1, color: LuxeColors.lineSoft),
@@ -3795,13 +3914,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   ),
                   onTap: () => _selectFocus(_Focus.floor(i)),
                 ),
+                if (i == visible.first)
+                  _plusUnderTrash(
+                    tooltip: 'Verdieping toevoegen',
+                    onPressed: _addFloor,
+                  ),
               ],
-              if (visible.isNotEmpty)
-                Divider(height: 1, color: LuxeColors.lineSoft),
-              LuxeAddRow(
-                label: 'Verdieping toevoegen',
-                onTap: _addFloor,
-              ),
             ],
           ),
         ),
@@ -3809,7 +3927,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     );
   }
 
-  Widget _floorStructureCard(int fi) {
+  Widget _floorStructureCard(int fi, {bool addFloor = false}) {
     final floor = _floors()[fi];
     final rooms = _roomList(fi);
     final floorSelected =
@@ -3831,6 +3949,11 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             ),
             onTap: () => _selectFocus(_Focus.buildings(fi: fi)),
           ),
+          if (addFloor)
+            _plusUnderTrash(
+              tooltip: 'Verdieping toevoegen',
+              onPressed: _addFloor,
+            ),
           if (floorSelected)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
@@ -3859,6 +3982,11 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                 ],
               ),
             ),
+          if (rooms.isEmpty)
+            _plusUnderTrash(
+              tooltip: 'Kamer toevoegen',
+              onPressed: () => _addRoom(fi),
+            ),
           for (var ri = 0; ri < rooms.length; ri++) ...[
             Divider(height: 1, color: LuxeColors.lineSoft),
             Padding(
@@ -3869,9 +3997,18 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                 selected: _sel.kind == _FocusKind.buildings &&
                     _sel.fi == fi &&
                     _sel.ri == ri,
+                trailing: _rowTrash(
+                  tooltip: 'Kamer verwijderen',
+                  onPressed: () => _deleteRoomAt(fi, ri),
+                ),
                 onTap: () => _selectFocus(_Focus.buildings(fi: fi, ri: ri)),
               ),
             ),
+            if (ri == 0)
+              _plusUnderTrash(
+                tooltip: 'Kamer toevoegen',
+                onPressed: () => _addRoom(fi),
+              ),
             if (_sel.kind == _FocusKind.buildings &&
                 _sel.fi == fi &&
                 _sel.ri == ri)
@@ -3885,14 +4022,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                 ),
               ),
           ],
-          Divider(height: 1, color: LuxeColors.lineSoft),
-          Padding(
-            padding: const EdgeInsets.only(left: 12),
-            child: LuxeAddRow(
-              label: 'Kamer toevoegen',
-              onTap: () => _addRoom(fi),
-            ),
-          ),
         ],
       ),
     );
@@ -4160,7 +4289,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               trailing: _roomPasteButton(fi, ri),
             ),
           ),
-          if (devices.isEmpty)
+          if (devices.isEmpty) ...[
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
               child: Text(
@@ -4168,6 +4297,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
+            _plusUnderTrash(
+              tooltip: 'Apparaat toevoegen',
+              onPressed: () => _addDeviceFromPicker(fi, ri),
+              compact: true,
+            ),
+          ],
           for (var di = 0; di < devices.length; di++) ...[
             if (di > 0) Divider(height: 1, color: LuxeColors.lineSoft),
             _deviceDragRow(
@@ -4181,17 +4316,13 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   _sel.ri == ri &&
                   _sel.di == di,
             ),
+            if (di == 0)
+              _plusUnderTrash(
+                tooltip: 'Apparaat toevoegen',
+                onPressed: () => _addDeviceFromPicker(fi, ri),
+                compact: true,
+              ),
           ],
-          if (devices.isNotEmpty)
-            Divider(height: 1, color: LuxeColors.lineSoft),
-          LuxeAddRow(
-            label: 'Apparaat toevoegen',
-            onTap: () async {
-              final pick = await showPickDeviceTypeSheet(context);
-              if (!context.mounted) return;
-              if (pick != null) _addDevice(fi, ri, pick);
-            },
-          ),
         ],
       ),
     );
@@ -4295,7 +4426,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   title: 'Kamers',
                 ),
               ),
-              if (rooms.isEmpty)
+              if (rooms.isEmpty) ...[
                 Padding(
                   padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
                   child: Text(
@@ -4303,6 +4434,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                 ),
+                _plusUnderTrash(
+                  tooltip: 'Kamer toevoegen',
+                  onPressed: () => _addRoom(fi),
+                  compact: true,
+                ),
+              ],
               for (var ri = 0; ri < rooms.length; ri++) ...[
                 if (ri > 0) Divider(height: 1, color: LuxeColors.lineSoft),
                 _roomDropRow(
@@ -4313,13 +4450,13 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                       _sel.fi == fi &&
                       _sel.ri == ri,
                 ),
+                if (ri == 0)
+                  _plusUnderTrash(
+                    tooltip: 'Kamer toevoegen',
+                    onPressed: () => _addRoom(fi),
+                    compact: true,
+                  ),
               ],
-              if (rooms.isNotEmpty)
-                Divider(height: 1, color: LuxeColors.lineSoft),
-              LuxeAddRow(
-                label: 'Kamer toevoegen',
-                onTap: () => _addRoom(fi),
-              ),
             ],
           ),
         ),
@@ -4345,7 +4482,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     if (building == null) {
       return const LuxeListCard(
         child: Text(
-          'Nog geen gebouw. Voeg er hieronder een toe.',
+          'Nog geen gebouw.',
         ),
       );
     }
@@ -5590,6 +5727,10 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
   InstallerLutronStatus? _status;
   String? _statusErr;
   bool _reconnectBusy = false;
+  bool _pairBusy = false;
+  List<LutronZoneInfo> _zones = const [];
+  String? _zonesErr;
+  bool _zonesLoaded = false;
 
   @override
   void initState() {
@@ -5616,6 +5757,9 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
         _status = s;
         if (!silent) _statusErr = null;
       });
+      if (s.leap && s.connected && !_zonesLoaded) {
+        await _loadZones();
+      }
     } catch (e) {
       if (!mounted || silent) return;
       setState(() => _statusErr = '$e');
@@ -5649,6 +5793,82 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
     }
   }
 
+  Future<void> _loadZones() async {
+    final t = await widget.getToken();
+    if (!mounted || t == null) return;
+    try {
+      final zones = await fetchInstallerLutronZones(t);
+      if (!mounted) return;
+      setState(() {
+        _zones = zones;
+        _zonesErr = null;
+        _zonesLoaded = true;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _zonesErr = '$e'.replaceFirst('Bad state: ', '');
+        _zonesLoaded = true;
+      });
+    }
+  }
+
+  Future<void> _pair() async {
+    final messenger = ScaffoldMessenger.of(context);
+    final t = await widget.getToken();
+    if (!context.mounted || t == null) return;
+    setState(() => _pairBusy = true);
+    try {
+      final status = await postInstallerLutronPair(t);
+      if (!mounted) return;
+      setState(() => _status = status);
+      await _loadZones();
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('QSX gekoppeld.')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('$e'.replaceFirst('Bad state: ', '')),
+          backgroundColor: Colors.red.shade800,
+        ),
+      );
+      await _refreshStatus();
+    } finally {
+      if (mounted) setState(() => _pairBusy = false);
+    }
+  }
+
+  String _zoneLine(LutronZoneInfo z) {
+    final name = z.area.isEmpty ? z.name : '${z.area} · ${z.name}';
+    final kind = z.controlType.isEmpty ? '' : '  (${z.controlType})';
+    return '${z.id}  $name$kind';
+  }
+
+  String _statusLine() {
+    final status = _status;
+    if (status == null) return _statusErr ?? 'Status laden…';
+    if (status.leap) {
+      if (status.connected) return 'QSX verbonden met ${status.host}';
+      if (status.paired) {
+        return 'Gekoppeld, geen verbinding met ${status.host}';
+      }
+      return status.lastError ??
+          'Nog niet gekoppeld. Houd de knop op de processor ingedrukt en tik op Koppelen.';
+    }
+    if (status.connected) {
+      return status.loggedIn
+          ? 'Verbonden met ${status.host}:${status.port}'
+          : 'Verbonden, login… (${status.host})';
+    }
+    final where = status.host.isNotEmpty
+        ? '${status.host}:${status.port}'
+        : 'host nog niet geconfigureerd';
+    return 'Niet verbonden — $where';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -5669,10 +5889,10 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
                   children: [
                     Tooltip(
                       message: _status == null
-                          ? 'Status wordt geladen?'
+                          ? 'Status wordt geladen…'
                           : (_status!.connected && _status!.loggedIn
-                              ? 'Telnet verbonden'
-                              : 'Geen telnet-verbinding'),
+                              ? (_status!.leap ? 'QSX LEAP verbonden' : 'Telnet verbonden')
+                              : 'Geen verbinding'),
                       child: Icon(
                         Icons.circle,
                         size: 22,
@@ -5689,18 +5909,12 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Telnet-verbinding',
+                            _status?.leap == true ? 'HomeWorks QSX' : 'Telnet-verbinding',
                             style: Theme.of(context).textTheme.titleSmall,
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            _status == null
-                                ? (_statusErr ?? 'Status laden?')
-                                : _status!.connected
-                                    ? (_status!.loggedIn
-                                        ? 'Verbonden met ${_status!.host}:${_status!.port}'
-                                        : 'Verbonden, login? (${_status!.host})')
-                                    : 'Niet verbonden ? ${_status!.host.isNotEmpty ? "${_status!.host}:${_status!.port}" : "host nog niet geconfigureerd"}',
+                            _statusLine(),
                             style: Theme.of(context).textTheme.bodySmall,
                           ),
                         ],
@@ -5724,8 +5938,57 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
                   ],
                 ),
                 const SizedBox(height: 8),
+                Align(
+                    alignment: Alignment.centerLeft,
+                    child: FilledButton.icon(
+                      onPressed: _pairBusy ? null : _pair,
+                      icon: _pairBusy
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.link, size: 20),
+                      label: Text(_pairBusy
+                          ? 'Wachten op de knop…'
+                          : 'Koppelen'),
+                    ),
+                  ),
+                if (_zones.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Zone-id voor de lamp',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: 4),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 180),
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: [
+                        for (final z in _zones)
+                          Text(
+                            _zoneLine(z),
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                      ],
+                    ),
+                  ),
+                ] else if (_zonesErr != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    _zonesErr!,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                  ),
+                ],
+                const SizedBox(height: 8),
                 Text(
-                  'Zet telnet aan, vul IP-adres, username en password in. Bij lampen/zonwering kies je het zone-nummer uit het Lutron integration report.',
+                  'HomeWorks QSX: sla het IP op, houd de knop op de processor ingedrukt en tik op Koppelen. Poort 8902 is de Designer-poort en stuurt geen lamp aan. Het getal bij de lamp is de zone-id uit de lijst hierboven. Oudere QS gebruikt telnet op poort 23.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).hintColor,
                         fontSize: 11,
@@ -5773,9 +6036,9 @@ class _LutronForm extends StatelessWidget {
         Text('Lutron QSX/QS Processor', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
         Text(
-          'Centrale koppeling voor alle Lutron-gestuurde lampen en zonwering. '
-          'Vul het IP-adres van de QSX/QS processor in, username en password. '
-          'Integration ID?s vul je per apparaat in de kamer in.',
+          'HomeWorks QSX: IP-adres invullen, opslaan, dan koppelen met de knop '
+          'op de processor. Het zone-id van de lamp staat in de lijst na het koppelen. '
+          'Username en wachtwoord hieronder zijn alleen voor oudere QS op telnet-poort 23.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 20),
@@ -5796,7 +6059,7 @@ class _LutronForm extends StatelessWidget {
         ),
         _BoundStrField('port', telm, onChanged,
             number: true,
-            labelOverride: 'Poort (standaard 23, optioneel)'),
+            labelOverride: 'Poort (QS-telnet 23; QSX negeert 8902)'),
         _BoundStrField('bridgeHost', lutron, onChanged,
             labelOverride: 'bridgeHost (fallback)',
             hintText: 'Optioneel als host leeg is',
@@ -7521,8 +7784,9 @@ class _DeviceBusControlSection extends StatelessWidget {
             if (lutronOnly) const SizedBox(height: 8),
             const SizedBox(height: 16),
             Text(
-              'Lutron Zone-nummer (integration ID uit Lutron-software / integration report). '
-              'Telnet staat onder Lutron QSX/QS Processor in de boom.',
+              'Zone-id van deze lamp. Na het koppelen van de QSX staat het getal '
+              'in de lijst onder Lutron QSX/QS. Dat is niet het zonevolgnummer '
+              'in de ruimte en niet de Designer-poort 8902.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
@@ -7530,7 +7794,7 @@ class _DeviceBusControlSection extends StatelessWidget {
               'lutronIntegrationId',
               device,
               onChanged,
-              labelOverride: 'Zone-nummer (integration ID)',
+              labelOverride: 'Zone-id',
               number: true,
             ),
             if (device['type'] == 'shading') ...[

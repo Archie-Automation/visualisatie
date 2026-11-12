@@ -204,6 +204,8 @@ class InstallerLutronStatus {
     required this.host,
     required this.port,
     this.lastError,
+    this.protocol = 'telnet',
+    this.paired = false,
   });
 
   final bool connected;
@@ -211,6 +213,11 @@ class InstallerLutronStatus {
   final String host;
   final int port;
   final String? lastError;
+  /// `leap` voor HomeWorks QSX, `telnet` voor oudere QS.
+  final String protocol;
+  final bool paired;
+
+  bool get leap => protocol == 'leap';
 
   factory InstallerLutronStatus.fromJson(Map<String, dynamic> j) {
     return InstallerLutronStatus(
@@ -219,6 +226,31 @@ class InstallerLutronStatus {
       host: j['host'] as String? ?? '',
       port: (j['port'] as num?)?.toInt() ?? 23,
       lastError: j['lastError'] as String?,
+      protocol: j['protocol'] as String? ?? 'telnet',
+      paired: j['paired'] == true,
+    );
+  }
+}
+
+class LutronZoneInfo {
+  const LutronZoneInfo({
+    required this.id,
+    required this.name,
+    required this.controlType,
+    required this.area,
+  });
+
+  final int id;
+  final String name;
+  final String controlType;
+  final String area;
+
+  factory LutronZoneInfo.fromJson(Map<String, dynamic> j) {
+    return LutronZoneInfo(
+      id: (j['id'] as num?)?.toInt() ?? 0,
+      name: j['name'] as String? ?? '',
+      controlType: j['controlType'] as String? ?? '',
+      area: j['area'] as String? ?? '',
     );
   }
 }
@@ -234,6 +266,44 @@ Future<InstallerLutronStatus> fetchInstallerLutronStatus(String token) async {
   return InstallerLutronStatus.fromJson(
     jsonDecode(res.body) as Map<String, dynamic>,
   );
+}
+
+Future<InstallerLutronStatus> postInstallerLutronPair(String token) async {
+  final res = await http
+      .post(
+        Uri.parse('$apiBase/api/installer/lutron-pair'),
+        headers: {'authorization': 'Bearer $token'},
+      )
+      .timeout(const Duration(seconds: 120));
+  final dynamic raw =
+      res.body.isNotEmpty ? jsonDecode(res.body) : <String, dynamic>{};
+  final body = Map<String, dynamic>.from(raw as Map);
+  if (res.statusCode != 200) {
+    throw StateError(body['error'] as String? ?? 'Koppelen mislukt');
+  }
+  return InstallerLutronStatus.fromJson(body);
+}
+
+Future<List<LutronZoneInfo>> fetchInstallerLutronZones(String token) async {
+  final res = await http
+      .get(
+        Uri.parse('$apiBase/api/installer/lutron-zones'),
+        headers: {'authorization': 'Bearer $token'},
+      )
+      .timeout(const Duration(seconds: 20));
+  final dynamic raw =
+      res.body.isNotEmpty ? jsonDecode(res.body) : <String, dynamic>{};
+  final body = Map<String, dynamic>.from(raw as Map);
+  if (res.statusCode != 200) {
+    throw StateError(body['error'] as String? ?? 'Zones ophalen mislukt');
+  }
+  final list = body['zones'];
+  if (list is! List) return const [];
+  return [
+    for (final item in list)
+      if (item is Map)
+        LutronZoneInfo.fromJson(Map<String, dynamic>.from(item)),
+  ];
 }
 
 Future<InstallerLutronStatus> postInstallerLutronReconnect(String token) async {

@@ -143,6 +143,7 @@ import {
 } from "./intercomReleaseMode";
 import type { MediaManager } from "./media/manager";
 import type { LutronIntegrationManager } from "./lutron/manager";
+import { isLeapTransportPort } from "./lutron/leapMessages";
 import type { WsHub } from "./ws";
 import { getConnectivitySnapshot } from "./startupConnectivity";
 import { normalizeHouseCamerasRaw } from "./houseCameras";
@@ -260,6 +261,52 @@ p{color:#b3b3b3;margin:0}a{color:#1db954}</style></head>
 <body><div class="card"><h1>Spotify</h1><p>${safe}</p>${back}</div></body></html>`;
 }
 
+function lutronStatusPayload(lutron: LutronIntegrationManager) {
+  const leap = lutron.getLeapStatus();
+  const cfg = getConfig();
+  const telnetPort = cfg.lutron?.telnet?.port;
+  const host = lutron.configuredHost(cfg);
+  const clients = lutron.getStatus();
+  if (leap.paired || isLeapTransportPort(telnetPort)) {
+    const waiting =
+      !leap.paired && isLeapTransportPort(telnetPort)
+        ? "Poort 8902 is de Designer-poort. HomeWorks QSX koppelt via LEAP: houd de knop op de processor ingedrukt en tik op Koppelen."
+        : leap.lastError;
+    return {
+      connected: leap.connected,
+      loggedIn: leap.connected,
+      host: leap.host || host,
+      port: leap.paired ? 8081 : telnetPort ?? 8081,
+      protocol: "leap",
+      paired: leap.paired,
+      lastError: waiting,
+      clients
+    };
+  }
+  const row = clients.find((c) => c.deviceId === "house") ?? clients[0];
+  if (!row) {
+    return {
+      connected: false,
+      loggedIn: false,
+      host,
+      port: telnetPort ?? 23,
+      protocol: "telnet",
+      paired: false,
+      clients
+    };
+  }
+  return {
+    connected: row.connected,
+    loggedIn: row.loggedIn,
+    host: row.host,
+    port: row.port,
+    protocol: "telnet",
+    paired: false,
+    lastError: row.lastError,
+    clients
+  };
+}
+
 /**
  * Strip sensitive bits before shipping config to a client and apply
  * per-user ACLs. Camera/intercom credentials never leave the backend.
@@ -288,6 +335,16 @@ function publicConfig(cfg: HouseConfig, role: string, userId?: string) {
           ...rest.lutron,
           ...(rest.lutron.telnet
             ? { telnet: { ...rest.lutron.telnet, password: "" } }
+            : {}),
+          ...(rest.lutron.leap
+            ? {
+                leap: {
+                  paired: Boolean(
+                    rest.lutron.leap.privateKey?.includes("PRIVATE KEY") &&
+                      rest.lutron.leap.certificate?.includes("BEGIN CERTIFICATE")
+                  )
+                }
+              }
             : {})
         }
       : undefined;
@@ -1486,45 +1543,42 @@ export function buildRouter(
   });
 
   r.get("/installer/lutron-status", requireAuth, requireInstaller, (_req, res) => {
-    const clients = lutron.getStatus();
-    const row = clients.find((c) => c.deviceId === "house") ?? clients[0];
-    if (!row) {
-      return res.json({
-        connected: false,
-        loggedIn: false,
-        host: "",
-        port: 23,
-        clients: []
+    res.json(lutronStatusPayload(lutron));
+  });
+
+  r.post("/installer/lutron-pair", requireAuth, requireInstaller, async (_req, res) => {
+    try {
+      await lutron.pairProcessor();
+      res.json({ ok: true, ...lutronStatusPayload(lutron) });
+    } catch (err) {
+      logger.warn({ err }, "QSX koppelen mislukt");
+      res.status(400).json({
+        error: err instanceof Error ? err.message : "Koppelen mislukt"
       });
     }
-    res.json({
-      connected: row.connected,
-      loggedIn: row.loggedIn,
-      host: row.host,
-      port: row.port,
-      lastError: row.lastError,
-      clients
-    });
+  });
+
+  r.get("/installer/lutron-zones", requireAuth, requireInstaller, async (_req, res) => {
+    try {
+      const zones = await lutron.listZones();
+      res.json({ zones });
+    } catch (err) {
+      logger.warn({ err }, "QSX zones ophalen mislukt");
+      res.status(400).json({
+        error: err instanceof Error ? err.message : "Zones ophalen mislukt"
+      });
+    }
   });
 
   r.post("/installer/lutron-reconnect", requireAuth, requireInstaller, (_req, res) => {
     try {
       lutron.reconnect();
-      const clients = lutron.getStatus();
-      const row = clients.find((c) => c.deviceId === "house") ?? clients[0];
-      res.json({
-        ok: true,
-        connected: row?.connected ?? false,
-        loggedIn: row?.loggedIn ?? false,
-        host: row?.host ?? "",
-        port: row?.port ?? 23,
-        clients
-      });
+      res.json({ ok: true, ...lutronStatusPayload(lutron) });
     } catch (err) {
       logger.warn({ err }, "Lutron manual reconnect failed");
       res.status(500).json({
         error: err instanceof Error ? err.message : "reconnect failed",
-        clients: lutron.getStatus()
+        ...lutronStatusPayload(lutron)
       });
     }
   });
