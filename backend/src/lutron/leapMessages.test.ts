@@ -13,7 +13,9 @@ import {
   leapButtonAction,
   parseButtonEvents,
   collectDefinedButtons,
+  collectHrefs,
   deviceMayHaveButtons,
+  buttonStubFromHref,
   parseButtonList,
   parsePairingMessage,
   parseZoneLevels,
@@ -115,7 +117,38 @@ describe("LEAP-berichten", () => {
     );
     assert.deepEqual(engraved, [{ id: 8, name: "Eten", buttonNumber: 1, deviceName: "Keuken" }]);
     assert.equal(deviceMayHaveButtons("SeeTouchKeypad"), true);
-    assert.equal(deviceMayHaveButtons("WallDimmer"), false);
+    assert.equal(deviceMayHaveButtons("WallSwitch"), true);
+    assert.equal(deviceMayHaveButtons("Shade"), false);
+    const report = collectHrefs(
+      {
+        Body: {
+          Device: {
+            href: "/device/604",
+            Name: "Keuken",
+            Buttons: [
+              { href: "/button/614" },
+              { href: "/button/664" },
+              { href: "/button/668" },
+              { href: "/button/672" }
+            ]
+          }
+        }
+      },
+      "button"
+    );
+    assert.deepEqual(report, ["/button/614", "/button/664", "/button/668", "/button/672"]);
+    assert.equal(buttonStubFromHref("/button/614", "Keuken")?.name, "Knop 614");
+    const one = collectDefinedButtons({
+      Body: {
+        Button: {
+          href: "/button/614",
+          ButtonNumber: 1,
+          Parent: { href: "/device/604", Name: "Keuken" }
+        }
+      }
+    });
+    assert.equal(one[0]?.buttonNumber, 1);
+    assert.equal(one[0]?.deviceName, "Keuken");
   });
 
   it("zet een dimmer-commando op de LEAP-zone", () => {

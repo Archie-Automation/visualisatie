@@ -687,45 +687,93 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
     return _Placeholder(name: d.name, hint: 'Modus: $mode');
   }
 
-  Widget _rgbModeSwitch(BuildContext context, Device d, {required bool rgb}) {
-    return SegmentedButton<bool>(
-      showSelectedIcon: false,
-      style: SegmentedButton.styleFrom(
-        visualDensity: VisualDensity.compact,
-        textStyle: Theme.of(context).textTheme.labelMedium,
+  Widget _rgbModeIcons(BuildContext context, Device d, {required bool rgb}) {
+    void select(bool color) {
+      if (color == rgb) return;
+      setState(() => _whiteOnly = !color);
+      if (color) {
+        _sendRgbChannels(d);
+      } else {
+        _sendTunableWhite(d);
+      }
+    }
+
+    Widget icon({
+      required bool selected,
+      required IconData glyph,
+      required String tooltip,
+      required VoidCallback onTap,
+    }) {
+      return Tooltip(
+        message: tooltip,
+        child: Material(
+          color: selected ? LuxeColors.brassSoft : Colors.transparent,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: onTap,
+            child: SizedBox(
+              width: 26,
+              height: 26,
+              child: Icon(
+                glyph,
+                size: 16,
+                color: selected ? LuxeColors.brassDeep : LuxeColors.inkSoft,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return SizedBox(
+      width: DeviceCardScale.iconBadgeSize(context),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          icon(
+            selected: rgb,
+            glyph: Icons.palette_outlined,
+            tooltip: 'RGB(W)',
+            onTap: () => select(true),
+          ),
+          const SizedBox(width: 2),
+          icon(
+            selected: !rgb,
+            glyph: Icons.wb_twilight_outlined,
+            tooltip: 'Kleurtemperatuur',
+            onTap: () => select(false),
+          ),
+        ],
       ),
-      segments: const [
-        ButtonSegment(value: true, label: Text('RGB(W)')),
-        ButtonSegment(value: false, label: Text('Kleurtemperatuur')),
-      ],
-      selected: {rgb},
-      onSelectionChanged: (next) {
-        final color = next.first;
-        if (color == rgb) return;
-        setState(() => _whiteOnly = !color);
-        if (color) {
-          _sendRgbChannels(d);
-        } else {
-          _sendTunableWhite(d);
-        }
-      },
     );
   }
 
-  /// Zelfde slider als een dimbare lamp: 0–100, zonder kleurbalk.
-  Widget _brightnessSlider(Device d, {required bool white}) {
-    return DeviceCardSliderWrap(
-      child: _DimmerSlider(
-        value: (_val * 100).clamp(0.0, 100.0),
-        onDim: (pct) {
-          setState(() => _val = (pct / 100).clamp(0.0, 1.0));
-          if (white) {
-            _sendTunableWhite(d);
-          } else {
-            _sendRgbChannels(d);
-          }
-        },
-      ),
+  /// Zelfde slider als een dimbare lamp. De modus-icoontjes staan rechts,
+  /// onder de aan/uit-schakelaar.
+  Widget _brightnessSlider(
+    Device d, {
+    required bool white,
+    bool showMode = false,
+  }) {
+    final slider = _DimmerSlider(
+      value: (_val * 100).clamp(0.0, 100.0),
+      onDim: (pct) {
+        setState(() => _val = (pct / 100).clamp(0.0, 1.0));
+        if (white) {
+          _sendTunableWhite(d);
+        } else {
+          _sendRgbChannels(d);
+        }
+      },
+    );
+    if (!showMode) return DeviceCardSliderWrap(child: slider);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Expanded(child: slider),
+        _rgbModeIcons(context, d, rgb: !white),
+      ],
     );
   }
 
@@ -781,7 +829,6 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
             ),
             trailing: _rgbSwitch(context, d, on, hasOnGa),
           ),
-          if (showWhiteSwitch) _rgbModeSwitch(context, d, rgb: true),
           Opacity(
             opacity: on ? 1.0 : 0.35,
             child: IgnorePointer(
@@ -804,7 +851,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _brightnessSlider(d, white: false),
+                _brightnessSlider(d, white: false, showMode: showWhiteSwitch),
                 if (hasWhite) ...[
                   const SizedBox(height: 12),
                   DeviceCardSliderWrap(
@@ -894,7 +941,6 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
             ),
             trailing: _rgbSwitch(context, d, on, hasOnGa),
           ),
-          if (showColorSwitch) _rgbModeSwitch(context, d, rgb: false),
           const SizedBox(height: 20),
 
           // CCT gradient strip (warm → cool)
@@ -911,7 +957,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
           ),
           const SizedBox(height: 16),
 
-          _brightnessSlider(d, white: true),
+          _brightnessSlider(d, white: true, showMode: showColorSwitch),
         ],
       ),
     );

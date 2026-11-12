@@ -401,10 +401,13 @@ class KnxTelegramEditor extends StatelessWidget {
 /// Lutron keypad → KNX mappings (geen JSON).
 String lutronButtonChoiceLabel(LutronButtonInfo button) {
   final keypad = button.deviceName.trim();
-  final name = button.name.trim().isEmpty
-      ? 'Knop ${button.buttonNumber}'
-      : button.name.trim();
-  return keypad.isEmpty ? name : '$keypad · $name';
+  final raw = button.name.trim();
+  final generic = raw.isEmpty || raw == 'Knop ${button.id}';
+  final title = !generic
+      ? raw
+      : (button.buttonNumber > 0 ? 'Knop ${button.buttonNumber}' : 'Knop ${button.id}');
+  final core = '$title · /button/${button.id}';
+  return keypad.isEmpty ? core : '$keypad · $core';
 }
 
 class LutronButtonToKnxListEditor extends StatelessWidget {

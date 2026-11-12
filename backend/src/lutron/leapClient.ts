@@ -26,6 +26,7 @@ import {
   collectDevices,
   collectHrefs,
   deviceMayHaveButtons,
+  buttonStubFromHref,
   parseButtonEvents,
   parsePairingMessage,
   parseZoneLevels,
@@ -251,37 +252,42 @@ export class LutronLeapSession {
 
   async listButtons(): Promise<LeapButton[]> {
     if (!this.buttonLoad) {
-      this.buttonLoad = this.discoverButtons().catch((err) => {
-        this.buttonLoad = null;
-        throw err;
-      });
+      this.buttonLoad = this.discoverButtons()
+        .then((buttons) => {
+          if (buttons.length === 0) this.buttonLoad = null;
+          return buttons;
+        })
+        .catch((err) => {
+          this.buttonLoad = null;
+          throw err;
+        });
     }
     return this.buttonLoad;
   }
 
   /**
-   * Keypad-knoppen staan niet in de zonelijst. `/button` weigert een QSX vaak;
-   * dan zitten ze op het control station van de schakelaar.
+   * Keypad-knoppen staan niet in de zonelijst. Het integratierapport noemt
+   * `/device/604` en `/button/614`; `/button` levert vaak alleen die hrefs.
    */
   private async discoverButtons(): Promise<LeapButton[]> {
     await this.waitConnected(REQUEST_TIMEOUT_MS);
-    const direct = collectDefinedButtons(await this.readOptional("/button"));
-    if (direct.length > 0) {
-      this.subscribeButtonsOneByOne = false;
-      return direct;
-    }
-    this.subscribeButtonsOneByOne = true;
-
     const found = new Map<number, LeapButton>();
     const take = (buttons: LeapButton[]) => {
       for (const button of buttons) found.set(button.id, button);
     };
 
-    const areaMsg = await this.readOptional("/area");
-    for (const area of collectHrefs(areaMsg, "area")) {
-      if (this.stopped || !this.connected) break;
-      const stations = await this.readOptional(`${area}/associatedcontrolstation`);
-      await this.readStationButtons(stations, take);
+    const index = await this.readOptional("/button");
+    const indexed = collectDefinedButtons(index);
+    take(indexed);
+    await this.hydrateButtonHrefs(collectHrefs(index, "button"), "", take);
+    this.subscribeButtonsOneByOne = indexed.length === 0;
+
+    if (found.size === 0) {
+      for (const area of await this.areaHrefs()) {
+        if (this.stopped || !this.connected) break;
+        const stations = await this.readOptional(`${area}/associatedcontrolstation`);
+        await this.readStationButtons(stations, take);
+      }
     }
     if (found.size === 0) {
       const devices = collectDevices(await this.readOptional("/device")).filter((device) =>
@@ -292,7 +298,59 @@ export class LutronLeapSession {
         take(await this.buttonsOnDevice(device.href, device.name));
       }
     }
-    return [...found.values()].sort((a, b) => a.id - b.id);
+    return [...found.values()].sort((a, b) => a.buttonNumber - b.buttonNumber || a.id - b.id);
+  }
+
+  /** Ruimtes zitten onder de root. Alleen de root aflopen mist de schakelaars. */
+  private async areaHrefs(): Promise<string[]> {
+    const seen = new Set<string>();
+    const pending = collectHrefs(await this.readOptional("/area"), "area");
+    const all: string[] = [];
+    while (pending.length > 0) {
+      const area = pending.pop();
+      if (!area || seen.has(area)) continue;
+      seen.add(area);
+      all.push(area);
+      if (this.stopped || !this.connected) break;
+      for (const child of collectHrefs(await this.readOptional(`${area}/childarea`), "area")) {
+        if (!seen.has(child)) pending.push(child);
+      }
+    }
+    return all;
+  }
+
+  private async hydrateButtonHrefs(
+    hrefs: string[],
+    deviceName: string,
+    take: (buttons: LeapButton[]) => void
+  ): Promise<void> {
+    const todo = [
+      ...new Set(hrefs.filter((href) => buttonStubFromHref(href) != null))
+    ];
+    await this.mapPool(todo, 4, async (href) => {
+      const stub = buttonStubFromHref(href, deviceName);
+      if (!stub) return;
+      const defined = collectDefinedButtons(await this.readOptional(href), deviceName);
+      take(defined.length > 0 ? defined : [stub]);
+    });
+  }
+
+  private async mapPool<T>(
+    items: T[],
+    limit: number,
+    fn: (item: T) => Promise<void>
+  ): Promise<void> {
+    if (items.length === 0) return;
+    let cursor = 0;
+    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+      while (cursor < items.length) {
+        const index = cursor;
+        cursor += 1;
+        if (this.stopped || !this.connected) return;
+        await fn(items[index] as T);
+      }
+    });
+    await Promise.all(workers);
   }
 
   private async readStationButtons(
@@ -313,30 +371,36 @@ export class LutronLeapSession {
   }
 
   private async buttonsOnDevice(href: string, deviceName: string): Promise<LeapButton[]> {
+    const found = new Map<number, LeapButton>();
+    const take = (buttons: LeapButton[]) => {
+      for (const button of buttons) found.set(button.id, button);
+    };
     const full = await this.readOptional(href);
-    const defined = collectDefinedButtons(full, deviceName);
-    if (defined.length > 0) return defined;
-    const out: LeapButton[] = [];
-    const groups = collectHrefs(full, "buttongroup");
+    const named = collectDevices(full).find((device) => device.href === href);
+    const name = deviceName || named?.name || "";
+    take(collectDefinedButtons(full, name));
     const hrefs = new Set<string>(collectHrefs(full, "button"));
+    const groups = new Set<string>(collectHrefs(full, "buttongroup"));
+    if (hrefs.size === 0 && groups.size === 0) {
+      for (const extra of [`${href}/button`, `${href}/buttongroup`]) {
+        const child = await this.readOptional(extra);
+        take(collectDefinedButtons(child, name));
+        for (const buttonHref of collectHrefs(child, "button")) hrefs.add(buttonHref);
+        for (const groupHref of collectHrefs(child, "buttongroup")) groups.add(groupHref);
+      }
+    }
     for (const group of groups) {
       if (this.stopped || !this.connected) break;
       const groupMsg = await this.readOptional(group);
-      const named = collectDefinedButtons(groupMsg, deviceName);
-      if (named.length > 0) out.push(...named);
-      else for (const href of collectHrefs(groupMsg, "button")) hrefs.add(href);
+      take(collectDefinedButtons(groupMsg, name));
+      for (const buttonHref of collectHrefs(groupMsg, "button")) hrefs.add(buttonHref);
     }
-    if (out.length === 0 && hrefs.size === 0) {
-      const child = await this.readOptional(`${href}/button`);
-      const named = collectDefinedButtons(child, deviceName);
-      if (named.length > 0) return named;
-      for (const buttonHref of collectHrefs(child, "button")) hrefs.add(buttonHref);
-    }
-    for (const buttonHref of hrefs) {
-      if (this.stopped || !this.connected) break;
-      out.push(...collectDefinedButtons(await this.readOptional(buttonHref), deviceName));
-    }
-    return out;
+    const missing = [...hrefs].filter((buttonHref) => {
+      const stub = buttonStubFromHref(buttonHref);
+      return stub != null && !found.has(stub.id);
+    });
+    await this.hydrateButtonHrefs(missing, name, take);
+    return [...found.values()];
   }
 
   private async subscribeZones(): Promise<void> {

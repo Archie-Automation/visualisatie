@@ -206,7 +206,7 @@ export function collectDefinedButtons(msg: unknown, deviceName = ""): LeapButton
         id,
         name: buttonLabel(rec, id),
         buttonNumber: Number.isFinite(number) ? number : 0,
-        deviceName: nextDevice
+        deviceName: ownerName(rec, nextDevice)
       });
     }
     for (const value of Object.values(rec)) visit(value, nextDevice);
@@ -263,16 +263,32 @@ export function collectDevices(msg: unknown): LeapDeviceRef[] {
   return [...byHref.values()];
 }
 
-/** Loads overslaan. Leeg type blijft, dat is vaak een samenvatting zonder soort. */
+/** Loads zonder knoppen overslaan. Een schakelaar of dimmer heeft vaak wél knoppen. */
 export function deviceMayHaveButtons(deviceType: string): boolean {
   const type = deviceType.toLowerCase();
   if (!type) return true;
-  if (/keypad|pico|seetouch|sunnata|palladiom|grafik|tabletop|hybrid|remote/.test(type)) {
+  if (/keypad|pico|seetouch|sunnata|palladiom|grafik|tabletop|hybrid|remote|switch|dimmer/.test(type)) {
     return true;
   }
-  return !/dimmer|switch|shade|processor|repeater|interface|contact|module|panel|sensor|occupancy|thermostat|fan|receptacle|phase|drape|blind|motor|output|lamp/.test(
+  return !/shade|processor|repeater|interface|contact|module|panel|sensor|occupancy|thermostat|fan|receptacle|phase|drape|blind|motor|output|lamp/.test(
     type
   );
+}
+
+/** `/button/614` uit het integratierapport, ook als de processor alleen het href stuurt. */
+export function buttonStubFromHref(href: string, deviceName = ""): LeapButton | null {
+  const id = hrefId(href, "button");
+  if (id == null) return null;
+  return { id, name: `Knop ${id}`, buttonNumber: 0, deviceName };
+}
+
+function ownerName(rec: Record<string, unknown>, fallback: string): string {
+  const parent = rec.Parent ?? rec.Device;
+  if (parent && typeof parent === "object") {
+    const named = String((parent as Record<string, unknown>).Name ?? "").trim();
+    if (named) return named;
+  }
+  return fallback;
 }
 
 function buttonIsDefined(rec: Record<string, unknown>): boolean {
