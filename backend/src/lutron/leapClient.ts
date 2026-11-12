@@ -21,8 +21,11 @@ import {
   encodeLeap,
   headerUrl,
   leapErrorMessage,
+  collectDefinedButtons,
+  collectDevices,
+  collectHrefs,
+  deviceMayHaveButtons,
   parseButtonEvents,
-  parseButtonList,
   parsePairingMessage,
   parseZoneList
 } from "./leapMessages";
@@ -169,6 +172,9 @@ export class LutronLeapSession {
   private stopped = false;
   private relaxedTls = false;
   private immediateRetry = false;
+  private buttonLoad: Promise<LeapButton[]> | null = null;
+  /** `/button` gaf niets. Dan is een bulk-abonnement meestal ook leeg. */
+  private subscribeButtonsOneByOne = false;
 
   constructor(
     private readonly host: string,
@@ -233,14 +239,102 @@ export class LutronLeapSession {
   }
 
   async listButtons(): Promise<LeapButton[]> {
+    if (!this.buttonLoad) {
+      this.buttonLoad = this.discoverButtons().catch((err) => {
+        this.buttonLoad = null;
+        throw err;
+      });
+    }
+    return this.buttonLoad;
+  }
+
+  /**
+   * Keypad-knoppen staan niet in de zonelijst. `/button` weigert een QSX vaak;
+   * dan zitten ze op het control station van de schakelaar.
+   */
+  private async discoverButtons(): Promise<LeapButton[]> {
     await this.waitConnected(REQUEST_TIMEOUT_MS);
-    const msg = await this.readOptional("/button");
-    return parseButtonList(msg ?? {});
+    const direct = collectDefinedButtons(await this.readOptional("/button"));
+    if (direct.length > 0) {
+      this.subscribeButtonsOneByOne = false;
+      return direct;
+    }
+    this.subscribeButtonsOneByOne = true;
+
+    const found = new Map<number, LeapButton>();
+    const take = (buttons: LeapButton[]) => {
+      for (const button of buttons) found.set(button.id, button);
+    };
+
+    const areaMsg = await this.readOptional("/area");
+    for (const area of collectHrefs(areaMsg, "area")) {
+      if (this.stopped || !this.connected) break;
+      const stations = await this.readOptional(`${area}/associatedcontrolstation`);
+      await this.readStationButtons(stations, take);
+    }
+    if (found.size === 0) {
+      const devices = collectDevices(await this.readOptional("/device")).filter((device) =>
+        deviceMayHaveButtons(device.deviceType)
+      );
+      for (const device of devices) {
+        if (this.stopped || !this.connected) break;
+        take(await this.buttonsOnDevice(device.href, device.name));
+      }
+    }
+    return [...found.values()].sort((a, b) => a.id - b.id);
+  }
+
+  private async readStationButtons(
+    msg: unknown,
+    take: (buttons: LeapButton[]) => void
+  ): Promise<void> {
+    take(collectDefinedButtons(msg));
+    for (const station of collectHrefs(msg, "controlstation")) {
+      if (this.stopped || !this.connected) return;
+      const full = await this.readOptional(station);
+      const name = stationName(full);
+      take(collectDefinedButtons(full, name));
+      for (const device of collectDevices(full)) {
+        if (this.stopped || !this.connected) return;
+        take(await this.buttonsOnDevice(device.href, device.name || name));
+      }
+    }
+  }
+
+  private async buttonsOnDevice(href: string, deviceName: string): Promise<LeapButton[]> {
+    const full = await this.readOptional(href);
+    const defined = collectDefinedButtons(full, deviceName);
+    if (defined.length > 0) return defined;
+    const out: LeapButton[] = [];
+    const groups = collectHrefs(full, "buttongroup");
+    const hrefs = new Set<string>(collectHrefs(full, "button"));
+    for (const group of groups) {
+      if (this.stopped || !this.connected) break;
+      const groupMsg = await this.readOptional(group);
+      const named = collectDefinedButtons(groupMsg, deviceName);
+      if (named.length > 0) out.push(...named);
+      else for (const href of collectHrefs(groupMsg, "button")) hrefs.add(href);
+    }
+    if (out.length === 0 && hrefs.size === 0) {
+      const child = await this.readOptional(`${href}/button`);
+      const named = collectDefinedButtons(child, deviceName);
+      if (named.length > 0) return named;
+      for (const buttonHref of collectHrefs(child, "button")) hrefs.add(buttonHref);
+    }
+    for (const buttonHref of hrefs) {
+      if (this.stopped || !this.connected) break;
+      out.push(...collectDefinedButtons(await this.readOptional(buttonHref), deviceName));
+    }
+    return out;
   }
 
   private async subscribeButtons(): Promise<void> {
-    if (await this.subscribe("/button/status")) return;
     const buttons = await this.listButtons().catch(() => [] as LeapButton[]);
+    logger.info(
+      { count: buttons.length, perButton: this.subscribeButtonsOneByOne },
+      "QSX-knoppen"
+    );
+    if (!this.subscribeButtonsOneByOne && (await this.subscribe("/button/status"))) return;
     for (const button of buttons) {
       if (this.stopped || !this.connected) return;
       await this.subscribe(`/button/${button.id}/status`);
@@ -316,6 +410,8 @@ export class LutronLeapSession {
       this.connected = true;
       this.lastError = undefined;
       this.buttonsReadyAt = Date.now() + 2_000;
+      this.buttonLoad = null;
+      this.subscribeButtonsOneByOne = false;
       logger.info({ host: this.host, port: LEAP_PORT }, "QSX LEAP verbonden");
       void this.subscribeButtons();
     });
@@ -405,6 +501,18 @@ export class LutronLeapSession {
     }
     this.pending.clear();
   }
+}
+
+function stationName(msg: unknown): string {
+  if (!msg || typeof msg !== "object") return "";
+  const body = (msg as Record<string, unknown>).Body;
+  if (!body || typeof body !== "object") return "";
+  const record = body as Record<string, unknown>;
+  const one = record.ControlStation;
+  if (one && typeof one === "object") {
+    return String((one as Record<string, unknown>).Name ?? "").trim();
+  }
+  return "";
 }
 
 function hrefList(msg: unknown, ...keys: string[]): string[] {

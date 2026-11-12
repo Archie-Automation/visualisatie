@@ -1042,8 +1042,8 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     );
   }
 
-  /// Plus in de kolom van het prullenbakje. Zelfde breedte, zodat het icoon
-  /// er recht onder valt. [rounded] volgt de extra zij-inset van [LuxeNavRow].
+  /// Plus in de kolom van het prullenbakje, onder de laatste rij.
+  /// [rounded] volgt de extra zij-inset van [LuxeNavRow].
   Widget _plusUnderTrash({
     required String tooltip,
     required VoidCallback onPressed,
@@ -1053,15 +1053,16 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     return Align(
       alignment: Alignment.centerRight,
       child: Padding(
-        padding: EdgeInsets.only(right: rounded ? 18 : 12),
+        padding: EdgeInsets.only(right: rounded ? 18 : 12, top: 2, bottom: 6),
         child: IconButton(
           tooltip: tooltip,
           visualDensity: compact ? VisualDensity.compact : null,
-          padding: compact ? EdgeInsets.zero : null,
-          constraints: compact
-              ? const BoxConstraints(minWidth: 36, minHeight: 36)
-              : null,
-          icon: Icon(Icons.add_rounded, color: LuxeColors.brassDeep),
+          style: IconButton.styleFrom(
+            backgroundColor: LuxeColors.brassSoft,
+            foregroundColor: LuxeColors.brassDeep,
+            side: BorderSide(color: LuxeColors.brass.withValues(alpha: 0.85)),
+          ),
+          icon: Icon(Icons.add_rounded, size: compact ? 24 : 28),
           onPressed: onPressed,
         ),
       ),
@@ -3439,7 +3440,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                       _sel.kind == _FocusKind.room ||
                       _sel.kind == _FocusKind.device),
             ),
-            if (i == visible.first)
+            if (i == visible.last)
               _plusUnderTrash(
                 tooltip: 'Verdieping toevoegen',
                 onPressed: _addFloor,
@@ -3489,7 +3490,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   (_sel.kind == _FocusKind.room ||
                       _sel.kind == _FocusKind.device),
             ),
-            if (ri == 0)
+            if (ri == rooms.length - 1)
               _plusUnderTrash(
                 tooltip: 'Kamer toevoegen',
                 onPressed: () => _addRoom(fi),
@@ -3650,7 +3651,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               ),
               onTap: () => _selectFocus(_Focus.buildings(fi: fi)),
             ),
-            if (fi == visible.first)
+            if (fi == visible.last)
               _plusUnderTrash(
                 tooltip: 'Verdieping toevoegen',
                 onPressed: _addFloor,
@@ -3702,7 +3703,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               ),
               onTap: () => _selectFocus(_Focus.buildings(fi: fi, ri: ri)),
             ),
-            if (ri == 0)
+            if (ri == rooms.length - 1)
               _plusUnderTrash(
                 tooltip: 'Kamer toevoegen',
                 onPressed: () => _addRoom(fi),
@@ -3874,7 +3875,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           ),
         ],
         for (final fi in visible) ...[
-          _floorStructureCard(fi, addFloor: fi == visible.first),
+          _floorStructureCard(fi, addFloor: fi == visible.last),
           const SizedBox(height: 12),
         ],
       ],
@@ -3934,7 +3935,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   ),
                   onTap: () => _selectFocus(_Focus.floor(i)),
                 ),
-                if (i == visible.first)
+                if (i == visible.last)
                   _plusUnderTrash(
                     tooltip: 'Verdieping toevoegen',
                     onPressed: _addFloor,
@@ -3969,11 +3970,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             ),
             onTap: () => _selectFocus(_Focus.buildings(fi: fi)),
           ),
-          if (addFloor)
-            _plusUnderTrash(
-              tooltip: 'Verdieping toevoegen',
-              onPressed: _addFloor,
-            ),
           if (floorSelected)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
@@ -4024,11 +4020,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                 onTap: () => _selectFocus(_Focus.buildings(fi: fi, ri: ri)),
               ),
             ),
-            if (ri == 0)
-              _plusUnderTrash(
-                tooltip: 'Kamer toevoegen',
-                onPressed: () => _addRoom(fi),
-              ),
             if (_sel.kind == _FocusKind.buildings &&
                 _sel.fi == fi &&
                 _sel.ri == ri)
@@ -4041,7 +4032,17 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   labelOverride: 'Naam',
                 ),
               ),
+            if (ri == rooms.length - 1)
+              _plusUnderTrash(
+                tooltip: 'Kamer toevoegen',
+                onPressed: () => _addRoom(fi),
+              ),
           ],
+          if (addFloor)
+            _plusUnderTrash(
+              tooltip: 'Verdieping toevoegen',
+              onPressed: _addFloor,
+            ),
         ],
       ),
     );
@@ -4470,7 +4471,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                       _sel.fi == fi &&
                       _sel.ri == ri,
                 ),
-                if (ri == 0)
+                if (ri == rooms.length - 1)
                   _plusUnderTrash(
                     tooltip: 'Kamer toevoegen',
                     onPressed: () => _addRoom(fi),
@@ -5880,6 +5881,13 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
     return '${z.id}  $name$kind';
   }
 
+  String _buttonLine(LutronButtonInfo b) {
+    final keypad = b.deviceName.trim();
+    final name = b.name.trim().isEmpty ? 'Knop ${b.buttonNumber}' : b.name.trim();
+    final label = keypad.isEmpty ? name : '$keypad · $name';
+    return '${b.id}  $label';
+  }
+
   String _statusLine() {
     final status = _status;
     if (status == null) return _statusErr ?? 'Status laden…';
@@ -6053,26 +6061,32 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
-                if (_buttons.isNotEmpty) ...[
+                if (_zonesLoaded && _status?.connected == true) ...[
                   const SizedBox(height: 8),
                   Text(
                     'Knop-id voor keypad → KNX',
                     style: Theme.of(context).textTheme.labelLarge,
                   ),
                   const SizedBox(height: 4),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 140),
-                    child: ListView(
-                      shrinkWrap: true,
-                      children: [
-                        for (final b in _buttons)
-                          Text(
-                            '${b.id}  ${b.name}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                      ],
+                  if (_buttons.isEmpty)
+                    Text(
+                      'Geen knoppen van de schakelaars. Keypads zitten niet in de zonelijst.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    )
+                  else
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 180),
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: [
+                          for (final b in _buttons)
+                            Text(
+                              _buttonLine(b),
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
                 ],
               ],
             ),

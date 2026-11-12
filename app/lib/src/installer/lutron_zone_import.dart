@@ -239,24 +239,27 @@ class _FloorOption {
   final String label;
 }
 
-class _RoomOption {
-  const _RoomOption(this.floorIndex, this.roomIndex, this.label);
-  final int floorIndex;
-  final int roomIndex;
-  final String label;
-}
-
 class _RowState {
   _RowState({required this.zone, required this.used})
-      : kind = suggestLutronImportKind(zone.controlType) ?? LutronImportKind.dimmer,
-        known = suggestLutronImportKind(zone.controlType) != null,
+      : kind = suggestLutronImportKind(zone.controlType),
+        deviceName = TextEditingController(text: zone.name.trim()),
         selected = !used && suggestLutronImportKind(zone.controlType) != null;
 
   final LutronZoneInfo zone;
   final bool used;
-  final bool known;
-  LutronImportKind kind;
+  final LutronImportKind? kind;
+  final TextEditingController deviceName;
   bool selected;
+
+  String get typeLabel =>
+      kind == null ? zone.controlType.trim() : lutronImportKindLabels[kind]!;
+}
+
+class _ImportGroup {
+  _ImportGroup(String roomName) : room = TextEditingController(text: roomName);
+
+  final TextEditingController room;
+  final List<_RowState> rows = [];
 }
 
 class _LutronZoneImportDialog extends StatefulWidget {
@@ -270,64 +273,72 @@ class _LutronZoneImportDialog extends StatefulWidget {
 }
 
 class _LutronZoneImportDialogState extends State<_LutronZoneImportDialog> {
-  late final List<_RowState> _rows;
+  late final List<_ImportGroup> _groups;
   late final List<_FloorOption> _floors;
-  late final List<_RoomOption> _rooms;
-  late bool _perArea;
   late int _floorIndex;
-  int _roomChoice = 0;
 
   @override
   void initState() {
     super.initState();
     final used = lutronZoneIdsInHouse(widget.house);
-    _rows = [
-      for (final zone in widget.zones)
-        if (zone.id >= 1) _RowState(zone: zone, used: used.contains(zone.id)),
-    ];
+    final byRoom = <String, _ImportGroup>{};
+    for (final zone in widget.zones) {
+      if (zone.id < 1) continue;
+      final roomName = zone.area.trim().isEmpty ? 'Lutron' : zone.area.trim();
+      final group = byRoom.putIfAbsent(roomName, () => _ImportGroup(roomName));
+      group.rows.add(_RowState(zone: zone, used: used.contains(zone.id)));
+    }
+    _groups = byRoom.values.toList();
     _floors = _readFloors(widget.house);
-    _rooms = _readRooms(widget.house, _floors);
-    _perArea = _rows.any((row) => row.zone.area.trim().isNotEmpty) || _rooms.isEmpty;
     _floorIndex = _floors.isEmpty ? -1 : _floors.first.index;
-    if (_rooms.isEmpty) _perArea = _floors.isNotEmpty;
   }
 
-  bool get _canApply {
-    if (_selected.isEmpty) return false;
-    if (_perArea) return _floorIndex >= 0;
-    return _roomChoice >= 0 && _roomChoice < _rooms.length;
+  @override
+  void dispose() {
+    for (final group in _groups) {
+      group.room.dispose();
+      for (final row in group.rows) {
+        row.deviceName.dispose();
+      }
+    }
+    super.dispose();
   }
 
-  List<_RowState> get _selected =>
-      _rows.where((row) => row.selected && !row.used).toList();
+  bool get _canApply => _selected.isNotEmpty && _floorIndex >= 0;
+
+  List<_RowState> get _selected => [
+        for (final group in _groups)
+          for (final row in group.rows)
+            if (row.selected && !row.used && row.kind != null) row,
+      ];
 
   void _setKnown(bool selected) {
     setState(() {
-      for (final row in _rows) {
-        if (!row.used && row.known) row.selected = selected;
+      for (final group in _groups) {
+        for (final row in group.rows) {
+          if (!row.used && row.kind != null) row.selected = selected;
+        }
       }
     });
   }
 
   void _apply() {
     if (!_canApply) return;
-    final target = _perArea
-        ? LutronZoneImportTarget.perArea(_floorIndex)
-        : LutronZoneImportTarget.room(
-            _rooms[_roomChoice].floorIndex,
-            _rooms[_roomChoice].roomIndex,
-          );
     final added = applyLutronZoneImport(
       house: widget.house,
-      target: target,
+      target: LutronZoneImportTarget.perArea(_floorIndex),
       items: [
-        for (final row in _selected)
-          LutronZoneImportItem(
-            id: row.zone.id,
-            name: row.zone.name,
-            area: row.zone.area,
-            kind: row.kind,
-          ),
+        for (final group in _groups)
+          for (final row in group.rows)
+            if (row.selected && !row.used && row.kind != null)
+              LutronZoneImportItem(
+                id: row.zone.id,
+                name: row.deviceName.text.trim().isEmpty
+                    ? row.zone.name
+                    : row.deviceName.text.trim(),
+                area: group.room.text.trim().isEmpty ? 'Lutron' : group.room.text.trim(),
+                kind: row.kind!,
+              ),
       ],
     );
     Navigator.pop(context, added);
@@ -335,99 +346,61 @@ class _LutronZoneImportDialogState extends State<_LutronZoneImportDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final groups = <String, List<_RowState>>{};
-    for (final row in _rows) {
-      final area = row.zone.area.trim().isEmpty ? 'Zonder gebied' : row.zone.area.trim();
-      groups.putIfAbsent(area, () => []).add(row);
-    }
-    final knownOn = _rows.where((row) => row.known && !row.used && row.selected).length;
-    final known = _rows.where((row) => row.known && !row.used).length;
+    final knownOn = _selected.length;
+    final known = [
+      for (final group in _groups)
+        for (final row in group.rows)
+          if (!row.used && row.kind != null) row,
+    ].length;
 
     return AlertDialog(
       title: const Text('Zones in het huis zetten'),
       content: SizedBox(
-        width: 720,
+        width: 640,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
-              'Alleen aangevinkte zones worden apparaten. Een zone die al in het huis zit blijft staan.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 12),
             if (_floors.isEmpty)
-              const Text('Maak eerst een verdieping. De import maakt geen gebouw of verdieping.')
-            else ...[
-              CheckboxListTile(
-                contentPadding: EdgeInsets.zero,
-                dense: true,
-                controlAffinity: ListTileControlAffinity.leading,
-                value: _perArea,
-                onChanged: (v) => setState(() => _perArea = v ?? false),
-                title: const Text('Nieuwe kamer per Lutron-gebied'),
-                subtitle: const Text(
-                  'Op de gekozen verdieping. Een kamer met dezelfde naam wordt hergebruikt.',
+              const Text('Maak eerst een verdieping.')
+            else
+              DropdownButtonFormField<int>(
+                initialValue: _floorIndex,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  labelText: 'Verdieping',
+                  border: OutlineInputBorder(),
                 ),
+                items: [
+                  for (final floor in _floors)
+                    DropdownMenuItem(value: floor.index, child: Text(floor.label)),
+                ],
+                onChanged: (v) {
+                  if (v == null) return;
+                  setState(() => _floorIndex = v);
+                },
               ),
-              if (_perArea)
-                DropdownButtonFormField<int>(
-                  initialValue: _floorIndex,
-                  decoration: const InputDecoration(
-                    labelText: 'Verdieping',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    for (final floor in _floors)
-                      DropdownMenuItem(value: floor.index, child: Text(floor.label)),
-                  ],
-                  onChanged: (v) {
-                    if (v == null) return;
-                    setState(() => _floorIndex = v);
-                  },
-                )
-              else if (_rooms.isEmpty)
-                const Text('Geen kamer. Zet nieuwe kamer per gebied aan, of maak eerst een kamer.')
-              else
-                DropdownButtonFormField<int>(
-                  initialValue: _roomChoice,
-                  decoration: const InputDecoration(
-                    labelText: 'Kamer',
-                    border: OutlineInputBorder(),
-                  ),
-                  items: [
-                    for (var i = 0; i < _rooms.length; i++)
-                      DropdownMenuItem(value: i, child: Text(_rooms[i].label)),
-                  ],
-                  onChanged: (v) {
-                    if (v == null) return;
-                    setState(() => _roomChoice = v);
-                  },
-                ),
-            ],
-            const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton(
-                onPressed: known == 0
-                    ? null
-                    : () => _setKnown(knownOn != known),
-                child: Text(knownOn == known && known > 0
-                    ? 'Bekende uitzetten'
-                    : 'Bekende aanvinken'),
+                onPressed: known == 0 ? null : () => _setKnown(knownOn != known),
+                child: Text(knownOn == known && known > 0 ? 'Uitzetten' : 'Aanvinken'),
               ),
             ),
             Expanded(
               child: ListView(
                 children: [
-                  for (final entry in groups.entries) ...[
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8, bottom: 4),
-                      child: Text(
-                        entry.key,
-                        style: Theme.of(context).textTheme.titleSmall,
+                  for (final group in _groups) ...[
+                    TextField(
+                      controller: group.room,
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        labelText: 'Ruimte',
+                        border: OutlineInputBorder(),
                       ),
                     ),
-                    for (final row in entry.value) _rowTile(row),
+                    const SizedBox(height: 6),
+                    for (final row in group.rows) _rowTile(row),
+                    const SizedBox(height: 12),
                   ],
                 ],
               ),
@@ -449,59 +422,46 @@ class _LutronZoneImportDialogState extends State<_LutronZoneImportDialog> {
   }
 
   Widget _rowTile(_RowState row) {
-    final type = row.zone.controlType.trim();
-    final subtitle = row.used
-        ? 'Staat al in het huis'
-        : (row.known
-            ? (type.isEmpty ? lutronImportKindLabels[row.kind]! : type)
-            : (type.isEmpty
-                ? 'Onbekend type. Kies een apparaat en vink aan.'
-                : 'Onbekend type $type. Kies een apparaat en vink aan.'));
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Checkbox(
-          value: row.selected,
-          onChanged: row.used
-              ? null
-              : (v) => setState(() => row.selected = v ?? false),
-        ),
-        Expanded(
-          flex: 3,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(row.zone.name.trim().isEmpty ? 'Zone ${row.zone.id}' : row.zone.name),
-              Text(subtitle, style: Theme.of(context).textTheme.bodySmall),
-            ],
+    final editable = !row.used && row.kind != null;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          Checkbox(
+            value: row.selected && editable,
+            onChanged: editable
+                ? (v) => setState(() => row.selected = v ?? false)
+                : null,
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 2,
-          child: DropdownButtonFormField<LutronImportKind>(
-            initialValue: row.kind,
-            isExpanded: true,
-            decoration: const InputDecoration(
-              isDense: true,
-              border: OutlineInputBorder(),
+          Expanded(
+            child: editable
+                ? TextField(
+                    controller: row.deviceName,
+                    decoration: InputDecoration(
+                      isDense: true,
+                      border: const OutlineInputBorder(),
+                      hintText: row.used ? 'Staat al in het huis' : 'Apparaat',
+                    ),
+                  )
+                : Text(
+                    row.used
+                        ? '${row.zone.name} · staat al in het huis'
+                        : (row.deviceName.text.trim().isEmpty
+                            ? 'Zone ${row.zone.id}'
+                            : row.deviceName.text.trim()),
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 116,
+            child: Text(
+              row.typeLabel.isEmpty ? 'Onbekend' : row.typeLabel,
+              style: Theme.of(context).textTheme.bodySmall,
             ),
-            items: [
-              for (final kind in LutronImportKind.values)
-                DropdownMenuItem(
-                  value: kind,
-                  child: Text(lutronImportKindLabels[kind]!),
-                ),
-            ],
-            onChanged: row.used
-                ? null
-                : (v) {
-                    if (v == null) return;
-                    setState(() => row.kind = v);
-                  },
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -527,29 +487,6 @@ List<_FloorOption> _readFloors(Map<String, dynamic> house) {
     final label = name.isEmpty ? 'Verdieping' : name;
     final building = buildings['${floor['buildingId'] ?? ''}'.trim()];
     out.add(_FloorOption(i, building == null ? label : '$building · $label'));
-  }
-  return out;
-}
-
-List<_RoomOption> _readRooms(Map<String, dynamic> house, List<_FloorOption> floors) {
-  final raw = house['floors'];
-  if (raw is! List) return const [];
-  final out = <_RoomOption>[];
-  for (final floor in floors) {
-    final floorMap = raw[floor.index];
-    if (floorMap is! Map) continue;
-    final rooms = floorMap['rooms'];
-    if (rooms is! List) continue;
-    for (var ri = 0; ri < rooms.length; ri++) {
-      final room = rooms[ri];
-      if (room is! Map) continue;
-      final name = '${room['name'] ?? ''}'.trim();
-      out.add(_RoomOption(
-        floor.index,
-        ri,
-        '$floor.label · ${name.isEmpty ? 'Kamer' : name}',
-      ));
-    }
   }
   return out;
 }

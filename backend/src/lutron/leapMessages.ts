@@ -149,6 +149,8 @@ export type LeapButton = {
   id: number;
   name: string;
   buttonNumber: number;
+  /** Keypad of control station waar de knop op zit. */
+  deviceName: string;
 };
 
 export type LeapButtonPress = {
@@ -174,22 +176,127 @@ export function leapButtonAction(eventType: string): number | null {
   }
 }
 
-export function parseButtonList(msg: unknown): LeapButton[] {
-  const body = bodyOf(msg);
-  const raw = arrayOf(body.Buttons);
-  const out: LeapButton[] = [];
-  for (const button of raw) {
-    const id = buttonIdFromHref(String(button.href ?? ""));
-    if (id == null) continue;
-    const number = Number(button.ButtonNumber);
-    out.push({
-      id,
-      name: String(button.Name ?? `Knop ${id}`),
-      buttonNumber: Number.isFinite(number) ? number : 0
-    });
+export function parseButtonList(msg: unknown, deviceName = ""): LeapButton[] {
+  return collectDefinedButtons(msg, deviceName);
+}
+
+/**
+ * QSX wijst `/button` vaak af. Knoppen zitten dan op een control station
+ * of in een buttongroep van het keypad. Een kaal `{href}` is nog geen knop.
+ */
+export function collectDefinedButtons(msg: unknown, deviceName = ""): LeapButton[] {
+  const byId = new Map<number, LeapButton>();
+  const visit = (node: unknown, device: string) => {
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item, device);
+      return;
+    }
+    if (!node || typeof node !== "object") return;
+    const rec = node as Record<string, unknown>;
+    let nextDevice = device;
+    const href = String(rec.href ?? "");
+    if (hrefId(href, "device") != null || hrefId(href, "controlstation") != null) {
+      const named = String(rec.Name ?? "").trim();
+      if (named) nextDevice = named;
+    }
+    const id = hrefId(href, "button");
+    if (id != null && buttonIsDefined(rec) && !byId.has(id)) {
+      const number = Number(rec.ButtonNumber);
+      byId.set(id, {
+        id,
+        name: buttonLabel(rec, id),
+        buttonNumber: Number.isFinite(number) ? number : 0,
+        deviceName: nextDevice
+      });
+    }
+    for (const value of Object.values(rec)) visit(value, nextDevice);
+  };
+  visit(msg, deviceName);
+  return [...byId.values()].sort((a, b) => a.id - b.id);
+}
+
+export function collectHrefs(msg: unknown, kind: string): string[] {
+  const found = new Set<string>();
+  const visit = (node: unknown) => {
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+      return;
+    }
+    if (!node || typeof node !== "object") return;
+    const rec = node as Record<string, unknown>;
+    const href = String(rec.href ?? "");
+    const id = hrefId(href, kind);
+    if (id != null) found.add(`/${kind}/${id}`);
+    for (const value of Object.values(rec)) visit(value);
+  };
+  visit(msg);
+  return [...found];
+}
+
+export type LeapDeviceRef = { href: string; name: string; deviceType: string };
+
+export function collectDevices(msg: unknown): LeapDeviceRef[] {
+  const byHref = new Map<string, LeapDeviceRef>();
+  const visit = (node: unknown) => {
+    if (Array.isArray(node)) {
+      for (const item of node) visit(item);
+      return;
+    }
+    if (!node || typeof node !== "object") return;
+    const rec = node as Record<string, unknown>;
+    const href = String(rec.href ?? "");
+    const id = hrefId(href, "device");
+    if (id != null) {
+      const key = `/device/${id}`;
+      const prev = byHref.get(key);
+      const name = String(rec.Name ?? "").trim();
+      const deviceType = String(rec.DeviceType ?? rec.FullyQualifiedType ?? "").trim();
+      byHref.set(key, {
+        href: key,
+        name: name || prev?.name || "",
+        deviceType: deviceType || prev?.deviceType || ""
+      });
+    }
+    for (const value of Object.values(rec)) visit(value);
+  };
+  visit(msg);
+  return [...byHref.values()];
+}
+
+/** Loads overslaan. Leeg type blijft, dat is vaak een samenvatting zonder soort. */
+export function deviceMayHaveButtons(deviceType: string): boolean {
+  const type = deviceType.toLowerCase();
+  if (!type) return true;
+  if (/keypad|pico|seetouch|sunnata|palladiom|grafik|tabletop|hybrid|remote/.test(type)) {
+    return true;
   }
-  out.sort((a, b) => a.id - b.id);
-  return out;
+  return !/dimmer|switch|shade|processor|repeater|interface|contact|module|panel|sensor|occupancy|thermostat|fan|receptacle|phase|drape|blind|motor|output|lamp/.test(
+    type
+  );
+}
+
+function buttonIsDefined(rec: Record<string, unknown>): boolean {
+  if (rec.ButtonNumber != null || rec.Engraving != null || rec.ProgrammingModel != null) {
+    return true;
+  }
+  return typeof rec.Name === "string" && rec.Name.trim() !== "";
+}
+
+function buttonLabel(rec: Record<string, unknown>, id: number): string {
+  const engraving = rec.Engraving;
+  if (engraving && typeof engraving === "object") {
+    const text = String((engraving as Record<string, unknown>).Text ?? "").trim();
+    if (text) return text;
+  }
+  const name = String(rec.Name ?? "").trim();
+  return name || `Knop ${id}`;
+}
+
+function hrefId(href: string, kind: string): number | null {
+  const parts = href.split("/").filter(Boolean);
+  if (parts.length !== 2 || parts[0] !== kind) return null;
+  const id = Number(parts[1]);
+  return Number.isFinite(id) && id >= 1 ? id : null;
 }
 
 export function parseButtonEvents(msg: unknown): LeapButtonPress[] {

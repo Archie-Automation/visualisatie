@@ -470,12 +470,12 @@ class LutronButtonToKnxListEditor extends StatelessWidget {
 
 /// Vaste actienummers in het Lutron QSX/QS Integration Protocol.
 const _lutronActions = <String, int?>{
-  'Alle acties (elke druk)': null,
-  'Druk (korte druk) — actie 3': 3,
-  'Loslaten — actie 4': 4,
-  'Vasthouden (lange druk) — actie 5': 5,
-  'Dubbel tikken — actie 6': 6,
-  'Aangepast…': -1, // schildwacht voor vrij veld
+  'Korte druk': 3,
+  'Loslaten': 4,
+  'Vasthouden': 5,
+  'Dubbele druk': 6,
+  'Elke druk': null,
+  'Aangepast…': -1,
 };
 
 class _LutronMappingCard extends StatefulWidget {
@@ -498,7 +498,7 @@ class _LutronMappingCardState extends State<_LutronMappingCard> {
   /// Geeft de huidige dropdown-sleutel terug op basis van `mapping['actionNumber']`.
   String _dropdownKey() {
     final cur = widget.mapping['actionNumber'];
-    if (cur == null) return 'Alle acties (elke druk)';
+    if (cur == null) return 'Elke druk';
     final num = cur is int ? cur : int.tryParse('$cur');
     for (final entry in _lutronActions.entries) {
       if (entry.value == num) return entry.key;

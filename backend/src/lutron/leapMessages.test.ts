@@ -11,6 +11,8 @@ import {
   leapErrorMessage,
   leapButtonAction,
   parseButtonEvents,
+  collectDefinedButtons,
+  deviceMayHaveButtons,
   parseButtonList,
   parsePairingMessage,
   parseZoneList
@@ -77,7 +79,26 @@ describe("LEAP-berichten", () => {
     const listed = parseButtonList({
       Body: { Buttons: [{ href: "/button/42", Name: "Sfeer", ButtonNumber: 2 }] }
     });
-    assert.deepEqual(listed, [{ id: 42, name: "Sfeer", buttonNumber: 2 }]);
+    assert.deepEqual(listed, [{ id: 42, name: "Sfeer", buttonNumber: 2, deviceName: "" }]);
+    const engraved = collectDefinedButtons(
+      {
+        Body: {
+          ControlStation: { href: "/controlstation/4", Name: "Keuken" },
+          Buttons: [
+            {
+              href: "/button/8",
+              Name: "Button 1",
+              ButtonNumber: 1,
+              Engraving: { Text: "Eten" }
+            }
+          ]
+        }
+      },
+      "Keuken"
+    );
+    assert.deepEqual(engraved, [{ id: 8, name: "Eten", buttonNumber: 1, deviceName: "Keuken" }]);
+    assert.equal(deviceMayHaveButtons("SeeTouchKeypad"), true);
+    assert.equal(deviceMayHaveButtons("WallDimmer"), false);
   });
 
   it("zet een dimmer-commando op de LEAP-zone", () => {

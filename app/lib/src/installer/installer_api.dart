@@ -237,17 +237,20 @@ class LutronButtonInfo {
     required this.id,
     required this.name,
     required this.buttonNumber,
+    this.deviceName = '',
   });
 
   final int id;
   final String name;
   final int buttonNumber;
+  final String deviceName;
 
   factory LutronButtonInfo.fromJson(Map<String, dynamic> j) {
     return LutronButtonInfo(
       id: (j['id'] as num?)?.toInt() ?? 0,
       name: j['name'] as String? ?? '',
       buttonNumber: (j['buttonNumber'] as num?)?.toInt() ?? 0,
+      deviceName: j['deviceName'] as String? ?? '',
     );
   }
 }
@@ -317,7 +320,7 @@ Future<List<LutronButtonInfo>> fetchInstallerLutronButtons(String token) async {
         Uri.parse('$apiBase/api/installer/lutron-buttons'),
         headers: {'authorization': 'Bearer $token'},
       )
-      .timeout(const Duration(seconds: 20));
+      .timeout(const Duration(seconds: 90));
   final dynamic raw =
       res.body.isNotEmpty ? jsonDecode(res.body) : <String, dynamic>{};
   final body = Map<String, dynamic>.from(raw as Map);

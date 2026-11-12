@@ -148,6 +148,45 @@ void main() {
     expect(devices.single['lutronIntegrationId'], 4);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('een ruimtenaam geldt voor iedere zone in die ruimte', (tester) async {
+    final house = <String, dynamic>{
+      'floors': [
+        {
+          'name': 'Begane grond',
+          'rooms': <Map<String, dynamic>>[],
+        },
+      ],
+    };
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showLutronZoneImportDialog(
+              context: context,
+              house: house,
+              zones: const [
+                LutronZoneInfo(id: 1, name: 'Spot', controlType: 'Dimmed', area: 'Keuken'),
+                LutronZoneInfo(id: 2, name: 'Wand', controlType: 'Switched', area: 'Keuken'),
+              ],
+            ),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, 'Keuken leef');
+    await tester.tap(find.text('2 toevoegen'));
+    await tester.pumpAndSettle();
+    final rooms = ((house['floors'] as List).first as Map)['rooms'] as List;
+    expect(rooms, hasLength(1));
+    expect(rooms.single['name'], 'Keuken leef');
+    final devices = rooms.single['devices'] as List;
+    expect(devices, hasLength(2));
+    expect(devices.map((device) => device['name']), ['Spot', 'Wand']);
+  });
 }
 
 String Function() _ids() {
