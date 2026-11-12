@@ -178,6 +178,8 @@ function main() {
 
   const server = http.createServer(app);
   const wsHub = attachWebSocket(server, bus, media);
+  wsHub.setLutronZones(() => lutron.zoneSnapshot());
+  lutron.onZone = (zone) => wsHub.broadcastLutronZone(zone);
   setVoipHub(wsHub);
   setVoipBus(bus);
   void syncVoipFromConfig(cfg).catch((err) => {

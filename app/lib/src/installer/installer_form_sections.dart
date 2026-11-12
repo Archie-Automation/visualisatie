@@ -11,6 +11,7 @@ import '../ui/widgets/confirm_dialog.dart';
 import '../ui/widgets/glass_card.dart';
 import '../ui/widgets/heater_icon.dart';
 import '../ui/widgets/luxe_form.dart';
+import 'installer_api.dart';
 import 'knx_ga_catalog.dart';
 
 const _uuid = Uuid();
@@ -398,65 +399,83 @@ class KnxTelegramEditor extends StatelessWidget {
 }
 
 /// Lutron keypad → KNX mappings (geen JSON).
+String lutronButtonChoiceLabel(LutronButtonInfo button) {
+  final keypad = button.deviceName.trim();
+  final name = button.name.trim().isEmpty
+      ? 'Knop ${button.buttonNumber}'
+      : button.name.trim();
+  return keypad.isEmpty ? name : '$keypad · $name';
+}
+
 class LutronButtonToKnxListEditor extends StatelessWidget {
   const LutronButtonToKnxListEditor({
     super.key,
     required this.parent,
     this.listKey = 'buttonToKnx',
+    this.buttons = const [],
     required this.onChanged,
   });
 
   final Map<String, dynamic> parent;
   final String listKey;
+  final List<LutronButtonInfo> buttons;
   final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
     final maps = _ensureList(parent, listKey);
+    final canAdd = buttons.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Keypad-knoppen → KNX',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-            ),
-            TextButton.icon(
-              onPressed: () {
-                maps.add({
-                  'id': 'map-${_uuid.v4()}',
-                  'label': 'Nieuwe knop',
-                  'integrationId': 1,
-                  'componentNumber': 1,
-                  'actionNumber': 3,
-                  'knx': {
-                    'ga': '1/1/1',
-                    'role': 'switch',
-                    'value': true,
-                    'pulseMs': 250,
-                  },
-                });
-                onChanged();
-              },
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('Mapping'),
-            ),
-          ],
+        Text(
+          'Keypad-knoppen → KNX',
+          style: Theme.of(context).textTheme.titleSmall,
         ),
         const SizedBox(height: 8),
-        if (maps.isEmpty)
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton.icon(
+            onPressed: canAdd
+                ? () {
+                    final pick = buttons.first;
+                    maps.add({
+                      'id': 'map-${_uuid.v4()}',
+                      'label': lutronButtonChoiceLabel(pick),
+                      'integrationId': pick.id,
+                      'componentNumber': 1,
+                      'actionNumber': 3,
+                      'knx': {
+                        'ga': '1/1/1',
+                        'role': 'switch',
+                        'value': true,
+                        'pulseMs': 250,
+                      },
+                    });
+                    onChanged();
+                  }
+                : null,
+            icon: const Icon(Icons.add, size: 20),
+            label: const Text('Knop koppelen'),
+          ),
+        ),
+        const SizedBox(height: 8),
+        if (!canAdd)
           Text(
-            'Nog geen mappings. Het knop-id staat in de lijst na het koppelen van de QSX.',
+            'Koppel de QSX. De uitgelezen knoppen kies je hier.',
+            style: Theme.of(context).textTheme.bodySmall,
+          )
+        else if (maps.isEmpty)
+          Text(
+            'Nog geen koppeling. Kies een Lutron-knop en hang er een KNX-actie aan.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         for (var i = 0; i < maps.length; i++)
           _LutronMappingCard(
             key: ValueKey(maps[i]['id'] ?? 'm$i'),
             mapping: maps[i],
+            buttons: buttons,
             onChanged: onChanged,
             onDelete: () {
               maps.removeAt(i);
@@ -482,11 +501,13 @@ class _LutronMappingCard extends StatefulWidget {
   const _LutronMappingCard({
     super.key,
     required this.mapping,
+    required this.buttons,
     required this.onChanged,
     required this.onDelete,
   });
 
   final Map<String, dynamic> mapping;
+  final List<LutronButtonInfo> buttons;
   final VoidCallback onChanged;
   final VoidCallback onDelete;
 
@@ -540,12 +561,11 @@ class _LutronMappingCardState extends State<_LutronMappingCard> {
                 widget.onChanged();
               },
             ),
-            _InstallerStrField(
-              label: 'Knop-id (uit de lijst na koppelen)',
-              value: '${mapping['integrationId'] ?? ''}',
-              number: true,
-              onChanged: (v) {
-                mapping['integrationId'] = int.tryParse(v) ?? 1;
+            _LutronButtonPicker(
+              mapping: mapping,
+              buttons: widget.buttons,
+              onChanged: () {
+                setState(() {});
                 widget.onChanged();
               },
             ),
@@ -607,6 +627,70 @@ class _LutronMappingCardState extends State<_LutronMappingCard> {
             ),
           ],
         ),
+    );
+  }
+}
+
+class _LutronButtonPicker extends StatelessWidget {
+  const _LutronButtonPicker({
+    required this.mapping,
+    required this.buttons,
+    required this.onChanged,
+  });
+
+  final Map<String, dynamic> mapping;
+  final List<LutronButtonInfo> buttons;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final current = (mapping['integrationId'] as num?)?.toInt();
+    final known = {for (final button in buttons) button.id};
+    final items = <DropdownMenuItem<int>>[
+      for (final button in buttons)
+        DropdownMenuItem(
+          value: button.id,
+          child: Text(
+            lutronButtonChoiceLabel(button),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      if (current != null && current >= 1 && !known.contains(current))
+        DropdownMenuItem(value: current, child: Text('Knop $current')),
+    ];
+    if (items.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 12),
+        child: Text(
+          'Geen uitgelezen knoppen.',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      );
+    }
+    final value = items.any((item) => item.value == current) ? current : items.first.value;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: DropdownButtonFormField<int>(
+        key: ValueKey('$value-${buttons.length}'),
+        initialValue: value,
+        isExpanded: true,
+        decoration: const InputDecoration(
+          labelText: 'Lutron-knop',
+          border: OutlineInputBorder(),
+        ),
+        items: items,
+        onChanged: (id) {
+          if (id == null) return;
+          mapping['integrationId'] = id;
+          for (final button in buttons) {
+            if (button.id == id) {
+              mapping['label'] = lutronButtonChoiceLabel(button);
+              break;
+            }
+          }
+          onChanged();
+        },
+      ),
     );
   }
 }
@@ -2683,9 +2767,8 @@ class RgbwWwInstallerSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Clear Connect Type X op de QSX, één zone-id. In de app kun je kleur '
-            'of alleen tunable white kiezen. KNX-groepadressen blijven staan '
-            'als de besturing op KNX staat.',
+            'Eén zone op de QSX. Kleur en tunable white wissel je in de app, '
+            'tenzij je hier alleen tunable white vastzet.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 12),

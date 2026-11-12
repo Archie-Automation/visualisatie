@@ -17,7 +17,13 @@ import {
   buildOutputStop
 } from "./outputCommands";
 import { LutronLeapSession, pairWithProcessor } from "./leapClient";
-import { isLeapTransportPort, type LeapButton, type LeapZone } from "./leapMessages";
+import {
+  isLeapTransportPort,
+  switchLevelFromRecall,
+  type LeapButton,
+  type LeapZone,
+  type LeapZoneLive
+} from "./leapMessages";
 import { HOUSE_LUTRON_SLOT_ID } from "./resolve";
 
 export type LutronClientStatus = {
@@ -68,6 +74,9 @@ export class LutronIntegrationManager {
   private leap: LutronLeapSession | null = null;
   private leapHost = "";
   private readonly bus: KnxBus;
+  private readonly zones = new Map<number, LeapZoneLive>();
+  /** Nieuwe of gewijzigde zonestand, voor de app. */
+  onZone?: (zone: LeapZoneLive) => void;
 
   constructor(bus: KnxBus) {
     this.bus = bus;
@@ -124,6 +133,7 @@ export class LutronIntegrationManager {
       throw new Error("HomeWorks QSX is nog niet gekoppeld. Tik op Koppelen en druk daarna de processorknop in.");
     }
     await this.leap.setSpectrum(zoneId, level, hue, saturation);
+    this.rememberZone({ id: zoneId, level, hue, saturation });
   }
 
   async setWhite(zoneId: number, level: number, kelvin: number): Promise<void> {
@@ -131,6 +141,37 @@ export class LutronIntegrationManager {
       throw new Error("HomeWorks QSX is nog niet gekoppeld. Tik op Koppelen en druk daarna de processorknop in.");
     }
     await this.leap.setWhite(zoneId, level, kelvin);
+    this.rememberZone({ id: zoneId, level, kelvin });
+  }
+
+  zoneSnapshot(): LeapZoneLive[] {
+    return [...this.zones.values()];
+  }
+
+  /** Dimmer en RGBW: laatste stand. Een gewone schakelaar gaat naar 100. */
+  switchLevel(zoneId: number, on: boolean, fullOn: boolean): number {
+    return switchLevelFromRecall(this.zones.get(zoneId)?.recall, on, fullOn);
+  }
+
+  private rememberZone(update: {
+    id: number;
+    level: number;
+    hue?: number;
+    saturation?: number;
+    kelvin?: number;
+  }): void {
+    const prev = this.zones.get(update.id);
+    const level = Math.max(0, Math.min(100, Math.round(update.level)));
+    const next: LeapZoneLive = {
+      id: update.id,
+      level,
+      recall: level > 0 ? level : (prev?.recall ?? 0),
+      hue: update.hue ?? prev?.hue,
+      saturation: update.saturation ?? prev?.saturation,
+      kelvin: update.kelvin ?? prev?.kelvin
+    };
+    this.zones.set(update.id, next);
+    this.onZone?.(next);
   }
 
   listZones(): Promise<LeapZone[]> {
@@ -196,6 +237,7 @@ export class LutronIntegrationManager {
         rootCertificate: leap.rootCertificate ?? ""
       });
       this.leap.onButton = (press) => this.onLeapButton(press);
+      this.leap.onZoneLevel = (level) => this.rememberZone(level);
       this.leap.start();
     }
 
@@ -435,6 +477,7 @@ export class LutronIntegrationManager {
   async setHomeworksOutputLevel(binding: LutronLoadOutputBinding, percent: number): Promise<void> {
     if (this.leap) {
       await this.leap.setLevel(binding.integrationId, percent, binding.fadeSeconds);
+      this.rememberZone({ id: binding.integrationId, level: percent });
       return;
     }
     this.assertTelnetPath();

@@ -27,6 +27,7 @@ import {
   deviceMayHaveButtons,
   parseButtonEvents,
   parsePairingMessage,
+  parseZoneLevels,
   parseZoneList
 } from "./leapMessages";
 
@@ -164,6 +165,7 @@ export class LutronLeapSession {
   lastError?: string;
   /** Keypad-druk nadat het abonnement staat. De eerste seconden na verbinden worden genegeerd. */
   onButton?: (press: LeapButtonPress) => void;
+  onZoneLevel?: (level: { id: number; level: number; hue?: number; saturation?: number; kelvin?: number }) => void;
   private buttonsReadyAt = Number.POSITIVE_INFINITY;
   private socket?: tls.TLSSocket;
   private buffer = "";
@@ -328,6 +330,15 @@ export class LutronLeapSession {
     return out;
   }
 
+  private async subscribeZones(): Promise<void> {
+    if (await this.subscribe("/zone/status")) return;
+    const zones = await this.listZones().catch(() => [] as LeapZone[]);
+    for (const zone of zones) {
+      if (this.stopped || !this.connected) return;
+      await this.subscribe(`/zone/${zone.id}/status`);
+    }
+  }
+
   private async subscribeButtons(): Promise<void> {
     const buttons = await this.listButtons().catch(() => [] as LeapButton[]);
     logger.info(
@@ -414,6 +425,7 @@ export class LutronLeapSession {
       this.subscribeButtonsOneByOne = false;
       logger.info({ host: this.host, port: LEAP_PORT }, "QSX LEAP verbonden");
       void this.subscribeButtons();
+      void this.subscribeZones();
     });
     socket.on("error", (err) => {
       this.lastError = err.message;
@@ -467,6 +479,7 @@ export class LutronLeapSession {
     if (Date.now() >= this.buttonsReadyAt) {
       for (const press of parseButtonEvents(msg)) this.onButton?.(press);
     }
+    for (const level of parseZoneLevels(msg)) this.onZoneLevel?.(level);
     const url = headerUrl(msg);
     for (const [key, pending] of this.pending) {
       if (url === key || url.startsWith(`${key}?`) || url.startsWith(`${key}/`)) {

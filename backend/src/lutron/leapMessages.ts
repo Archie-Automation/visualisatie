@@ -427,6 +427,98 @@ function clampPercent(n: number): number {
   return Math.max(0, Math.min(100, Math.round(n)));
 }
 
+export type LeapZoneLive = {
+  id: number;
+  /** Huidige stand 0–100. 0 is uit. */
+  level: number;
+  /** Laatste stand boven 0. Aan zetten gaat hierheen, niet naar 100. */
+  recall: number;
+  hue?: number;
+  saturation?: number;
+  kelvin?: number;
+};
+
+/** Aan = laatste dimstand. Een schakelaar (geen dimmer) gaat wel naar 100. */
+export function switchLevelFromRecall(
+  recall: number | undefined,
+  on: boolean,
+  fullOn: boolean
+): number {
+  if (!on) return 0;
+  if (fullOn) return 100;
+  if (recall != null && recall > 0) {
+    return Math.max(1, Math.min(100, Math.round(recall)));
+  }
+  return 100;
+}
+
+export function parseZoneLevels(msg: unknown): LeapZoneLive[] {
+  const body = bodyOf(msg);
+  const single = body.ZoneStatus;
+  const many = arrayOf(body.ZoneStatuses);
+  const rows =
+    single && typeof single === "object"
+      ? [single as Record<string, unknown>, ...many]
+      : many;
+  const out: LeapZoneLive[] = [];
+  for (const row of rows) {
+    const id = zoneIdOf(row);
+    if (id == null) continue;
+    const level = zoneLevelOf(row);
+    if (level == null) continue;
+    const color = row.ColorTuningStatus;
+    const hsv =
+      color && typeof color === "object"
+        ? ((color as Record<string, unknown>).HSVTuningLevel as Record<string, unknown> | undefined)
+        : undefined;
+    const white =
+      color && typeof color === "object"
+        ? ((color as Record<string, unknown>).WhiteTuningLevel as Record<string, unknown> | undefined)
+        : undefined;
+    const hue = numberOrUndefined(hsv?.Hue);
+    const saturation = numberOrUndefined(hsv?.Saturation);
+    const kelvin = numberOrUndefined(white?.Kelvin);
+    out.push({
+      id,
+      level,
+      recall: level > 0 ? level : 0,
+      ...(hue != null ? { hue } : {}),
+      ...(saturation != null ? { saturation } : {}),
+      ...(kelvin != null ? { kelvin } : {})
+    });
+  }
+  return out;
+}
+
+function zoneIdOf(row: Record<string, unknown>): number | null {
+  const zone = row.Zone;
+  const href = String(
+    (zone && typeof zone === "object" ? (zone as Record<string, unknown>).href : undefined) ??
+      row.href ??
+      ""
+  );
+  const parts = href.split("/").filter(Boolean);
+  const at = parts.indexOf("zone");
+  const raw = at >= 0 ? parts[at + 1] : "";
+  if (!raw || raw === "status") return null;
+  const id = Number(raw);
+  return Number.isFinite(id) && id >= 1 ? id : null;
+}
+
+function zoneLevelOf(row: Record<string, unknown>): number | null {
+  const level = numberOrUndefined(row.Level);
+  if (level != null) return Math.max(0, Math.min(100, Math.round(level)));
+  const switched = String(row.SwitchedLevel ?? "");
+  if (switched === "On") return 100;
+  if (switched === "Off") return 0;
+  return null;
+}
+
+function numberOrUndefined(value: unknown): number | undefined {
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 export function parseZoneList(zoneMsg: unknown, areaMsg: unknown): LeapZone[] {
   const areas = new Map<string, string>();
   const areaBody = bodyOf(areaMsg);

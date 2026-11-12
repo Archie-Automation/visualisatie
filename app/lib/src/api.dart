@@ -13,6 +13,7 @@ import 'demo/demo_bus.dart';
 import 'demo/demo_house.dart';
 import 'demo/demo_session.dart';
 import 'energy_state.dart';
+import 'lutron_levels.dart';
 import 'saved_houses.dart';
 import 'media_api.dart';
 import 'server_route.dart';
@@ -1026,6 +1027,10 @@ class BusController extends Notifier<BusState> {
                 Map<String, dynamic>.from(energy),
               );
         }
+        final zones = data['lutronZones'];
+        if (zones is List) {
+          ref.read(lutronZoneProvider.notifier).replaceAll(zones);
+        }
       } else if (passwordChangeRequired(snap)) {
         await ref.read(authProvider.notifier).requirePasswordChange();
         if (gen != _connectGen || _disposed) return;
@@ -1115,6 +1120,18 @@ class BusController extends Notifier<BusState> {
               if (energy is Map) {
                 ref.read(energyStateProvider.notifier).apply(
                       Map<String, dynamic>.from(energy),
+                    );
+              }
+            case 'lutron.zones':
+              final zones = msg['payload'];
+              if (zones is List) {
+                ref.read(lutronZoneProvider.notifier).replaceAll(zones);
+              }
+            case 'lutron.zone':
+              final zone = msg['payload'];
+              if (zone is Map) {
+                ref.read(lutronZoneProvider.notifier).applyJson(
+                      Map<String, dynamic>.from(zone),
                     );
               }
             case 'intercom.ring':

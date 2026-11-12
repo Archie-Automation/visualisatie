@@ -332,7 +332,12 @@ export async function dispatch(
       const lut = resolveLutronLoadOutput(device);
       if (lut) {
         if (!lutron) throw new Error("Lutron-integratie niet beschikbaar");
-        await lutron.setHomeworksOutputLevel(lut, cmd.on ? 100 : 0);
+        const percent = lutron.switchLevel(
+          lut.integrationId,
+          cmd.on,
+          device.type === "light_switch"
+        );
+        await lutron.setHomeworksOutputLevel(lut, percent);
         return;
       }
       const switchGa = (device.ga as any).switch ?? (device.ga as any).on;

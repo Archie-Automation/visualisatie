@@ -160,9 +160,11 @@ class LuxeNavRow extends StatelessWidget {
     this.selected = false,
     this.rounded = false,
     this.selectedTextMatchesIcon = false,
+    this.leading,
   });
 
   final IconData icon;
+  /// Vervangt [icon] als de rij een eigen tekening nodig heeft, zoals een verdieping.
   final String title;
   final String? subtitle;
   final Widget? trailing;
@@ -170,6 +172,7 @@ class LuxeNavRow extends StatelessWidget {
   final bool rounded;
   /// Dark mode: geselecteerde titel en subtitel in dezelfde kleur als het icoon.
   final bool selectedTextMatchesIcon;
+  final Widget Function(Color color)? leading;
   final VoidCallback onTap;
 
   @override
@@ -226,11 +229,12 @@ class LuxeNavRow extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(14, 11, 4, 11),
                   child: Row(
                     children: [
-                      Icon(
-                        icon,
-                        color: iconColor,
-                        size: 20,
-                      ),
+                      leading?.call(iconColor) ??
+                          Icon(
+                            icon,
+                            color: iconColor,
+                            size: 20,
+                          ),
                       const SizedBox(width: 12),
                       Expanded(child: titleBlock),
                     ],

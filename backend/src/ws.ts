@@ -46,6 +46,15 @@ if (
   );
 }
 
+type LutronZoneMsg = {
+  id: number;
+  level: number;
+  recall: number;
+  hue?: number;
+  saturation?: number;
+  kelvin?: number;
+};
+
 type Outgoing =
   | { type: "snapshot"; payload: GAState[] }
   | { type: "state"; payload: GAState }
@@ -89,7 +98,9 @@ type Outgoing =
         buttonName?: string;
         sceneName?: string;
       };
-    };
+    }
+  | { type: "lutron.zones"; payload: LutronZoneMsg[] }
+  | { type: "lutron.zone"; payload: LutronZoneMsg };
 
 export interface WsHub {
   broadcastIntercomRing(intercomId: string, groupId?: string): void;
@@ -99,6 +110,8 @@ export interface WsHub {
     state: "idle" | "ringing" | "dialing" | "busy"
   ): void;
   broadcastConfigChanged(version: number): void;
+  setLutronZones(read: () => LutronZoneMsg[]): void;
+  broadcastLutronZone(zone: LutronZoneMsg): void;
   broadcastSceneHeard(payload: {
     roomId: string;
     ga: string;
@@ -125,6 +138,7 @@ export function attachWebSocket(
   media: MediaManager
 ): WsHub {
   const wss = new WebSocketServer({ server, path: "/ws" });
+  let lutronZones: () => LutronZoneMsg[] = () => [];
   const socketsBySession = new Map<string, Set<WebSocket>>();
   const trackSession = (ws: WebSocket, sid: string) => {
     let set = socketsBySession.get(sid);
@@ -213,6 +227,7 @@ export function attachWebSocket(
     });
     send(ws, { type: "wtw.logic.snapshot", payload: wtwRuntime.getAll() });
     send(ws, { type: "energy.state", payload: energyRuntime.getSnapshot() });
+    send(ws, { type: "lutron.zones", payload: lutronZones() });
   });
 
   let idxVersion = -1;
@@ -305,6 +320,12 @@ export function attachWebSocket(
     },
     broadcastSceneHeard(payload) {
       broadcastAll({ type: "scene.heard", payload });
+    },
+    setLutronZones(read) {
+      lutronZones = read;
+    },
+    broadcastLutronZone(zone) {
+      broadcastAll({ type: "lutron.zone", payload: zone });
     },
     async close() {
       unsubHvac();

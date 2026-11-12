@@ -152,7 +152,7 @@ String _deviceTypeLabel(String dt, DeviceBusCategory bus) {
       case 'light_dimmer':
         return 'Dimbare lamp';
       case 'rgbw_ww':
-        return 'Kleur / RGBW (Clear Connect)';
+        return 'Kleur / RGBW';
       case 'shading':
         return 'Gordijn / jaloezie';
       case 'lutron_homeworks':
@@ -1252,6 +1252,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           hot: candidate.isNotEmpty,
           child: LuxeNavRow(
             icon: Icons.layers_outlined,
+            leading: _floorLeading(fi),
             title: _namedOr(_floors()[fi], 'Verdieping'),
             subtitle: _countLabel(_roomList(fi).length, 'kamer', 'kamers'),
             selectedTextMatchesIcon: true,
@@ -1942,9 +1943,9 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     return list;
   }
 
-  List<({String id, String name, String type, String where})>
+  List<({String id, String name, String type, String where, String control})>
       _catalogAllDevices() {
-    final out = <({String id, String name, String type, String where})>[];
+    final out = <({String id, String name, String type, String where, String control})>[];
     void add(Map<String, dynamic> d, String where) {
       final id = (d['id'] as String?)?.trim() ?? '';
       if (id.isEmpty) return;
@@ -1953,6 +1954,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         name: _namedOr(d, 'Apparaat'),
         type: d['type'] as String? ?? '',
         where: where,
+        control: d['control'] as String? ?? '',
       ));
     }
 
@@ -1979,7 +1981,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     return out;
   }
 
-  ({String id, String name, String type, String where})? _catalogDevice(
+  ({String id, String name, String type, String where, String control})? _catalogDevice(
       String id) {
     for (final d in _catalogAllDevices()) {
       if (d.id == id) return d;
@@ -2033,7 +2035,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   title: Text(d.name),
                   subtitle: Text(
                     [
-                      _deviceTypeLabels[d.type] ?? d.type,
+                      _deviceTypeLabel(
+                        d.type,
+                        d.control == 'lutron'
+                            ? DeviceBusCategory.lutron
+                            : DeviceBusCategory.knx,
+                      ),
                       d.where,
                     ].where((s) => s.isNotEmpty).join(' · '),
                   ),
@@ -3254,7 +3261,15 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
 
   String _deviceRowSubtitle(Map<String, dynamic> d) {
     final type = d['type'] as String? ?? '';
-    return _deviceTypeLabels[type] ?? type;
+    final bus = d['control'] == 'lutron'
+        ? DeviceBusCategory.lutron
+        : DeviceBusCategory.knx;
+    return _deviceTypeLabel(type, bus);
+  }
+
+  Widget Function(Color color) _floorLeading(int fi) {
+    final key = _floors()[fi]['icon'] as String?;
+    return (color) => scopeFloorGlyph(key, size: 20, color: color);
   }
 
   String _namedOr(Map<String, dynamic> m, String fallback) {
@@ -3477,7 +3492,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           _plusUnderTrash(
             tooltip: 'Kamer toevoegen',
             onPressed: () => _addRoom(fi),
-            compact: true,
             rounded: true,
           )
         else
@@ -3494,7 +3508,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               _plusUnderTrash(
                 tooltip: 'Kamer toevoegen',
                 onPressed: () => _addRoom(fi),
-                compact: true,
                 rounded: true,
               ),
           ],
@@ -3528,7 +3541,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           _plusUnderTrash(
             tooltip: 'Apparaat toevoegen',
             onPressed: () => _addDeviceFromPicker(fi, ri),
-            compact: true,
             rounded: true,
           )
         else
@@ -3541,11 +3553,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               rounded: true,
               selected: _sel.kind == _FocusKind.device && _sel.di == di,
             ),
-            if (di == 0)
+            if (di == devices.length - 1)
               _plusUnderTrash(
                 tooltip: 'Apparaat toevoegen',
                 onPressed: () => _addDeviceFromPicker(fi, ri),
-                compact: true,
                 rounded: true,
               ),
           ],
@@ -3640,6 +3651,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           for (final fi in visible) ...[
             LuxeNavRow(
               icon: Icons.layers_outlined,
+              leading: _floorLeading(fi),
               title: _namedOr(floors[fi], 'Verdieping'),
               subtitle: _countLabel(_roomList(fi).length, 'kamer', 'kamers'),
               selectedTextMatchesIcon: true,
@@ -3685,7 +3697,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           _plusUnderTrash(
             tooltip: 'Kamer toevoegen',
             onPressed: () => _addRoom(fi),
-            compact: true,
             rounded: true,
           )
         else
@@ -3707,7 +3718,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               _plusUnderTrash(
                 tooltip: 'Kamer toevoegen',
                 onPressed: () => _addRoom(fi),
-                compact: true,
                 rounded: true,
               ),
           ],
@@ -3925,6 +3935,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   Divider(height: 1, color: LuxeColors.lineSoft),
                 LuxeNavRow(
                   icon: Icons.layers_outlined,
+                  leading: _floorLeading(i),
                   title: _namedOr(floors[i], 'Verdieping'),
                   subtitle: _countLabel(_roomList(i).length, 'kamer', 'kamers'),
                   selectedTextMatchesIcon: true,
@@ -3960,6 +3971,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         children: [
           LuxeNavRow(
             icon: Icons.layers_outlined,
+            leading: _floorLeading(fi),
             title: _namedOr(floor, 'Verdieping'),
             subtitle: _countLabel(rooms.length, 'kamer', 'kamers'),
             selectedTextMatchesIcon: true,
@@ -4162,7 +4174,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   final sub = info == null
                       ? 'Apparaat ontbreekt'
                       : [
-                          _deviceTypeLabels[info.type] ?? info.type,
+                          _deviceTypeLabel(
+                            info.type,
+                            info.control == 'lutron'
+                                ? DeviceBusCategory.lutron
+                                : DeviceBusCategory.knx,
+                          ),
                           info.where,
                         ].where((s) => s.isNotEmpty).join(' · ');
                   return Padding(
@@ -4321,7 +4338,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             _plusUnderTrash(
               tooltip: 'Apparaat toevoegen',
               onPressed: () => _addDeviceFromPicker(fi, ri),
-              compact: true,
             ),
           ],
           for (var di = 0; di < devices.length; di++) ...[
@@ -4337,11 +4353,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   _sel.ri == ri &&
                   _sel.di == di,
             ),
-            if (di == 0)
+            if (di == devices.length - 1)
               _plusUnderTrash(
                 tooltip: 'Apparaat toevoegen',
                 onPressed: () => _addDeviceFromPicker(fi, ri),
-                compact: true,
               ),
           ],
         ],
@@ -4458,7 +4473,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                 _plusUnderTrash(
                   tooltip: 'Kamer toevoegen',
                   onPressed: () => _addRoom(fi),
-                  compact: true,
                 ),
               ],
               for (var ri = 0; ri < rooms.length; ri++) ...[
@@ -4475,7 +4489,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   _plusUnderTrash(
                     tooltip: 'Kamer toevoegen',
                     onPressed: () => _addRoom(fi),
-                    compact: true,
                   ),
               ],
             ],
@@ -5875,17 +5888,23 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
     }
   }
 
-  String _zoneLine(LutronZoneInfo z) {
-    final name = z.area.isEmpty ? z.name : '${z.area} · ${z.name}';
-    final kind = z.controlType.isEmpty ? '' : '  (${z.controlType})';
-    return '${z.id}  $name$kind';
-  }
-
-  String _buttonLine(LutronButtonInfo b) {
-    final keypad = b.deviceName.trim();
-    final name = b.name.trim().isEmpty ? 'Knop ${b.buttonNumber}' : b.name.trim();
-    final label = keypad.isEmpty ? name : '$keypad · $name';
-    return '${b.id}  $label';
+  Future<void> _importZones() async {
+    final added = await showLutronZoneImportDialog(
+      context: context,
+      zones: _zones,
+      house: widget.house,
+    );
+    if (!mounted || added == null) return;
+    widget.onChanged();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          added == 0
+              ? 'Geen nieuwe zones. Ze staan al in het huis.'
+              : '$added zones in het huis gezet. Sla op om ze te bewaren.',
+        ),
+      ),
+    );
   }
 
   String _statusLine() {
@@ -5960,7 +5979,7 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
                                 title: 'HomeWorks QSX',
                                 body:
                                     'Tik op Koppelen en druk daarna de knop op de processor in tot het lampje knippert. Houd hem vast tot het lampje stopt.\n\n'
-                                    'Het zone-id van een lamp, gordijn of Clear Connect Type X staat daarna in de lijst. Met Zones in het huis zetten maak je er apparaten van in een kamer. Het knop-id voor keypad → KNX staat in de knoppenlijst. Dat is niet poort 8902 en niet het kamernummer.',
+                                    'Tik daarna op Zones in het huis zetten. De zones komen pas in dat scherm. Een keypad-knop kies je onder Keypad-knoppen → KNX en hang je aan een KNX-actie.',
                               ),
                             ],
                           ),
@@ -6009,91 +6028,34 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
                           : 'Koppelen'),
                     ),
                   ),
-                if (_zones.isNotEmpty) ...[
+                if (_status?.paired == true) ...[
                   const SizedBox(height: 8),
-                  Text(
-                    'Zones op de QSX',
-                    style: Theme.of(context).textTheme.labelLarge,
-                  ),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: () async {
-                        final added = await showLutronZoneImportDialog(
-                          context: context,
-                          zones: _zones,
-                          house: widget.house,
-                        );
-                        if (!mounted || added == null) return;
-                        widget.onChanged();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              added == 0
-                                  ? 'Geen nieuwe zones. Ze staan al in het huis.'
-                                  : '$added zones in het huis gezet. Sla op om ze te bewaren.',
-                            ),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.playlist_add_outlined),
+                    child: FilledButton.icon(
+                      onPressed: _zones.isEmpty ? null : _importZones,
+                      icon: const Icon(Icons.playlist_add_outlined, size: 20),
                       label: const Text('Zones in het huis zetten'),
                     ),
                   ),
-                  const SizedBox(height: 4),
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 180),
-                    child: ListView(
-                      shrinkWrap: true,
-                      children: [
-                        for (final z in _zones)
-                          Text(
-                            _zoneLine(z),
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                      ],
-                    ),
-                  ),
-                ] else if (_zonesErr != null && _status?.paired == true) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Geen zonelijst. Het zone-id zet je zelf op de lamp.',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-                if (_zonesLoaded && _status?.connected == true) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    'Knop-id voor keypad → KNX',
-                    style: Theme.of(context).textTheme.labelLarge,
-                  ),
-                  const SizedBox(height: 4),
-                  if (_buttons.isEmpty)
+                  if (_zonesLoaded && _zones.isEmpty) ...[
+                    const SizedBox(height: 8),
                     Text(
-                      'Geen knoppen van de schakelaars. Keypads zitten niet in de zonelijst.',
+                      _zonesErr ?? 'Geen zones op de processor.',
                       style: Theme.of(context).textTheme.bodySmall,
-                    )
-                  else
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxHeight: 180),
-                      child: ListView(
-                        shrinkWrap: true,
-                        children: [
-                          for (final b in _buttons)
-                            Text(
-                              _buttonLine(b),
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                        ],
-                      ),
                     ),
+                  ],
                 ],
               ],
             ),
           ),
         ),
         Expanded(
-          child: _LutronForm(lutron: widget.lutron, onChanged: widget.onChanged),
+          child: _LutronForm(
+            lutron: widget.lutron,
+            buttons: _buttons,
+            onChanged: widget.onChanged,
+          ),
         ),
       ],
     );
@@ -6101,9 +6063,14 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
 }
 
 class _LutronForm extends StatelessWidget {
-  const _LutronForm({required this.lutron, required this.onChanged});
+  const _LutronForm({
+    required this.lutron,
+    required this.buttons,
+    required this.onChanged,
+  });
 
   final Map<String, dynamic> lutron;
+  final List<LutronButtonInfo> buttons;
   final VoidCallback onChanged;
 
   @override
@@ -6144,6 +6111,7 @@ class _LutronForm extends StatelessWidget {
         const SizedBox(height: 16),
         LutronButtonToKnxListEditor(
           parent: lutron,
+          buttons: buttons,
           onChanged: onChanged,
         ),
       ],
@@ -7853,8 +7821,7 @@ class _DeviceBusControlSection extends StatelessWidget {
             const SizedBox(height: 16),
             Text(
               'Zone-id op de QSX. Na het koppelen staat het getal in de lijst '
-              'onder Lutron QSX/QS. Clear Connect Type X, ook RGBW, is één zone '
-              'op die processor. Niet het kamernummer en niet poort 8902.',
+              'onder Lutron QSX/QS. Niet het kamernummer en niet poort 8902.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
@@ -7984,7 +7951,12 @@ class _DeviceForm extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final type = device['type'] as String? ?? '';
-    final typeLabel = _deviceTypeLabels[type] ?? type;
+    final typeLabel = _deviceTypeLabel(
+      type,
+      device['control'] == 'lutron'
+          ? DeviceBusCategory.lutron
+          : DeviceBusCategory.knx,
+    );
     final lutronOnly =
         device['control'] == 'lutron' && !_deviceHasKnxGa(device);
     final showBus = type == 'light_switch' ||
@@ -8225,7 +8197,7 @@ class _DeviceForm extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Text(
-                    'Keypad-knoppen van de QSX. Het knop-id staat in de lijst onder Lutron QSX/QS.',
+                    'Keypad-knoppen kies je bij de QSX-processor, nadat ze zijn uitgelezen.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),

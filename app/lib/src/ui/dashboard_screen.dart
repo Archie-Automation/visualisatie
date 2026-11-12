@@ -1029,10 +1029,25 @@ class _FloorReorderSheetState extends ConsumerState<_FloorReorderSheet> {
                             color: LuxeColors.inkSoft),
                       ),
                     ),
-                    title: Text(floor.name,
-                        style: TextStyle(
-                            fontWeight: FontWeight.w500,
-                            color: LuxeColors.ink)),
+                    title: Row(
+                      children: [
+                        scopeFloorGlyph(
+                          floor.icon,
+                          size: 20,
+                          color: LuxeColors.ink,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            floor.name,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w500,
+                              color: LuxeColors.ink,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                     subtitle: Text(
                         '${floor.rooms.length} kamer${floor.rooms.length == 1 ? '' : 's'}',
                         style: TextStyle(

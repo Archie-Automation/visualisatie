@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../ac_mode_config.dart';
 import '../../device_control_specs.dart';
 import '../../api.dart';
+import '../../lutron_levels.dart';
 import '../../camera_api.dart';
 import '../../fireplace_status.dart';
 import '../../fireplace_step_ranges.dart';
@@ -277,7 +278,14 @@ class _LightDimmerTileState extends ConsumerState<LightDimmerTile> {
     final busPct = dimVal is num
         ? dimVal.toDouble().clamp(0.0, 100.0)
         : (on ? 100.0 : 0.0);
-    final shown = _dragLabel ?? (d.isLutronBusControl && dimGA == null ? (_held ?? 0) : busPct);
+    final zoneId = d.lutronIntegrationId;
+    final live = !d.isLutronBusControl || zoneId == null
+        ? null
+        : ref.watch(lutronZoneProvider)[zoneId];
+    final shown = _dragLabel ??
+        (d.isLutronBusControl && dimGA == null
+            ? (live?.level ?? _held ?? 0)
+            : busPct);
     final lit = d.isLutronBusControl && dimGA == null ? shown > 0 : on;
 
     return DeviceTileShell(
@@ -290,7 +298,23 @@ class _LightDimmerTileState extends ConsumerState<LightDimmerTile> {
             status: lit ? '${shown.round()}%' : 'Uit',
             on: lit,
             onChanged: (x) {
-              if (d.isLutronBusControl) setState(() => _held = x ? 100 : 0);
+              if (d.isLutronBusControl) {
+                final recall = live?.recall ?? _held ?? 0;
+                final next = x ? (recall > 0 ? recall : 100.0) : 0.0;
+                if (zoneId != null) {
+                  ref.read(lutronZoneProvider.notifier).note(
+                        id: zoneId,
+                        level: next.round(),
+                      );
+                }
+                setState(() => _held = next);
+                ref.read(busProvider.notifier).send({
+                  'kind': 'light.dim',
+                  'deviceId': d.id,
+                  'percent': next.round(),
+                });
+                return;
+              }
               ref.read(busProvider.notifier).send({
                 'kind': 'light.switch',
                 'deviceId': d.id,
@@ -307,6 +331,12 @@ class _LightDimmerTileState extends ConsumerState<LightDimmerTile> {
                 onDragEnd: () => setState(() => _dragLabel = null),
                 onDim: (pct) {
                   if (d.isLutronBusControl) {
+                    if (zoneId != null) {
+                      ref.read(lutronZoneProvider.notifier).note(
+                            id: zoneId,
+                            level: pct,
+                          );
+                    }
                     setState(() => _held = pct.toDouble());
                     ref.read(busProvider.notifier).send({
                       'kind': 'light.dim',
@@ -347,7 +377,11 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
   // HSV colour wheel state
   double _hue = 30;
   double _sat = 1.0;
-  double _val = 0.8; // brightness  0‑1
+  double _val = 0; // brightness  0‑1. Lutron start uit tot de zone-status binnen is.
+  double _recall = 0;
+  int? _appliedZone;
+  DateTime? _expectUntil;
+  int? _expectLevel;
 
   // Individual KNX channels (0‑255)
   double _white = 0;
@@ -454,10 +488,54 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
     return v == true || v == 1;
   }
 
+  void _applyZone(LutronZoneLive z) {
+    final stamp = Object.hash(
+      z.level.round(),
+      z.hue?.round(),
+      z.saturation?.round(),
+      z.kelvin?.round(),
+    );
+    if (stamp == _appliedZone) return;
+    final until = _expectUntil;
+    if (until != null && DateTime.now().isBefore(until)) {
+      if (z.level.round() != _expectLevel) return;
+      _expectUntil = null;
+    }
+    _appliedZone = stamp;
+    _val = (z.level / 100).clamp(0.0, 1.0);
+    if (z.recall > 0) _recall = (z.recall / 100).clamp(0.0, 1.0);
+    if (z.hue != null) _hue = z.hue!;
+    if (z.saturation != null) _sat = (z.saturation! / 100).clamp(0.0, 1.0);
+  }
+
+  void _noteLutron(Device d, int level) {
+    _expectLevel = level;
+    _expectUntil = DateTime.now().add(const Duration(seconds: 2));
+    if (level > 0) _recall = (level / 100).clamp(0.0, 1.0);
+    final id = d.lutronIntegrationId;
+    if (id == null) return;
+    ref.read(lutronZoneProvider.notifier).note(
+          id: id,
+          level: level,
+          hue: _hue,
+          saturation: (_sat * 100).roundToDouble(),
+        );
+  }
+
   void _toggleLight(Device d, bool on, {required bool hasOnGa}) {
     if (d.isLutronBusControl) {
       final next = !on;
-      setState(() => _val = next ? (_val < 0.01 ? 0.8 : _val) : 0);
+      if (next) {
+        final id = d.lutronIntegrationId;
+        final stored = id == null ? 0.0 : (ref.read(lutronZoneProvider)[id]?.recall ?? 0) / 100;
+        final remembered = stored > 0.01 ? stored : _recall;
+        _val = remembered < 0.01 ? 0.8 : remembered;
+      } else {
+        if (_val > 0.01) _recall = _val;
+        _val = 0;
+      }
+      _noteLutron(d, (_val * 100).round());
+      setState(() {});
       if (_mode == 'tunable_white') {
         _sendTunableWhite(d);
       } else {
@@ -521,6 +599,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
 
   void _sendRgbChannels(Device d) {
     if (d.isLutronBusControl) {
+      _noteLutron(d, (_val * 100).round());
       ref.read(busProvider.notifier).send({
         'kind': 'rgbw_ww.spectrum',
         'deviceId': d.id,
@@ -552,6 +631,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
   }
 
   void _sendTunableWhite(Device d) {
+    if (d.isLutronBusControl) _noteLutron(d, (_val * 100).round());
     ref.read(busProvider.notifier).send({
       'kind': 'rgbw_ww.tunable_white',
       'deviceId': d.id,
@@ -567,6 +647,11 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
     final d   = widget.device;
     final bus = ref.watch(busProvider);
     _syncFromBus(bus, d);
+    final zoneId = d.lutronIntegrationId;
+    if (d.isLutronBusControl && zoneId != null) {
+      final live = ref.watch(lutronZoneProvider)[zoneId];
+      if (live != null) _applyZone(live);
+    }
 
     final mode = _mode;
 
@@ -602,6 +687,46 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
     return _Placeholder(name: d.name, hint: 'Modus: $mode');
   }
 
+  Widget _rgbModeSwitch(BuildContext context, Device d, {required bool rgb}) {
+    return Align(
+      alignment: Alignment.centerRight,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('RGB', style: Theme.of(context).textTheme.labelLarge),
+          Switch(
+            value: rgb,
+            onChanged: (on) {
+              setState(() => _whiteOnly = !on);
+              if (on) {
+                _sendRgbChannels(d);
+              } else {
+                _sendTunableWhite(d);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Zelfde slider als een dimbare lamp: 0–100, zonder kleurbalk.
+  Widget _brightnessSlider(Device d, {required bool white}) {
+    return DeviceCardSliderWrap(
+      child: _DimmerSlider(
+        value: (_val * 100).clamp(0.0, 100.0),
+        onDim: (pct) {
+          setState(() => _val = (pct / 100).clamp(0.0, 1.0));
+          if (white) {
+            _sendTunableWhite(d);
+          } else {
+            _sendRgbChannels(d);
+          }
+        },
+      ),
+    );
+  }
+
   // ── RGB colour wheel tile ─────────────────────────────────────────────────
 
   Widget _buildColorWheelTile(
@@ -614,7 +739,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
     final bus    = ref.watch(busProvider);
     final mode   = _mode;
     final label = d.isLutronBusControl
-        ? 'Clear Connect'
+        ? ''
         : mode == 'rgb232'
             ? 'RGB·DPT232'
             : (hasWhite ? 'RGBW' : hasCct ? 'RGB+WW/CW' : 'RGB');
@@ -642,28 +767,19 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                   ),
                 ),
-                Text(
-                  label,
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelMedium
-                      ?.copyWith(color: LuxeColors.inkSoft),
-                ),
+                if (label.isNotEmpty)
+                  Text(
+                    label,
+                    style: Theme.of(context)
+                        .textTheme
+                        .labelMedium
+                        ?.copyWith(color: LuxeColors.inkSoft),
+                  ),
               ],
             ),
             trailing: _rgbSwitch(context, d, on, hasOnGa),
           ),
-          if (showWhiteSwitch)
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: () {
-                  setState(() => _whiteOnly = true);
-                  _sendTunableWhite(d);
-                },
-                child: const Text('Alleen tunable white'),
-              ),
-            ),
+          if (showWhiteSwitch) _rgbModeSwitch(context, d, rgb: true),
           Opacity(
             opacity: on ? 1.0 : 0.35,
             child: IgnorePointer(
@@ -686,18 +802,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                DeviceCardSliderWrap(
-                  child: _LuxeGradientBar(
-                    value: _val,
-                    label: 'Helderheid',
-                    colors: [Colors.black, _currentColor],
-                    onChanged: (v) => setState(() => _val = v),
-                    onChangeEnd: (v) {
-                      setState(() => _val = v);
-                      _sendRgbChannels(d);
-                    },
-                  ),
-                ),
+                _brightnessSlider(d, white: false),
                 if (hasWhite) ...[
                   const SizedBox(height: 12),
                   DeviceCardSliderWrap(
@@ -775,28 +880,19 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                   ),
                 ),
-                Text(
-                  'Tunable White',
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelMedium
-                      ?.copyWith(color: LuxeColors.inkSoft),
-                ),
+                if (!d.isLutronBusControl)
+                  Text(
+                    'Tunable White',
+                    style: Theme.of(context)
+                        .textTheme
+                        .labelMedium
+                        ?.copyWith(color: LuxeColors.inkSoft),
+                  ),
               ],
             ),
             trailing: _rgbSwitch(context, d, on, hasOnGa),
           ),
-          if (showColorSwitch)
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: () {
-                  setState(() => _whiteOnly = false);
-                  _sendRgbChannels(d);
-                },
-                child: const Text('Kleur'),
-              ),
-            ),
+          if (showColorSwitch) _rgbModeSwitch(context, d, rgb: false),
           const SizedBox(height: 20),
 
           // CCT gradient strip (warm → cool)
@@ -813,17 +909,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
           ),
           const SizedBox(height: 16),
 
-          // Brightness
-          _LuxeGradientBar(
-            value: _val,
-            label: 'Helderheid',
-            colors: const [Colors.black, Color(0xFFFFEFCF)],
-            onChanged:  (v) => setState(() => _val = v),
-            onChangeEnd: (v) {
-              setState(() => _val = v);
-              _sendTunableWhite(d);
-            },
-          ),
+          _brightnessSlider(d, white: true),
         ],
       ),
     );

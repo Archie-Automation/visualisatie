@@ -11,6 +11,7 @@ import '../models.dart';
 import '../room_control_category.dart';
 import '../system_category.dart';
 import '../theme.dart';
+import 'scope_icons.dart';
 import '../user_favorite_shortcuts.dart';
 import 'app_nav.dart';
 import 'responsive.dart';
@@ -262,7 +263,7 @@ class _SystemDevicesBody extends ConsumerWidget {
                       _AudioGroupSummary(devices: visible, mediaStates: mediaStates),
                       for (final fg in floorGroups) ...[
                         _SectionLabel(
-                          icon: Icons.layers_outlined,
+                          floorIcon: fg.floor.icon,
                           label: fg.floor.name.toUpperCase(),
                           brass: true,
                         ),
@@ -628,11 +629,13 @@ class _SectionLabel extends StatelessWidget {
   const _SectionLabel({
     required this.label,
     this.icon,
+    this.floorIcon,
     this.brass = false,
   });
 
   final String label;
   final IconData? icon;
+  final String? floorIcon;
   final bool brass;
 
   @override
@@ -662,10 +665,17 @@ class _SectionLabel extends StatelessWidget {
       padding: EdgeInsets.fromLTRB(4, brass ? 20 : 18, 4, brass ? 12 : 10),
       child: Row(
         children: [
-          if (icon != null) ...[
+          if (brass) ...[
+            scopeFloorGlyph(
+              floorIcon,
+              size: context.isPhone ? 22 : 26,
+              color: color,
+            ),
+            SizedBox(width: 8),
+          ] else if (icon != null) ...[
             Icon(
               icon,
-              size: brass ? (context.isPhone ? 22 : 26) : 15,
+              size: 15,
               color: color,
             ),
             SizedBox(width: 8),

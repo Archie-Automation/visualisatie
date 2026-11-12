@@ -2648,7 +2648,8 @@ export function buildRouter(
       hvacLocks: hvacSwitchLock.getAll(),
       fireplaceVirtual: fireplaceVirtual.getAll(),
       wtwLogics: wtwRuntime.getAll(),
-      energy: energyRuntime.getSnapshot()
+      energy: energyRuntime.getSnapshot(),
+      lutronZones: lutron.zoneSnapshot()
     });
   });
 

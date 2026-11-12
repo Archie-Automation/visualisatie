@@ -15,7 +15,9 @@ import {
   deviceMayHaveButtons,
   parseButtonList,
   parsePairingMessage,
-  parseZoneList
+  parseZoneLevels,
+  parseZoneList,
+  switchLevelFromRecall
 } from "./leapMessages";
 
 describe("LEAP-berichten", () => {
@@ -141,6 +143,29 @@ describe("LEAP-berichten", () => {
     if (done.kind === "cert") {
       assert.match(done.certificate, /BEGIN CERTIFICATE/);
     }
+  });
+
+  it("onthoudt de laatste dimstand en leest een zone die uit staat", () => {
+    assert.equal(switchLevelFromRecall(40, true, false), 40);
+    assert.equal(switchLevelFromRecall(40, false, false), 0);
+    assert.equal(switchLevelFromRecall(undefined, true, false), 100);
+    assert.equal(switchLevelFromRecall(40, true, true), 100);
+    const levels = parseZoneLevels({
+      Body: {
+        ZoneStatuses: [
+          { Level: 0, Zone: { href: "/zone/4" } },
+          {
+            Level: 35,
+            Zone: { href: "/zone/9" },
+            ColorTuningStatus: { HSVTuningLevel: { Hue: 20, Saturation: 80 } }
+          }
+        ]
+      }
+    });
+    assert.equal(levels[0]?.id, 4);
+    assert.equal(levels[0]?.level, 0);
+    assert.equal(levels[1]?.level, 35);
+    assert.equal(levels[1]?.hue, 20);
   });
 
   it("koppelt zone-ids aan de ruimtenaam", () => {
