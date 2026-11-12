@@ -270,7 +270,7 @@ function lutronStatusPayload(lutron: LutronIntegrationManager) {
   if (leap.paired || isLeapTransportPort(telnetPort)) {
     const waiting =
       !leap.paired && isLeapTransportPort(telnetPort)
-        ? "Poort 8902 is de Designer-poort. HomeWorks QSX koppelt via LEAP: houd de knop op de processor ingedrukt en tik op Koppelen."
+        ? "Poort 8902 is de Designer-poort. Tik op Koppelen en druk daarna de knop op de QSX in."
         : leap.lastError;
     return {
       connected: leap.connected,
@@ -1546,9 +1546,10 @@ export function buildRouter(
     res.json(lutronStatusPayload(lutron));
   });
 
-  r.post("/installer/lutron-pair", requireAuth, requireInstaller, async (_req, res) => {
+  r.post("/installer/lutron-pair", requireAuth, requireInstaller, async (req, res) => {
     try {
-      await lutron.pairProcessor();
+      const host = typeof req.body?.host === "string" ? req.body.host : undefined;
+      await lutron.pairProcessor(host);
       res.json({ ok: true, ...lutronStatusPayload(lutron) });
     } catch (err) {
       logger.warn({ err }, "QSX koppelen mislukt");

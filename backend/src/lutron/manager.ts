@@ -106,21 +106,37 @@ export class LutronIntegrationManager {
     return (hl?.telnet?.host ?? hl?.bridgeHost ?? "").trim();
   }
 
-  async pairProcessor(): Promise<void> {
-    const host = this.configuredHost();
+  async pairProcessor(hostOverride?: string): Promise<void> {
+    const host = (hostOverride ?? this.configuredHost()).trim();
     if (!host) throw new Error("Vul het IP-adres van de QSX in en sla op.");
     const secrets = await pairWithProcessor(host);
     updateConfig((draft) => {
       draft.lutron = draft.lutron ?? {};
+      draft.lutron.telnet = { ...draft.lutron.telnet, host };
+      draft.lutron.bridgeHost = host;
       draft.lutron.leap = secrets;
     });
     this.rebuild(getConfig());
   }
 
+  async setSpectrum(zoneId: number, level: number, hue: number, saturation: number): Promise<void> {
+    if (!this.leap) {
+      throw new Error("HomeWorks QSX is nog niet gekoppeld. Tik op Koppelen en druk daarna de processorknop in.");
+    }
+    await this.leap.setSpectrum(zoneId, level, hue, saturation);
+  }
+
+  async setWhite(zoneId: number, level: number, kelvin: number): Promise<void> {
+    if (!this.leap) {
+      throw new Error("HomeWorks QSX is nog niet gekoppeld. Tik op Koppelen en druk daarna de processorknop in.");
+    }
+    await this.leap.setWhite(zoneId, level, kelvin);
+  }
+
   listZones(): Promise<LeapZone[]> {
     if (!this.leap) {
       return Promise.reject(
-        new Error("HomeWorks QSX is nog niet gekoppeld. Houd de knop op de processor ingedrukt en tik op Koppelen.")
+        new Error("HomeWorks QSX is nog niet gekoppeld. Tik op Koppelen en druk daarna de knop op de processor in.")
       );
     }
     return this.leap.listZones();
@@ -471,7 +487,8 @@ export class LutronIntegrationManager {
       loadType: "shade"
     };
     if (this.leap) {
-      await this.leap.setLevel(slatIntegrationId, percent, binding.fadeSeconds);
+      const zone = slatIntegrationId >= 1 ? slatIntegrationId : binding.integrationId;
+      await this.leap.setTilt(zone, percent);
       return;
     }
     this.assertTelnetPath();
@@ -486,7 +503,7 @@ export class LutronIntegrationManager {
     const port = getConfig().lutron?.telnet?.port;
     if (isLeapTransportPort(port)) {
       throw new Error(
-        "HomeWorks QSX praat niet via telnet op deze poort. Houd de knop op de processor ingedrukt en tik op Koppelen."
+        "HomeWorks QSX praat niet via telnet op deze poort. Tik op Koppelen en druk daarna de knop op de processor in."
       );
     }
   }

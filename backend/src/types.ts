@@ -212,6 +212,11 @@ export interface RgbwWwConfig {
 
 export interface RgbwWwDevice extends DeviceBase {
   type: "rgbw_ww";
+  /** `lutron`: Clear Connect Type X via de QSX-processor. `knx` blijft de groepadressen gebruiken. */
+  control?: "knx" | "lutron";
+  /** LEAP-zone op de QSX. Niet het kamernummer en niet poort 8902. */
+  lutronIntegrationId?: number;
+  lutronOutput?: LutronLoadOutputBinding;
   ga: RgbwWwGA;
   rgbwWw: RgbwWwConfig;
 }

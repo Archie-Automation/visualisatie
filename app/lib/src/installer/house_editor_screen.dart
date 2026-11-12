@@ -93,6 +93,7 @@ const _deviceTypesAudio = [
 const _deviceTypesLutron = [
   'light_switch',
   'light_dimmer',
+  'rgbw_ww',
   'shading',
   'lutron_homeworks',
 ];
@@ -109,7 +110,7 @@ const _deviceBusCategoryHints = <DeviceBusCategory, String>{
   DeviceBusCategory.knx:
       'Licht, zonwering, klimaat, haard, knoppaneel, ?',
   DeviceBusCategory.lutron:
-      'Lampen, gordijnen/jaloezie?n en keypad ? KNX',
+      'Lampen, kleur/RGBW, gordijnen en keypad',
   DeviceBusCategory.audio: 'Sonos en Bluesound in een kamer',
 };
 
@@ -149,6 +150,8 @@ String _deviceTypeLabel(String dt, DeviceBusCategory bus) {
         return 'Lamp / schakelcontact (aan/uit)';
       case 'light_dimmer':
         return 'Dimbare lamp';
+      case 'rgbw_ww':
+        return 'Kleur / RGBW (Clear Connect)';
       case 'shading':
         return 'Gordijn / jaloezie';
       case 'lutron_homeworks':
@@ -2449,6 +2452,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     final lutronLoad = bus == DeviceBusCategory.lutron &&
         (type == 'light_switch' ||
             type == 'light_dimmer' ||
+            type == 'rgbw_ww' ||
             type == 'shading');
 
     switch (type) {
@@ -2484,6 +2488,20 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           },
         };
       case 'rgbw_ww':
+        if (lutronLoad) {
+          return _lutronLoadDevice(
+            id: id,
+            type: 'rgbw_ww',
+            name: 'Lutron kleur',
+            extra: {
+              'rgbwWw': {
+                'mode': 'channels',
+                'kelvinMin': 2700,
+                'kelvinMax': 6500,
+              },
+            },
+          );
+        }
         return {
           'id': id,
           'name': 'RGBWW',
@@ -5819,7 +5837,9 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
     if (!context.mounted || t == null) return;
     setState(() => _pairBusy = true);
     try {
-      final status = await postInstallerLutronPair(t);
+      final tel = widget.lutron['telnet'];
+      final host = tel is Map ? '${tel['host'] ?? ''}' : '${widget.lutron['bridgeHost'] ?? ''}';
+      final status = await postInstallerLutronPair(t, host: host);
       if (!mounted) return;
       setState(() => _status = status);
       await _loadZones();
@@ -5856,7 +5876,7 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
         return 'Gekoppeld, geen verbinding met ${status.host}';
       }
       return status.lastError ??
-          'Nog niet gekoppeld. Houd de knop op de processor ingedrukt en tik op Koppelen.';
+          'Nog niet gekoppeld. Tik op Koppelen en druk daarna de knop op de processor in.';
     }
     if (status.connected) {
       return status.loggedIn
@@ -5953,7 +5973,7 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
                             )
                           : const Icon(Icons.link, size: 20),
                       label: Text(_pairBusy
-                          ? 'Wachten op de knop…'
+                          ? 'Druk nu op de knop…'
                           : 'Koppelen'),
                     ),
                   ),
@@ -5988,7 +6008,7 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
                 ],
                 const SizedBox(height: 8),
                 Text(
-                  'HomeWorks QSX: sla het IP op, houd de knop op de processor ingedrukt en tik op Koppelen. Poort 8902 is de Designer-poort en stuurt geen lamp aan. Het getal bij de lamp is de zone-id uit de lijst hierboven. Oudere QS gebruikt telnet op poort 23.',
+                  'Tik op Koppelen en druk daarna de knop op de QSX in tot het lampje knippert. Houd de knop vast tot het lampje stopt. De app stuurt het certificaat pas nadat de processor die knop ziet. Poort 8902 is Designer en stuurt geen lamp aan. Het zone-id, ook van Clear Connect Type X, staat daarna in de lijst. Oudere QS blijft op telnet-poort 23.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Theme.of(context).hintColor,
                         fontSize: 11,
@@ -6036,9 +6056,10 @@ class _LutronForm extends StatelessWidget {
         Text('Lutron QSX/QS Processor', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
         Text(
-          'HomeWorks QSX: IP-adres invullen, opslaan, dan koppelen met de knop '
-          'op de processor. Het zone-id van de lamp staat in de lijst na het koppelen. '
-          'Username en wachtwoord hieronder zijn alleen voor oudere QS op telnet-poort 23.',
+          'Vul het IP van de QSX in. Tik daarna op Koppelen en druk de knop op de '
+          'processor in tot het lampje knippert. Clear Connect Type X, ook RGBW, '
+          'is een zone op die processor. Username en wachtwoord zijn alleen voor '
+          'oudere QS op telnet-poort 23.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 20),
@@ -7784,9 +7805,9 @@ class _DeviceBusControlSection extends StatelessWidget {
             if (lutronOnly) const SizedBox(height: 8),
             const SizedBox(height: 16),
             Text(
-              'Zone-id van deze lamp. Na het koppelen van de QSX staat het getal '
-              'in de lijst onder Lutron QSX/QS. Dat is niet het zonevolgnummer '
-              'in de ruimte en niet de Designer-poort 8902.',
+              'Zone-id op de QSX. Na het koppelen staat het getal in de lijst '
+              'onder Lutron QSX/QS. Clear Connect Type X, ook RGBW, is één zone '
+              'op die processor. Niet het kamernummer en niet poort 8902.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 8),
@@ -7921,6 +7942,7 @@ class _DeviceForm extends StatelessWidget {
         device['control'] == 'lutron' && !_deviceHasKnxGa(device);
     final showBus = type == 'light_switch' ||
         type == 'light_dimmer' ||
+        type == 'rgbw_ww' ||
         type == 'shading';
     final knxLight = (type == 'light_switch' || type == 'light_dimmer') &&
         device['control'] != 'lutron';

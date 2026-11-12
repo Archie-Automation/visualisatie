@@ -1,15 +1,19 @@
 import tls from "node:tls";
 import forge from "node-forge";
 import { logger } from "../logger";
+import { LAP_CA_PEM, LAP_CERT_PEM, LAP_KEY_PEM, LUTRON_ROOT_CA_PEM } from "./lapCerts";
 import {
   LEAP_PAIR_PORT,
   LEAP_PORT,
   type LeapSecrets,
   type LeapZone,
   buildGoToLevel,
+  buildGoToTilt,
   buildPairRequest,
   buildPingResponse,
   buildReadRequest,
+  buildSpectrum,
+  buildWhite,
   buildZoneCommand,
   encodeLeap,
   headerUrl,
@@ -18,14 +22,14 @@ import {
   parseZoneList
 } from "./leapMessages";
 
-const PAIR_TIMEOUT_MS = 90_000;
+const PAIR_TIMEOUT_MS = 150_000;
 const REQUEST_TIMEOUT_MS = 8_000;
 
 export function generatePairingMaterial(): { csrPem: string; keyPem: string } {
   const keys = forge.pki.rsa.generateKeyPair(2048);
   const csr = forge.pki.createCertificationRequest();
   csr.publicKey = keys.publicKey;
-  csr.setSubject([{ name: "commonName", value: "Archie OS" }]);
+  csr.setSubject([{ name: "commonName", value: "ArchieOS" }]);
   csr.sign(keys.privateKey, forge.md.sha256.create());
   return {
     csrPem: forge.pki.certificationRequestToPem(csr).replace(/\r\n/g, "\n"),
@@ -34,22 +38,46 @@ export function generatePairingMaterial(): { csrPem: string; keyPem: string } {
 }
 
 /**
- * Eenmalig: TLS naar poort 8083, CSR, wachten tot iemand de knop op de
- * processor indrukt. De processor tekent dan het clientcertificaat.
+ * Eenmalig op poort 8083.
+ * De processor stuurt eerst statussen. Pas als de knop is ingedrukt
+ * (PhysicalAccess) mag de CSR eruit. CommandType is CSR, niet Execute.
+ * QSX verifieert met het Lutron-rootcertificaat en TLS 1.2.
  */
-export function pairWithProcessor(host: string): Promise<LeapSecrets> {
+export async function pairWithProcessor(host: string): Promise<LeapSecrets> {
   const target = host.trim();
-  if (!target) return Promise.reject(new Error("Vul het IP-adres van de QSX in en sla op."));
+  if (!target) throw new Error("Vul het IP-adres van de QSX in en sla op.");
   const { csrPem, keyPem } = generatePairingMaterial();
+  try {
+    return await runPairing(target, csrPem, keyPem, true);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/knop|certificaat|geweigerd|CSR/i.test(message)) throw err;
+    logger.warn({ err, host: target }, "QSX-koppeling met Lutron-root mislukt, opnieuw zonder CA-check");
+    return runPairing(target, csrPem, keyPem, false);
+  }
+}
 
+function runPairing(
+  target: string,
+  csrPem: string,
+  keyPem: string,
+  verifyServer: boolean
+): Promise<LeapSecrets> {
   return new Promise((resolve, reject) => {
     const socket = tls.connect({
       host: target,
       port: LEAP_PAIR_PORT,
-      rejectUnauthorized: false,
-      minVersion: "TLSv1.2"
+      cert: LAP_CERT_PEM,
+      key: LAP_KEY_PEM,
+      ca: verifyServer ? `${LAP_CA_PEM}\n${LUTRON_ROOT_CA_PEM}` : undefined,
+      rejectUnauthorized: verifyServer,
+      minVersion: "TLSv1.2",
+      maxVersion: "TLSv1.2",
+      servername: "",
+      checkServerIdentity: () => undefined
     });
     let settled = false;
+    let csrSent = false;
     const finish = (err: Error | null, secrets?: LeapSecrets) => {
       if (settled) return;
       settled = true;
@@ -61,7 +89,9 @@ export function pairWithProcessor(host: string): Promise<LeapSecrets> {
     const timer = setTimeout(() => {
       finish(
         new Error(
-          "De processor reageerde niet. Houd de knop op de QSX ingedrukt tot het lampje knippert, en koppel opnieuw."
+          csrSent
+            ? "De processor tekende het certificaat niet. Houd de knop ingedrukt tot het lampje stopt met knipperen en koppel opnieuw."
+            : "De processor wacht op de knop. Tik op Koppelen en druk daarna de knop op de QSX in tot het lampje knippert."
         )
       );
     }, PAIR_TIMEOUT_MS);
@@ -70,13 +100,19 @@ export function pairWithProcessor(host: string): Promise<LeapSecrets> {
       finish(new Error(`Koppelen mislukt (${target}:${LEAP_PAIR_PORT}): ${err.message}`));
     });
     socket.once("secureConnect", () => {
-      logger.info({ host: target, port: LEAP_PAIR_PORT }, "QSX-koppeling gestart");
-      socket.write(encodeLeap(buildPairRequest(csrPem)));
+      logger.info({ host: target, port: LEAP_PAIR_PORT, verifyServer }, "QSX-koppeling open, wacht op de knop");
     });
-    readLeapLines(socket, (msg) => {
+    const take = (msg: unknown) => {
       const parsed = parsePairingMessage(msg);
-      if (parsed.kind === "button") {
-        logger.info({ host: target }, "QSX wacht op de knop op de processor");
+      if (parsed.kind === "waiting") {
+        logger.info({ host: target }, "QSX wacht nog op de knop");
+        return;
+      }
+      if (parsed.kind === "ready") {
+        if (csrSent) return;
+        csrSent = true;
+        logger.info({ host: target }, "QSX-knop gezien, CSR wordt gestuurd");
+        socket.write(encodeLeap(buildPairRequest(csrPem)));
         return;
       }
       if (parsed.kind === "error") {
@@ -84,15 +120,28 @@ export function pairWithProcessor(host: string): Promise<LeapSecrets> {
         return;
       }
       if (parsed.kind === "cert") {
+        const returned = parsed.rootCertificate.includes("BEGIN CERTIFICATE")
+          ? parsed.rootCertificate
+          : "";
         finish(null, {
           paired: true,
           certificate: parsed.certificate,
           privateKey: keyPem,
-          rootCertificate: parsed.rootCertificate
+          rootCertificate: [returned, LUTRON_ROOT_CA_PEM].filter(Boolean).join("\n")
         });
+        return;
       }
-    });
+      logger.info({ host: target, keys: messageKeys(msg) }, "QSX-koppelbericht genegeerd");
+    };
+    readLeapLines(socket, take);
   });
+}
+
+function messageKeys(msg: unknown): string[] {
+  if (!msg || typeof msg !== "object") return [];
+  const root = msg as Record<string, unknown>;
+  const header = (root.Header ?? {}) as Record<string, unknown>;
+  return [String(root.CommuniqueType ?? header.RequestType ?? ""), String(header.StatusCode ?? ""), String(header.Url ?? "")];
 }
 
 type Pending = {
@@ -110,6 +159,8 @@ export class LutronLeapSession {
   private pending = new Map<string, Pending>();
   private reconnectTimer?: NodeJS.Timeout;
   private stopped = false;
+  private relaxedTls = false;
+  private immediateRetry = false;
 
   constructor(
     private readonly host: string,
@@ -138,6 +189,22 @@ export class LutronLeapSession {
 
   async zoneCommand(zoneId: number, command: "Raise" | "Lower" | "Stop"): Promise<void> {
     await this.request(buildZoneCommand(zoneId, command), `/zone/${zoneId}/commandprocessor`);
+  }
+
+  async setTilt(zoneId: number, percent: number): Promise<void> {
+    await this.request(buildGoToTilt(zoneId, percent), `/zone/${zoneId}/commandprocessor`);
+  }
+
+  /** Clear Connect Type X kleurzone op de QSX. */
+  async setSpectrum(zoneId: number, level: number, hue: number, saturation: number): Promise<void> {
+    await this.request(
+      buildSpectrum(zoneId, level, hue, saturation),
+      `/zone/${zoneId}/commandprocessor`
+    );
+  }
+
+  async setWhite(zoneId: number, level: number, kelvin: number): Promise<void> {
+    await this.request(buildWhite(zoneId, level, kelvin), `/zone/${zoneId}/commandprocessor`);
   }
 
   async listZones(): Promise<LeapZone[]> {
@@ -175,14 +242,20 @@ export class LutronLeapSession {
     this.socket?.destroy();
     this.buffer = "";
     this.connected = false;
+    const ca = [this.secrets.rootCertificate, LUTRON_ROOT_CA_PEM]
+      .filter((pem) => pem.includes("BEGIN CERTIFICATE"))
+      .join("\n");
     const socket = tls.connect({
       host: this.host,
       port: LEAP_PORT,
-      ca: this.secrets.rootCertificate || undefined,
+      ca: ca || undefined,
       cert: this.secrets.certificate,
       key: this.secrets.privateKey,
-      rejectUnauthorized: Boolean(this.secrets.rootCertificate),
-      minVersion: "TLSv1.2"
+      rejectUnauthorized: !this.relaxedTls,
+      minVersion: "TLSv1.2",
+      maxVersion: "TLSv1.2",
+      servername: "",
+      checkServerIdentity: () => undefined
     });
     this.socket = socket;
     socket.setKeepAlive(true, 30_000);
@@ -194,16 +267,24 @@ export class LutronLeapSession {
     socket.on("error", (err) => {
       this.lastError = err.message;
       this.connected = false;
+      if (!this.relaxedTls && /cert|handshake|alert|unknown/i.test(err.message)) {
+        this.relaxedTls = true;
+        this.immediateRetry = true;
+      }
       logger.warn({ err, host: this.host }, "QSX LEAP fout");
     });
     socket.on("close", () => {
       this.connected = false;
       this.failPending(new Error("QSX-verbinding gesloten"));
       if (this.socket === socket) this.socket = undefined;
-      if (!this.stopped) {
-        logger.info({ host: this.host }, "QSX LEAP gesloten — herverbinding over 10s");
-        this.reconnectTimer = setTimeout(() => this.connect(), 10_000);
+      if (this.stopped) return;
+      if (this.immediateRetry) {
+        this.immediateRetry = false;
+        this.connect();
+        return;
       }
+      logger.info({ host: this.host }, "QSX LEAP gesloten — herverbinding over 10s");
+      this.reconnectTimer = setTimeout(() => this.connect(), 10_000);
     });
     socket.on("data", (chunk: Buffer) => this.onData(chunk));
   }

@@ -38,18 +38,20 @@ export function buildPairRequest(csrPem: string): object {
       ClientTag: "archie-pair"
     },
     Body: {
-      CommandType: "Execute",
+      CommandType: "CSR",
       Parameters: {
         CSR: csrPem,
         DisplayName: "Archie OS",
-        DeviceUID: "archie-os"
+        DeviceUID: "000000000000",
+        Role: "Admin"
       }
     }
   };
 }
 
 export type PairingParse =
-  | { kind: "button" }
+  | { kind: "ready" }
+  | { kind: "waiting" }
   | { kind: "cert"; certificate: string; rootCertificate: string }
   | { kind: "error"; message: string }
   | { kind: "ignore" };
@@ -75,12 +77,8 @@ export function parsePairingMessage(msg: unknown): PairingParse {
   const status = body.Status as Record<string, unknown> | undefined;
   const signingStatus = String(status?.SigningStatus ?? "");
   const permissions = Array.isArray(status?.Permissions) ? status.Permissions.map(String) : [];
-  if (
-    signingStatus.toLowerCase().includes("button") ||
-    permissions.includes("PhysicalAccess")
-  ) {
-    return { kind: "button" };
-  }
+  if (permissions.includes("PhysicalAccess")) return { kind: "ready" };
+  if (signingStatus.toLowerCase().includes("button")) return { kind: "waiting" };
   return { kind: "ignore" };
 }
 
@@ -172,6 +170,75 @@ export function buildZoneCommand(
     Header: { Url: `/zone/${zoneId}/commandprocessor` },
     Body: { Command: { CommandType: commandType } }
   };
+}
+
+/** Lamellen op dezelfde QSX-zone. Een tweede zone-id is alleen nodig als Designer ze splitst. */
+export function buildGoToTilt(zoneId: number, percent: number): object {
+  return {
+    CommuniqueType: "CreateRequest",
+    Header: { Url: `/zone/${zoneId}/commandprocessor` },
+    Body: {
+      Command: {
+        CommandType: "GoToTilt",
+        TiltParameters: { Tilt: clampPercent(percent) }
+      }
+    }
+  };
+}
+
+/**
+ * Clear Connect Type X kleur (Ketra / Lumaris / SpectrumTune) op de QSX.
+ * Hue 0–360, saturation en level 0–100.
+ */
+export function buildSpectrum(
+  zoneId: number,
+  level: number,
+  hue: number,
+  saturation: number
+): object {
+  const hueDeg = ((Math.round(hue) % 360) + 360) % 360;
+  return {
+    CommuniqueType: "CreateRequest",
+    Header: { Url: `/zone/${zoneId}/commandprocessor` },
+    Body: {
+      Command: {
+        CommandType: "GoToSpectrumTuningLevel",
+        SpectrumTuningLevelParameters: {
+          Level: clampPercent(level),
+          ColorTuningStatus: {
+            HSVTuningLevel: {
+              Hue: hueDeg,
+              Saturation: clampPercent(saturation)
+            }
+          }
+        }
+      }
+    }
+  };
+}
+
+/** Tunable white op dezelfde processor. Kelvin typisch 2700–6500. */
+export function buildWhite(zoneId: number, level: number, kelvin: number): object {
+  const k = Math.max(1000, Math.min(25000, Math.round(kelvin)));
+  return {
+    CommuniqueType: "CreateRequest",
+    Header: { Url: `/zone/${zoneId}/commandprocessor` },
+    Body: {
+      Command: {
+        CommandType: "GoToWhiteTuningLevel",
+        WhiteTuningLevelParameters: {
+          Level: clampPercent(level),
+          ColorTuningStatus: {
+            WhiteTuningLevel: { Kelvin: k }
+          }
+        }
+      }
+    }
+  };
+}
+
+function clampPercent(n: number): number {
+  return Math.max(0, Math.min(100, Math.round(n)));
 }
 
 export function parseZoneList(zoneMsg: unknown, areaMsg: unknown): LeapZone[] {

@@ -268,13 +268,20 @@ Future<InstallerLutronStatus> fetchInstallerLutronStatus(String token) async {
   );
 }
 
-Future<InstallerLutronStatus> postInstallerLutronPair(String token) async {
+Future<InstallerLutronStatus> postInstallerLutronPair(
+  String token, {
+  String host = '',
+}) async {
   final res = await http
       .post(
         Uri.parse('$apiBase/api/installer/lutron-pair'),
-        headers: {'authorization': 'Bearer $token'},
+        headers: {
+          'authorization': 'Bearer $token',
+          'content-type': 'application/json',
+        },
+        body: jsonEncode({'host': host.trim()}),
       )
-      .timeout(const Duration(seconds: 120));
+      .timeout(const Duration(seconds: 170));
   final dynamic raw =
       res.body.isNotEmpty ? jsonDecode(res.body) : <String, dynamic>{};
   final body = Map<String, dynamic>.from(raw as Map);

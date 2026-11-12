@@ -265,6 +265,7 @@ export function validateRgbwWwSemantics(cfg: HouseConfig): string[] {
   const issues: string[] = [];
   walkDevices(cfg, (d) => {
     if (d.type !== "rgbw_ww") return;
+    if (d.control === "lutron") return;
     const mode = d.rgbwWw.mode;
     const ga = d.ga;
     const pb = d.rgbwWw.payloadBytes;
@@ -554,7 +555,14 @@ export function validateLutronLoadOutputSemantics(cfg: HouseConfig): string[] {
     leapPaired || (cfg.lutron?.telnet?.enabled === true && houseHost.length > 0);
 
   walkDevices(cfg, (d) => {
-    if (d.type !== "light_switch" && d.type !== "light_dimmer" && d.type !== "shading") return;
+    if (
+      d.type !== "light_switch" &&
+      d.type !== "light_dimmer" &&
+      d.type !== "shading" &&
+      d.type !== "rgbw_ww"
+    ) {
+      return;
+    }
     if (d.control !== "lutron") return;
 
     const iid =

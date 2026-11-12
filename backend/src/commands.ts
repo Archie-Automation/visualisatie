@@ -97,6 +97,16 @@ export const CommandSchema = z.discriminatedUnion("kind", [
     blue: z.number().int().min(0).max(255)
   }),
   z.object({
+    kind: z.literal("rgbw_ww.spectrum"),
+    deviceId: z.string(),
+    /** 0–360 */
+    hue: z.number().min(0).max(360),
+    /** 0–100 */
+    saturation: z.number().min(0).max(100),
+    /** 0–100 helderheid */
+    level: z.number().min(0).max(100)
+  }),
+  z.object({
     kind: z.literal("rgbw_ww.tunable_white"),
     deviceId: z.string(),
     /** 0–255 helderheid */
@@ -392,10 +402,28 @@ export async function dispatch(
       await bus.write(ga, "rgb232", triplet);
       return;
     }
+    case "rgbw_ww.spectrum": {
+      if (device.type !== "rgbw_ww") throw new Error("not an rgbw_ww device");
+      const lut = resolveLutronLoadOutput(device);
+      if (!lut) throw new Error("rgbw_ww.spectrum is alleen voor een Lutron-zone");
+      if (!lutron) throw new Error("Lutron-integratie niet beschikbaar");
+      await lutron.setSpectrum(lut.integrationId, cmd.level, cmd.hue, cmd.saturation);
+      return;
+    }
     case "rgbw_ww.tunable_white": {
       if (device.type !== "rgbw_ww") throw new Error("not an rgbw_ww device");
       const { brightness, warmCoolRatio } = cmd;
       const cfg = device.rgbwWw;
+      const lut = resolveLutronLoadOutput(device);
+      if (lut) {
+        if (!lutron) throw new Error("Lutron-integratie niet beschikbaar");
+        const level = Math.round((brightness / 255) * 100);
+        const kMin = cfg.kelvinMin ?? 2700;
+        const kMax = cfg.kelvinMax ?? 6500;
+        const kelvin = Math.round(kMin + warmCoolRatio * (kMax - kMin));
+        await lutron.setWhite(lut.integrationId, level, kelvin);
+        return;
+      }
       const gaMap = device.ga;
 
       // Option A: ww + cw channels
@@ -469,12 +497,13 @@ export async function dispatch(
         if (!lutron) throw new Error("Lutron-integratie niet beschikbaar");
         const slatId =
           device.type === "shading" ? device.lutronSlatIntegrationId : undefined;
-        if (!slatId || slatId < 1) {
+        const tiltZone = slatId != null && slatId >= 1 ? slatId : lut.integrationId;
+        if (!lutron.getLeapStatus().paired && tiltZone === lut.integrationId && (slatId == null || slatId < 1)) {
           throw new Error(
             "Lutron-shade: stel lutronSlatIntegrationId in voor lamelbesturing"
           );
         }
-        await lutron.shadeHomeworksSetSlats(lut, slatId, cmd.percent);
+        await lutron.shadeHomeworksSetSlats(lut, tiltZone, cmd.percent);
         return;
       }
       if (!device.ga.slat) throw new Error("no slat GA");

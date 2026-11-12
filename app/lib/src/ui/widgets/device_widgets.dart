@@ -264,6 +264,7 @@ class LightDimmerTile extends ConsumerStatefulWidget {
 
 class _LightDimmerTileState extends ConsumerState<LightDimmerTile> {
   double? _dragLabel;
+  double? _held;
 
   @override
   Widget build(BuildContext context) {
@@ -276,18 +277,20 @@ class _LightDimmerTileState extends ConsumerState<LightDimmerTile> {
     final busPct = dimVal is num
         ? dimVal.toDouble().clamp(0.0, 100.0)
         : (on ? 100.0 : 0.0);
-    final current = _dragLabel ?? busPct;
+    final shown = _dragLabel ?? (d.isLutronBusControl && dimGA == null ? (_held ?? 0) : busPct);
+    final lit = d.isLutronBusControl && dimGA == null ? shown > 0 : on;
 
     return DeviceTileShell(
-      glow: on,
+      glow: lit,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _LightTileHeader(
             name: d.name,
-            status: on ? '${current.round()}%' : 'Uit',
-            on: on,
+            status: lit ? '${shown.round()}%' : 'Uit',
+            on: lit,
             onChanged: (x) {
+              if (d.isLutronBusControl) setState(() => _held = x ? 100 : 0);
               ref.read(busProvider.notifier).send({
                 'kind': 'light.switch',
                 'deviceId': d.id,
@@ -299,10 +302,19 @@ class _LightDimmerTileState extends ConsumerState<LightDimmerTile> {
           DeviceCardBody(
             child: DeviceCardSliderWrap(
               child: _DimmerSlider(
-                value: busPct,
+                value: shown,
                 onDisplayChanged: (v) => setState(() => _dragLabel = v),
                 onDragEnd: () => setState(() => _dragLabel = null),
                 onDim: (pct) {
+                  if (d.isLutronBusControl) {
+                    setState(() => _held = pct.toDouble());
+                    ref.read(busProvider.notifier).send({
+                      'kind': 'light.dim',
+                      'deviceId': d.id,
+                      'percent': pct,
+                    });
+                    return;
+                  }
                   if (dimGA == null) return;
                   ref.read(busProvider.notifier).sendLightDim(
                         deviceId: d.id,
@@ -433,6 +445,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
   // ── on/off helper ────────────────────────────────────────────────────────
 
   bool _isOn(BusState bus, Device d) {
+    if (d.isLutronBusControl) return _val > 0.01;
     final ga = d.ga['on'];
     if (ga == null) return _val > 0.01;
     final v = bus.values[ga];
@@ -440,6 +453,16 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
   }
 
   void _toggleLight(Device d, bool on, {required bool hasOnGa}) {
+    if (d.isLutronBusControl) {
+      final next = !on;
+      setState(() => _val = next ? (_val < 0.01 ? 0.8 : _val) : 0);
+      if (_mode == 'tunable_white') {
+        _sendTunableWhite(d);
+      } else {
+        _sendRgbChannels(d);
+      }
+      return;
+    }
     if (hasOnGa) {
       ref.read(busProvider.notifier).send({
         'kind': 'light.switch',
@@ -480,9 +503,31 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
         }),
       );
 
+  Widget? _rgbSwitch(BuildContext context, Device d, bool on, bool hasOnGa) {
+    if (!hasOnGa) return null;
+    if (d.isLutronBusControl) {
+      return DeviceTileLayout.trailingSwitch(
+        context: context,
+        value: on,
+        onChanged: (x) => _toggleLight(d, !x, hasOnGa: true),
+      );
+    }
+    return _lightOnOffSwitch(context, d, on);
+  }
+
   // ── send helpers ─────────────────────────────────────────────────────────
 
   void _sendRgbChannels(Device d) {
+    if (d.isLutronBusControl) {
+      ref.read(busProvider.notifier).send({
+        'kind': 'rgbw_ww.spectrum',
+        'deviceId': d.id,
+        'hue': _hue,
+        'saturation': (_sat * 100).round().clamp(0, 100),
+        'level': (_val * 100).round().clamp(0, 100),
+      });
+      return;
+    }
     final c = _currentColor;
     final n = ref.read(busProvider.notifier);
     void ch(String k, int v) {
@@ -523,6 +568,11 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
 
     final mode = _mode;
 
+    if (d.isLutronBusControl) {
+      if (mode == 'tunable_white') return _buildCctTile(context, d);
+      return _buildColorWheelTile(context, d);
+    }
+
     // Composite: raw byte sliders (too low-level for a wheel)
     if (mode == 'composite') return _buildCompositeTile(context, d, bus);
 
@@ -554,9 +604,13 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
   }) {
     final bus    = ref.watch(busProvider);
     final mode   = _mode;
-    final label  = mode == 'rgb232' ? 'RGB·DPT232' : (hasWhite ? 'RGBW' : hasCct ? 'RGB+WW/CW' : 'RGB');
+    final label = d.isLutronBusControl
+        ? 'Clear Connect'
+        : mode == 'rgb232'
+            ? 'RGB·DPT232'
+            : (hasWhite ? 'RGBW' : hasCct ? 'RGB+WW/CW' : 'RGB');
     final on     = _isOn(bus, d);
-    final hasOnGa = d.ga['on'] != null;
+    final hasOnGa = d.isLutronBusControl || d.ga['on'] != null;
 
     return DeviceTileShell(
       glow: on,
@@ -588,7 +642,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
                 ),
               ],
             ),
-            trailing: hasOnGa ? _lightOnOffSwitch(context, d, on) : null,
+            trailing: _rgbSwitch(context, d, on, hasOnGa),
           ),
           Opacity(
             opacity: on ? 1.0 : 0.35,
@@ -680,7 +734,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
   Widget _buildCctTile(BuildContext context, Device d) {
     final bus     = ref.watch(busProvider);
     final on      = _isOn(bus, d);
-    final hasOnGa = d.ga['on'] != null;
+    final hasOnGa = d.isLutronBusControl || d.ga['on'] != null;
     return DeviceTileShell(
       glow: on,
       child: Column(
@@ -710,7 +764,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
                 ),
               ],
             ),
-            trailing: hasOnGa ? _lightOnOffSwitch(context, d, on) : null,
+            trailing: _rgbSwitch(context, d, on, hasOnGa),
           ),
           const SizedBox(height: 20),
 
@@ -782,7 +836,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
                 ),
               ],
             ),
-            trailing: hasOnGa ? _lightOnOffSwitch(context, d, on) : null,
+            trailing: _rgbSwitch(context, d, on, hasOnGa),
           ),
           SizedBox(height: 8),
           Text('Ruwe bytes op één GA.',

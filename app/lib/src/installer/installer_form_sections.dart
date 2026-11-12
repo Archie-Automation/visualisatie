@@ -2686,6 +2686,54 @@ class RgbwWwInstallerSection extends StatelessWidget {
     final cfg  = _ensureMap(device, 'rgbwWw');
     final mode = (cfg['mode'] as String?) ?? 'channels';
     final ga   = _ensureMap(device, 'ga');
+    if (device['control'] == 'lutron') {
+      final lutronMode = mode == 'tunable_white' ? 'tunable_white' : 'channels';
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Clear Connect Type X op de QSX. Eén zone-id hierboven. '
+            'Kleur gaat als spectrum naar die zone. Zet de besturing op KNX '
+            'als deze lamp groepadressen moet houden.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          _InstallerDropdown(
+            label: 'Modus',
+            value: lutronMode,
+            options: const ['channels', 'tunable_white'],
+            optionLabels: const {
+              'channels': 'Kleur (hue / saturatie)',
+              'tunable_white': 'Tunable white (Kelvin)',
+            },
+            onChanged: (v) {
+              cfg['mode'] = v;
+              onChanged();
+            },
+          ),
+          if (lutronMode == 'tunable_white') ...[
+            _InstallerStrField(
+              label: 'Min Kelvin (bijv. 2700)',
+              value: '${cfg['kelvinMin'] ?? 2700}',
+              number: true,
+              onChanged: (v) {
+                cfg['kelvinMin'] = int.tryParse(v) ?? 2700;
+                onChanged();
+              },
+            ),
+            _InstallerStrField(
+              label: 'Max Kelvin (bijv. 6500)',
+              value: '${cfg['kelvinMax'] ?? 6500}',
+              number: true,
+              onChanged: (v) {
+                cfg['kelvinMax'] = int.tryParse(v) ?? 6500;
+                onChanged();
+              },
+            ),
+          ],
+        ],
+      );
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,

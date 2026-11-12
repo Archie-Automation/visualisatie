@@ -11,11 +11,11 @@ import type {
 export const HOUSE_LUTRON_SLOT_ID = "house";
 
 export function inferLutronLoadType(
-  device: LightSwitchDevice | LightDimmerDevice | ShadingDevice
+  device: LightSwitchDevice | LightDimmerDevice | ShadingDevice | { type: "rgbw_ww" }
 ): LutronLoadOutputBinding["loadType"] {
   if (device.type === "shading") return "shade";
-  if (device.type === "light_dimmer") return "dimmer";
-  return "switch";
+  if (device.type === "light_switch") return "switch";
+  return "dimmer";
 }
 
 export function resolveLutronLoadOutput(
@@ -24,7 +24,8 @@ export function resolveLutronLoadOutput(
   if (
     device.type !== "light_switch" &&
     device.type !== "light_dimmer" &&
-    device.type !== "shading"
+    device.type !== "shading" &&
+    device.type !== "rgbw_ww"
   ) {
     return undefined;
   }

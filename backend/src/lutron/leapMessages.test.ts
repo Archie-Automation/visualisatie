@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildGoToLevel,
+  buildPairRequest,
   buildPingResponse,
+  buildSpectrum,
+  buildWhite,
   encodeLeap,
   isLeapTransportPort,
   leapErrorMessage,
@@ -29,6 +32,32 @@ describe("LEAP-berichten", () => {
     assert.equal(buildPingResponse({ CommuniqueType: "ReadResponse", Header: { Url: "/zone/1" } }), null);
   });
 
+  it("stuurt de CSR pas als commando CSR met rol Admin", () => {
+    const msg = buildPairRequest("-----BEGIN CERTIFICATE REQUEST-----\nA\n-----END CERTIFICATE REQUEST-----\n") as {
+      Body: { CommandType: string; Parameters: { Role: string; DeviceUID: string } };
+    };
+    assert.equal(msg.Body.CommandType, "CSR");
+    assert.equal(msg.Body.Parameters.Role, "Admin");
+    assert.equal(msg.Body.Parameters.DeviceUID, "000000000000");
+  });
+
+  it("zet kleur en tunable white op een QSX-zone", () => {
+    const color = buildSpectrum(30, 80, 180, 75) as {
+      Body: { Command: { CommandType: string; SpectrumTuningLevelParameters: { Level: number; ColorTuningStatus: { HSVTuningLevel: { Hue: number; Saturation: number } } } } };
+    };
+    assert.equal(color.Body.Command.CommandType, "GoToSpectrumTuningLevel");
+    assert.equal(color.Body.Command.SpectrumTuningLevelParameters.Level, 80);
+    assert.deepEqual(color.Body.Command.SpectrumTuningLevelParameters.ColorTuningStatus.HSVTuningLevel, {
+      Hue: 180,
+      Saturation: 75
+    });
+    const white = buildWhite(30, 40, 2700) as {
+      Body: { Command: { CommandType: string; WhiteTuningLevelParameters: { Level: number; ColorTuningStatus: { WhiteTuningLevel: { Kelvin: number } } } } };
+    };
+    assert.equal(white.Body.Command.CommandType, "GoToWhiteTuningLevel");
+    assert.equal(white.Body.Command.WhiteTuningLevelParameters.ColorTuningStatus.WhiteTuningLevel.Kelvin, 2700);
+  });
+
   it("zet een dimmer-commando op de LEAP-zone", () => {
     const msg = buildGoToLevel(12, 40, 2) as {
       Header: { Url: string };
@@ -48,7 +77,13 @@ describe("LEAP-berichten", () => {
       Header: { StatusCode: "202 Accepted" },
       Body: { Status: { SigningStatus: "WaitingForButtonPress", Permissions: ["PhysicalAccess"] } }
     });
-    assert.equal(waiting.kind, "button");
+    assert.equal(waiting.kind, "ready");
+    assert.equal(
+      parsePairingMessage({
+        Body: { Status: { SigningStatus: "WaitingForButtonPress", Permissions: ["Public"] } }
+      }).kind,
+      "waiting"
+    );
 
     const done = parsePairingMessage({
       Header: { StatusCode: "200 OK" },
