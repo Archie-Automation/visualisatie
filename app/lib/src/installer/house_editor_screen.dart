@@ -5928,9 +5928,23 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            _status?.leap == true ? 'HomeWorks QSX' : 'Telnet-verbinding',
-                            style: Theme.of(context).textTheme.titleSmall,
+                          Row(
+                            children: [
+                              Text(
+                                _status?.leap == true
+                                    ? 'HomeWorks QSX'
+                                    : 'Telnet-verbinding',
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                              const SizedBox(width: 8),
+                              const LuxeInfoIconButton(
+                                title: 'HomeWorks QSX',
+                                body:
+                                    'Tik op Koppelen en druk daarna de knop op de processor in tot het lampje knippert. Houd hem vast tot het lampje stopt.\n\n'
+                                    'Het zone-id van een lamp, gordijn of Clear Connect Type X staat daarna in de lijst. Dat is niet poort 8902 en niet het kamernummer.\n\n'
+                                    'Telnet op poort 23 is het oude HomeWorks QS-protocol. Een QSX praat daar niet mee. Laat telnet uit.',
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 4),
                           Text(
@@ -5997,23 +6011,13 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
                       ],
                     ),
                   ),
-                ] else if (_zonesErr != null) ...[
+                ] else if (_zonesErr != null && _status?.paired == true) ...[
                   const SizedBox(height: 8),
                   Text(
-                    _zonesErr!,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
+                    'Geen zonelijst. Het zone-id zet je zelf op de lamp.',
+                    style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ],
-                const SizedBox(height: 8),
-                Text(
-                  'Tik op Koppelen en druk daarna de knop op de QSX in tot het lampje knippert. Houd de knop vast tot het lampje stopt. De app stuurt het certificaat pas nadat de processor die knop ziet. Poort 8902 is Designer en stuurt geen lamp aan. Het zone-id, ook van Clear Connect Type X, staat daarna in de lijst. Oudere QS blijft op telnet-poort 23.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).hintColor,
-                        fontSize: 11,
-                      ),
-                ),
               ],
             ),
           ),
@@ -6056,21 +6060,10 @@ class _LutronForm extends StatelessWidget {
         Text('Lutron QSX/QS Processor', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
         Text(
-          'Vul het IP van de QSX in. Tik daarna op Koppelen en druk de knop op de '
-          'processor in tot het lampje knippert. Clear Connect Type X, ook RGBW, '
-          'is een zone op die processor. Username en wachtwoord zijn alleen voor '
-          'oudere QS op telnet-poort 23.',
+          'IP van de QSX. Koppelen staat hierboven.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 20),
-        LuxeSwitchRow(
-          title: 'Telnet ingeschakeld',
-          value: telm['enabled'] == true,
-          onChanged: (v) {
-            telm['enabled'] = v;
-            onChanged();
-          },
-        ),
         _BoundStrField(
           'host',
           telm,
@@ -6078,21 +6071,42 @@ class _LutronForm extends StatelessWidget {
           labelOverride: 'IP-adres (verplicht)',
           hintText: 'bijv. 192.168.1.50 (IP van de QSX/QS processor)',
         ),
-        _BoundStrField('port', telm, onChanged,
-            number: true,
-            labelOverride: 'Poort (QS-telnet 23; QSX negeert 8902)'),
-        _BoundStrField('bridgeHost', lutron, onChanged,
-            labelOverride: 'bridgeHost (fallback)',
-            hintText: 'Optioneel als host leeg is',
-            emptyMeansRemove: true),
-        _BoundStrField('username', telm, onChanged, emptyMeansRemove: true),
-        _BoundStrField(
-          'password',
-          telm,
-          onChanged,
-          labelOverride: 'Wachtwoord',
-          hintText: 'Leeg laten = bestaande hash behouden bij opslaan',
-          emptyMeansRemove: true,
+        const SizedBox(height: 8),
+        ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          title: const Text('Oudere QS (telnet)'),
+          subtitle: const Text('Niet voor HomeWorks QSX'),
+          children: [
+            LuxeSwitchRow(
+              title: 'Telnet ingeschakeld',
+              value: telm['enabled'] == true,
+              onChanged: (v) {
+                telm['enabled'] = v;
+                onChanged();
+              },
+            ),
+            _BoundStrField(
+              'port',
+              telm,
+              onChanged,
+              number: true,
+              labelOverride: 'Telnet-poort',
+              hintText: '23. Een QSX gebruikt dit niet.',
+            ),
+            _BoundStrField('bridgeHost', lutron, onChanged,
+                labelOverride: 'bridgeHost (fallback)',
+                hintText: 'Optioneel als host leeg is',
+                emptyMeansRemove: true),
+            _BoundStrField('username', telm, onChanged, emptyMeansRemove: true),
+            _BoundStrField(
+              'password',
+              telm,
+              onChanged,
+              labelOverride: 'Wachtwoord',
+              hintText: 'Leeg laten = bestaande hash behouden bij opslaan',
+              emptyMeansRemove: true,
+            ),
+          ],
         ),
         const SizedBox(height: 16),
         LutronButtonToKnxListEditor(

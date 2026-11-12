@@ -209,9 +209,29 @@ export class LutronLeapSession {
 
   async listZones(): Promise<LeapZone[]> {
     await this.waitConnected(REQUEST_TIMEOUT_MS);
-    const zones = await this.request(buildReadRequest("/zone"), "/zone");
-    const areas = await this.request(buildReadRequest("/area"), "/area");
-    return parseZoneList(zones, areas);
+    const zoneMsg = await this.readOptional("/zone");
+    const areaMsg = await this.readOptional("/area");
+    let zones = parseZoneList(zoneMsg ?? {}, areaMsg ?? {});
+    if (zones.length === 0 && areaMsg) {
+      const hrefs = hrefList(areaMsg, "Areas", "AreaSummaries");
+      const parts: unknown[] = [];
+      for (const href of hrefs) {
+        const part = await this.readOptional(`${href}/associatedzone`);
+        if (part) parts.push(part);
+      }
+      if (parts.length > 0) zones = parseZoneList(mergeZoneMessages(parts), areaMsg);
+    }
+    return zones;
+  }
+
+  /** QSX wijst /zone of /area soms af. Dat mag de rest van de lijst niet laten falen. */
+  private async readOptional(url: string): Promise<unknown | null> {
+    try {
+      return await this.request(buildReadRequest(url), url);
+    } catch (err) {
+      logger.info({ url, err }, "QSX-leesverzoek niet ondersteund");
+      return null;
+    }
   }
 
   private waitConnected(ms: number): Promise<void> {
@@ -347,6 +367,33 @@ export class LutronLeapSession {
     }
     this.pending.clear();
   }
+}
+
+function hrefList(msg: unknown, ...keys: string[]): string[] {
+  if (!msg || typeof msg !== "object") return [];
+  const body = (msg as Record<string, unknown>).Body;
+  if (!body || typeof body !== "object") return [];
+  const record = body as Record<string, unknown>;
+  const raw = keys.flatMap((key) => (Array.isArray(record[key]) ? record[key] : []));
+  const hrefs: string[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const href = String((item as Record<string, unknown>).href ?? "");
+    if (href.startsWith("/")) hrefs.push(href);
+  }
+  return hrefs;
+}
+
+function mergeZoneMessages(messages: unknown[]): unknown {
+  const Zones: unknown[] = [];
+  for (const msg of messages) {
+    if (!msg || typeof msg !== "object") continue;
+    const body = (msg as Record<string, unknown>).Body;
+    if (!body || typeof body !== "object") continue;
+    const zones = (body as Record<string, unknown>).Zones;
+    if (Array.isArray(zones)) Zones.push(...zones);
+  }
+  return { Body: { Zones } };
 }
 
 function readLeapLines(socket: tls.TLSSocket, onMessage: (msg: unknown) => void): void {

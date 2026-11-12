@@ -356,6 +356,8 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
 
   // warmCoolRatio for tunable_white: 0=warm, 1=cool
   double _warmCool = 0.0;
+  /// Lutron-kleurzone tijdelijk als alleen tunable white, zonder het kleurenwiel.
+  bool _whiteOnly = false;
 
   bool _synced = false;
 
@@ -569,8 +571,14 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
     final mode = _mode;
 
     if (d.isLutronBusControl) {
-      if (mode == 'tunable_white') return _buildCctTile(context, d);
-      return _buildColorWheelTile(context, d);
+      if (mode == 'tunable_white' || _whiteOnly) {
+        return _buildCctTile(
+          context,
+          d,
+          showColorSwitch: mode != 'tunable_white',
+        );
+      }
+      return _buildColorWheelTile(context, d, showWhiteSwitch: true);
     }
 
     // Composite: raw byte sliders (too low-level for a wheel)
@@ -601,6 +609,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
     Device d, {
     bool hasWhite = false,
     bool hasCct   = false,
+    bool showWhiteSwitch = false,
   }) {
     final bus    = ref.watch(busProvider);
     final mode   = _mode;
@@ -644,6 +653,17 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
             ),
             trailing: _rgbSwitch(context, d, on, hasOnGa),
           ),
+          if (showWhiteSwitch)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () {
+                  setState(() => _whiteOnly = true);
+                  _sendTunableWhite(d);
+                },
+                child: const Text('Alleen tunable white'),
+              ),
+            ),
           Opacity(
             opacity: on ? 1.0 : 0.35,
             child: IgnorePointer(
@@ -731,7 +751,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
 
   // ── Tunable white tile ────────────────────────────────────────────────────
 
-  Widget _buildCctTile(BuildContext context, Device d) {
+  Widget _buildCctTile(BuildContext context, Device d, {bool showColorSwitch = false}) {
     final bus     = ref.watch(busProvider);
     final on      = _isOn(bus, d);
     final hasOnGa = d.isLutronBusControl || d.ga['on'] != null;
@@ -766,6 +786,17 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
             ),
             trailing: _rgbSwitch(context, d, on, hasOnGa),
           ),
+          if (showColorSwitch)
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () {
+                  setState(() => _whiteOnly = false);
+                  _sendRgbChannels(d);
+                },
+                child: const Text('Kleur'),
+              ),
+            ),
           const SizedBox(height: 20),
 
           // CCT gradient strip (warm → cool)

@@ -2692,9 +2692,9 @@ class RgbwWwInstallerSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Clear Connect Type X op de QSX. Eén zone-id hierboven. '
-            'Kleur gaat als spectrum naar die zone. Zet de besturing op KNX '
-            'als deze lamp groepadressen moet houden.',
+            'Clear Connect Type X op de QSX, één zone-id. In de app kun je kleur '
+            'of alleen tunable white kiezen. KNX-groepadressen blijven staan '
+            'als de besturing op KNX staat.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 12),
