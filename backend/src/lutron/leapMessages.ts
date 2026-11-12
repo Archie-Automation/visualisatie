@@ -141,6 +141,85 @@ export function buildReadRequest(url: string): object {
   return { CommuniqueType: "ReadRequest", Header: { Url: url } };
 }
 
+export function buildSubscribeRequest(url: string): object {
+  return { CommuniqueType: "SubscribeRequest", Header: { Url: url } };
+}
+
+export type LeapButton = {
+  id: number;
+  name: string;
+  buttonNumber: number;
+};
+
+export type LeapButtonPress = {
+  id: number;
+  /** Zelfde nummers als de installateur: 3 druk, 4 los, 5 lang, 6 dubbel. */
+  action: number;
+};
+
+/** Press/Release/LongHold/MultiTap → de actienummers van de keypad-mapping. */
+export function leapButtonAction(eventType: string): number | null {
+  switch (eventType) {
+    case "Press":
+      return 3;
+    case "Release":
+      return 4;
+    case "LongHold":
+    case "Hold":
+      return 5;
+    case "MultiTap":
+      return 6;
+    default:
+      return null;
+  }
+}
+
+export function parseButtonList(msg: unknown): LeapButton[] {
+  const body = bodyOf(msg);
+  const raw = arrayOf(body.Buttons);
+  const out: LeapButton[] = [];
+  for (const button of raw) {
+    const id = buttonIdFromHref(String(button.href ?? ""));
+    if (id == null) continue;
+    const number = Number(button.ButtonNumber);
+    out.push({
+      id,
+      name: String(button.Name ?? `Knop ${id}`),
+      buttonNumber: Number.isFinite(number) ? number : 0
+    });
+  }
+  out.sort((a, b) => a.id - b.id);
+  return out;
+}
+
+export function parseButtonEvents(msg: unknown): LeapButtonPress[] {
+  const body = bodyOf(msg);
+  const single = body.ButtonStatus;
+  const many = arrayOf(body.ButtonStatuses);
+  const statuses =
+    single && typeof single === "object" ? [single as Record<string, unknown>, ...many] : many;
+  const out: LeapButtonPress[] = [];
+  for (const status of statuses) {
+    const event = status.ButtonEvent;
+    if (!event || typeof event !== "object") continue;
+    const action = leapButtonAction(String((event as Record<string, unknown>).EventType ?? ""));
+    if (action == null) continue;
+    const button = status.Button as Record<string, unknown> | undefined;
+    const id = buttonIdFromHref(String(button?.href ?? headerUrl(msg)));
+    if (id == null) continue;
+    out.push({ id, action });
+  }
+  return out;
+}
+
+function buttonIdFromHref(href: string): number | null {
+  const parts = href.split("/").filter(Boolean);
+  const at = parts.indexOf("button");
+  const raw = at >= 0 ? parts[at + 1] : parts[parts.length - 1];
+  const id = Number(raw);
+  return Number.isFinite(id) && id >= 1 ? id : null;
+}
+
 export function buildGoToLevel(zoneId: number, percent: number, fadeSeconds?: number): object {
   const level = Math.max(0, Math.min(100, Math.round(percent)));
   const parameter: { Type: string; Value: number | string }[] = [

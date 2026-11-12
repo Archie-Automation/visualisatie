@@ -551,8 +551,7 @@ export function validateLutronLoadOutputSemantics(cfg: HouseConfig): string[] {
     cfg.lutron?.leap?.privateKey?.includes("PRIVATE KEY") &&
       cfg.lutron?.leap?.certificate?.includes("BEGIN CERTIFICATE")
   );
-  const houseEnabled =
-    leapPaired || (cfg.lutron?.telnet?.enabled === true && houseHost.length > 0);
+  const houseEnabled = leapPaired || houseHost.length > 0;
 
   walkDevices(cfg, (d) => {
     if (

@@ -10,6 +10,7 @@ import 'package:uuid/uuid.dart';
 
 import '../ac_mode_config.dart';
 import 'energy_installer_section.dart';
+import 'lutron_zone_import.dart';
 import '../api.dart';
 import '../fireplace_step_ranges.dart';
 import '../models.dart';
@@ -3150,9 +3151,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               title: 'Lutron QSX/QS',
               selected: _sel.kind == _FocusKind.lutron,
               trailing: _IntegrationBadge(
-                  enabled:
-                      (_house?['lutron']?['telnet']?['enabled'] as bool?) ==
-                          true),
+                  enabled: ((_house?['lutron']?['telnet']?['host'] as String?) ??
+                          '')
+                      .trim()
+                      .isNotEmpty),
               onTap: () => _selectFocus(const _Focus.lutron()),
             ),
             LuxeNavRow(
@@ -4803,6 +4805,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       case _FocusKind.lutron:
         return _LutronInstallerSection(
           lutron: _ensureLutron(),
+          house: _house!,
           onChanged: () => setState(() {}),
           getToken: () async {
             if (widget.useCustomerSession) {
@@ -5728,11 +5731,13 @@ class _KnxInstallerSectionState extends State<_KnxInstallerSection> {
 class _LutronInstallerSection extends StatefulWidget {
   const _LutronInstallerSection({
     required this.lutron,
+    required this.house,
     required this.onChanged,
     required this.getToken,
   });
 
   final Map<String, dynamic> lutron;
+  final Map<String, dynamic> house;
   final VoidCallback onChanged;
   final Future<String?> Function() getToken;
 
@@ -5747,6 +5752,7 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
   bool _reconnectBusy = false;
   bool _pairBusy = false;
   List<LutronZoneInfo> _zones = const [];
+  List<LutronButtonInfo> _buttons = const [];
   String? _zonesErr;
   bool _zonesLoaded = false;
 
@@ -5816,9 +5822,16 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
     if (!mounted || t == null) return;
     try {
       final zones = await fetchInstallerLutronZones(t);
+      List<LutronButtonInfo> buttons = const [];
+      try {
+        buttons = await fetchInstallerLutronButtons(t);
+      } catch (_) {
+        buttons = const [];
+      }
       if (!mounted) return;
       setState(() {
         _zones = zones;
+        _buttons = buttons;
         _zonesErr = null;
         _zonesLoaded = true;
       });
@@ -5911,7 +5924,7 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
                       message: _status == null
                           ? 'Status wordt geladen…'
                           : (_status!.connected && _status!.loggedIn
-                              ? (_status!.leap ? 'QSX LEAP verbonden' : 'Telnet verbonden')
+                              ? 'QSX LEAP verbonden'
                               : 'Geen verbinding'),
                       child: Icon(
                         Icons.circle,
@@ -5931,9 +5944,7 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
                           Row(
                             children: [
                               Text(
-                                _status?.leap == true
-                                    ? 'HomeWorks QSX'
-                                    : 'Telnet-verbinding',
+                                'HomeWorks QSX',
                                 style: Theme.of(context).textTheme.titleSmall,
                               ),
                               const SizedBox(width: 8),
@@ -5941,8 +5952,7 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
                                 title: 'HomeWorks QSX',
                                 body:
                                     'Tik op Koppelen en druk daarna de knop op de processor in tot het lampje knippert. Houd hem vast tot het lampje stopt.\n\n'
-                                    'Het zone-id van een lamp, gordijn of Clear Connect Type X staat daarna in de lijst. Dat is niet poort 8902 en niet het kamernummer.\n\n'
-                                    'Telnet op poort 23 is het oude HomeWorks QS-protocol. Een QSX praat daar niet mee. Laat telnet uit.',
+                                    'Het zone-id van een lamp, gordijn of Clear Connect Type X staat daarna in de lijst. Met Zones in het huis zetten maak je er apparaten van in een kamer. Het knop-id voor keypad → KNX staat in de knoppenlijst. Dat is niet poort 8902 en niet het kamernummer.',
                               ),
                             ],
                           ),
@@ -5994,8 +6004,33 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
                 if (_zones.isNotEmpty) ...[
                   const SizedBox(height: 8),
                   Text(
-                    'Zone-id voor de lamp',
+                    'Zones op de QSX',
                     style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () async {
+                        final added = await showLutronZoneImportDialog(
+                          context: context,
+                          zones: _zones,
+                          house: widget.house,
+                        );
+                        if (!mounted || added == null) return;
+                        widget.onChanged();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              added == 0
+                                  ? 'Geen nieuwe zones. Ze staan al in het huis.'
+                                  : '$added zones in het huis gezet. Sla op om ze te bewaren.',
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.playlist_add_outlined),
+                      label: const Text('Zones in het huis zetten'),
+                    ),
                   ),
                   const SizedBox(height: 4),
                   ConstrainedBox(
@@ -6016,6 +6051,27 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
                   Text(
                     'Geen zonelijst. Het zone-id zet je zelf op de lamp.',
                     style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+                if (_buttons.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    'Knop-id voor keypad → KNX',
+                    style: Theme.of(context).textTheme.labelLarge,
+                  ),
+                  const SizedBox(height: 4),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 140),
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: [
+                        for (final b in _buttons)
+                          Text(
+                            '${b.id}  ${b.name}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                      ],
+                    ),
                   ),
                 ],
               ],
@@ -6070,43 +6126,6 @@ class _LutronForm extends StatelessWidget {
           onChanged,
           labelOverride: 'IP-adres (verplicht)',
           hintText: 'bijv. 192.168.1.50 (IP van de QSX/QS processor)',
-        ),
-        const SizedBox(height: 8),
-        ExpansionTile(
-          tilePadding: EdgeInsets.zero,
-          title: const Text('Oudere QS (telnet)'),
-          subtitle: const Text('Niet voor HomeWorks QSX'),
-          children: [
-            LuxeSwitchRow(
-              title: 'Telnet ingeschakeld',
-              value: telm['enabled'] == true,
-              onChanged: (v) {
-                telm['enabled'] = v;
-                onChanged();
-              },
-            ),
-            _BoundStrField(
-              'port',
-              telm,
-              onChanged,
-              number: true,
-              labelOverride: 'Telnet-poort',
-              hintText: '23. Een QSX gebruikt dit niet.',
-            ),
-            _BoundStrField('bridgeHost', lutron, onChanged,
-                labelOverride: 'bridgeHost (fallback)',
-                hintText: 'Optioneel als host leeg is',
-                emptyMeansRemove: true),
-            _BoundStrField('username', telm, onChanged, emptyMeansRemove: true),
-            _BoundStrField(
-              'password',
-              telm,
-              onChanged,
-              labelOverride: 'Wachtwoord',
-              hintText: 'Leeg laten = bestaande hash behouden bij opslaan',
-              emptyMeansRemove: true,
-            ),
-          ],
         ),
         const SizedBox(height: 16),
         LutronButtonToKnxListEditor(
@@ -8192,8 +8211,7 @@ class _DeviceForm extends StatelessWidget {
                 Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Text(
-                    'Telnet en de centrale Lutron-koppeling stel je in via Lutron QSX/QS Processor '
-                    'in de boom. Hier kun je optioneel extra keypad → KNX mappings zetten.',
+                    'Keypad-knoppen van de QSX. Het knop-id staat in de lijst onder Lutron QSX/QS.',
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
                 ),

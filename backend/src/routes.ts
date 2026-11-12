@@ -143,7 +143,6 @@ import {
 } from "./intercomReleaseMode";
 import type { MediaManager } from "./media/manager";
 import type { LutronIntegrationManager } from "./lutron/manager";
-import { isLeapTransportPort } from "./lutron/leapMessages";
 import type { WsHub } from "./ws";
 import { getConnectivitySnapshot } from "./startupConnectivity";
 import { normalizeHouseCamerasRaw } from "./houseCameras";
@@ -263,47 +262,16 @@ p{color:#b3b3b3;margin:0}a{color:#1db954}</style></head>
 
 function lutronStatusPayload(lutron: LutronIntegrationManager) {
   const leap = lutron.getLeapStatus();
-  const cfg = getConfig();
-  const telnetPort = cfg.lutron?.telnet?.port;
-  const host = lutron.configuredHost(cfg);
-  const clients = lutron.getStatus();
-  if (leap.paired || isLeapTransportPort(telnetPort)) {
-    const waiting =
-      !leap.paired && isLeapTransportPort(telnetPort)
-        ? "Poort 8902 is de Designer-poort. Tik op Koppelen en druk daarna de knop op de QSX in."
-        : leap.lastError;
-    return {
-      connected: leap.connected,
-      loggedIn: leap.connected,
-      host: leap.host || host,
-      port: leap.paired ? 8081 : telnetPort ?? 8081,
-      protocol: "leap",
-      paired: leap.paired,
-      lastError: waiting,
-      clients
-    };
-  }
-  const row = clients.find((c) => c.deviceId === "house") ?? clients[0];
-  if (!row) {
-    return {
-      connected: false,
-      loggedIn: false,
-      host,
-      port: telnetPort ?? 23,
-      protocol: "telnet",
-      paired: false,
-      clients
-    };
-  }
+  const host = lutron.configuredHost(getConfig());
   return {
-    connected: row.connected,
-    loggedIn: row.loggedIn,
-    host: row.host,
-    port: row.port,
-    protocol: "telnet",
-    paired: false,
-    lastError: row.lastError,
-    clients
+    connected: leap.connected,
+    loggedIn: leap.connected,
+    host: leap.host || host,
+    port: 8081,
+    protocol: "leap",
+    paired: leap.paired,
+    lastError: leap.lastError,
+    clients: lutron.getStatus()
   };
 }
 
@@ -1555,6 +1523,18 @@ export function buildRouter(
       logger.warn({ err }, "QSX koppelen mislukt");
       res.status(400).json({
         error: err instanceof Error ? err.message : "Koppelen mislukt"
+      });
+    }
+  });
+
+  r.get("/installer/lutron-buttons", requireAuth, requireInstaller, async (_req, res) => {
+    try {
+      const buttons = await lutron.listButtons();
+      res.json({ buttons });
+    } catch (err) {
+      logger.warn({ err }, "QSX knoppen ophalen mislukt");
+      res.status(400).json({
+        error: err instanceof Error ? err.message : "Knoppen ophalen mislukt"
       });
     }
   });

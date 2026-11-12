@@ -450,7 +450,7 @@ class LutronButtonToKnxListEditor extends StatelessWidget {
         const SizedBox(height: 8),
         if (maps.isEmpty)
           Text(
-            'Nog geen mappings. Voeg een regel toe als een Lutron-keypad een KNX-actie moet starten.',
+            'Nog geen mappings. Het knop-id staat in de lijst na het koppelen van de QSX.',
             style: Theme.of(context).textTheme.bodySmall,
           ),
         for (var i = 0; i < maps.length; i++)
@@ -541,20 +541,11 @@ class _LutronMappingCardState extends State<_LutronMappingCard> {
               },
             ),
             _InstallerStrField(
-              label: 'Integration ID (Lutron)',
+              label: 'Knop-id (uit de lijst na koppelen)',
               value: '${mapping['integrationId'] ?? ''}',
               number: true,
               onChanged: (v) {
                 mapping['integrationId'] = int.tryParse(v) ?? 1;
-                widget.onChanged();
-              },
-            ),
-            _InstallerStrField(
-              label: 'Component-nummer (knopnummer op keypad)',
-              value: '${mapping['componentNumber'] ?? ''}',
-              number: true,
-              onChanged: (v) {
-                mapping['componentNumber'] = int.tryParse(v) ?? 1;
                 widget.onChanged();
               },
             ),
@@ -563,7 +554,7 @@ class _LutronMappingCardState extends State<_LutronMappingCard> {
               child: DropdownButtonFormField<String>(
                 key: ValueKey('action-$dropKey'),
                 decoration: const InputDecoration(
-                  labelText: 'Knopactie (Lutron QSX/QS)',
+                  labelText: 'Knopactie',
                   border: OutlineInputBorder(),
                 ),
                 value: dropKey,

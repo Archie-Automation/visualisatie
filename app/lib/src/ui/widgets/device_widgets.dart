@@ -1583,7 +1583,7 @@ class _ShadingTileState extends ConsumerState<ShadingTile> {
 
     final hasStopGa = d.ga['stop_step'] != null || d.isLutronShade;
     final hasUpDown = d.ga['up_down'] != null || d.isLutronShade;
-    final hasSlat = d.ga['slat'] != null;
+    final hasSlat = d.ga['slat'] != null || d.lutronSlatIntegrationId != null;
     final isJalousie = !isPositionActuator && subtype == ShadingSubtype.jalousie;
     final isMoving = _shadingIsMoving(bus.values, d.ga);
 
@@ -1779,7 +1779,7 @@ class _ShadingPopupState extends ConsumerState<_ShadingPopup> {
         _dragPos ?? _shadingPositionPercent(bus.values, d.ga);
 
     final slatGa = d.ga['slat_status'] ?? d.ga['slat'];
-    final hasSlat = d.ga['slat'] != null;
+    final hasSlat = d.ga['slat'] != null || d.lutronSlatIntegrationId != null;
     final slatRaw = slatGa == null ? null : bus.values[slatGa];
     final slatPct =
         _dragSlat ?? (slatRaw is num ? slatRaw.toDouble().clamp(0, 100) : 0.0);

@@ -9,6 +9,9 @@ import {
   encodeLeap,
   isLeapTransportPort,
   leapErrorMessage,
+  leapButtonAction,
+  parseButtonEvents,
+  parseButtonList,
   parsePairingMessage,
   parseZoneList
 } from "./leapMessages";
@@ -56,6 +59,25 @@ describe("LEAP-berichten", () => {
     };
     assert.equal(white.Body.Command.CommandType, "GoToWhiteTuningLevel");
     assert.equal(white.Body.Command.WhiteTuningLevelParameters.ColorTuningStatus.WhiteTuningLevel.Kelvin, 2700);
+  });
+
+  it("leest een keypad-druk als actie 3", () => {
+    assert.equal(leapButtonAction("Press"), 3);
+    assert.equal(leapButtonAction("Release"), 4);
+    const presses = parseButtonEvents({
+      Header: { Url: "/button/42/status" },
+      Body: {
+        ButtonStatus: {
+          Button: { href: "/button/42" },
+          ButtonEvent: { EventType: "Press" }
+        }
+      }
+    });
+    assert.deepEqual(presses, [{ id: 42, action: 3 }]);
+    const listed = parseButtonList({
+      Body: { Buttons: [{ href: "/button/42", Name: "Sfeer", ButtonNumber: 2 }] }
+    });
+    assert.deepEqual(listed, [{ id: 42, name: "Sfeer", buttonNumber: 2 }]);
   });
 
   it("zet een dimmer-commando op de LEAP-zone", () => {

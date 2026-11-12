@@ -232,6 +232,26 @@ class InstallerLutronStatus {
   }
 }
 
+class LutronButtonInfo {
+  const LutronButtonInfo({
+    required this.id,
+    required this.name,
+    required this.buttonNumber,
+  });
+
+  final int id;
+  final String name;
+  final int buttonNumber;
+
+  factory LutronButtonInfo.fromJson(Map<String, dynamic> j) {
+    return LutronButtonInfo(
+      id: (j['id'] as num?)?.toInt() ?? 0,
+      name: j['name'] as String? ?? '',
+      buttonNumber: (j['buttonNumber'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
 class LutronZoneInfo {
   const LutronZoneInfo({
     required this.id,
@@ -289,6 +309,28 @@ Future<InstallerLutronStatus> postInstallerLutronPair(
     throw StateError(body['error'] as String? ?? 'Koppelen mislukt');
   }
   return InstallerLutronStatus.fromJson(body);
+}
+
+Future<List<LutronButtonInfo>> fetchInstallerLutronButtons(String token) async {
+  final res = await http
+      .get(
+        Uri.parse('$apiBase/api/installer/lutron-buttons'),
+        headers: {'authorization': 'Bearer $token'},
+      )
+      .timeout(const Duration(seconds: 20));
+  final dynamic raw =
+      res.body.isNotEmpty ? jsonDecode(res.body) : <String, dynamic>{};
+  final body = Map<String, dynamic>.from(raw as Map);
+  if (res.statusCode != 200) {
+    throw StateError(body['error'] as String? ?? 'Knoppen ophalen mislukt');
+  }
+  final list = body['buttons'];
+  if (list is! List) return const [];
+  return [
+    for (final item in list)
+      if (item is Map)
+        LutronButtonInfo.fromJson(Map<String, dynamic>.from(item)),
+  ];
 }
 
 Future<List<LutronZoneInfo>> fetchInstallerLutronZones(String token) async {

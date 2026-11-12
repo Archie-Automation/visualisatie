@@ -17,7 +17,7 @@ import {
   buildOutputStop
 } from "./outputCommands";
 import { LutronLeapSession, pairWithProcessor } from "./leapClient";
-import { isLeapTransportPort, type LeapZone } from "./leapMessages";
+import { isLeapTransportPort, type LeapButton, type LeapZone } from "./leapMessages";
 import { HOUSE_LUTRON_SLOT_ID } from "./resolve";
 
 export type LutronClientStatus = {
@@ -142,6 +142,40 @@ export class LutronIntegrationManager {
     return this.leap.listZones();
   }
 
+  listButtons(): Promise<LeapButton[]> {
+    if (!this.leap) return Promise.resolve([]);
+    return this.leap.listButtons();
+  }
+
+  private leapDebounce = new Map<string, number>();
+
+  /** Keypad-druk van LEAP. integrationId in de mapping is het knop-id. */
+  private onLeapButton(press: { id: number; action: number }): void {
+    const cfg = getConfig();
+    const maps: { source: string; map: LutronButtonToKnxMapping }[] = [];
+    for (const map of cfg.lutron?.buttonToKnx ?? []) {
+      maps.push({ source: "QSX", map });
+    }
+    walkDevices(cfg, (d) => {
+      if (d.type !== "lutron_homeworks") return;
+      for (const map of d.lutronHomeworks.buttonToKnx ?? []) {
+        maps.push({ source: d.name, map });
+      }
+    });
+    for (const { source, map } of maps) {
+      if (map.integrationId !== press.id) continue;
+      if (map.actionNumber != null && map.actionNumber !== press.action) continue;
+      const key = `${map.id}:${press.id}:${press.action}`;
+      const now = Date.now();
+      const prev = this.leapDebounce.get(key) ?? 0;
+      if (now - prev < DEBOUNCE_MS) continue;
+      this.leapDebounce.set(key, now);
+      void this.fireButtonMapping(source, map).catch((err) => {
+        logger.warn({ err, button: press.id, map: map.id }, "QSX-knop → KNX mislukt");
+      });
+    }
+  }
+
   rebuild(cfg: HouseConfig): void {
     this.leap?.stop();
     this.leap = null;
@@ -161,45 +195,11 @@ export class LutronIntegrationManager {
         privateKey: leap.privateKey,
         rootCertificate: leap.rootCertificate ?? ""
       });
+      this.leap.onButton = (press) => this.onLeapButton(press);
       this.leap.start();
     }
 
-    if (hl) {
-      const tel = hl.telnet;
-      const host = (tel?.host ?? hl.bridgeHost ?? "").trim();
-      if (tel?.enabled && host && !isLeapTransportPort(tel.port)) {
-        this.slots.push(this.emptySlot({
-          slotId: HOUSE_LUTRON_SLOT_ID,
-          displayName: "Lutron QSX/QS Processor",
-          telnet: tel,
-          bridgeHost: hl.bridgeHost,
-          buttonToKnx: hl.buttonToKnx ?? []
-        }));
-      }
-    }
-
-    walkDevices(cfg, (d) => {
-      if (d.type !== "lutron_homeworks") return;
-      const lh = d.lutronHomeworks;
-      const tel = lh.telnet;
-      const host = (tel?.host ?? lh.bridgeHost ?? "").trim();
-      if (!tel?.enabled || !host || isLeapTransportPort(tel.port)) return;
-      if (this.slots.some((s) => s.slotId === d.id)) return;
-      this.slots.push(
-        this.emptySlot({
-          slotId: d.id,
-          displayName: d.name,
-          telnet: tel,
-          bridgeHost: lh.bridgeHost,
-          buttonToKnx: lh.buttonToKnx ?? []
-        })
-      );
-    });
-
-    for (const s of this.slots) {
-      this.scheduleConnect(s, 0);
-    }
-    logger.info({ clients: this.slots.length }, "Lutron integratie herbouwd");
+    logger.info({ leap: this.leap != null }, "Lutron integratie herbouwd");
   }
 
   reconnect(): void {

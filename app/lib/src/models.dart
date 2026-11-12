@@ -264,6 +264,13 @@ class Device {
     return null;
   }
 
+  /// Zelfde zone als de gordijnpositie, of een aparte lamelzone.
+  int? get lutronSlatIntegrationId {
+    final v = raw['lutronSlatIntegrationId'];
+    if (v is num && v >= 1) return v.toInt();
+    return null;
+  }
+
   factory Device.fromJson(Map<String, dynamic> j) {
     final gaMap = (j['ga'] as Map?) ?? const {};
     return Device(
