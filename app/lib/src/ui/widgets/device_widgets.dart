@@ -698,6 +698,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
       }
     }
 
+    final size = DeviceCardScale.iconBadgeSize(context);
     Widget icon({
       required bool selected,
       required IconData glyph,
@@ -713,11 +714,11 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
             customBorder: const CircleBorder(),
             onTap: onTap,
             child: SizedBox(
-              width: 26,
-              height: 26,
+              width: size,
+              height: size,
               child: Icon(
                 glyph,
-                size: 16,
+                size: size * 0.46,
                 color: selected ? LuxeColors.brassDeep : LuxeColors.inkSoft,
               ),
             ),
@@ -726,26 +727,23 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
       );
     }
 
-    return SizedBox(
-      width: DeviceCardScale.iconBadgeSize(context),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          icon(
-            selected: rgb,
-            glyph: Icons.palette_outlined,
-            tooltip: 'RGB(W)',
-            onTap: () => select(true),
-          ),
-          const SizedBox(width: 2),
-          icon(
-            selected: !rgb,
-            glyph: Icons.wb_twilight_outlined,
-            tooltip: 'Kleurtemperatuur',
-            onTap: () => select(false),
-          ),
-        ],
-      ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        icon(
+          selected: rgb,
+          glyph: Icons.palette_outlined,
+          tooltip: 'RGB(W)',
+          onTap: () => select(true),
+        ),
+        const SizedBox(width: 8),
+        icon(
+          selected: !rgb,
+          glyph: Icons.wb_twilight_outlined,
+          tooltip: 'Kleurtemperatuur',
+          onTap: () => select(false),
+        ),
+      ],
     );
   }
 
