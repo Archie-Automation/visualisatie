@@ -372,6 +372,8 @@ function hrefId(href: string, kind: string): number | null {
 }
 
 export function parseButtonEvents(msg: unknown): LeapButtonPress[] {
+  // Het SubscribeResponse is een momentopname. Een oude druk daarin mag geen KNX sturen.
+  if (communiqueType(msg) === "SubscribeResponse") return [];
   const body = bodyOf(msg);
   const single = body.ButtonStatus;
   const many = arrayOf(body.ButtonStatuses);
@@ -389,6 +391,11 @@ export function parseButtonEvents(msg: unknown): LeapButtonPress[] {
     out.push({ id, action });
   }
   return out;
+}
+
+function communiqueType(msg: unknown): string {
+  if (!msg || typeof msg !== "object") return "";
+  return String((msg as Record<string, unknown>).CommuniqueType ?? "");
 }
 
 function buttonIdFromHref(href: string): number | null {

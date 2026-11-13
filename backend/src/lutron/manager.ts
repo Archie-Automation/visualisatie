@@ -218,6 +218,10 @@ export class LutronIntegrationManager {
         maps.push({ source: d.name, map });
       }
     });
+    const watched = maps.some(({ map }) => map.integrationId === press.id);
+    if (watched) {
+      logger.info({ button: press.id, action: press.action }, "QSX-knop");
+    }
     for (const { source, map } of maps) {
       if (map.integrationId !== press.id) continue;
       if (map.actionNumber != null && map.actionNumber !== press.action) continue;

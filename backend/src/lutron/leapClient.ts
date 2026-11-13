@@ -165,7 +165,7 @@ type Pending = {
 export class LutronLeapSession {
   connected = false;
   lastError?: string;
-  /** Keypad-druk nadat het abonnement staat. De eerste seconden na verbinden worden genegeerd. */
+  /** Keypad-druk. Een SubscribeResponse (momentopname) telt niet. */
   onButton?: (press: LeapButtonPress) => void;
   onZoneLevel?: (level: { id: number; level: number; hue?: number; saturation?: number; kelvin?: number }) => void;
   private buttonsReadyAt = Number.POSITIVE_INFINITY;
@@ -177,8 +177,6 @@ export class LutronLeapSession {
   private relaxedTls = false;
   private immediateRetry = false;
   private buttonLoad: Promise<LeapButton[]> | null = null;
-  /** `/button` gaf niets. Dan is een bulk-abonnement meestal ook leeg. */
-  private subscribeButtonsOneByOne = false;
 
   constructor(
     private readonly host: string,
@@ -280,7 +278,6 @@ export class LutronLeapSession {
     const indexed = collectDefinedButtons(index);
     take(indexed);
     await this.hydrateButtonHrefs(collectHrefs(index, "button"), "", take);
-    this.subscribeButtonsOneByOne = indexed.length === 0;
 
     if (found.size === 0) {
       for (const area of await this.areaHrefs()) {
@@ -414,24 +411,46 @@ export class LutronLeapSession {
 
   private async subscribeButtons(): Promise<void> {
     const buttons = await this.listButtons().catch(() => [] as LeapButton[]);
-    logger.info(
-      { count: buttons.length, perButton: this.subscribeButtonsOneByOne },
-      "QSX-knoppen"
-    );
-    if (!this.subscribeButtonsOneByOne && (await this.subscribe("/button/status"))) return;
+    logger.info({ count: buttons.length }, "QSX-knoppen");
+    // Een druk komt op /button/{id}/status/event. /button/status levert alleen
+    // een momentopname en stopt daarna; daarop wachten mist elke keypad-druk.
+    let useEvent = true;
+    let subscribed = 0;
+    this.buttonsReadyAt = Date.now();
     for (const button of buttons) {
-      if (this.stopped || !this.connected) return;
-      await this.subscribe(`/button/${button.id}/status`);
+      if (this.stopped || !this.connected) break;
+      if (useEvent) {
+        const eventUrl = `/button/${button.id}/status/event`;
+        const result = await this.subscribeResult(eventUrl);
+        if (result === "ok") {
+          subscribed += 1;
+          continue;
+        }
+        if (result === "unsupported") useEvent = false;
+        else continue;
+      }
+      if (await this.subscribe(`/button/${button.id}/status`)) subscribed += 1;
     }
+    logger.info(
+      { subscribed, count: buttons.length, via: useEvent ? "event" : "status" },
+      "QSX-knopabonnement klaar"
+    );
   }
 
   private async subscribe(url: string): Promise<boolean> {
+    return (await this.subscribeResult(url)) === "ok";
+  }
+
+  /** `unsupported` = dit pad bestaat niet op de processor. Andere knoppen dan ook niet. */
+  private async subscribeResult(url: string): Promise<"ok" | "unsupported" | "failed"> {
     try {
       await this.request(buildSubscribeRequest(url), url);
-      return true;
+      return "ok";
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       logger.info({ url, err }, "QSX-knopabonnement niet ondersteund");
-      return false;
+      if (/405|method|not allowed|unknown url|unsupported/i.test(message)) return "unsupported";
+      return "failed";
     }
   }
 
@@ -493,9 +512,8 @@ export class LutronLeapSession {
     socket.once("secureConnect", () => {
       this.connected = true;
       this.lastError = undefined;
-      this.buttonsReadyAt = Date.now() + 2_000;
+      this.buttonsReadyAt = Number.POSITIVE_INFINITY;
       this.buttonLoad = null;
-      this.subscribeButtonsOneByOne = false;
       logger.info({ host: this.host, port: LEAP_PORT }, "QSX LEAP verbonden");
       void this.subscribeButtons();
       void this.subscribeZones();

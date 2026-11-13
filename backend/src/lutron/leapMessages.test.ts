@@ -99,6 +99,29 @@ describe("LEAP-berichten", () => {
       }
     });
     assert.deepEqual(presses, [{ id: 42, action: 3 }]);
+    const fromEventUrl = parseButtonEvents({
+      CommuniqueType: "ReadResponse",
+      Header: { Url: "/button/42/status/event" },
+      Body: {
+        ButtonStatus: {
+          href: "/button/42/status/event",
+          Button: { href: "/button/42" },
+          ButtonEvent: { EventType: "Press" }
+        }
+      }
+    });
+    assert.deepEqual(fromEventUrl, [{ id: 42, action: 3 }]);
+    const snapshot = parseButtonEvents({
+      CommuniqueType: "SubscribeResponse",
+      Header: { Url: "/button/42/status/event" },
+      Body: {
+        ButtonStatus: {
+          Button: { href: "/button/42" },
+          ButtonEvent: { EventType: "Press" }
+        }
+      }
+    });
+    assert.deepEqual(snapshot, []);
     const listed = parseButtonList({
       Body: { Buttons: [{ href: "/button/42", Name: "Sfeer", ButtonNumber: 2 }] }
     });
