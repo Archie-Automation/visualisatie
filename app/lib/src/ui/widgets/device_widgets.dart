@@ -656,14 +656,8 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
     final mode = _mode;
 
     if (d.isLutronBusControl) {
-      if (mode == 'tunable_white' || _whiteOnly) {
-        return _buildCctTile(
-          context,
-          d,
-          showColorSwitch: mode != 'tunable_white',
-        );
-      }
-      return _buildColorWheelTile(context, d, showWhiteSwitch: true);
+      if (mode == 'tunable_white') return _buildCctTile(context, d);
+      return _buildSpectrumTile(context, d);
     }
 
     // Composite: raw byte sliders (too low-level for a wheel)
@@ -775,6 +769,128 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
     );
   }
 
+  /// RGB en kleurtemperatuur in dezelfde tegel. De hero-hoogte is die van
+  /// het kleurenwiel; dimmer en modusknoppen blijven op hun plek.
+  Widget _buildSpectrumTile(BuildContext context, Device d) {
+    final bus = ref.watch(busProvider);
+    final on = _isOn(bus, d);
+    final hasOnGa = d.isLutronBusControl || d.ga['on'] != null;
+    final white = _whiteOnly;
+    final wheel = DeviceCardScale.colorWheelSize(context);
+    final gap = DeviceCardScale.sectionSpacing(context);
+    final heroHeight = gap * 0.5 + wheel + gap;
+    final reduceMotion = MediaQuery.of(context).disableAnimations;
+
+    return DeviceTileShell(
+      glow: on,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DeviceTileLayout.headerRow(
+            context: context,
+            leading: _rgbHeaderIcon(
+              icon: white
+                  ? (on ? Icons.wb_incandescent : Icons.wb_incandescent_outlined)
+                  : (on ? Icons.palette : Icons.palette_outlined),
+              on: on,
+              onTap: () => _toggleLight(d, on, hasOnGa: hasOnGa),
+            ),
+            content: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    d.name,
+                    style: Theme.of(context)
+                        .textTheme
+                        .titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+            trailing: _rgbSwitch(context, d, on, hasOnGa),
+          ),
+          Opacity(
+            opacity: on ? 1.0 : 0.35,
+            child: IgnorePointer(
+              ignoring: !on,
+              child: SizedBox(
+                height: heroHeight,
+                width: double.infinity,
+                child: AnimatedSwitcher(
+                  duration: reduceMotion
+                      ? Duration.zero
+                      : const Duration(milliseconds: 520),
+                  layoutBuilder: (current, previous) => Stack(
+                    alignment: Alignment.center,
+                    fit: StackFit.expand,
+                    children: [
+                      ...previous,
+                      if (current != null) current,
+                    ],
+                  ),
+                  transitionBuilder: (child, animation) =>
+                      _SequentialFade(animation: animation, child: child),
+                  child: SizedBox.expand(
+                    key: ValueKey(white ? 'cct' : 'rgb'),
+                    child: Padding(
+                      padding: EdgeInsets.only(top: gap * 0.5, bottom: gap),
+                      child: white
+                          ? DeviceCardBody(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  _LuxeGradientBar(
+                                    value: _warmCool,
+                                    label: 'Kleurtemperatuur (warm → koud)',
+                                    colors: const [
+                                      Color(0xFFFF9A3C),
+                                      Color(0xFFFFEFCF),
+                                      Color(0xFFCCE8FF),
+                                    ],
+                                    onChanged: (v) =>
+                                        setState(() => _warmCool = v),
+                                    onChangeEnd: (v) {
+                                      setState(() => _warmCool = v);
+                                      _sendTunableWhite(d);
+                                    },
+                                    thumbColor: const Color(0xFFFFD88A),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : Center(
+                              child: _HsvWheelPicker(
+                                hue: _hue,
+                                saturation: _sat,
+                                diameter: wheel,
+                                onChanged: (h, s) => setState(() {
+                                  _hue = h;
+                                  _sat = s;
+                                }),
+                                onChangeEnd: (_, __) => _sendRgbChannels(d),
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          DeviceCardBody(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _brightnessSlider(d, white: white, showMode: true),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ── RGB colour wheel tile ─────────────────────────────────────────────────
 
   Widget _buildColorWheelTile(
@@ -782,7 +898,6 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
     Device d, {
     bool hasWhite = false,
     bool hasCct   = false,
-    bool showWhiteSwitch = false,
   }) {
     final bus    = ref.watch(busProvider);
     final mode   = _mode;
@@ -849,7 +964,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _brightnessSlider(d, white: false, showMode: showWhiteSwitch),
+                _brightnessSlider(d, white: false),
                 if (hasWhite) ...[
                   const SizedBox(height: 12),
                   DeviceCardSliderWrap(
@@ -903,7 +1018,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
 
   // ── Tunable white tile ────────────────────────────────────────────────────
 
-  Widget _buildCctTile(BuildContext context, Device d, {bool showColorSwitch = false}) {
+  Widget _buildCctTile(BuildContext context, Device d) {
     final bus     = ref.watch(busProvider);
     final on      = _isOn(bus, d);
     final hasOnGa = d.isLutronBusControl || d.ga['on'] != null;
@@ -955,7 +1070,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
           ),
           const SizedBox(height: 16),
 
-          _brightnessSlider(d, white: true, showMode: showColorSwitch),
+          _brightnessSlider(d, white: true),
         ],
       ),
     );
@@ -1034,6 +1149,30 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Eerst uitfaden, daarna infaden. [animation] loopt 0→1 voor het nieuwe
+/// kind en 1→0 voor het oude.
+class _SequentialFade extends AnimatedWidget {
+  const _SequentialFade({
+    required Animation<double> animation,
+    required this.child,
+  }) : super(listenable: animation);
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = (listenable as Animation<double>).value;
+    final raw = t <= 0.5 ? 0.0 : (t - 0.5) / 0.5;
+    return Opacity(
+      opacity: Curves.easeInOut.transform(raw),
+      child: IgnorePointer(
+        ignoring: t < 1,
+        child: child,
       ),
     );
   }
