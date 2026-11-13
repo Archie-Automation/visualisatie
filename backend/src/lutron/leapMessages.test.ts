@@ -11,6 +11,7 @@ import {
   isLeapTransportPort,
   leapErrorMessage,
   leapButtonAction,
+  LeapHoldDetector,
   parseButtonEvents,
   collectDefinedButtons,
   collectHrefs,
@@ -85,6 +86,9 @@ describe("LEAP-berichten", () => {
   it("leest een keypad-druk als actie 3", () => {
     assert.equal(leapButtonAction("Press"), 3);
     assert.equal(leapButtonAction("Release"), 4);
+    assert.equal(leapButtonAction("release"), 4);
+    assert.equal(leapButtonAction("LongHold"), 5);
+    assert.equal(leapButtonAction("hold"), 5);
     const presses = parseButtonEvents({
       Header: { Url: "/button/42/status" },
       Body: {
@@ -149,6 +153,37 @@ describe("LEAP-berichten", () => {
     });
     assert.equal(one[0]?.buttonNumber, 1);
     assert.equal(one[0]?.deviceName, "Keuken");
+  });
+
+  it("loslaten voor de wachttijd is geen vasthouden", async () => {
+    const seen: number[] = [];
+    const detector = new LeapHoldDetector(40);
+    detector.handle({ id: 7, action: 3 }, (press) => seen.push(press.action));
+    detector.handle({ id: 7, action: 4 }, (press) => seen.push(press.action));
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    detector.stop();
+    assert.deepEqual(seen, [3, 4]);
+  });
+
+  it("vasthouden volgt als loslaten uitblijft", async () => {
+    const seen: number[] = [];
+    const detector = new LeapHoldDetector(30);
+    detector.handle({ id: 7, action: 3 }, (press) => seen.push(press.action));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    detector.handle({ id: 7, action: 5 }, (press) => seen.push(press.action));
+    detector.handle({ id: 7, action: 4 }, (press) => seen.push(press.action));
+    detector.stop();
+    assert.deepEqual(seen, [3, 5, 4]);
+  });
+
+  it("LongHold van de processor telt één keer", async () => {
+    const seen: number[] = [];
+    const detector = new LeapHoldDetector(80);
+    detector.handle({ id: 7, action: 3 }, (press) => seen.push(press.action));
+    detector.handle({ id: 7, action: 5 }, (press) => seen.push(press.action));
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    detector.stop();
+    assert.deepEqual(seen, [3, 5]);
   });
 
   it("zet een dimmer-commando op de LEAP-zone", () => {

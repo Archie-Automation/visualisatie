@@ -17,16 +17,61 @@ import 'knx_ga_catalog.dart';
 const _uuid = Uuid();
 
 const lutronKnxRoles = [
-  'switch',
-  'dim_value',
-  'byte',
-  'percent',
-  'temperature',
   'bit',
-  'setpoint',
-  'position',
+  'percent',
+  'byte',
+  'temperature',
   'scene_number',
+  'scene',
 ];
+
+const lutronKnxDptLabels = <String, String>{
+  'bit': 'DPT 1.001 — aan/uit',
+  'percent': 'DPT 5.001 — percentage (0–100)',
+  'byte': 'DPT 5.010 — byte (0–255)',
+  'temperature': 'DPT 9.001 — temperatuur (°C)',
+  'scene_number': 'DPT 17.001 — scenenummer (0–63)',
+  'scene': 'DPT 18.001 — scene (1–64)',
+};
+
+const lutronSendModes = ['value', 'toggle', 'pulse'];
+
+const lutronSendLabels = <String, String>{
+  'value': 'Vaste waarde',
+  'toggle': 'Toggle',
+  'pulse': 'Puls',
+};
+
+/// Oude rollen die hetzelfde datatype zijn als de DPT-keuze.
+String canonicalLutronDptRole(String role) {
+  switch (role) {
+    case 'switch':
+      return 'bit';
+    case 'dim_value':
+    case 'position':
+      return 'percent';
+    case 'setpoint':
+      return 'temperature';
+    default:
+      return lutronKnxRoles.contains(role) ? role : 'bit';
+  }
+}
+
+String lutronSendModeOf(Map<String, dynamic> knx) {
+  final send = knx['send'];
+  if (send == 'value' || send == 'toggle' || send == 'pulse') return send as String;
+  final role = knx['role'] as String? ?? '';
+  final pulse = knx['pulseMs'];
+  if (pulse is num && pulse > 0 && (role == 'switch' || role == 'bit')) {
+    return 'pulse';
+  }
+  return 'value';
+}
+
+dynamic _defaultOffValue(String role, dynamic on) {
+  if (_roleIsBool(role)) return !(on == true || on == 1);
+  return 0;
+}
 
 const universalKnxRoles = [
   'bit',
@@ -145,8 +190,9 @@ bool _roleIsScene(String role) => role == 'scene';
       return (min: 1, max: 64, integer: true);
     case 'byte':
     case 'raw_int':
-    case 'scene_number':
       return (min: 0, max: 255, integer: true);
+    case 'scene_number':
+      return (min: 0, max: 63, integer: true);
     case 'percent':
     case 'dim_value':
     case 'position':
@@ -204,6 +250,7 @@ class _KnxValueField extends StatelessWidget {
     required this.onChanged,
     this.compact = false,
     this.hideLabel = false,
+    this.field = 'value',
   });
 
   final Map<String, dynamic> knx;
@@ -211,6 +258,8 @@ class _KnxValueField extends StatelessWidget {
   final VoidCallback onChanged;
   final bool compact;
   final bool hideLabel;
+  /// `value` of `valueOff` op dezelfde map.
+  final String field;
 
   @override
   Widget build(BuildContext context) {
@@ -220,180 +269,47 @@ class _KnxValueField extends StatelessWidget {
         : (compact
             ? _knxValueCaption(role)
             : '${_knxValueCaption(role)} (${_knxValueHint(role)})');
+    final raw = knx[field];
     if (_roleIsBool(role)) {
       if (compact) {
         return _InstallerDropdown(
           compact: true,
           label: label,
-          value: knx['value'] == true || knx['value'] == 1 ? '1' : '0',
+          value: raw == true || raw == 1 ? '1' : '0',
           options: const ['1', '0'],
           optionLabels: const {
             '1': '1',
             '0': '0',
           },
           onChanged: (v) {
-            knx['value'] = v == '1';
+            knx[field] = v == '1';
             onChanged();
           },
         );
       }
       return LuxeSwitchRow(
-        title: 'Waarde (aan)',
-        value: knx['value'] == true || knx['value'] == 1,
+        title: field == 'valueOff' ? 'Waarde uit' : 'Waarde aan',
+        value: raw == true || raw == 1,
         onChanged: (v) {
-          knx['value'] = v;
+          knx[field] = v;
           onChanged();
         },
       );
     }
     return _InstallerStrField(
-      key: ValueKey('knx-val-$role-${identityHashCode(knx)}'),
+      key: ValueKey('knx-val-$role-$field-${identityHashCode(knx)}'),
       compact: compact,
       label: label.isEmpty ? 'Waarde' : label,
       hint: _knxValueHint(role),
-      value: '${_clampKnxRoleValue(role, knx['value'])}',
+      value: '${_clampKnxRoleValue(role, raw)}',
       number: true,
       min: bounds?.min,
       max: bounds?.max,
       integer: bounds?.integer ?? false,
       onChanged: (v) {
-        knx['value'] = _clampKnxRoleValue(role, v);
+        knx[field] = _clampKnxRoleValue(role, v);
         onChanged();
       },
-    );
-  }
-}
-
-/// Eén KNX-telegram (GA + rol + waarde) — gedeeld door Lutron-keypad en universeel paneel.
-class KnxTelegramEditor extends StatelessWidget {
-  const KnxTelegramEditor({
-    super.key,
-    required this.title,
-    required this.knx,
-    required this.roles,
-    required this.onChanged,
-    this.showPulseMs = false,
-    this.roleLabels,
-    this.compact = false,
-  });
-
-  final String title;
-  final Map<String, dynamic> knx;
-  final List<String> roles;
-  final VoidCallback onChanged;
-  final bool showPulseMs;
-  /// Optioneel: rol → weergavenaam (bijv. DPT-omschrijving).
-  final Map<String, String>? roleLabels;
-  /// Eén rij: groepadres · DPT · waarde.
-  final bool compact;
-
-  @override
-  Widget build(BuildContext context) {
-    final roleRaw = (knx['role'] as String?) ?? roles.first;
-    final role = roles.contains(roleRaw) ? roleRaw : roles.first;
-
-    final gaField = _InstallerStrField(
-      compact: compact,
-      label: compact ? 'Groepadres' : 'Groepadres (x/y/z)',
-      value: knx['ga'] as String? ?? '',
-      onChanged: (v) {
-        knx['ga'] = v;
-        onChanged();
-      },
-    );
-    final roleField = _InstallerDropdown(
-      compact: compact,
-      label: compact
-          ? ''
-          : (roleLabels != null ? 'Datatype (DPT)' : 'KNX-rol'),
-      value: role,
-      options: roles,
-      optionLabels: roleLabels,
-      onChanged: (v) {
-        knx['role'] = v;
-        knx['value'] = _clampKnxRoleValue(v, knx['value']);
-        onChanged();
-      },
-    );
-    final valueField = _KnxValueField(
-      knx: knx,
-      role: role,
-      compact: compact,
-      hideLabel: compact,
-      onChanged: onChanged,
-    );
-    final pulseField = showPulseMs && _roleIsBool(role)
-        ? _InstallerStrField(
-            compact: compact,
-            label: 'Pulsduur (ms)',
-            value: knx['pulseMs'] == null ? '' : '${knx['pulseMs']}',
-            number: true,
-            onChanged: (v) {
-              if (v.trim().isEmpty) {
-                knx.remove('pulseMs');
-              } else {
-                knx['pulseMs'] = int.tryParse(v) ?? 250;
-              }
-              onChanged();
-            },
-          )
-        : null;
-
-    if (compact) {
-      Widget col(int flex, String caption, Widget child) => Expanded(
-            flex: flex,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: Text(
-                    caption,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
-                child,
-              ],
-            ),
-          );
-      return Padding(
-        padding: const EdgeInsets.only(bottom: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (title.isNotEmpty) ...[
-              Text(title, style: Theme.of(context).textTheme.labelLarge),
-              const SizedBox(height: 6),
-            ],
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                col(3, 'Groepadres', gaField),
-                const SizedBox(width: 8),
-                col(2, 'DPT', roleField),
-                const SizedBox(width: 8),
-                col(1, _roleIsScene(role) ? 'Scene' : 'Waarde', valueField),
-              ],
-            ),
-            if (pulseField != null) ...[
-              const SizedBox(height: 8),
-              pulseField,
-            ],
-          ],
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: Theme.of(context).textTheme.labelLarge),
-        const SizedBox(height: 8),
-        gaField,
-        roleField,
-        valueField,
-        if (pulseField != null) pulseField,
-      ],
     );
   }
 }
@@ -451,9 +367,9 @@ class LutronButtonToKnxListEditor extends StatelessWidget {
                       'actionNumber': 3,
                       'knx': {
                         'ga': '1/1/1',
-                        'role': 'switch',
+                        'role': 'bit',
+                        'send': 'value',
                         'value': true,
-                        'pulseMs': 250,
                       },
                     });
                     onChanged();
@@ -602,6 +518,10 @@ class _LutronMappingCardState extends State<_LutronMappingCard> {
                 },
               ),
             ),
+            Text(
+              'Eén regel is één moment. Koppel dezelfde knop opnieuw voor loslaten of vasthouden.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
             if (isCustom)
               _InstallerStrField(
                 label: 'Actienummer (vrij invullen)',
@@ -621,15 +541,207 @@ class _LutronMappingCardState extends State<_LutronMappingCard> {
                 },
               ),
             const SizedBox(height: 12),
-            KnxTelegramEditor(
-              title: 'KNX-actie bij dit event',
+            _LutronKnxCommand(
               knx: knx,
-              roles: lutronKnxRoles,
-              showPulseMs: true,
-              onChanged: widget.onChanged,
+              onChanged: () {
+                setState(() {});
+                widget.onChanged();
+              },
             ),
           ],
         ),
+    );
+  }
+}
+
+class _LutronKnxCommand extends StatelessWidget {
+  const _LutronKnxCommand({required this.knx, required this.onChanged});
+
+  final Map<String, dynamic> knx;
+  final VoidCallback onChanged;
+
+  void _setRole(String role) {
+    knx['role'] = role;
+    knx['value'] = _clampKnxRoleValue(role, knx['value']);
+    if (knx['valueOff'] != null) {
+      knx['valueOff'] = _clampKnxRoleValue(role, knx['valueOff']);
+    }
+    if (role == 'scene' || role == 'scene_number') {
+      knx['send'] = 'value';
+      knx.remove('pulseMs');
+      knx.remove('valueOff');
+      knx.remove('statusGa');
+    }
+    onChanged();
+  }
+
+  void _setSend(String mode) {
+    knx['send'] = mode;
+    final role = canonicalLutronDptRole(knx['role'] as String? ?? 'bit');
+    if (mode == 'pulse') {
+      knx['pulseMs'] ??= 250;
+      knx.remove('valueOff');
+      knx.remove('statusGa');
+    } else if (mode == 'toggle') {
+      knx.remove('pulseMs');
+      knx['valueOff'] ??= _defaultOffValue(role, knx['value']);
+    } else {
+      knx.remove('pulseMs');
+      knx.remove('valueOff');
+      knx.remove('statusGa');
+    }
+    onChanged();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final stored = knx['role'] as String? ?? 'bit';
+    final role = canonicalLutronDptRole(stored);
+    final sceneLike = role == 'scene' || role == 'scene_number';
+    final mode = sceneLike ? 'value' : lutronSendModeOf(knx);
+    final caption = Theme.of(context).textTheme.bodySmall;
+
+    Widget captioned(String text, Widget child) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Text(text, style: caption),
+            ),
+            child,
+          ],
+        );
+
+    final hint = switch (mode) {
+      'toggle' =>
+        'Wisselt tussen de twee waarden. Zonder statusadres geldt het groepsadres.',
+      'pulse' => 'Stuurt de waarde en daarna de tegenwaarde.',
+      _ => sceneLike ? 'Stuurt dit scenenummer.' : 'Stuurt deze waarde bij elke druk.',
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text('KNX-commando', style: Theme.of(context).textTheme.labelLarge),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 3,
+              child: captioned(
+                'Groepadres',
+                _InstallerStrField(
+                  key: ValueKey('lutron-ga-${identityHashCode(knx)}'),
+                  compact: true,
+                  label: 'Groepadres',
+                  value: knx['ga'] as String? ?? '',
+                  onChanged: (v) {
+                    knx['ga'] = v;
+                    onChanged();
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 2,
+              child: captioned(
+                'DPT',
+                _InstallerDropdown(
+                  compact: true,
+                  label: '',
+                  value: role,
+                  options: lutronKnxRoles,
+                  optionLabels: lutronKnxDptLabels,
+                  onChanged: _setRole,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (!sceneLike)
+          _InstallerDropdown(
+            label: 'Versturen',
+            value: mode,
+            options: lutronSendModes,
+            optionLabels: lutronSendLabels,
+            onChanged: _setSend,
+          ),
+        Text(hint, style: caption),
+        const SizedBox(height: 8),
+        if (mode == 'toggle') ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: captioned(
+                  'Waarde aan',
+                  _KnxValueField(
+                    knx: knx,
+                    role: role,
+                    compact: true,
+                    hideLabel: true,
+                    onChanged: onChanged,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: captioned(
+                  'Waarde uit',
+                  _KnxValueField(
+                    knx: knx,
+                    role: role,
+                    field: 'valueOff',
+                    compact: true,
+                    hideLabel: true,
+                    onChanged: onChanged,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          captioned(
+            'Status groepsadres',
+            _InstallerStrField(
+              key: ValueKey('lutron-st-${identityHashCode(knx)}'),
+              compact: true,
+              label: 'Status groepsadres',
+              hint: 'Leeg = het groepsadres',
+              value: knx['statusGa'] as String? ?? '',
+              onChanged: (v) {
+                if (v.trim().isEmpty) {
+                  knx.remove('statusGa');
+                } else {
+                  knx['statusGa'] = v.trim();
+                }
+                onChanged();
+              },
+            ),
+          ),
+        ] else
+          captioned(
+            role == 'scene' ? 'Scene' : 'Waarde',
+            _KnxValueField(
+              knx: knx,
+              role: role,
+              compact: true,
+              hideLabel: true,
+              onChanged: onChanged,
+            ),
+          ),
+        if (mode == 'pulse')
+          _InstallerStrField(
+            label: 'Pulsduur (ms)',
+            value: knx['pulseMs'] == null ? '' : '${knx['pulseMs']}',
+            number: true,
+            onChanged: (v) {
+              knx['pulseMs'] = int.tryParse(v) ?? 250;
+              onChanged();
+            },
+          ),
+      ],
     );
   }
 }

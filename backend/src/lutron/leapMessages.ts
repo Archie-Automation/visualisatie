@@ -161,18 +161,74 @@ export type LeapButtonPress = {
 
 /** Press/Release/LongHold/MultiTap → de actienummers van de keypad-mapping. */
 export function leapButtonAction(eventType: string): number | null {
-  switch (eventType) {
-    case "Press":
+  switch (eventType.trim().toLowerCase()) {
+    case "press":
       return 3;
-    case "Release":
+    case "release":
       return 4;
-    case "LongHold":
-    case "Hold":
+    case "longhold":
+    case "hold":
       return 5;
-    case "MultiTap":
+    case "multitap":
       return 6;
     default:
       return null;
+  }
+}
+
+/** Hoe lang een vinger moet blijven liggen voordat wij zelf vasthouden sturen. */
+export const LEAP_HOLD_MS = 600;
+
+/**
+ * QSX stuurt LongHold alleen als die actie in Designer staat.
+ * Zolang de druk open is en loslaten uitblijft, maken wij actie 5 zelf.
+ * Een LongHold van de processor telt daarna niet nog een keer.
+ */
+export class LeapHoldDetector {
+  private readonly timers = new Map<number, ReturnType<typeof setTimeout>>();
+  private readonly held = new Set<number>();
+
+  constructor(private readonly holdMs = LEAP_HOLD_MS) {}
+
+  handle(press: LeapButtonPress, emit: (press: LeapButtonPress) => void): void {
+    if (press.action === 3) {
+      this.cancel(press.id);
+      this.held.delete(press.id);
+      emit(press);
+      const timer = setTimeout(() => {
+        this.timers.delete(press.id);
+        this.held.add(press.id);
+        emit({ id: press.id, action: 5 });
+      }, this.holdMs);
+      this.timers.set(press.id, timer);
+      return;
+    }
+    if (press.action === 4) {
+      this.cancel(press.id);
+      this.held.delete(press.id);
+      emit(press);
+      return;
+    }
+    if (press.action === 5) {
+      if (this.held.has(press.id)) return;
+      this.cancel(press.id);
+      this.held.add(press.id);
+      emit(press);
+      return;
+    }
+    emit(press);
+  }
+
+  stop(): void {
+    for (const timer of this.timers.values()) clearTimeout(timer);
+    this.timers.clear();
+    this.held.clear();
+  }
+
+  private cancel(id: number): void {
+    const timer = this.timers.get(id);
+    if (timer) clearTimeout(timer);
+    this.timers.delete(id);
   }
 }
 

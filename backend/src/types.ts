@@ -1291,9 +1291,21 @@ export interface LutronTelnetConfig {
 /** Eén KNX-schrijfactie vanuit een Lutron-mapping. */
 export interface LutronKnxBinding {
   ga: GA;
+  /** Busrol; kiest de DPT (zie `ROLE_DPT`). */
   role: string;
   value: number | boolean | number[] | Rgb232Triplet;
-  /** Alleen bij `switch` / `bit`: pulsduur ms (true → false). */
+  /**
+   * `value` = één telegram met `value`.
+   * `toggle` = wissel tussen `value` en `valueOff` op basis van de laatste status.
+   * `pulse` = `value`, daarna de tegenwaarde.
+   * Weglaten + `pulseMs` op een bit = puls (oude koppelingen).
+   */
+  send?: "value" | "toggle" | "pulse";
+  /** Alleen bij `send: "toggle"`. */
+  valueOff?: number | boolean;
+  /** Status voor toggle. Weglaten = `ga`. */
+  statusGa?: GA;
+  /** Alleen bij puls: duur ms tot de tegenwaarde. */
   pulseMs?: number;
 }
 

@@ -426,6 +426,7 @@ const LUTRON_KNX_ROLES = new Set([
   "bit",
   "rgb232",
   "raw_bytes",
+  "scene",
   "scene_number",
   "setpoint",
   "position"
@@ -529,6 +530,12 @@ function validateLutronButtonMapping(
   ids.add(m.id);
   if (!LUTRON_KNX_GA_RE.test(m.knx.ga)) {
     issues.push(`${ctx}, mapping "${m.id}": ongeldige KNX-GA "${m.knx.ga}".`);
+  }
+  if (m.knx.statusGa && !LUTRON_KNX_GA_RE.test(m.knx.statusGa)) {
+    issues.push(`${ctx}, mapping "${m.id}": ongeldig statusadres "${m.knx.statusGa}".`);
+  }
+  if (m.knx.send && !["value", "toggle", "pulse"].includes(m.knx.send)) {
+    issues.push(`${ctx}, mapping "${m.id}": onbekend versturen "${m.knx.send}".`);
   }
   if (!LUTRON_KNX_ROLES.has(m.knx.role)) {
     issues.push(`${ctx}, mapping "${m.id}": KNX-rol "${m.knx.role}" is hier niet toegestaan.`);

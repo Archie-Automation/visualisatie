@@ -1,5 +1,6 @@
 import { logger } from "../logger";
 import type { KnxBus } from "../knxBus";
+import { encodeSceneByte } from "../knxScene";
 import type { LutronKnxBinding, Rgb232Triplet } from "../types";
 
 const ALLOWED_ROLES = new Set([
@@ -11,10 +12,62 @@ const ALLOWED_ROLES = new Set([
   "bit",
   "rgb232",
   "raw_bytes",
+  "scene",
   "scene_number",
   "setpoint",
   "position"
 ]);
+
+export type PlannedLutronWrite =
+  | { kind: "once"; value: number | boolean }
+  | { kind: "pulse"; on: number | boolean; off: number | boolean; ms: number }
+  | { kind: "scene"; byte: number };
+
+/** Oude koppelingen zonder `send` maar mét pulsduur op een bit blijven een puls. */
+export function lutronSendMode(knx: LutronKnxBinding): "value" | "toggle" | "pulse" {
+  if (knx.send === "value" || knx.send === "toggle" || knx.send === "pulse") return knx.send;
+  const pulseBit =
+    knx.pulseMs != null &&
+    knx.pulseMs > 0 &&
+    (knx.role === "switch" || knx.role === "bit");
+  return pulseBit ? "pulse" : "value";
+}
+
+export function planLutronKnxWrite(knx: LutronKnxBinding, current: unknown): PlannedLutronWrite {
+  if (knx.role === "scene") {
+    const n = Math.min(64, Math.max(1, Math.round(Number(knx.value) || 1)));
+    return { kind: "scene", byte: encodeSceneByte(n, false) };
+  }
+  const on = coerceScalar(knx.role, knx.value);
+  const mode = lutronSendMode(knx);
+  if (mode === "pulse") {
+    const off = typeof on === "boolean" ? !on : 0;
+    return {
+      kind: "pulse",
+      on,
+      off: coerceScalar(knx.role, off),
+      ms: Math.min(3000, Math.max(50, knx.pulseMs ?? 250))
+    };
+  }
+  if (mode === "toggle") {
+    const off =
+      knx.valueOff == null
+        ? coerceScalar(knx.role, typeof on === "boolean" ? !on : 0)
+        : coerceScalar(knx.role, knx.valueOff);
+    return { kind: "once", value: sameKnxValue(current, on) ? off : on };
+  }
+  return { kind: "once", value: on };
+}
+
+function sameKnxValue(current: unknown, expected: number | boolean): boolean {
+  if (typeof expected === "boolean") {
+    return current === expected || current === (expected ? 1 : 0);
+  }
+  if (current === expected) return true;
+  if (expected === 0 && current === false) return true;
+  if (expected === 1 && current === true) return true;
+  return typeof current === "number" && Math.abs(current - expected) < 0.05;
+}
 
 function clampByte(n: number): number {
   return Math.max(0, Math.min(255, Math.round(n)));
@@ -43,26 +96,19 @@ export async function executeLutronToKnx(bus: KnxBus, knx: LutronKnxBinding): Pr
     return;
   }
 
-  const pulse =
-    knx.pulseMs != null &&
-    knx.pulseMs > 0 &&
-    (role === "switch" || role === "bit");
-
-  if (pulse) {
-    const on =
-      typeof knx.value === "boolean"
-        ? knx.value
-        : typeof knx.value === "number"
-          ? knx.value !== 0
-          : true;
-    await bus.write(knx.ga, role, on);
-    await sleep(Math.min(3000, Math.max(50, knx.pulseMs ?? 250)));
-    await bus.write(knx.ga, role, !on);
+  const statusGa = knx.statusGa?.trim() || knx.ga;
+  const plan = planLutronKnxWrite(knx, bus.getState(statusGa)?.value);
+  if (plan.kind === "scene") {
+    await bus.writeRaw(knx.ga, Buffer.from([plan.byte]), 8);
     return;
   }
-
-  const scalar = coerceScalar(role, knx.value);
-  await bus.write(knx.ga, role, scalar);
+  if (plan.kind === "pulse") {
+    await bus.write(knx.ga, role, plan.on);
+    await sleep(plan.ms);
+    await bus.write(knx.ga, role, plan.off);
+    return;
+  }
+  await bus.write(knx.ga, role, plan.value);
 }
 
 function normalizeRgb232(

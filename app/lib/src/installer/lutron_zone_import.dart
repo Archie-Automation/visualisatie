@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
+import '../ui/widgets/function_screen_header.dart';
+import '../ui/widgets/luxe_backdrop.dart';
 import 'installer_api.dart';
 
 /// Apparaattype dat een LEAP-zone in het huis wordt.
@@ -159,14 +161,15 @@ int applyLutronZoneImport({
   return added;
 }
 
-Future<int?> showLutronZoneImportDialog({
+Future<int?> openLutronZoneImportPage({
   required BuildContext context,
   required List<LutronZoneInfo> zones,
   required Map<String, dynamic> house,
 }) {
-  return showDialog<int>(
-    context: context,
-    builder: (context) => _LutronZoneImportDialog(zones: zones, house: house),
+  return Navigator.of(context).push<int>(
+    MaterialPageRoute(
+      builder: (context) => _LutronZoneImportPage(zones: zones, house: house),
+    ),
   );
 }
 
@@ -262,17 +265,17 @@ class _ImportGroup {
   final List<_RowState> rows = [];
 }
 
-class _LutronZoneImportDialog extends StatefulWidget {
-  const _LutronZoneImportDialog({required this.zones, required this.house});
+class _LutronZoneImportPage extends StatefulWidget {
+  const _LutronZoneImportPage({required this.zones, required this.house});
 
   final List<LutronZoneInfo> zones;
   final Map<String, dynamic> house;
 
   @override
-  State<_LutronZoneImportDialog> createState() => _LutronZoneImportDialogState();
+  State<_LutronZoneImportPage> createState() => _LutronZoneImportPageState();
 }
 
-class _LutronZoneImportDialogState extends State<_LutronZoneImportDialog> {
+class _LutronZoneImportPageState extends State<_LutronZoneImportPage> {
   late final List<_ImportGroup> _groups;
   late final List<_FloorOption> _floors;
   late int _floorIndex;
@@ -353,41 +356,59 @@ class _LutronZoneImportDialogState extends State<_LutronZoneImportDialog> {
           if (!row.used && row.kind != null) row,
     ].length;
 
-    return AlertDialog(
-      title: const Text('Zones in het huis zetten'),
-      content: SizedBox(
-        width: 640,
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      body: LuxeBackdrop(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (_floors.isEmpty)
-              const Text('Maak eerst een verdieping.')
-            else
-              DropdownButtonFormField<int>(
-                initialValue: _floorIndex,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  labelText: 'Verdieping',
-                  border: OutlineInputBorder(),
-                ),
-                items: [
-                  for (final floor in _floors)
-                    DropdownMenuItem(value: floor.index, child: Text(floor.label)),
+            FunctionScreenHeader(
+              onBack: () => Navigator.pop(context),
+              title: 'Zones in het huis zetten',
+              subtitle: 'Lutron',
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (_floors.isEmpty)
+                    const Text('Maak eerst een verdieping.')
+                  else
+                    DropdownButtonFormField<int>(
+                      initialValue: _floorIndex,
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        labelText: 'Verdieping',
+                        border: OutlineInputBorder(),
+                      ),
+                      items: [
+                        for (final floor in _floors)
+                          DropdownMenuItem(
+                            value: floor.index,
+                            child: Text(floor.label),
+                          ),
+                      ],
+                      onChanged: (v) {
+                        if (v == null) return;
+                        setState(() => _floorIndex = v);
+                      },
+                    ),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: known == 0 ? null : () => _setKnown(knownOn != known),
+                      child: Text(
+                        knownOn == known && known > 0 ? 'Uitzetten' : 'Aanvinken',
+                      ),
+                    ),
+                  ),
                 ],
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() => _floorIndex = v);
-                },
-              ),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                onPressed: known == 0 ? null : () => _setKnown(knownOn != known),
-                child: Text(knownOn == known && known > 0 ? 'Uitzetten' : 'Aanvinken'),
               ),
             ),
             Expanded(
               child: ListView(
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 12),
                 children: [
                   for (final group in _groups) ...[
                     TextField(
@@ -405,19 +426,16 @@ class _LutronZoneImportDialogState extends State<_LutronZoneImportDialog> {
                 ],
               ),
             ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+              child: FilledButton(
+                onPressed: _canApply ? _apply : null,
+                child: Text('${_selected.length} toevoegen'),
+              ),
+            ),
           ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Annuleren'),
-        ),
-        FilledButton(
-          onPressed: _canApply ? _apply : null,
-          child: Text('${_selected.length} toevoegen'),
-        ),
-      ],
     );
   }
 

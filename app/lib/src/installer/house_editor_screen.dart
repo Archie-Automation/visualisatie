@@ -2702,12 +2702,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                 'label': 'Voorbeeld knop',
                 'integrationId': 1,
                 'componentNumber': 1,
-                'actionNumber': 1,
+                'actionNumber': 3,
                 'knx': <String, dynamic>{
                   'ga': '1/1/1',
-                  'role': 'switch',
+                  'role': 'bit',
+                  'send': 'value',
                   'value': true,
-                  'pulseMs': 250,
                 },
               },
             ],
@@ -5889,7 +5889,7 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
   }
 
   Future<void> _importZones() async {
-    final added = await showLutronZoneImportDialog(
+    final added = await openLutronZoneImportPage(
       context: context,
       zones: _zones,
       house: widget.house,
@@ -5978,8 +5978,9 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
                               const LuxeInfoIconButton(
                                 title: 'HomeWorks QSX',
                                 body:
-                                    'Tik op Koppelen en druk daarna de knop op de processor in tot het lampje knippert. Houd hem vast tot het lampje stopt.\n\n'
-                                    'Tik daarna op Zones in het huis zetten. De zones komen pas in dat scherm. Een keypad-knop kies je onder Keypad-knoppen → KNX en hang je aan een KNX-actie.',
+                                    'Vul het IP-adres in en tik op Koppelen. Druk daarna de knop op de processor in tot het lampje knippert. Houd hem vast tot het lampje stopt.\n\n'
+                                    'Een knop zonder actie in Lutron Designer stuurt vaak niets. Dual action geeft druk en loslaten. Vasthouden en dubbel tikken komen alleen binnen als die actie in Designer staat, bijvoorbeeld Conditional met een loze actie.\n\n'
+                                    'Koppel dezelfde knop per moment: korte druk, loslaten, vasthouden. Blijft de vinger 0,6 s liggen en komt loslaten wél binnen, dan telt dat ook als vasthouden. Sla daarna op.',
                               ),
                             ],
                           ),
@@ -6028,24 +6029,6 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
                           : 'Koppelen'),
                     ),
                   ),
-                if (_status?.paired == true) ...[
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: FilledButton.icon(
-                      onPressed: _zones.isEmpty ? null : _importZones,
-                      icon: const Icon(Icons.playlist_add_outlined, size: 20),
-                      label: const Text('Zones in het huis zetten'),
-                    ),
-                  ),
-                  if (_zonesLoaded && _zones.isEmpty) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      _zonesErr ?? 'Geen zones op de processor.',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ],
-                ],
               ],
             ),
           ),
@@ -6054,6 +6037,12 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
           child: _LutronForm(
             lutron: widget.lutron,
             buttons: _buttons,
+            paired: _status?.paired == true,
+            canImportZones: _zones.isNotEmpty,
+            zonesLoaded: _zonesLoaded,
+            awaitingZones: _status?.connected == true && !_zonesLoaded,
+            zonesErr: _zonesErr,
+            onImportZones: _importZones,
             onChanged: widget.onChanged,
           ),
         ),
@@ -6066,11 +6055,23 @@ class _LutronForm extends StatelessWidget {
   const _LutronForm({
     required this.lutron,
     required this.buttons,
+    required this.paired,
+    required this.canImportZones,
+    required this.zonesLoaded,
+    required this.awaitingZones,
+    required this.zonesErr,
+    required this.onImportZones,
     required this.onChanged,
   });
 
   final Map<String, dynamic> lutron;
   final List<LutronButtonInfo> buttons;
+  final bool paired;
+  final bool canImportZones;
+  final bool zonesLoaded;
+  final bool awaitingZones;
+  final String? zonesErr;
+  final VoidCallback onImportZones;
   final VoidCallback onChanged;
 
   @override
@@ -6097,7 +6098,7 @@ class _LutronForm extends StatelessWidget {
         Text('Lutron QSX/QS Processor', style: Theme.of(context).textTheme.titleLarge),
         const SizedBox(height: 8),
         Text(
-          'IP van de QSX. Koppelen staat hierboven.',
+          'Vul het IP-adres in en koppel hierboven. Zones en keypad-knoppen komen daarna.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 20),
@@ -6109,11 +6110,40 @@ class _LutronForm extends StatelessWidget {
           hintText: 'bijv. 192.168.1.50 (IP van de QSX/QS processor)',
         ),
         const SizedBox(height: 16),
-        LutronButtonToKnxListEditor(
-          parent: lutron,
-          buttons: buttons,
-          onChanged: onChanged,
-        ),
+        if (!paired)
+          Text(
+            'Koppel eerst de processor. Daarna zet je zones in het huis en koppel je keypad-knoppen.',
+            style: Theme.of(context).textTheme.bodySmall,
+          )
+        else ...[
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.icon(
+              onPressed: canImportZones ? onImportZones : null,
+              icon: const Icon(Icons.playlist_add_outlined, size: 20),
+              label: const Text('Zones in het huis zetten'),
+            ),
+          ),
+          if (zonesLoaded && !canImportZones) ...[
+            const SizedBox(height: 8),
+            Text(
+              zonesErr ?? 'Geen zones op de processor.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ] else if (awaitingZones) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Zones worden uitgelezen…',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+          const SizedBox(height: 24),
+          LutronButtonToKnxListEditor(
+            parent: lutron,
+            buttons: buttons,
+            onChanged: onChanged,
+          ),
+        ],
       ],
     );
   }

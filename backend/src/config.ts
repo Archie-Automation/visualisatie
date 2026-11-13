@@ -6,7 +6,7 @@ import { normalizeHouseIntercoms } from "./houseIntercoms";
 import { effectiveIntercomReleaseMode } from "./intercomReleaseMode";
 import { logger } from "./logger";
 import { climateBusRole } from "./climateSetpoint";
-import type { Device, HouseConfig, GA } from "./types";
+import type { Device, HouseConfig, GA, LutronButtonToKnxMapping } from "./types";
 import { catalogSceneAddresses, configuredSceneAddresses } from "./knxScene";
 import { normalizeVoip } from "./voip/normalize";
 import { collectZehnderSubscriptions, collectDucoSubscriptions, collectMvSubscriptions, collectModbusSubscriptions } from "./wtw";
@@ -209,6 +209,12 @@ export function collectAllGAs(cfg: HouseConfig): GA[] {
         add(item.resetGa);
       }
     }
+    if (d.type === "lutron_homeworks") {
+      for (const m of d.lutronHomeworks.buttonToKnx ?? []) {
+        add(m.knx.ga);
+        add(m.knx.statusGa);
+      }
+    }
     if (d.type === "media_sonos" || d.type === "media_bluesound") {
       const knx = d.knx;
       if (knx) {
@@ -226,6 +232,11 @@ export function collectAllGAs(cfg: HouseConfig): GA[] {
       }
     }
   });
+
+  for (const m of cfg.lutron?.buttonToKnx ?? []) {
+    add(m.knx.ga);
+    add(m.knx.statusGa);
+  }
 
   for (const d of cfg.intercoms ?? []) {
     add(d.intercom.doorbell?.ga);
@@ -261,8 +272,21 @@ export function collectAllGAs(cfg: HouseConfig): GA[] {
  */
 export interface GARole {
   deviceId: string;
-  deviceType: Device["type"] | "energy";
+  deviceType: Device["type"] | "energy" | "lutron";
   role: string;
+}
+
+function pushLutronButtons(
+  index: Map<GA, GARole[]>,
+  deviceId: string,
+  maps: LutronButtonToKnxMapping[] | undefined
+) {
+  for (const m of maps ?? []) {
+    pushGA(index, m.knx.ga, m.knx.role, deviceId, "lutron");
+    if (m.knx.statusGa && m.knx.statusGa !== m.knx.ga) {
+      pushGA(index, m.knx.statusGa, m.knx.role, deviceId, "lutron");
+    }
+  }
 }
 
 function pushGA(
@@ -270,7 +294,7 @@ function pushGA(
   ga: GA | undefined,
   role: string,
   deviceId: string,
-  deviceType: Device["type"] | "energy"
+  deviceType: Device["type"] | "energy" | "lutron"
 ) {
   if (!ga) return;
   const list = index.get(ga) ?? [];
@@ -405,6 +429,9 @@ export function buildGAIndex(cfg: HouseConfig): Map<GA, GARole[]> {
         pushGA(index, item.resetGa, "bit", d.id, d.type);
       }
     }
+    if (d.type === "lutron_homeworks") {
+      pushLutronButtons(index, d.id, d.lutronHomeworks.buttonToKnx);
+    }
 
     if (d.type === "media_sonos" || d.type === "media_bluesound") {
       const knx = d.knx;
@@ -426,6 +453,8 @@ export function buildGAIndex(cfg: HouseConfig): Map<GA, GARole[]> {
     }
 
   });
+
+  pushLutronButtons(index, "lutron", cfg.lutron?.buttonToKnx);
 
   for (const d of cfg.intercoms ?? []) {
     pushGA(index, d.intercom.doorbell?.ga, "switch", d.id, d.type);

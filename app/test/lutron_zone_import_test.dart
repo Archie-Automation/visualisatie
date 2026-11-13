@@ -95,7 +95,7 @@ void main() {
     expect(devices[1]['rgbwWw']['mode'], 'channels');
   });
 
-  testWidgets('dialoog toont de zone en zet hem in de kamer', (tester) async {
+  testWidgets('pagina toont de zone en zet hem in de kamer', (tester) async {
     final house = <String, dynamic>{
       'floors': [
         {
@@ -110,7 +110,7 @@ void main() {
       home: Scaffold(
         body: Builder(
           builder: (context) => TextButton(
-            onPressed: () => showLutronZoneImportDialog(
+            onPressed: () => openLutronZoneImportPage(
               context: context,
               house: house,
               zones: const [
@@ -162,7 +162,7 @@ void main() {
       home: Scaffold(
         body: Builder(
           builder: (context) => TextButton(
-            onPressed: () => showLutronZoneImportDialog(
+            onPressed: () => openLutronZoneImportPage(
               context: context,
               house: house,
               zones: const [

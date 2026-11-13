@@ -10,6 +10,7 @@ import type {
   LutronTelnetConfig
 } from "../types";
 import { executeLutronToKnx, logLutronKnx } from "./knxBridge";
+import { LeapHoldDetector, type LeapButtonPress } from "./leapMessages";
 import {
   buildOutputLower,
   buildOutputRaise,
@@ -198,9 +199,14 @@ export class LutronIntegrationManager {
   }
 
   private leapDebounce = new Map<string, number>();
+  private readonly buttonGesture = new LeapHoldDetector();
 
   /** Keypad-druk van LEAP. integrationId in de mapping is het knop-id. */
-  private onLeapButton(press: { id: number; action: number }): void {
+  private onLeapButton(press: LeapButtonPress): void {
+    this.buttonGesture.handle(press, (next) => this.applyLeapButton(next));
+  }
+
+  private applyLeapButton(press: LeapButtonPress): void {
     const cfg = getConfig();
     const maps: { source: string; map: LutronButtonToKnxMapping }[] = [];
     for (const map of cfg.lutron?.buttonToKnx ?? []) {
@@ -227,6 +233,7 @@ export class LutronIntegrationManager {
   }
 
   rebuild(cfg: HouseConfig): void {
+    this.buttonGesture.stop();
     this.leap?.stop();
     this.leap = null;
     this.stopAll();
