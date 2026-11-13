@@ -753,6 +753,25 @@ export class KnxBus extends EventEmitter {
   }
 
   /**
+   * DPT 3.007. `step` 1–7 start een relatieve stap (1 = het hele bereik);
+   * `step` 0 is break en stopt het dimmen. De richting telt niet bij een break.
+   */
+  async writeDimControl(ga: GA, increase: boolean, step: number): Promise<void> {
+    const data = step & 7;
+    const value = { decr_incr: increase ? 1 : 0, data };
+    const nibble = (increase ? 8 : 0) | data;
+    if (this.simulate) {
+      this.noteSelfWrite(ga, nibble);
+      return;
+    }
+    if (!this.connection) throw new Error("KNX not connected");
+    const knx = await loadKnxModule();
+    const dp = new knx.Datapoint({ ga, dpt: "DPT3.007" }, this.connection as never);
+    this.noteSelfWrite(ga, nibble);
+    dp.write(value);
+  }
+
+  /**
    * GroupValue_Write met ruwe APDU (geen DPT-encoding). Gebruik voor
    * fabrikant-eigen meerdere bytes op één GA (bijv. 14-byte RGBWWW).
    */

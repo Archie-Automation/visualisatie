@@ -15,16 +15,39 @@ const ALLOWED_ROLES = new Set([
   "scene",
   "scene_number",
   "setpoint",
-  "position"
+  "position",
+  "dim_control",
+  "up_down",
+  "stop_step"
 ]);
 
 export type PlannedLutronWrite =
   | { kind: "once"; value: number | boolean }
   | { kind: "pulse"; on: number | boolean; off: number | boolean; ms: number }
-  | { kind: "scene"; byte: number };
+  | { kind: "scene"; byte: number }
+  | { kind: "dim"; increase: boolean; step: number }
+  | { kind: "shadeStop"; ga: string };
+
+/** Indrukken start, loslaten stopt. Geldt voor 4-bit dimmen en zonwering op/neer. */
+export function lutronKnxIsHold(knx: LutronKnxBinding): boolean {
+  return knx.role === "dim_control" || knx.role === "up_down";
+}
+
+/** Actienummers: 3 = indrukken, 4 = loslaten. */
+export function lutronMappingHandles(
+  map: { actionNumber?: number; knx: LutronKnxBinding },
+  action: number
+): boolean {
+  if (lutronKnxIsHold(map.knx)) return action === 3 || action === 4;
+  if (map.actionNumber != null && map.actionNumber !== action) return false;
+  return true;
+}
+
+export type LutronButtonPhase = "press" | "release";
 
 /** Oude koppelingen zonder `send` maar mét pulsduur op een bit blijven een puls. */
-export function lutronSendMode(knx: LutronKnxBinding): "value" | "toggle" | "pulse" {
+export function lutronSendMode(knx: LutronKnxBinding): "value" | "toggle" | "pulse" | "hold" {
+  if (lutronKnxIsHold(knx)) return "hold";
   if (knx.send === "value" || knx.send === "toggle" || knx.send === "pulse") return knx.send;
   const pulseBit =
     knx.pulseMs != null &&
@@ -59,6 +82,33 @@ export function planLutronKnxWrite(knx: LutronKnxBinding, current: unknown): Pla
   return { kind: "once", value: on };
 }
 
+/**
+ * 4-bit dimmen: stapcode 1 is het hele bereik, de actor loopt tot het break-telegram.
+ * Zonwering: DPT 1.008 op indrukken (0 = omhoog), DPT 1.007 stop op loslaten.
+ */
+export function planLutronHold(knx: LutronKnxBinding): {
+  start: PlannedLutronWrite;
+  stop: PlannedLutronWrite;
+} {
+  if (knx.role === "dim_control") {
+    const increase = knx.value === true || knx.value === 1;
+    return {
+      start: { kind: "dim", increase, step: 1 },
+      stop: { kind: "dim", increase: false, step: 0 }
+    };
+  }
+  if (knx.role === "up_down") {
+    const down = knx.value === true || knx.value === 1;
+    const stopGa = knx.stopGa?.trim() ?? "";
+    if (!stopGa) throw new Error("zonwering vasthouden vereist een stop-groepsadres");
+    return {
+      start: { kind: "once", value: down },
+      stop: { kind: "shadeStop", ga: stopGa }
+    };
+  }
+  throw new Error("vasthouden is alleen voor dimmen of zonwering");
+}
+
 function sameKnxValue(current: unknown, expected: number | boolean): boolean {
   if (typeof expected === "boolean") {
     return current === expected || current === (expected ? 1 : 0);
@@ -77,7 +127,11 @@ function clampByte(n: number): number {
  * Voert één KNX-schrijf uit zoals geconfigureerd bij een Lutron→KNX mapping.
  * Rollen zijn beperkt tot gangbare bus-rollen (zelfde als universeel/scenes).
  */
-export async function executeLutronToKnx(bus: KnxBus, knx: LutronKnxBinding): Promise<void> {
+export async function executeLutronToKnx(
+  bus: KnxBus,
+  knx: LutronKnxBinding,
+  phase?: LutronButtonPhase
+): Promise<void> {
   const role = knx.role;
   if (!ALLOWED_ROLES.has(role)) {
     throw new Error(`KNX-rol niet toegestaan vanuit Lutron: ${role}`);
@@ -96,10 +150,47 @@ export async function executeLutronToKnx(bus: KnxBus, knx: LutronKnxBinding): Pr
     return;
   }
 
+  if (lutronKnxIsHold(knx)) {
+    const held = planLutronHold(knx);
+    if (phase === "release") {
+      await runLutronPlan(bus, knx, held.stop);
+      return;
+    }
+    if (phase === "press") {
+      await runLutronPlan(bus, knx, held.start);
+      return;
+    }
+    await runLutronPlan(bus, knx, held.start);
+    await sleep(400);
+    await runLutronPlan(bus, knx, held.stop);
+    return;
+  }
+
   const statusGa = knx.statusGa?.trim() || knx.ga;
   const plan = planLutronKnxWrite(knx, bus.getState(statusGa)?.value);
   if (plan.kind === "scene") {
     await bus.writeRaw(knx.ga, Buffer.from([plan.byte]), 8);
+    return;
+  }
+  await runLutronPlan(bus, knx, plan);
+}
+
+async function runLutronPlan(
+  bus: KnxBus,
+  knx: LutronKnxBinding,
+  plan: PlannedLutronWrite
+): Promise<void> {
+  const role = knx.role;
+  if (plan.kind === "scene") {
+    await bus.writeRaw(knx.ga, Buffer.from([plan.byte]), 8);
+    return;
+  }
+  if (plan.kind === "dim") {
+    await bus.writeDimControl(knx.ga, plan.increase, plan.step);
+    return;
+  }
+  if (plan.kind === "shadeStop") {
+    await bus.write(plan.ga, "stop_step", true);
     return;
   }
   if (plan.kind === "pulse") {
@@ -139,7 +230,7 @@ function coerceScalar(
   if (Array.isArray(v) || (typeof v === "object" && v !== null && "red" in v)) {
     throw new Error("ongeldige scalar value voor rol");
   }
-  if (role === "switch" || role === "bit") {
+  if (role === "switch" || role === "bit" || role === "stop_step" || role === "up_down") {
     if (typeof v === "boolean") return v;
     return v !== 0;
   }

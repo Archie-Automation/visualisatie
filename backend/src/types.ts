@@ -1298,9 +1298,15 @@ export interface LutronKnxBinding {
    * `value` = één telegram met `value`.
    * `toggle` = wissel tussen `value` en `valueOff` op basis van de laatste status.
    * `pulse` = `value`, daarna de tegenwaarde.
+   * `hold` = indrukken start (dimmen of zonwering), loslaten stuurt stop.
    * Weglaten + `pulseMs` op een bit = puls (oude koppelingen).
    */
-  send?: "value" | "toggle" | "pulse";
+  send?: "value" | "toggle" | "pulse" | "hold";
+  /**
+   * Alleen bij zonwering vasthouden (`role: "up_down"`).
+   * Loslaten schrijft stop/stap (DPT 1.007) naar dit adres.
+   */
+  stopGa?: GA;
   /** Alleen bij `send: "toggle"`. */
   valueOff?: number | boolean;
   /** Status voor toggle. Weglaten = `ga`. */

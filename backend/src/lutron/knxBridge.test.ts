@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { planLutronKnxWrite } from "./knxBridge";
+import { lutronMappingHandles, planLutronHold, planLutronKnxWrite } from "./knxBridge";
 import type { LutronKnxBinding } from "../types";
 
 function knx(partial: Partial<LutronKnxBinding> & Pick<LutronKnxBinding, "role" | "value">): LutronKnxBinding {
@@ -43,5 +43,38 @@ describe("Lutron-knop → KNX", () => {
   it("een scene wordt DPT 18.001", () => {
     const plan = planLutronKnxWrite(knx({ role: "scene", value: 3, send: "value" }), undefined);
     assert.deepEqual(plan, { kind: "scene", byte: 2 });
+  });
+
+  it("4-bit dimmen start bij indrukken en stopt bij loslaten", () => {
+    const held = planLutronHold(knx({ role: "dim_control", value: true, send: "hold" }));
+    assert.deepEqual(held.start, { kind: "dim", increase: true, step: 1 });
+    assert.deepEqual(held.stop, { kind: "dim", increase: false, step: 0 });
+    const darker = planLutronHold(knx({ role: "dim_control", value: false, send: "hold" }));
+    assert.deepEqual(darker.start, { kind: "dim", increase: false, step: 1 });
+  });
+
+  it("zonwering loopt bij indrukken en stopt op het stop-adres", () => {
+    const held = planLutronHold(
+      knx({ role: "up_down", value: false, send: "hold", stopGa: "2/1/2" })
+    );
+    assert.deepEqual(held.start, { kind: "once", value: false });
+    assert.deepEqual(held.stop, { kind: "shadeStop", ga: "2/1/2" });
+    const down = planLutronHold(
+      knx({ role: "up_down", value: true, send: "hold", stopGa: "2/1/2" })
+    );
+    assert.deepEqual(down.start, { kind: "once", value: true });
+  });
+
+  it("vasthouden luistert naar indrukken en loslaten, niet naar een losse actie", () => {
+    const map = {
+      actionNumber: 3,
+      knx: knx({ role: "dim_control", value: true, send: "hold" })
+    };
+    assert.equal(lutronMappingHandles(map, 3), true);
+    assert.equal(lutronMappingHandles(map, 4), true);
+    assert.equal(lutronMappingHandles(map, 5), false);
+    const pressOnly = { actionNumber: 3, knx: knx({ role: "bit", value: true, send: "value" }) };
+    assert.equal(lutronMappingHandles(pressOnly, 3), true);
+    assert.equal(lutronMappingHandles(pressOnly, 4), false);
   });
 });

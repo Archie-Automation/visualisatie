@@ -23,6 +23,10 @@ const lutronKnxRoles = [
   'temperature',
   'scene_number',
   'scene',
+  'dim_control',
+  'up_down',
+  'stop_step',
+  'position',
 ];
 
 const lutronKnxDptLabels = <String, String>{
@@ -32,6 +36,10 @@ const lutronKnxDptLabels = <String, String>{
   'temperature': 'DPT 9.001 — temperatuur (°C)',
   'scene_number': 'DPT 17.001 — scenenummer (0–63)',
   'scene': 'DPT 18.001 — scene (1–64)',
+  'dim_control': 'DPT 3.007 — dimmen op/neer',
+  'up_down': 'DPT 1.008 — zonwering op/neer',
+  'stop_step': 'DPT 1.007 — zonwering stop/stap',
+  'position': 'DPT 5.001 — zonwering positie',
 };
 
 const lutronSendModes = ['value', 'toggle', 'pulse'];
@@ -48,7 +56,6 @@ String canonicalLutronDptRole(String role) {
     case 'switch':
       return 'bit';
     case 'dim_value':
-    case 'position':
       return 'percent';
     case 'setpoint':
       return 'temperature';
@@ -57,10 +64,18 @@ String canonicalLutronDptRole(String role) {
   }
 }
 
+String _lutronHoldDirection(String role, dynamic raw) {
+  if (role == 'dim_control') {
+    return raw == false || raw == 0 ? 'down' : 'up';
+  }
+  return raw == true || raw == 1 ? 'down' : 'up';
+}
+
 String lutronSendModeOf(Map<String, dynamic> knx) {
   final send = knx['send'];
   if (send == 'value' || send == 'toggle' || send == 'pulse') return send as String;
   final role = knx['role'] as String? ?? '';
+  if (role == 'dim_control' || role == 'up_down') return 'hold';
   final pulse = knx['pulseMs'];
   if (pulse is num && pulse > 0 && (role == 'switch' || role == 'bit')) {
     return 'pulse';
@@ -180,7 +195,8 @@ Map<String, dynamic> _ensureMap(Map<String, dynamic> parent, String key) {
   return m;
 }
 
-bool _roleIsBool(String role) => role == 'switch' || role == 'bit';
+bool _roleIsBool(String role) =>
+    role == 'switch' || role == 'bit' || role == 'stop_step';
 
 bool _roleIsScene(String role) => role == 'scene';
 
@@ -452,6 +468,9 @@ class _LutronMappingCardState extends State<_LutronMappingCard> {
     final knx = _ensureMap(mapping, 'knx');
     final dropKey = _dropdownKey();
     final isCustom = dropKey == 'Aangepast…';
+    final hold = canonicalLutronDptRole(knx['role'] as String? ?? 'bit') ==
+            'dim_control' ||
+        canonicalLutronDptRole(knx['role'] as String? ?? 'bit') == 'up_down';
 
     return LuxeInsetCard(
       child: Column(
@@ -488,7 +507,8 @@ class _LutronMappingCardState extends State<_LutronMappingCard> {
                 widget.onChanged();
               },
             ),
-            Padding(
+            if (!hold)
+              Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: DropdownButtonFormField<String>(
                 key: ValueKey('action-$dropKey'),
@@ -519,10 +539,12 @@ class _LutronMappingCardState extends State<_LutronMappingCard> {
               ),
             ),
             Text(
-              'Eén regel is één moment. Koppel dezelfde knop opnieuw voor loslaten of vasthouden.',
+              hold
+                  ? 'Indrukken en loslaten zitten in deze ene koppeling.'
+                  : 'Eén regel is één moment. Koppel dezelfde knop opnieuw voor loslaten of vasthouden.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
-            if (isCustom)
+            if (!hold && isCustom)
               _InstallerStrField(
                 label: 'Actienummer (vrij invullen)',
                 value: mapping['actionNumber'] == null
@@ -571,6 +593,18 @@ class _LutronKnxCommand extends StatelessWidget {
       knx.remove('pulseMs');
       knx.remove('valueOff');
       knx.remove('statusGa');
+      knx.remove('stopGa');
+    } else if (role == 'dim_control' || role == 'up_down') {
+      knx['send'] = 'hold';
+      knx.remove('pulseMs');
+      knx.remove('valueOff');
+      knx.remove('statusGa');
+      knx['value'] = role == 'up_down' ? false : true;
+      if (role != 'up_down') knx.remove('stopGa');
+    } else {
+      if (knx['send'] == 'hold') knx['send'] = 'value';
+      knx.remove('stopGa');
+      if (role == 'stop_step') knx['value'] = true;
     }
     onChanged();
   }
@@ -598,6 +632,7 @@ class _LutronKnxCommand extends StatelessWidget {
     final stored = knx['role'] as String? ?? 'bit';
     final role = canonicalLutronDptRole(stored);
     final sceneLike = role == 'scene' || role == 'scene_number';
+    final hold = role == 'dim_control' || role == 'up_down';
     final mode = sceneLike ? 'value' : lutronSendModeOf(knx);
     final caption = Theme.of(context).textTheme.bodySmall;
 
@@ -612,12 +647,16 @@ class _LutronKnxCommand extends StatelessWidget {
           ],
         );
 
-    final hint = switch (mode) {
-      'toggle' =>
-        'Wisselt tussen de twee waarden. Zonder statusadres geldt het groepsadres.',
-      'pulse' => 'Stuurt de waarde en daarna de tegenwaarde.',
-      _ => sceneLike ? 'Stuurt dit scenenummer.' : 'Stuurt deze waarde bij elke druk.',
-    };
+    final hint = hold
+        ? (role == 'dim_control'
+            ? 'Indrukken start het dimmen (stap over het hele bereik). Loslaten stuurt stop op hetzelfde adres.'
+            : 'Indrukken laat de zonwering lopen. Loslaten stuurt stop op het stop-adres.')
+        : switch (mode) {
+            'toggle' =>
+              'Wisselt tussen de twee waarden. Zonder statusadres geldt het groepsadres.',
+            'pulse' => 'Stuurt de waarde en daarna de tegenwaarde.',
+            _ => sceneLike ? 'Stuurt dit scenenummer.' : 'Stuurt deze waarde bij elke druk.',
+          };
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -660,7 +699,7 @@ class _LutronKnxCommand extends StatelessWidget {
             ),
           ],
         ),
-        if (!sceneLike)
+        if (!sceneLike && !hold)
           _InstallerDropdown(
             label: 'Versturen',
             value: mode,
@@ -670,7 +709,43 @@ class _LutronKnxCommand extends StatelessWidget {
           ),
         Text(hint, style: caption),
         const SizedBox(height: 8),
-        if (mode == 'toggle') ...[
+        if (hold) ...[
+          captioned(
+            'Richting',
+            _InstallerDropdown(
+              compact: true,
+              label: '',
+              value: _lutronHoldDirection(role, knx['value']),
+              options: const ['up', 'down'],
+              optionLabels: role == 'dim_control'
+                  ? const {'up': 'Helderder', 'down': 'Donkerder'}
+                  : const {'up': 'Omhoog', 'down': 'Omlaag'},
+              onChanged: (v) {
+                knx['value'] = role == 'dim_control' ? v == 'up' : v == 'down';
+                onChanged();
+              },
+            ),
+          ),
+          if (role == 'up_down')
+            captioned(
+              'Stop-groepsadres',
+              _InstallerStrField(
+                key: ValueKey('lutron-stop-${identityHashCode(knx)}'),
+                compact: true,
+                label: 'Stop-groepsadres',
+                hint: 'DPT 1.007',
+                value: knx['stopGa'] as String? ?? '',
+                onChanged: (v) {
+                  if (v.trim().isEmpty) {
+                    knx.remove('stopGa');
+                  } else {
+                    knx['stopGa'] = v.trim();
+                  }
+                  onChanged();
+                },
+              ),
+            ),
+        ] else if (mode == 'toggle') ...[
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

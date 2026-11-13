@@ -9,7 +9,7 @@ import type {
   LutronLoadOutputBinding,
   LutronTelnetConfig
 } from "../types";
-import { executeLutronToKnx, logLutronKnx } from "./knxBridge";
+import { executeLutronToKnx, logLutronKnx, lutronMappingHandles, type LutronButtonPhase } from "./knxBridge";
 import { LeapHoldDetector, type LeapButtonPress } from "./leapMessages";
 import {
   buildOutputLower,
@@ -224,13 +224,13 @@ export class LutronIntegrationManager {
     }
     for (const { source, map } of maps) {
       if (map.integrationId !== press.id) continue;
-      if (map.actionNumber != null && map.actionNumber !== press.action) continue;
+      if (!lutronMappingHandles(map, press.action)) continue;
       const key = `${map.id}:${press.id}:${press.action}`;
       const now = Date.now();
       const prev = this.leapDebounce.get(key) ?? 0;
       if (now - prev < DEBOUNCE_MS) continue;
       this.leapDebounce.set(key, now);
-      void this.fireButtonMapping(source, map).catch((err) => {
+      void this.fireButtonMapping(source, map, press.action === 4 ? "release" : "press").catch((err) => {
         logger.warn({ err, button: press.id, map: map.id }, "QSX-knop → KNX mislukt");
       });
     }
@@ -447,7 +447,7 @@ export class LutronIntegrationManager {
     for (const map of s.buttonToKnx) {
       if (map.integrationId !== integrationId) continue;
       if (map.componentNumber !== component) continue;
-      if (map.actionNumber != null && map.actionNumber !== action) continue;
+      if (!lutronMappingHandles(map, action)) continue;
 
       const key = `${map.id}:${integrationId}:${component}:${action}`;
       const now = Date.now();
@@ -455,7 +455,7 @@ export class LutronIntegrationManager {
       if (now - prev < DEBOUNCE_MS) continue;
       s.debounce.set(key, now);
 
-      void this.fireButtonMapping(s.displayName, map).catch((err) => {
+      void this.fireButtonMapping(s.displayName, map, action === 4 ? "release" : "press").catch((err) => {
         logger.warn({ err, slot: s.slotId, map: map.id }, "Lutron→KNX mapping mislukt");
       });
     }
@@ -478,10 +478,11 @@ export class LutronIntegrationManager {
 
   private async fireButtonMapping(
     sourceName: string,
-    map: LutronButtonToKnxMapping
+    map: LutronButtonToKnxMapping,
+    phase?: LutronButtonPhase
   ): Promise<void> {
     logLutronKnx(sourceName, map.label, map.knx);
-    await executeLutronToKnx(this.bus, map.knx);
+    await executeLutronToKnx(this.bus, map.knx, phase);
   }
 
   private sendLine(s: Slot, line: string): void {
