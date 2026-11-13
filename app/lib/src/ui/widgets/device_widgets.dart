@@ -29,6 +29,7 @@ import 'device_card_scale.dart';
 import 'device_control_panel.dart';
 import 'device_tile_shell.dart';
 import 'heater_icon.dart';
+import 'tunable_white_icon.dart';
 import 'glass_card.dart';
 import 'media_tile.dart';
 
@@ -566,11 +567,20 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
   }
 
   Widget _rgbHeaderIcon({
-    required IconData icon,
+    IconData? icon,
+    Widget? glyph,
     required bool on,
     VoidCallback? onTap,
   }) =>
-      DeviceTileIconBadge(icon: icon, active: on, onTap: onTap);
+      DeviceTileIconBadge(icon: icon, glyph: glyph, active: on, onTap: onTap);
+
+  Widget _tunableWhiteGlyph(BuildContext context, {required bool on, required double size}) {
+    return TunableWhiteIcon(
+      size: size,
+      color: on ? LuxeColors.brass : LuxeColors.ink,
+      filled: on,
+    );
+  }
 
   Widget _lightOnOffSwitch(BuildContext context, Device d, bool on) =>
       DeviceTileLayout.trailingSwitch(
@@ -670,9 +680,11 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
       if (!_hasRgb(d) && (_hasWw(d) || _hasCw(d))) {
         return _buildCctTile(context, d);
       }
+      if (_hasRgb(d) && (_hasWw(d) || _hasCw(d))) {
+        return _buildSpectrumTile(context, d);
+      }
       if (_hasRgb(d)) {
-        return _buildColorWheelTile(context, d,
-            hasWhite: _hasW(d), hasCct: _hasWw(d) || _hasCw(d));
+        return _buildColorWheelTile(context, d, hasWhite: _hasW(d));
       }
     }
 
@@ -693,9 +705,10 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
     }
 
     final size = DeviceCardScale.iconBadgeSize(context);
+    final glyphSize = size * 0.46;
     Widget icon({
       required bool selected,
-      required IconData glyph,
+      required Widget glyph,
       required String tooltip,
       required VoidCallback onTap,
     }) {
@@ -710,30 +723,37 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
             child: SizedBox(
               width: size,
               height: size,
-              child: Icon(
-                glyph,
-                size: size * 0.46,
-                color: selected ? LuxeColors.brassDeep : LuxeColors.inkSoft,
-              ),
+              child: Center(child: glyph),
             ),
           ),
         ),
       );
     }
 
+    Color tone(bool selected) =>
+        selected ? LuxeColors.brassDeep : LuxeColors.inkSoft;
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         icon(
           selected: rgb,
-          glyph: Icons.palette_outlined,
+          glyph: Icon(
+            Icons.palette_outlined,
+            size: glyphSize,
+            color: tone(rgb),
+          ),
           tooltip: 'RGB(W)',
           onTap: () => select(true),
         ),
         const SizedBox(width: 8),
         icon(
           selected: !rgb,
-          glyph: Icons.wb_twilight_outlined,
+          glyph: TunableWhiteIcon(
+            size: glyphSize,
+            color: tone(!rgb),
+            filled: false,
+          ),
           tooltip: 'Kleurtemperatuur',
           onTap: () => select(false),
         ),
@@ -788,13 +808,21 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
         children: [
           DeviceTileLayout.headerRow(
             context: context,
-            leading: _rgbHeaderIcon(
-              icon: white
-                  ? (on ? Icons.wb_incandescent : Icons.wb_incandescent_outlined)
-                  : (on ? Icons.palette : Icons.palette_outlined),
-              on: on,
-              onTap: () => _toggleLight(d, on, hasOnGa: hasOnGa),
-            ),
+            leading: white
+                ? _rgbHeaderIcon(
+                    glyph: _tunableWhiteGlyph(
+                      context,
+                      on: on,
+                      size: DeviceCardScale.glyphSize(context),
+                    ),
+                    on: on,
+                    onTap: () => _toggleLight(d, on, hasOnGa: hasOnGa),
+                  )
+                : _rgbHeaderIcon(
+                    icon: on ? Icons.palette : Icons.palette_outlined,
+                    on: on,
+                    onTap: () => _toggleLight(d, on, hasOnGa: hasOnGa),
+                  ),
             content: Row(
               children: [
                 Expanded(
@@ -883,6 +911,21 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _brightnessSlider(d, white: white, showMode: true),
+                if (_hasW(d)) ...[
+                  const SizedBox(height: 12),
+                  DeviceCardSliderWrap(
+                    child: _LuxeGradientBar(
+                      value: _white / 255,
+                      label: 'Wit (W)',
+                      colors: const [Colors.black, Colors.white],
+                      onChanged: (v) => setState(() => _white = v * 255),
+                      onChangeEnd: (v) {
+                        setState(() => _white = v * 255);
+                        _sendChannel(d, 'w', _white);
+                      },
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -897,15 +940,8 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
     BuildContext context,
     Device d, {
     bool hasWhite = false,
-    bool hasCct   = false,
   }) {
     final bus    = ref.watch(busProvider);
-    final mode   = _mode;
-    final label = d.isLutronBusControl
-        ? ''
-        : mode == 'rgb232'
-            ? 'RGB·DPT232'
-            : (hasWhite ? 'RGBW' : hasCct ? 'RGB+WW/CW' : 'RGB');
     final on     = _isOn(bus, d);
     final hasOnGa = d.isLutronBusControl || d.ga['on'] != null;
 
@@ -930,14 +966,6 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                   ),
                 ),
-                if (label.isNotEmpty)
-                  Text(
-                    label,
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelMedium
-                        ?.copyWith(color: LuxeColors.inkSoft),
-                  ),
               ],
             ),
             trailing: _rgbSwitch(context, d, on, hasOnGa),
@@ -971,39 +999,11 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
                     child: _LuxeGradientBar(
                       value: _white / 255,
                       label: 'Wit (W)',
-                      colors: [Colors.black, Colors.white],
+                      colors: const [Colors.black, Colors.white],
                       onChanged: (v) => setState(() => _white = v * 255),
                       onChangeEnd: (v) {
                         setState(() => _white = v * 255);
                         _sendChannel(d, 'w', _white);
-                      },
-                    ),
-                  ),
-                ],
-                if (hasCct) ...[
-                  const SizedBox(height: 12),
-                  DeviceCardSliderWrap(
-                    child: _LuxeGradientBar(
-                      value: _ww / 255,
-                      label: 'Warm Wit (WW)',
-                      colors: [Colors.black, const Color(0xFFFFD080)],
-                      onChanged: (v) => setState(() => _ww = v * 255),
-                      onChangeEnd: (v) {
-                        setState(() => _ww = v * 255);
-                        _sendChannel(d, 'ww', _ww);
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  DeviceCardSliderWrap(
-                    child: _LuxeGradientBar(
-                      value: _cw / 255,
-                      label: 'Koud Wit (CW)',
-                      colors: [Colors.black, const Color(0xFFCCE8FF)],
-                      onChanged: (v) => setState(() => _cw = v * 255),
-                      onChangeEnd: (v) {
-                        setState(() => _cw = v * 255);
-                        _sendChannel(d, 'cw', _cw);
                       },
                     ),
                   ),
@@ -1030,7 +1030,11 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
           DeviceTileLayout.headerRow(
             context: context,
             leading: _rgbHeaderIcon(
-              icon: on ? Icons.wb_incandescent : Icons.wb_incandescent_outlined,
+              glyph: _tunableWhiteGlyph(
+                context,
+                on: on,
+                size: DeviceCardScale.glyphSize(context),
+              ),
               on: on,
               onTap: () => _toggleLight(d, on, hasOnGa: hasOnGa),
             ),
@@ -1042,14 +1046,6 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
                   ),
                 ),
-                if (!d.isLutronBusControl)
-                  Text(
-                    'Tunable White',
-                    style: Theme.of(context)
-                        .textTheme
-                        .labelMedium
-                        ?.copyWith(color: LuxeColors.inkSoft),
-                  ),
               ],
             ),
             trailing: _rgbSwitch(context, d, on, hasOnGa),

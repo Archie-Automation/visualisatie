@@ -6,6 +6,7 @@ import 'package:archie_os/src/api.dart';
 import 'package:archie_os/src/lutron_levels.dart';
 import 'package:archie_os/src/models.dart';
 import 'package:archie_os/src/ui/widgets/device_widgets.dart';
+import 'package:archie_os/src/ui/widgets/tunable_white_icon.dart';
 
 class _QuietBus extends BusController {
   @override
@@ -84,12 +85,14 @@ void main() {
 
     expect(find.text('Kleurtemperatuur (warm → koud)'), findsNothing);
     expect(_wheelCount(tester), 1);
+    expect(find.byType(TunableWhiteIcon), findsOneWidget);
 
     final label = find.text('Kleurtemperatuur (warm → koud)');
 
     await tester.tap(cct);
     await tester.pump();
     expectRowFixed();
+    expect(find.byType(TunableWhiteIcon), findsNWidgets(2));
 
     // Eerste helft: cirkel fadede uit, balk is nog weg.
     await tester.pump(const Duration(milliseconds: 200));
@@ -122,6 +125,53 @@ void main() {
     expect(label, findsNothing);
     expect(_wheelCount(tester), 1);
     expect(_wheelOpacity(tester), 1);
+    expect(find.byType(TunableWhiteIcon), findsOneWidget);
+  });
+
+  testWidgets('knx rgbw uses the same header icon as the colour wheel',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    const device = Device(
+      id: 'knx-rgbw',
+      name: 'Ledstrip',
+      type: DeviceType.rgbwWw,
+      favorite: false,
+      ga: {
+        'r': '1/3/1',
+        'g': '1/3/2',
+        'b': '1/3/3',
+        'w': '1/3/4',
+        'on': '1/3/0',
+      },
+      raw: {
+        'rgbwWw': {'mode': 'channels'},
+      },
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          busProvider.overrideWith(_QuietBus.new),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(
+            body: SizedBox(width: 390, child: RgbwWwTile(device: device)),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Ledstrip'), findsOneWidget);
+    expect(find.text('RGBW'), findsNothing);
+    expect(find.byIcon(Icons.palette_outlined), findsOneWidget);
+    expect(find.byType(TunableWhiteIcon), findsNothing);
+    expect(find.text('Wit (W)'), findsOneWidget);
+    expect(_wheelCount(tester), 1);
   });
 }
 
