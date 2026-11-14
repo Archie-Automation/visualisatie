@@ -167,7 +167,7 @@ export interface Rgb232Triplet {
  * - `composite`      : één GA, ruwe APDU (`writeRaw`), standaard 14 bytes.
  * - `rgb232`         : één GA, DPT 232.600 (3 bytes R·G·B, elk 0–255).
  * - `tunable_white`  : kleurtemperatuur via twee GA's: `ww` (warm) + `cw` (koud),
- *                      én/of `bright` (helderheid) + `kelvin` (DPT 9.001, bijv. 2700–6500 K).
+ *                      én/of `bright` (helderheid) + `kelvin` (DPT 9.001, bijv. 2200–6500 K).
  *
  * Kanaal-detectie in `channels`-modus:
  * - r+g+b aanwezig  → kleurenwiel + helderheidsschuif
@@ -195,7 +195,7 @@ export interface RgbwWwGA {
   bright?: GA;
   /**
    * `mode: "tunable_white"` — kleurtemperatuur GA (DPT 9.001, Kelvin).
-   * Typisch 2700–6500 K.
+   * Typisch 2200–6500 K.
    */
   kelvin?: GA;
 }
@@ -204,7 +204,7 @@ export interface RgbwWwConfig {
   mode: "channels" | "composite" | "rgb232" | "tunable_white";
   /** Telegramlengte voor `composite` (1–14, standaard 14). */
   payloadBytes?: number;
-  /** `tunable_white`: minimale Kelvin-waarde (standaard 2700). */
+  /** `tunable_white`: minimale Kelvin-waarde (standaard 2200). */
   kelvinMin?: number;
   /** `tunable_white`: maximale Kelvin-waarde (standaard 6500). */
   kelvinMax?: number;

@@ -472,25 +472,31 @@ class _LutronMappingCardState extends State<_LutronMappingCard> {
             'dim_control' ||
         canonicalLutronDptRole(knx['role'] as String? ?? 'bit') == 'up_down';
 
+    final label = mapping['label'] as String? ?? 'Mapping';
     return LuxeInsetCard(
-      child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: EdgeInsets.zero,
+          childrenPadding: const EdgeInsets.only(top: 4),
+          title: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.titleSmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                tooltip: 'Verwijderen',
+                visualDensity: VisualDensity.compact,
+                onPressed: widget.onDelete,
+              ),
+            ],
+          ),
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    mapping['label'] as String? ?? 'Mapping',
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  tooltip: 'Verwijderen',
-                  onPressed: widget.onDelete,
-                ),
-              ],
-            ),
             _InstallerStrField(
               label: 'Label (in app)',
               value: mapping['label'] as String? ?? '',
@@ -572,6 +578,7 @@ class _LutronMappingCardState extends State<_LutronMappingCard> {
             ),
           ],
         ),
+      ),
     );
   }
 }
@@ -2935,6 +2942,13 @@ class _InstallerStrFieldState extends State<_InstallerStrField> {
   }
 }
 
+/// 2700 K was de oude standaard in bestaande zones. De schuif begint op 2200 K.
+int _kelvinMinSetting(Object? raw) {
+  final n = raw is num ? raw.round() : int.tryParse('${raw ?? ''}');
+  if (n == null || n == 2700) return 2200;
+  return n;
+}
+
 /// RGB/WW-driver — modus en GA’s zonder JSON.
 class RgbwWwInstallerSection extends StatelessWidget {
   const RgbwWwInstallerSection({
@@ -2956,12 +2970,12 @@ class RgbwWwInstallerSection extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Eén zone op de QSX. Kleur en tunable white wissel je in de app, '
-            'tenzij je hier alleen tunable white vastzet.',
-            style: Theme.of(context).textTheme.bodySmall,
+          const _InstallerInfoTitle(
+            title: 'Kleurzone',
+            body:
+                'Eén zone op de QSX. Kleur en tunable white wissel je in de app, '
+                'tenzij je hier alleen tunable white vastzet.',
           ),
-          const SizedBox(height: 12),
           _InstallerDropdown(
             label: 'Modus',
             value: lutronMode,
@@ -2977,11 +2991,11 @@ class RgbwWwInstallerSection extends StatelessWidget {
           ),
           if (lutronMode == 'tunable_white') ...[
             _InstallerStrField(
-              label: 'Min Kelvin (bijv. 2700)',
-              value: '${cfg['kelvinMin'] ?? 2700}',
+              label: 'Min Kelvin (bijv. 2200)',
+              value: '${_kelvinMinSetting(cfg['kelvinMin'])}',
               number: true,
               onChanged: (v) {
-                cfg['kelvinMin'] = int.tryParse(v) ?? 2700;
+                cfg['kelvinMin'] = _kelvinMinSetting(v);
                 onChanged();
               },
             ),
@@ -3116,11 +3130,11 @@ class RgbwWwInstallerSection extends StatelessWidget {
           Row(children: [
             Expanded(
               child: _InstallerStrField(
-                label: 'Min Kelvin (bijv. 2700)',
-                value: '${cfg['kelvinMin'] ?? 2700}',
+                label: 'Min Kelvin (bijv. 2200)',
+                value: '${_kelvinMinSetting(cfg['kelvinMin'])}',
                 number: true,
                 onChanged: (v) {
-                  cfg['kelvinMin'] = int.tryParse(v) ?? 2700;
+                  cfg['kelvinMin'] = _kelvinMinSetting(v);
                   onChanged();
                 },
               ),
@@ -5113,13 +5127,13 @@ class _WtwLogicEditorSheetState extends State<_WtwLogicEditorSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Trigger wanneer de temperatuur met minstens X °C stijgt '
-            'binnen Y seconden. Geschikt voor een sensor op een '
-            'waterleiding (douche, warm water, …).',
-            style: Theme.of(context).textTheme.bodySmall,
+          const _InstallerInfoTitle(
+            title: 'Temperatuurstijging',
+            body:
+                'Trigger wanneer de temperatuur met minstens X °C stijgt '
+                'binnen Y seconden. Geschikt voor een sensor op een '
+                'waterleiding (douche, warm water).',
           ),
-          const SizedBox(height: 14),
           _InstallerStrField(
             label: 'Temperatuur-GA (DPT 9.001)',
             value: tr['ga'] as String? ?? '',

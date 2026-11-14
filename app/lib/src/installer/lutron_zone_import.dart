@@ -215,14 +215,14 @@ Map<String, dynamic> _deviceMap(
       device['type'] = 'rgbw_ww';
       device['rgbwWw'] = {
         'mode': 'channels',
-        'kelvinMin': 2700,
+        'kelvinMin': 2200,
         'kelvinMax': 6500,
       };
     case LutronImportKind.white:
       device['type'] = 'rgbw_ww';
       device['rgbwWw'] = {
         'mode': 'tunable_white',
-        'kelvinMin': 2700,
+        'kelvinMin': 2200,
         'kelvinMax': 6500,
       };
     case LutronImportKind.shade:

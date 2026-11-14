@@ -315,6 +315,17 @@ export const CommandSchema = z.discriminatedUnion("kind", [
 
 export type Command = z.infer<typeof CommandSchema>;
 
+/**
+ * Warme en koude kant van de kleurtemperatuur-schuif.
+ * 2700 K was de oude standaard en staat nog in bestaande zones; die wordt 2200 K.
+ */
+function kelvinEnds(cfg: { kelvinMin?: number; kelvinMax?: number }): { min: number; max: number } {
+  const stored = cfg.kelvinMin;
+  const min = stored == null || stored === 2700 ? 2200 : stored;
+  const max = cfg.kelvinMax ?? 6500;
+  return { min, max };
+}
+
 export async function dispatch(
   cmd: Command,
   cfg: HouseConfig,
@@ -423,8 +434,7 @@ export async function dispatch(
       if (lut) {
         if (!lutron) throw new Error("Lutron-integratie niet beschikbaar");
         const level = Math.round((brightness / 255) * 100);
-        const kMin = cfg.kelvinMin ?? 2700;
-        const kMax = cfg.kelvinMax ?? 6500;
+        const { min: kMin, max: kMax } = kelvinEnds(cfg);
         const kelvin = Math.round(kMin + warmCoolRatio * (kMax - kMin));
         if (cfg.mode === "tunable_white") {
           await lutron.setWhite(lut.integrationId, level, kelvin);
@@ -449,8 +459,7 @@ export async function dispatch(
         await bus.write(gaMap.bright, "r", brightness); // DPT 5.010
       }
       if (gaMap.kelvin) {
-        const kMin = cfg.kelvinMin ?? 2700;
-        const kMax = cfg.kelvinMax ?? 6500;
+        const { min: kMin, max: kMax } = kelvinEnds(cfg);
         const kelvinVal = Math.round(kMin + warmCoolRatio * (kMax - kMin));
         await bus.write(gaMap.kelvin, "temperature", kelvinVal);
       }

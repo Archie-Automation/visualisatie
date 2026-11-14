@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import '../ui/widgets/confirm_dialog.dart';
 import '../ui/widgets/luxe_form.dart';
 
 /// Installer form for `house.energy`. KNX group addresses only.
@@ -28,16 +29,24 @@ class EnergyInstallerSection extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        Text('Energie', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 8),
-        Text(
-          'KNX-groepsadressen voor net, PV, accu en tellers. De NUC leest de '
-          'bus en stuurt één snapshot naar de app. Een ontbrekend telegram '
-          'blijft leeg en wordt geen 0 W.',
-          style: Theme.of(context)
-              .textTheme
-              .bodyMedium
-              ?.copyWith(color: LuxeColors.inkSoft),
+        Row(
+          children: [
+            Expanded(
+              child: Text('Energie', style: Theme.of(context).textTheme.titleLarge),
+            ),
+            const LuxeInfoIconButton(
+              title: 'Energie',
+              body:
+                  'KNX-groepsadressen voor net, PV, accu en tellers. De NUC leest de '
+                  'bus en stuurt één snapshot naar de app. Een ontbrekend telegram '
+                  'blijft leeg en wordt geen 0 W.\n\n'
+                  'Net: positief is afname, negatief is teruglevering. '
+                  'Accu: positief is ontladen, negatief is laden. '
+                  'Woning is net + PV + accu. Schaalfactor 1 als de bus al in die '
+                  'eenheid staat, 1000 als de bus kW stuurt en het veld watt is, '
+                  '-1 om het teken te draaien.',
+            ),
+          ],
         ),
         const SizedBox(height: 16),
         Row(
@@ -56,18 +65,6 @@ class EnergyInstallerSection extends StatelessWidget {
               },
             ),
           ],
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Net: positief = afname, negatief = teruglevering. '
-          'Accu: positief = ontladen, negatief = laden. '
-          'Woning = net + PV + accu. Schaalfactor 1 als de bus al in die '
-          'eenheid staat, 1000 als de bus kW stuurt en het veld watt is, '
-          '-1 om het teken te draaien.',
-          style: Theme.of(context)
-              .textTheme
-              .bodySmall
-              ?.copyWith(color: LuxeColors.inkFaint),
         ),
         const SizedBox(height: 20),
         for (final point in _points) ...[
@@ -158,11 +155,12 @@ class _PricesEditorState extends State<_PricesEditor> {
     final exportMode = prices['exportMode'] == 'fixed' || prices['exportMode'] == 'market'
         ? prices['exportMode'] as String
         : 'none';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return ExpansionTile(
+      initiallyExpanded: false,
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: const EdgeInsets.only(top: 4),
+      title: Text('Prijzen', style: Theme.of(context).textTheme.titleMedium),
       children: [
-        Text('Prijzen', style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 8),
         Text(
           'EnergyZero levert de marktprijs excl. btw. De opslag is euro per '
           'kWh of m³, ook excl. btw. Btw (21%) komt er alleen overheen als je '
@@ -392,10 +390,15 @@ class _EnergyPointEditorState extends State<_EnergyPointEditor> {
     final scaleText = _scale.text.trim().replaceAll(',', '.');
     final scaleBad = scaleText.isNotEmpty &&
         (double.tryParse(scaleText) == null || double.tryParse(scaleText) == 0);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return ExpansionTile(
+      initiallyExpanded: false,
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: const EdgeInsets.only(bottom: 8),
+      title: Text(
+        '${widget.spec.label} (${widget.spec.unit})',
+        style: Theme.of(context).textTheme.titleSmall,
+      ),
       children: [
-        LuxeFieldLabel('${widget.spec.label} (${widget.spec.unit})'),
         TextField(
           controller: _ga,
           decoration: luxeFilledDecoration(hint: '1/2/3'),

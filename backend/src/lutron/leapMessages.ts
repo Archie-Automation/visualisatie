@@ -482,7 +482,7 @@ export function buildSpectrum(
   };
 }
 
-/** Tunable white op een zone die alleen wit kan. Kelvin typisch 2700–6500. */
+/** Tunable white op een zone die alleen wit kan. Kelvin typisch 2200–6500. */
 export function buildWhite(zoneId: number, level: number, kelvin: number): object {
   return {
     CommuniqueType: "CreateRequest",

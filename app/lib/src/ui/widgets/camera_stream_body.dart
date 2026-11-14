@@ -125,6 +125,7 @@ class _CameraLivePlayerState extends ConsumerState<CameraLivePlayer> {
           expand: true,
           showLiveBadge: false,
           radius: 0,
+          onIntrinsicAspect: widget.onIntrinsicAspect,
         ),
         live,
       ],

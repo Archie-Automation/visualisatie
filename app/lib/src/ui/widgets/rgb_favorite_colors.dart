@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../rgb_color_favorites.dart';
 import '../../theme.dart';
+import 'confirm_dialog.dart';
 
 /// Blad onder het favorieten-icoon: opslaan, toepassen, verwijderen.
 class RgbFavoriteColorsSheet extends StatefulWidget {
@@ -101,18 +102,24 @@ class _RgbFavoriteColorsSheetState extends State<RgbFavoriteColorsSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'Favoriete kleuren',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Tik om toe te passen. Houd ingedrukt om te verwijderen. '
-                'De dimmer blijft staan.',
-                style: Theme.of(context)
-                    .textTheme
-                    .bodySmall
-                    ?.copyWith(color: LuxeColors.inkSoft),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Favoriete kleuren',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const LuxeInfoIconButton(
+                    title: 'Favoriete kleuren',
+                    body: 'Tik op een kleur om die toe te passen. '
+                        'Houd een kleur ingedrukt om hem te verwijderen. '
+                        'De dimmer blijft staan.\n\n'
+                        'Maximaal ${RgbFavoriteColor.maxCount} kleuren, '
+                        'alleen op dit toestel.',
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
               if (!_ready)

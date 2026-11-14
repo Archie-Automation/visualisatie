@@ -111,12 +111,15 @@ class LuxeSwitchRow extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.subtitle,
+    this.beforeSwitch,
   });
 
   final String title;
   final String? subtitle;
   final bool value;
   final ValueChanged<bool>? onChanged;
+  /// Staat direct links van de schakelaar, zodat die rechts uitlijnt.
+  final Widget? beforeSwitch;
 
   @override
   Widget build(BuildContext context) {
@@ -139,6 +142,10 @@ class LuxeSwitchRow extends StatelessWidget {
               ],
             ),
           ),
+          if (beforeSwitch != null) ...[
+            const SizedBox(width: 8),
+            beforeSwitch!,
+          ],
           LuxeOnOffSwitch(
             value: value,
             onChanged: onChanged,

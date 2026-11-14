@@ -2144,14 +2144,16 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
-          child: Text(
-            'Voeg een camera toe met een naam en de stream-URL. '
-            'Ze horen bij het hele huis, niet bij één kamer.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: LuxeColors.inkSoft,
-                ),
+        const Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(28, 4, 12, 0),
+            child: LuxeInfoIconButton(
+              title: "Camera's",
+              body:
+                  'Voeg een camera toe met een naam en de stream-URL. '
+                  'Ze horen bij het hele huis, niet bij één kamer.',
+            ),
           ),
         ),
         LuxeListCard(
@@ -2285,13 +2287,14 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
-          child: Text(
-            'Apparaten staan in de gekozen kamer. Tik om te bewerken.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: LuxeColors.inkSoft,
-                ),
+        const Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(28, 4, 12, 0),
+            child: LuxeInfoIconButton(
+              title: 'Audio',
+              body: 'Apparaten staan in de gekozen kamer. Tik om te bewerken.',
+            ),
           ),
         ),
         LuxeListCard(
@@ -2372,12 +2375,15 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           child: Column(
             children: [
               const Padding(
-                padding: EdgeInsets.fromLTRB(16, 12, 14, 4),
+                padding: EdgeInsets.fromLTRB(16, 12, 8, 4),
                 child: LuxeSectionTitle(
                   icon: Icons.sensor_door_outlined,
                   title: 'Deurstations',
-                  subtitle:
-                      'Stap 1: toestel  ·  Stap 2: belgroep  ·  Stap 3: belknoppen',
+                  trailing: LuxeInfoIconButton(
+                    title: 'Deurstations',
+                    body:
+                        'Stap 1: toestel. Stap 2: belgroep. Stap 3: belknoppen.',
+                  ),
                 ),
               ),
               if (list.isEmpty)
@@ -2505,7 +2511,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             extra: {
               'rgbwWw': {
                 'mode': 'channels',
-                'kelvinMin': 2700,
+                'kelvinMin': 2200,
                 'kelvinMax': 6500,
               },
             },
@@ -3278,9 +3284,10 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   }
 
   Widget _floorsPathCard() {
+    final building = _activeBuildingMap();
     final crumbs = <(String, VoidCallback, bool)>[
       (
-        'Kamers',
+        building == null ? 'Kamers' : _namedOr(building, 'Gebouw'),
         () => _selectFocus(const _Focus.floors()),
         _sel.kind == _FocusKind.floors,
       ),
@@ -3422,10 +3429,40 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
 
   Widget _deviceMillerRow(BuildContext context) {
     return _millerColumns(context, [
+      _deviceBuildingsColumn(context),
       _millerFloorsColumn(context),
       _millerRoomsColumn(context),
       _millerDevicesColumn(context),
     ]);
+  }
+
+  Widget _deviceBuildingsColumn(BuildContext context) {
+    final buildings = [
+      for (final b in _buildingsSorted())
+        if ((b['id'] as String?)?.isNotEmpty == true) b,
+    ];
+    final active = _activeVizBuildingId;
+    return _millerColumn(
+      context: context,
+      title: 'Gebouw',
+      icon: Icons.home_work_outlined,
+      emptyText: buildings.isEmpty ? 'Nog geen gebouw' : null,
+      children: [
+        for (final b in buildings)
+          LuxeNavRow(
+            icon: Icons.home_work_outlined,
+            leading: (color) => scopeBuildingGlyph(
+              b['icon'] as String?,
+              size: 20,
+              color: color,
+            ),
+            title: _namedOr(b, 'Gebouw'),
+            selected: b['id'] == active,
+            rounded: true,
+            onTap: () => _setVizBuilding(b['id'] as String),
+          ),
+      ],
+    );
   }
 
   Widget _millerFloorsColumn(BuildContext context) {
@@ -3609,7 +3646,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                 _selectFocus(const _Focus.buildings());
               },
             ),
-            if (i == 0)
+            if (i == buildings.length - 1)
               _plusUnderTrash(
                 tooltip: 'Gebouw toevoegen',
                 onPressed: _addBuilding,
@@ -3854,7 +3891,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                       _selectFocus(const _Focus.buildings());
                     },
                   ),
-                  if (i == 0)
+                  if (i == buildings.length - 1)
                     _plusUnderTrash(
                       tooltip: 'Gebouw toevoegen',
                       onPressed: _addBuilding,
@@ -3898,9 +3935,38 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       for (var i = 0; i < floors.length; i++)
         if (_onActiveBuilding(floors[i])) i,
     ];
+    final buildings = [
+      for (final b in _buildingsSorted())
+        if ((b['id'] as String?)?.isNotEmpty == true) b,
+    ];
+    final active = _activeVizBuildingId;
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
       children: [
+        if (buildings.isNotEmpty) ...[
+          LuxeListCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                for (var i = 0; i < buildings.length; i++) ...[
+                  if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+                  LuxeNavRow(
+                    icon: Icons.home_work_outlined,
+                    leading: (color) => scopeBuildingGlyph(
+                      buildings[i]['icon'] as String?,
+                      size: 20,
+                      color: color,
+                    ),
+                    title: _namedOr(buildings[i], 'Gebouw'),
+                    selected: buildings[i]['id'] == active,
+                    onTap: () => _setVizBuilding(buildings[i]['id'] as String),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
         LuxeListCard(
           padding: EdgeInsets.zero,
           child: Column(
@@ -3913,7 +3979,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   trailing: LuxeInfoIconButton(
                     title: 'Kamergebonden devices',
                     body:
-                        'Eerst een verdieping, daarna een kamer, daarna het apparaat.',
+                        'Eerst het gebouw, daarna een verdieping, een kamer en het apparaat.',
                   ),
                 ),
               ),
@@ -4847,6 +4913,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             }
             return ref.read(installerAuthProvider).token;
           },
+          onDelete: () => _deleteCameraAt(_sel.ci!),
           leading: [
             _looseDeviceBuildingCard(_cameras()[_sel.ci!]),
           ],
@@ -5417,37 +5484,32 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: LuxeSwitchRow(
-                      title: 'Ontvangt deurbel-oproepen',
-                      subtitle: ensureVoipMap(widget.house)['enabled'] == true
-                          ? 'Automatisch gekoppeld aan het toestel van deze gebruiker.'
-                          : 'Zet deurbel-oproepen aan bij Intercom.',
-                      value: sipEndpointForUser(widget.house, u) != null,
-                      onChanged: ensureVoipMap(widget.house)['enabled'] == true
-                          ? (v) {
-                              if (v) {
-                                bindSipToUser(widget.house, u);
-                              } else {
-                                unbindSipFromUser(widget.house, u);
-                              }
-                              widget.onChanged();
-                              setState(() {});
-                            }
-                          : null,
-                    ),
-                  ),
-                  if (ensureVoipMap(widget.house)['enabled'] == true)
-                    const LuxeInfoIconButton(
-                      title: 'Deurbel-oproepen',
-                      body:
-                          'Dit account gaat over als het in een belgroep staat. '
-                          'Nummer en wachtwoord worden automatisch aangemaakt — '
-                          'niet nodig op het toestel in te vullen.',
-                    ),
-                ],
+              LuxeSwitchRow(
+                title: 'Ontvangt deurbel-oproepen',
+                subtitle: ensureVoipMap(widget.house)['enabled'] == true
+                    ? 'Automatisch gekoppeld aan het toestel van deze gebruiker.'
+                    : 'Zet deurbel-oproepen aan bij Intercom.',
+                beforeSwitch: ensureVoipMap(widget.house)['enabled'] == true
+                    ? const LuxeInfoIconButton(
+                        title: 'Deurbel-oproepen',
+                        body:
+                            'Dit account gaat over als het in een belgroep staat. '
+                            'Nummer en wachtwoord worden automatisch aangemaakt — '
+                            'niet nodig op het toestel in te vullen.',
+                      )
+                    : null,
+                value: sipEndpointForUser(widget.house, u) != null,
+                onChanged: ensureVoipMap(widget.house)['enabled'] == true
+                    ? (v) {
+                        if (v) {
+                          bindSipToUser(widget.house, u);
+                        } else {
+                          unbindSipFromUser(widget.house, u);
+                        }
+                        widget.onChanged();
+                        setState(() {});
+                      }
+                    : null,
               ),
               const SizedBox(height: 8),
               LuxeSwitchRow(
@@ -6095,11 +6157,21 @@ class _LutronForm extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Text('Lutron QSX/QS Processor', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 8),
-        Text(
-          'Vul het IP-adres in en koppel hierboven. Zones en keypad-knoppen komen daarna.',
-          style: Theme.of(context).textTheme.bodyMedium,
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Lutron QSX/QS Processor',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            const LuxeInfoIconButton(
+              title: 'Lutron QSX/QS',
+              body:
+                  'Vul het IP-adres in en koppel hierboven. Zones en keypad-knoppen komen daarna.\n\n'
+                  'Koppel eerst de processor. Daarna zet je zones in het huis en koppel je keypad-knoppen.',
+            ),
+          ],
         ),
         const SizedBox(height: 20),
         _BoundStrField(
@@ -6110,12 +6182,7 @@ class _LutronForm extends StatelessWidget {
           hintText: 'bijv. 192.168.1.50 (IP van de QSX/QS processor)',
         ),
         const SizedBox(height: 16),
-        if (!paired)
-          Text(
-            'Koppel eerst de processor. Daarna zet je zones in het huis en koppel je keypad-knoppen.',
-            style: Theme.of(context).textTheme.bodySmall,
-          )
-        else ...[
+        if (paired) ...[
           Align(
             alignment: Alignment.centerLeft,
             child: FilledButton.icon(
@@ -6216,10 +6283,6 @@ class _KnxForm extends StatelessWidget {
             child: ListTile(
               leading: const Icon(Icons.file_download_outlined),
               title: const Text('Importeer uit KNX (.xml)'),
-              subtitle: const Text(
-                'Maak verdiepingen, ruimtes en apparaten aan uit een '
-                'Group Address XML (ETS-export of Archie Groepsadressentool).',
-              ),
               trailing: IconButton(
                 icon: const Icon(Icons.info_outline),
                 tooltip: 'Uitleg KNX-import',
@@ -6229,21 +6292,27 @@ class _KnxForm extends StatelessWidget {
             ),
           ),
           const Divider(height: 32),
-          Text(
-            "KNX scene's inleren",
-            style: Theme.of(context).textTheme.titleLarge,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Per knop: ruimte, schakelaar (positie in de kamer), knopnaam, '
-            'optioneel scene (avond, dag, sfeer), het scene-groepsadres '
-            '(DPT 18.001) en het fysieke adres van die schakelaar.\n\n'
-            'Meerdere schakelaars in één ruimte mogen hetzelfde groepsadres '
-            'delen. Bij inlezen wordt het fysieke adres van de drukker '
-            'gecontroleerd, zodat de juiste schakelaar wordt herkend.\n\n'
-            'In Instellingen verschijnt het overzicht per ruimte. '
-            'Scene opslaan in KNX werkt alleen als store/leren in ETS is vrijgegeven.',
-            style: Theme.of(context).textTheme.bodySmall,
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  "KNX scene's inleren",
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+              ),
+              const LuxeInfoIconButton(
+                title: "KNX scene's inleren",
+                body:
+                    'Per knop: ruimte, schakelaar (positie in de kamer), knopnaam, '
+                    'optioneel scene (avond, dag, sfeer), het scene-groepsadres '
+                    '(DPT 18.001) en het fysieke adres van die schakelaar.\n\n'
+                    'Meerdere schakelaars in één ruimte mogen hetzelfde groepsadres '
+                    'delen. Bij inlezen wordt het fysieke adres van de drukker '
+                    'gecontroleerd, zodat de juiste schakelaar wordt herkend.\n\n'
+                    'In Instellingen verschijnt het overzicht per ruimte. '
+                    'Scene opslaan in KNX werkt alleen als store/leren in ETS is vrijgegeven.',
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           _SceneAddressList(
@@ -6365,37 +6434,43 @@ class _SceneAddressList extends StatelessWidget {
     Set<String> knownIds,
   ) {
     final row = rows[i];
+    final border = RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+      side: BorderSide(color: LuxeColors.lineSoft),
+    );
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: LuxeColors.lineSoft),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 10, 4, 4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Material(
+        color: Colors.transparent,
+        child: ExpansionTile(
+          key: ObjectKey(row),
+          initiallyExpanded: false,
+          shape: border,
+          collapsedShape: border,
+          tilePadding: const EdgeInsets.only(left: 12, right: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          title: Row(
             children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _addressCardTitle(row),
-                      style: Theme.of(context).textTheme.labelLarge,
-                    ),
-                  ),
-                  IconButton(
-                    tooltip: 'Verwijderen',
-                    onPressed: () {
-                      rows.removeAt(i);
-                      sceneLearn['addresses'] = rows;
-                      onChanged();
-                    },
-                    icon: const Icon(Icons.delete_outline),
-                  ),
-                ],
+              Expanded(
+                child: Text(
+                  _addressCardTitle(row),
+                  style: Theme.of(context).textTheme.labelLarge,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
+              IconButton(
+                tooltip: 'Verwijderen',
+                visualDensity: VisualDensity.compact,
+                onPressed: () {
+                  rows.removeAt(i);
+                  sceneLearn['addresses'] = rows;
+                  onChanged();
+                },
+                icon: const Icon(Icons.delete_outline),
+              ),
+            ],
+          ),
+          children: [
               _sceneRoomDropdown(row, knownIds),
               _BoundStrField(
                 'switchName',
@@ -6437,8 +6512,7 @@ class _SceneAddressList extends StatelessWidget {
                 gaSearch: true,
                 gaDptHint: 'DPT18.001',
               ),
-            ],
-          ),
+          ],
         ),
       ),
     );
@@ -7964,6 +8038,7 @@ class _DeviceForm extends StatelessWidget {
     this.onCopy,
     this.onPaste,
     this.headerActions,
+    this.onDelete,
     this.getInstallerToken,
     this.leading = const [],
     this.showSystemTile = false,
@@ -7974,6 +8049,7 @@ class _DeviceForm extends StatelessWidget {
   final VoidCallback? onCopy;
   final VoidCallback? onPaste;
   final Widget? headerActions;
+  final VoidCallback? onDelete;
   final Future<String?> Function()? getInstallerToken;
   final List<Widget> leading;
   final bool showSystemTile;
@@ -8032,6 +8108,12 @@ class _DeviceForm extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (headerActions != null) headerActions!,
+                    if (onDelete != null)
+                      IconButton(
+                        tooltip: 'Verwijderen',
+                        icon: const Icon(Icons.delete_outline),
+                        onPressed: onDelete,
+                      ),
                     if (onCopy != null)
                       IconButton(
                         tooltip: 'Kopiëren (Ctrl+C)',
@@ -8224,11 +8306,15 @@ class _DeviceForm extends StatelessWidget {
                   onChanged: onChanged,
                 ),
               if (type == 'lutron_homeworks') ...[
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Text(
-                    'Keypad-knoppen kies je bij de QSX-processor, nadat ze zijn uitgelezen.',
-                    style: Theme.of(context).textTheme.bodySmall,
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 12),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: LuxeInfoIconButton(
+                      title: 'Keypad-knoppen',
+                      body:
+                          'Keypad-knoppen kies je bij de QSX-processor, nadat ze zijn uitgelezen.',
+                    ),
                   ),
                 ),
                 LutronButtonToKnxListEditor(
@@ -9020,12 +9106,15 @@ class _IntercomKnxExtras extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 12),
-              Text(
-                'Aanbel-link, als het toestel zelf moet melden dat er gebeld wordt. Bij SIP hoeft dit niet.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w400,
-                      color: LuxeColors.inkSoft,
-                    ),
+              const Row(
+                children: [
+                  Expanded(child: Text('Aanbel-link')),
+                  LuxeInfoIconButton(
+                    title: 'Aanbel-link',
+                    body:
+                        'Alleen als het toestel zelf moet melden dat er gebeld wordt. Bij SIP hoeft dit niet.',
+                  ),
+                ],
               ),
               const SizedBox(height: 6),
               SelectableText(
@@ -9260,27 +9349,25 @@ class _LogsInstallerPanel extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        Text('Logs / grafieken',
-            style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 8),
-        Text(
-          'Maak grafieken van groepsadressen. Waarden worden op de server '
-          'gelogd zodra ze veranderen (numerieke DPT\'s, ~90 dagen bewaard). '
-          'Zet een grafiek aan voor gebruikers om hem onder Systemen → Grafieken '
-          'te tonen.',
-          style: Theme.of(context)
-              .textTheme
-              .bodyMedium
-              ?.copyWith(color: Colors.black54),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Thermostaten worden automatisch gelogd (gemeten + ingestelde '
-          'temperatuur) en hoeven hier niet te worden toegevoegd.',
-          style: Theme.of(context)
-              .textTheme
-              .bodySmall
-              ?.copyWith(color: Colors.black45),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Logs / grafieken',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            const LuxeInfoIconButton(
+              title: 'Logs / grafieken',
+              body:
+                  'Maak grafieken van groepsadressen. Waarden worden op de server '
+                  'gelogd zodra ze veranderen (numerieke DPT\'s, ongeveer 90 dagen bewaard). '
+                  'Zet een grafiek aan voor gebruikers om hem onder Systemen, Grafieken '
+                  'te tonen.\n\n'
+                  'Thermostaten worden automatisch gelogd (gemeten en ingestelde '
+                  'temperatuur) en hoeven hier niet te worden toegevoegd.',
+            ),
+          ],
         ),
         const SizedBox(height: 20),
         if (logs.isEmpty)

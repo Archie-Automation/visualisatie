@@ -467,7 +467,7 @@
             },
             "kelvinMin": {
               "type": "integer",
-              "description": "tunable_white: minimale kleurtemperatuur in Kelvin (standaard 2700)."
+              "description": "tunable_white: minimale kleurtemperatuur in Kelvin (standaard 2200)."
             },
             "kelvinMax": {
               "type": "integer",

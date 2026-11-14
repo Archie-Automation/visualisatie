@@ -30,6 +30,7 @@ class CameraSnapshot extends ConsumerStatefulWidget {
     this.showLiveBadge = true,
     this.expand = false,
     this.radius = 18,
+    this.onIntrinsicAspect,
   });
 
   final String cameraId;
@@ -42,6 +43,8 @@ class CameraSnapshot extends ConsumerStatefulWidget {
   final bool expand;
   /// Eigen afronding. 0 = de ouder knipt, zodat er geen tweede rand in de tegel zit.
   final double radius;
+  /// Echte breedte/hoogte van het JPEG, zodra die bekend is.
+  final ValueChanged<double>? onIntrinsicAspect;
 
   @override
   ConsumerState<CameraSnapshot> createState() => _CameraSnapshotState();
@@ -105,11 +108,16 @@ class _CameraSnapshotState extends ConsumerState<CameraSnapshot> {
         final bytes = res.bodyBytes;
         final intrinsic = _intrinsic ?? await _jpegAspect(bytes);
         if (!mounted) return;
+        if (intrinsic != null &&
+            (_intrinsic == null || (intrinsic - _intrinsic!).abs() >= 0.02)) {
+          _intrinsic = intrinsic;
+          widget.onIntrinsicAspect?.call(intrinsic);
+        }
         setState(() {
           _frame = bytes;
           _frameGen++;
           _failStreak = 0;
-          if (intrinsic != null) _intrinsic = intrinsic;
+          _intrinsic ??= intrinsic;
         });
       } else {
         // Non-200: keep old frame visible, slow down retries.

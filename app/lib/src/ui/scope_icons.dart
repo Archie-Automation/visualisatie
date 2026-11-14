@@ -254,11 +254,18 @@ class _BuildingPainter extends CustomPainter {
         _hline(canvas, stroke, 7, 17, 9);
         _hline(canvas, stroke, 7, 17, 15);
       case BuildingMark.guest:
-        _roof(canvas, stroke, 1.5, 13, 8, 6.5, 14.5, 13);
-        _walls(canvas, stroke, 3, 12.2, 13, 21);
-        _door(canvas, stroke, 6.4, 16, 9.4, 21);
-        _roof(canvas, stroke, 12.5, 16, 17, 12.5, 22.5, 16);
-        _walls(canvas, stroke, 14, 15.2, 21.2, 21);
+        _poly(canvas, stroke, const [
+          Offset(2.4, 21),
+          Offset(2.4, 11),
+          Offset(1.2, 11),
+          Offset(7.2, 4.2),
+          Offset(13.2, 11),
+          Offset(13.2, 16.2),
+          Offset(17.4, 13.4),
+          Offset(21.8, 16.2),
+          Offset(21.8, 21),
+        ]);
+        _door(canvas, stroke, 5, 15.2, 8.4, 21);
       case BuildingMark.cabin:
         _poly(canvas, stroke, const [
           Offset(3.5, 21),
