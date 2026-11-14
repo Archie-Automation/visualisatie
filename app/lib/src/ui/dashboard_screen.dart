@@ -2109,8 +2109,9 @@ class _SystemManageSheetState extends ConsumerState<_SystemManageSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final light = Theme.of(context).brightness == Brightness.light;
     return ClipRRect(
-      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       child: Container(
         color: LuxeColors.cream,
         child: Column(
@@ -2118,12 +2119,16 @@ class _SystemManageSheetState extends ConsumerState<_SystemManageSheet> {
           children: [
             _handle(),
             Padding(
-              padding: EdgeInsets.fromLTRB(22, 10, 22, 4),
+              padding: const EdgeInsets.fromLTRB(22, 10, 22, 4),
               child: Row(
                 children: [
-                  Icon(Icons.tune_rounded,
-                      size: 28, color: LuxeColors.brass),
-                  SizedBox(width: 10),
+                  _ManageGlyph(
+                    icon: Icons.tune_rounded,
+                    color: LuxeColors.brass,
+                    size: 28,
+                    ring: light,
+                  ),
+                  const SizedBox(width: 10),
                   Text('Systemen beheren',
                       style: Theme.of(context).textTheme.titleLarge),
                 ],
@@ -2172,19 +2177,14 @@ class _SystemManageSheetState extends ConsumerState<_SystemManageSheet> {
                     ),
                     title: Row(
                       children: [
-                        iconWidgetForData(
-                              chip.icon,
-                              size: 26,
-                              color: visible
-                                  ? (chip.accent ?? LuxeColors.brass)
-                                  : LuxeColors.inkSoft.withValues(alpha: 0.4),
-                            ) ??
-                            Icon(chip.icon,
-                                size: 26,
-                                color: visible
-                                    ? (chip.accent ?? LuxeColors.brass)
-                                    : LuxeColors.inkSoft.withValues(alpha: 0.4)),
-                        SizedBox(width: 10),
+                        _ManageGlyph(
+                          icon: chip.icon,
+                          color: visible
+                              ? (chip.accent ?? LuxeColors.brass)
+                              : LuxeColors.inkSoft.withValues(alpha: 0.4),
+                          ring: light && visible,
+                        ),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             chip.name,
@@ -2202,7 +2202,20 @@ class _SystemManageSheetState extends ConsumerState<_SystemManageSheet> {
                     ),
                     trailing: Switch.adaptive(
                       value: visible,
-                      activeColor: LuxeColors.brass,
+                      activeThumbColor:
+                          light ? LuxeColors.surface : LuxeColors.brass,
+                      activeTrackColor: LuxeColors.brass,
+                      inactiveThumbColor:
+                          light ? LuxeColors.surface : null,
+                      inactiveTrackColor: light
+                          ? LuxeColors.inkSoft.withValues(alpha: 0.28)
+                          : null,
+                      trackOutlineColor: light
+                          ? WidgetStatePropertyAll(LuxeColors.inkSoft)
+                          : null,
+                      trackOutlineWidth: light
+                          ? const WidgetStatePropertyAll(1)
+                          : null,
                       onChanged: (on) {
                         setState(() {
                           if (on) {
@@ -2236,6 +2249,39 @@ class _SystemManageSheetState extends ConsumerState<_SystemManageSheet> {
   }
 
   Widget _handle() => _sheetHandle();
+}
+
+/// Brass glyph on the stone sheet. Light mode gets a 1px anthracite ring
+/// so the gold edge stays readable.
+class _ManageGlyph extends StatelessWidget {
+  const _ManageGlyph({
+    required this.icon,
+    required this.color,
+    this.size = 26,
+    this.ring = false,
+  });
+
+  final IconData icon;
+  final Color color;
+  final double size;
+  final bool ring;
+
+  @override
+  Widget build(BuildContext context) {
+    final glyph = iconWidgetForData(icon, size: size, color: color) ??
+        Icon(icon, size: size, color: color);
+    if (!ring) return glyph;
+    return Container(
+      width: size + 10,
+      height: size + 10,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: LuxeColors.inkSoft, width: 1),
+      ),
+      child: glyph,
+    );
+  }
 }
 
 class _SystemChipData {
