@@ -275,37 +275,4 @@ export async function warmGo2rtcProducer(
   return false;
 }
 
-/** Keep go2rtc producers warm so opening live view does not wait on cold RTSP. */
-export function startGo2rtcStreamKeeper(
-  getConfig: () => HouseConfig,
-  mediaBase: () => string
-): () => void {
-  let stopped = false;
-  let timer: ReturnType<typeof setTimeout> | null = null;
-
-  const tick = async () => {
-    if (stopped) return;
-    const base = mediaBase();
-    const cfg = getConfig();
-    const devices: Array<CameraDevice | IntercomDevice> = [
-      ...collectCameras(cfg),
-      ...collectIntercoms(cfg)
-    ];
-    for (const d of devices) {
-      if (stopped) break;
-      const p = cameraPath(d);
-      await warmGo2rtcProducer(base, p, { retries: 2, timeoutMs: 15_000 }).catch(
-        () => false
-      );
-      await new Promise<void>((r) => setTimeout(r, 2_500));
-    }
-    if (!stopped) timer = setTimeout(() => void tick(), 15_000);
-  };
-
-  timer = setTimeout(() => void tick(), 3_000);
-
-  return () => {
-    stopped = true;
-    if (timer) clearTimeout(timer);
-  };
-}
+/** Warm a go2rtc producer via HLS manifest (less disruptive than frame.jpeg). */

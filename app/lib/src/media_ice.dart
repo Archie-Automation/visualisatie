@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -54,6 +55,20 @@ Future<List<Map<String, dynamic>>> fetchIceServers({
   } catch (_) {
     return c ?? _fallbackIceServers;
   }
+}
+
+/// Cache of de vaste STUN-fallback, meteen. Een verse lijst wordt op de
+/// achtergrond opgehaald, zodat de eerste WebRTC-offer niet op dat verzoek wacht.
+List<Map<String, dynamic>> iceServersNow({required String? token}) {
+  final now = DateTime.now();
+  final cached = _cached;
+  final fresh = cached != null &&
+      _cachedBase == apiBase &&
+      _cachedUntil != null &&
+      now.isBefore(_cachedUntil!);
+  if (!fresh) unawaited(fetchIceServers(token: token));
+  if (fresh) return cached;
+  return cached ?? _fallbackIceServers;
 }
 
 /// Na een routewissel (LAN <-> cloud) zijn credentials/hosts mogelijk anders.

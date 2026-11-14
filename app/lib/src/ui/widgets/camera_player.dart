@@ -19,6 +19,7 @@ class CameraPlayer extends ConsumerStatefulWidget {
     this.interactive = false,
     this.showLiveBadge = true,
     this.expand = false,
+    this.poster = false,
     this.onIntrinsicAspect,
   });
 
@@ -30,6 +31,8 @@ class CameraPlayer extends ConsumerStatefulWidget {
   final bool showLiveBadge;
   /// Fill the parent instead of locking to [aspectRatio].
   final bool expand;
+  /// Geen zwart vlak tot het beeld er is, zodat een still eronder zichtbaar blijft.
+  final bool poster;
   /// Real frame width/height once the HLS picture is ready.
   final ValueChanged<double>? onIntrinsicAspect;
 
@@ -159,7 +162,7 @@ class _CameraPlayerState extends ConsumerState<CameraPlayer> {
     final stack = Stack(
       fit: StackFit.expand,
       children: [
-        Container(color: Colors.black),
+        if (!widget.poster) Container(color: Colors.black),
         if (_ready && _ctrl != null)
           FittedBox(
             fit: widget.fit,
@@ -174,12 +177,12 @@ class _CameraPlayerState extends ConsumerState<CameraPlayer> {
               child: VideoPlayer(_ctrl!),
             ),
           )
-        else if (_err != null)
+        else if (_err != null && !widget.poster)
           Center(
             child: Icon(Icons.videocam_off_outlined,
                 color: Colors.white54, size: 32),
           )
-        else
+        else if (!_ready && !widget.poster)
           Center(
             child: SizedBox(
               width: 22,

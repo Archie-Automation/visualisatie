@@ -37,6 +37,12 @@ class CamerasOverviewScreen extends ConsumerStatefulWidget {
 
 class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
   String? _selectedId;
+  final Map<String, GlobalKey> _liveStageKeys = {};
+
+  /// Zelfde element bij kantelen. Een nieuwe key per camera, zodat wisselen
+  /// wél een nieuwe verbinding opent.
+  GlobalKey _liveStageKey(String id) =>
+      _liveStageKeys.putIfAbsent(id, GlobalKey.new);
 
   String _resolveSelectedId(List<Device> cameras) {
     final pick = _selectedId;
@@ -151,19 +157,31 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
               _restoreSystemUi();
             }
 
+            final info = CameraInfo.fromDevice(selectedDevice);
+            final stage = LiveVideoHuggingStage(
+              key: _liveStageKey(info.id),
+              identity: info.id,
+              fallbackAspect: info.aspectRatio,
+              builder: (onAspect) => CameraLivePlayer(
+                info: info,
+                fit: BoxFit.contain,
+                expand: true,
+                onIntrinsicAspect: onAspect,
+              ),
+            );
+
             if (isLandscape) {
               return _FullscreenCameraView(
-                selId: selId,
                 deviceName: selectedDevice.name,
                 onBack: () {
                   _restoreSystemUi();
                   appBack(context);
                 },
+                child: stage,
               );
             }
 
             // ── Portrait layout ────────────────────────────────────────────
-            final info = ref.watch(cameraInfoProvider(selId));
             return Scaffold(
               backgroundColor: Colors.transparent,
               body: LuxeBackdrop(
@@ -178,27 +196,7 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
-                        child: info.when(
-                          loading: () => Center(
-                            child: CircularProgressIndicator(
-                                color: LuxeColors.brass),
-                          ),
-                          error: (e, _) => Center(
-                            child: Text('Kan stream niet laden:\n$e',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: LuxeColors.inkSoft)),
-                          ),
-                          data: (i) => LiveVideoHuggingStage(
-                            identity: i.id,
-                            fallbackAspect: i.aspectRatio,
-                            builder: (onAspect) => CameraLivePlayer(
-                              info: i,
-                              fit: BoxFit.contain,
-                              expand: true,
-                              onIntrinsicAspect: onAspect,
-                            ),
-                          ),
-                        ),
+                        child: stage,
                       ),
                     ),
                     Padding(
@@ -254,39 +252,24 @@ class _CamerasOverviewScreenState extends ConsumerState<CamerasOverviewScreen> {
 }
 
 /// Volledig scherm camera-weergave voor landscape modus.
-class _FullscreenCameraView extends ConsumerWidget {
+class _FullscreenCameraView extends StatelessWidget {
   const _FullscreenCameraView({
-    required this.selId,
     required this.deviceName,
     required this.onBack,
+    required this.child,
   });
 
-  final String selId;
   final String deviceName;
   final VoidCallback onBack;
+  final Widget child;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final info = ref.watch(cameraInfoProvider(selId));
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          // Camera stream vult het hele scherm
-          info.when(
-            loading: () =>
-                Center(child: CircularProgressIndicator(color: LuxeColors.brass)),
-            error: (e, _) => Center(
-              child: Text('Kan stream niet laden:\n$e',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white54)),
-            ),
-            data: (i) => CameraLivePlayer(
-              info: i,
-              fit: BoxFit.contain,
-              expand: true,
-            ),
-          ),
+          Positioned.fill(child: child),
           // Terug — zelfde BackPill linksboven als de rest van de app
           Positioned(
             top: 0,

@@ -160,8 +160,7 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
         await _renderer.initialize();
         _rendererReady = true;
       }
-      final iceServers =
-          await fetchIceServers(token: ref.read(authProvider).token);
+      final iceServers = iceServersNow(token: ref.read(authProvider).token);
       final pc = await createPeerConnection({
         'iceServers': iceServers,
         'sdpSemantics': 'unified-plan',
@@ -267,10 +266,11 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
       fit: StackFit.expand,
       children: [
         if (widget.opaqueBackground) Container(color: Colors.black),
-        AnimatedOpacity(
-          opacity: _connected ? 1.0 : 0.0,
-          duration: Duration(milliseconds: 300),
-          child: RTCVideoView(
+        if (_connected || widget.opaqueBackground)
+          AnimatedOpacity(
+            opacity: _connected ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 300),
+            child: RTCVideoView(
             _renderer,
             objectFit: widget.fit == BoxFit.cover
                 ? RTCVideoViewObjectFit.RTCVideoViewObjectFitCover

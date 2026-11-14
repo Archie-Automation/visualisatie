@@ -8,8 +8,8 @@ import '../../server_route.dart';
 import '../../demo/demo_camera_view.dart';
 import '../../demo/demo_session.dart';
 import '../../models.dart';
-import '../../theme.dart';
 import 'camera_player.dart';
+import 'camera_snapshot.dart';
 import 'webrtc_camera_player.dart';
 
 /// Single-camera live view: WebRTC als beschikbaar, anders HLS (geen klantkeuze).
@@ -36,24 +36,6 @@ class CameraLivePlayer extends ConsumerStatefulWidget {
 class _CameraLivePlayerState extends ConsumerState<CameraLivePlayer> {
   /// When WebRTC fails to deliver video, fall back to HLS instead of snapshots.
   bool _useHlsFallback = false;
-  bool _streamReady = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _prewarmStream();
-  }
-
-  Future<void> _prewarmStream() async {
-    if (mounted) setState(() => _streamReady = true);
-    if (isDemoToken(ref.read(authProvider).token)) return;
-    final auth = ref.read(authProvider);
-    // Niet op dit verzoek wachten: de recorder levert het eerste beeld
-    // pas na een keyframe, en dat hield het scherm seconden leeg.
-    warmCameraStream(cameraId: widget.info.id, token: auth.token).catchError(
-      (_) => false,
-    );
-  }
 
   void _onWebRtcFailed() {
     if (_effectiveHlsUrl.isEmpty || !mounted) return;
@@ -97,23 +79,6 @@ class _CameraLivePlayerState extends ConsumerState<CameraLivePlayer> {
         doorStation: doorStation,
       );
     }
-    if (!_streamReady) {
-      final spinner = Center(
-        child: SizedBox(
-          width: 28,
-          height: 28,
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            color: LuxeColors.brass,
-          ),
-        ),
-      );
-      if (widget.expand) return spinner;
-      return AspectRatio(
-        aspectRatio: widget.info.aspectRatio,
-        child: spinner,
-      );
-    }
 
     // Buitenshuis is UDP 8555 dicht. De stream komt dan via de server (HLS),
     // niet via een directe WebRTC-kandidaat die de telefoon niet kan bereiken.
@@ -121,37 +86,53 @@ class _CameraLivePlayerState extends ConsumerState<CameraLivePlayer> {
         !_useHlsFallback &&
         !_offLan;
 
+    final Widget live;
     if (tryWebRtc) {
-      return WebRTCCameraPlayer(
+      live = WebRTCCameraPlayer(
         key: ValueKey('webrtc-${widget.info.id}'),
         signallingPath: 'cameras/${widget.info.id}',
         aspectRatio: widget.info.aspectRatio,
         fit: widget.fit,
-        expand: widget.expand,
+        expand: true,
+        opaqueBackground: false,
         videoOnly: true,
         onFailed: _onWebRtcFailed,
         onIntrinsicAspect: widget.onIntrinsicAspect,
       );
-    }
-
-    if (_effectiveHlsUrl.isNotEmpty) {
-      return CameraPlayer(
+    } else if (_effectiveHlsUrl.isNotEmpty) {
+      live = CameraPlayer(
         key: ValueKey('hls-${widget.info.id}'),
         hlsUrl: _effectiveHlsUrl,
         aspectRatio: widget.info.aspectRatio,
-        // Safari speelt alleen automatisch af zonder geluid. Geen knop erop.
         muted: true,
         fit: widget.fit,
-        expand: widget.expand,
+        expand: true,
+        poster: true,
         onIntrinsicAspect: widget.onIntrinsicAspect,
       );
+    } else {
+      live = const SizedBox.shrink();
     }
 
-    return const Center(
-      child: Text(
-        'Geen live stream beschikbaar',
-        style: TextStyle(color: Colors.white54),
-      ),
+    // Still meteen, live eroverheen zodra WebRTC of HLS een beeld heeft.
+    final picture = Stack(
+      fit: StackFit.expand,
+      children: [
+        CameraSnapshot(
+          cameraId: widget.info.id,
+          aspectRatio: widget.info.aspectRatio,
+          fit: widget.fit,
+          expand: true,
+          showLiveBadge: false,
+          radius: 0,
+        ),
+        live,
+      ],
+    );
+    if (widget.expand) return picture;
+    return AspectRatio(
+      aspectRatio: widget.info.aspectRatio,
+      child: picture,
     );
   }
 }

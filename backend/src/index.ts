@@ -15,7 +15,7 @@ import { startLogSampler } from "./logSampler";
 import { startScheduler } from "./scheduler";
 import { attachWebSocket } from "./ws";
 import { writeGo2rtcConfig } from "./cameras";
-import { startCameraSnapshotWarmer, startGo2rtcStreamKeeper } from "./cameraSnapshot";
+import { startCameraSnapshotWarmer } from "./cameraSnapshot";
 import { syncGo2rtcProcessAfterConfigWritten } from "./go2rtcSpawn";
 import { MediaManager } from "./media/manager";
 import { attachMediaKnxBridge } from "./media/knxBridge";
@@ -203,7 +203,6 @@ function main() {
   const mediaBase = () =>
     (process.env.MEDIA_BASE_URL ?? "http://localhost:1984").replace(/\/+$/, "");
   const stopSnapshotWarmer = startCameraSnapshotWarmer(loadConfig, mediaBase);
-  const stopStreamKeeper = startGo2rtcStreamKeeper(loadConfig, mediaBase);
 
   server.listen(listenPort, () => {
     logger.info({ port: listenPort }, "HTTP + WS server listening");
@@ -269,7 +268,6 @@ function main() {
   const shutdown = () => {
     media.stop();
     stopSnapshotWarmer();
-    stopStreamKeeper();
   };
   process.on("exit", shutdown);
   process.on("SIGTERM", () => { shutdown(); process.exit(0); });

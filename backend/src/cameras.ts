@@ -315,7 +315,7 @@ export function resolveWebRtcCandidates(): string[] {
   return [...out];
 }
 
-function buildGo2rtcYaml(
+export function buildGo2rtcYaml(
   cams: CameraDevice[],
   intercoms: IntercomDevice[],
   ffmpegBin: string | null
@@ -357,6 +357,7 @@ function buildGo2rtcYaml(
 
   L.push("streams:");
 
+  const preloaded: string[] = [];
   for (const cam of cams) {
     const p = cameraPath(cam);
     const cc = cam.camera;
@@ -364,23 +365,31 @@ function buildGo2rtcYaml(
       decorateCameraRtspUrl(cc.rtsp, cc),
       ...(cc.sources ?? []).map((s) => decorateCameraRtspUrl(s, cc))
     ];
-    pushStream(L, p, sources);
+    if (pushStream(L, p, sources)) preloaded.push(p);
   }
 
   for (const ic of intercoms) {
     const p = cameraPath(ic);
-    pushStream(L, p, intercomGo2rtcSources(ic, ffmpegBin));
+    if (pushStream(L, p, intercomGo2rtcSources(ic, ffmpegBin))) preloaded.push(p);
   }
 
   if (cams.length + intercoms.length === 0) L.push("  # (no cameras or intercoms configured)");
+
+  // Houd de RTSP-sessie open. Zonder dit start go2rtc de camera pas als
+  // iemand kijkt, en stopt hem weer zodra de laatste kijker weg is.
+  if (preloaded.length > 0) {
+    L.push("");
+    L.push("preload:");
+    for (const name of preloaded) L.push(`  ${name}: ""`);
+  }
   return L.join("\n") + "\n";
 }
 
-function pushStream(lines: string[], p: string, sources: string[]) {
+function pushStream(lines: string[], p: string, sources: string[]): boolean {
   const name = p.trim();
   if (!name) {
     logger.error("go2rtc streamnaam is leeg — dit zou niet mogen; check camera.path en id");
-    return;
+    return false;
   }
   if (sources.length === 1) {
     lines.push(`  ${name}: ${yamlString(sources[0])}`);
@@ -388,6 +397,7 @@ function pushStream(lines: string[], p: string, sources: string[]) {
     lines.push(`  ${name}:`);
     for (const s of sources) lines.push(`    - ${yamlString(s)}`);
   }
+  return true;
 }
 
 function yamlString(s: string): string {

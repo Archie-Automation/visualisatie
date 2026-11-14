@@ -18,6 +18,7 @@ import '../../melding_alert_sound.dart';
 import '../../models.dart';
 import '../../wtw_logic.dart';
 import '../../shading_subtype_glyph.dart';
+import '../../rgb_color_favorites.dart';
 import '../../room_control_category.dart';
 import '../../theme.dart';
 import '../app_nav.dart';
@@ -29,6 +30,7 @@ import 'device_card_scale.dart';
 import 'device_control_panel.dart';
 import 'device_tile_shell.dart';
 import 'heater_icon.dart';
+import 'rgb_favorite_colors.dart';
 import 'tunable_white_icon.dart';
 import 'glass_card.dart';
 import 'media_tile.dart';
@@ -621,14 +623,26 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
     }
     final c = _currentColor;
     final n = ref.read(busProvider.notifier);
+    int byte(double channel) =>
+        (channel * 255.0).round().clamp(0, 255).toInt();
+    if (_mode == 'rgb232') {
+      n.send({
+        'kind': 'rgbw_ww.rgb232',
+        'deviceId': d.id,
+        'red': byte(c.r),
+        'green': byte(c.g),
+        'blue': byte(c.b),
+      });
+      return;
+    }
     void ch(String k, int v) {
       if (d.ga[k] != null) {
         n.send({'kind': 'rgbw_ww.channel', 'deviceId': d.id, 'channel': k, 'value': v});
       }
     }
-    ch('r', c.red);
-    ch('g', c.green);
-    ch('b', c.blue);
+    ch('r', byte(c.r));
+    ch('g', byte(c.g));
+    ch('b', byte(c.b));
   }
 
   void _sendChannel(Device d, String channel, double value) {
@@ -648,6 +662,120 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
       'brightness': (_val * 255).round().clamp(0, 255),
       'warmCoolRatio': _warmCool,
     });
+  }
+
+  RgbFavoriteColor _captureFavorite(Device d) {
+    if (_mode == 'tunable_white' || _whiteOnly) {
+      return RgbFavoriteColor.tunable(warmCool: _warmCool);
+    }
+    return RgbFavoriteColor.rgb(
+      hue: _hue,
+      saturation: _sat,
+      white: _hasW(d) ? _white.round().clamp(0, 255) : 0,
+    );
+  }
+
+  Future<void> _applyFavorite(Device d, RgbFavoriteColor fav) async {
+    final wasOff = _val < 0.01;
+    setState(() {
+      if (fav.tunable) {
+        _whiteOnly = true;
+        _warmCool = fav.warmCool.clamp(0.0, 1.0);
+      } else {
+        _whiteOnly = false;
+        _hue = fav.hue;
+        _sat = fav.saturation.clamp(0.0, 1.0);
+        if (_hasW(d)) _white = fav.white.clamp(0, 255).toDouble();
+      }
+      if (wasOff) _val = _recall > 0.01 ? _recall : 0.8;
+    });
+    // Schakelaar eerst. Een kleurtelegram op een uit-kanaal gaat anders
+    // verloren, en daarna springt de lamp aan in de oude kleur.
+    final busOn = _isOn(ref.read(busProvider), d);
+    if (!d.isLutronBusControl && d.ga['on'] != null && !busOn) {
+      try {
+        await ref.read(busProvider.notifier).send({
+          'kind': 'light.switch',
+          'deviceId': d.id,
+          'on': true,
+        });
+      } catch (_) {}
+      if (!mounted) return;
+    }
+    if (fav.tunable) {
+      _sendTunableWhite(d);
+      return;
+    }
+    _sendRgbChannels(d);
+    if (_hasW(d)) _sendChannel(d, 'w', _white);
+  }
+
+  void _openFavoriteColors(Device d) {
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => RgbFavoriteColorsSheet(
+        storageId: d.id,
+        current: _captureFavorite(d),
+        onApply: (fav) {
+          if (!mounted) return;
+          _applyFavorite(d, fav);
+        },
+      ),
+    );
+  }
+
+  Widget _favoriteColorIcon(Device d) {
+    final size = DeviceCardScale.iconBadgeSize(context);
+    return Tooltip(
+      message: 'Favoriete kleuren',
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: () => _openFavoriteColors(d),
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: Center(
+              child: Icon(
+                Icons.bookmark_outline,
+                size: size * 0.46,
+                color: LuxeColors.inkSoft,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _whiteChannelRow(Device d, {required bool favorites}) {
+    final bar = _LuxeGradientBar(
+      value: _white / 255,
+      label: 'Wit (W)',
+      colors: const [Colors.black, Colors.white],
+      onChanged: (v) => setState(() => _white = v * 255),
+      onChangeEnd: (v) {
+        setState(() => _white = v * 255);
+        _sendChannel(d, 'w', _white);
+      },
+    );
+    return DeviceCardSliderWrap(
+      child: favorites
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(child: bar),
+                const SizedBox(width: 8),
+                _favoriteColorIcon(d),
+              ],
+            )
+          : bar,
+    );
   }
 
   // ── build ─────────────────────────────────────────────────────────────────
@@ -693,7 +821,12 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
     return _Placeholder(name: d.name, hint: 'Modus: $mode');
   }
 
-  Widget _rgbModeIcons(BuildContext context, Device d, {required bool rgb}) {
+  Widget _rgbModeIcons(
+    BuildContext context,
+    Device d, {
+    required bool rgb,
+    bool favorites = false,
+  }) {
     void select(bool color) {
       if (color == rgb) return;
       setState(() => _whiteOnly = !color);
@@ -757,6 +890,10 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
           tooltip: 'Kleurtemperatuur',
           onTap: () => select(false),
         ),
+        if (favorites) ...[
+          const SizedBox(width: 8),
+          _favoriteColorIcon(d),
+        ],
       ],
     );
   }
@@ -767,6 +904,7 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
     Device d, {
     required bool white,
     bool showMode = false,
+    bool showFavorites = false,
   }) {
     final slider = _DimmerSlider(
       value: (_val * 100).clamp(0.0, 100.0),
@@ -779,12 +917,29 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
         }
       },
     );
-    if (!showMode) return DeviceCardSliderWrap(child: slider);
+    if (!showMode && !showFavorites) return DeviceCardSliderWrap(child: slider);
+    if (!showMode) {
+      return DeviceCardSliderWrap(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(child: slider),
+            const SizedBox(width: 8),
+            _favoriteColorIcon(d),
+          ],
+        ),
+      );
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(child: slider),
-        _rgbModeIcons(context, d, rgb: !white),
+        _rgbModeIcons(
+          context,
+          d,
+          rgb: !white,
+          favorites: showFavorites,
+        ),
       ],
     );
   }
@@ -910,21 +1065,15 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _brightnessSlider(d, white: white, showMode: true),
+                _brightnessSlider(
+                  d,
+                  white: white,
+                  showMode: true,
+                  showFavorites: d.isLutronBusControl || !_hasW(d),
+                ),
                 if (_hasW(d)) ...[
                   const SizedBox(height: 12),
-                  DeviceCardSliderWrap(
-                    child: _LuxeGradientBar(
-                      value: _white / 255,
-                      label: 'Wit (W)',
-                      colors: const [Colors.black, Colors.white],
-                      onChanged: (v) => setState(() => _white = v * 255),
-                      onChangeEnd: (v) {
-                        setState(() => _white = v * 255);
-                        _sendChannel(d, 'w', _white);
-                      },
-                    ),
-                  ),
+                  _whiteChannelRow(d, favorites: !d.isLutronBusControl),
                 ],
               ],
             ),
@@ -992,21 +1141,10 @@ class _RgbwWwTileState extends ConsumerState<RgbwWwTile> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _brightnessSlider(d, white: false),
+                _brightnessSlider(d, white: false, showFavorites: !hasWhite),
                 if (hasWhite) ...[
                   const SizedBox(height: 12),
-                  DeviceCardSliderWrap(
-                    child: _LuxeGradientBar(
-                      value: _white / 255,
-                      label: 'Wit (W)',
-                      colors: const [Colors.black, Colors.white],
-                      onChanged: (v) => setState(() => _white = v * 255),
-                      onChangeEnd: (v) {
-                        setState(() => _white = v * 255);
-                        _sendChannel(d, 'w', _white);
-                      },
-                    ),
-                  ),
+                  _whiteChannelRow(d, favorites: true),
                 ],
               ],
             ),
@@ -2884,13 +3022,12 @@ class _HvacDemandGlyph extends StatelessWidget {
   }
 }
 
-class CameraTile extends ConsumerWidget {
+class CameraTile extends StatelessWidget {
   const CameraTile({super.key, required this.device});
   final Device device;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final info = ref.watch(cameraInfoProvider(device.id));
+  Widget build(BuildContext context) {
     final pad = DeviceTileLayout.padding(context);
     return GlassCard(
       padding: EdgeInsets.zero,
@@ -2920,15 +3057,11 @@ class CameraTile extends ConsumerWidget {
             child: ClipRRect(
               borderRadius:
                   const BorderRadius.vertical(bottom: Radius.circular(26)),
-              child: info.when(
-                loading: () => _placeholderBox(16 / 9),
-                error: (_, __) => _errorBox(16 / 9),
-                data: (i) => CameraSnapshot(
-                  cameraId: i.id,
-                  aspectRatio: i.aspectRatio,
-                  fit: BoxFit.cover,
-                  radius: 0,
-                ),
+              child: CameraSnapshot(
+                cameraId: device.id,
+                aspectRatio: CameraInfo.fromDevice(device).aspectRatio,
+                fit: BoxFit.cover,
+                radius: 0,
               ),
             ),
           ),
@@ -3111,33 +3244,6 @@ class _FireplaceFlameBar extends StatelessWidget {
     );
   }
 }
-
-Widget _placeholderBox(double ar) => AspectRatio(
-      aspectRatio: ar,
-      child: Container(
-        color: Colors.black,
-        child: Center(
-          child: SizedBox(
-            width: 22,
-            height: 22,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: LuxeColors.brass,
-            ),
-          ),
-        ),
-      ),
-    );
-
-Widget _errorBox(double ar) => AspectRatio(
-      aspectRatio: ar,
-      child: Container(
-        color: Colors.black,
-        child: const Center(
-          child: Icon(Icons.videocam_off_outlined, color: Colors.white54),
-        ),
-      ),
-    );
 
 class _Placeholder extends StatelessWidget {
   const _Placeholder({required this.name, required this.hint});

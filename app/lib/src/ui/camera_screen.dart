@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../api.dart';
 import '../camera_api.dart';
 import '../theme.dart';
 import 'app_nav.dart';
@@ -16,9 +17,9 @@ class CameraScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final info = ref.watch(cameraInfoProvider(cameraId));
-    final title = info.maybeWhen(
-      data: (i) => i.name,
+    final cfg = ref.watch(configProvider);
+    final title = cfg.maybeWhen(
+      data: (c) => c.deviceById(cameraId)?.name ?? 'Camera',
       orElse: () => 'Camera',
     );
 
@@ -34,7 +35,7 @@ class CameraScreen extends ConsumerWidget {
               subtitle: "Camera's",
             ),
             Expanded(
-              child: info.when(
+              child: cfg.when(
                 loading: () => Center(
                   child: CircularProgressIndicator(color: LuxeColors.brass),
                 ),
@@ -48,20 +49,32 @@ class CameraScreen extends ConsumerWidget {
                     ),
                   ),
                 ),
-                data: (i) => Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
-                  child: LiveVideoHuggingStage(
-                    identity: i.id,
-                    fallbackAspect: i.aspectRatio,
-                    heroTag: 'cam-${i.id}',
-                    builder: (onAspect) => CameraLivePlayer(
-                      info: i,
-                      fit: BoxFit.contain,
-                      expand: true,
-                      onIntrinsicAspect: onAspect,
+                data: (c) {
+                  final device = c.deviceById(cameraId);
+                  if (device == null) {
+                    return Center(
+                      child: Text(
+                        'Camera niet gevonden.',
+                        style: TextStyle(color: LuxeColors.inkSoft),
+                      ),
+                    );
+                  }
+                  final info = CameraInfo.fromDevice(device);
+                  return Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
+                    child: LiveVideoHuggingStage(
+                      identity: info.id,
+                      fallbackAspect: info.aspectRatio,
+                      heroTag: 'cam-${info.id}',
+                      builder: (onAspect) => CameraLivePlayer(
+                        info: info,
+                        fit: BoxFit.contain,
+                        expand: true,
+                        onIntrinsicAspect: onAspect,
+                      ),
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
             ),
           ],

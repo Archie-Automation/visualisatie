@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import 'api.dart';
 import 'demo/demo_session.dart';
+import 'models.dart';
 
 /// ----------------------------- Cameras -------------------------------
 /// Passive, view-only. No microphone. Ever.
@@ -47,6 +48,25 @@ class CameraInfo {
         whepUrl: (j['whep'] as String?) ?? '',
         snapshotUrl: (j['snapshot'] as String?) ?? '',
       );
+
+  /// Uit de al geladen huisconfiguratie. Geen extra verzoek voordat de stream start.
+  factory CameraInfo.fromDevice(Device d) {
+    final raw = d.type == DeviceType.intercom ? d.raw['intercom'] : d.raw['camera'];
+    final map = raw is Map ? raw : const <String, dynamic>{};
+    final directHls = (map['directHls'] as String?)?.trim() ?? '';
+    final aspect = (map['aspect'] as String?)?.trim() ?? '';
+    return CameraInfo(
+      id: d.id,
+      name: d.name,
+      aspect: aspect.contains(':') ? aspect : '16:9',
+      hlsUrl: directHls.isNotEmpty
+          ? directHls
+          : '$apiBase/api/cameras/${d.id}/hls.m3u8',
+      webrtcUrl: directHls.isEmpty ? 'app' : '',
+      whepUrl: '',
+      snapshotUrl: '$apiBase/api/cameras/${d.id}/snapshot',
+    );
+  }
 }
 
 final cameraInfoProvider =
