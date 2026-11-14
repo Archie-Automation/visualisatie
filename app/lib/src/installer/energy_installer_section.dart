@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
-import '../ui/widgets/confirm_dialog.dart';
 import '../ui/widgets/luxe_form.dart';
 
 /// Installer form for `house.energy`. KNX group addresses only.
@@ -29,24 +28,18 @@ class EnergyInstallerSection extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text('Energie', style: Theme.of(context).textTheme.titleLarge),
-            ),
-            const LuxeInfoIconButton(
-              title: 'Energie',
-              body:
-                  'KNX-groepsadressen voor net, PV, accu en tellers. De NUC leest de '
-                  'bus en stuurt één snapshot naar de app. Een ontbrekend telegram '
-                  'blijft leeg en wordt geen 0 W.\n\n'
-                  'Net: positief is afname, negatief is teruglevering. '
-                  'Accu: positief is ontladen, negatief is laden. '
-                  'Woning is net + PV + accu. Schaalfactor 1 als de bus al in die '
-                  'eenheid staat, 1000 als de bus kW stuurt en het veld watt is, '
-                  '-1 om het teken te draaien.',
-            ),
-          ],
+        const LuxeInfoHeading(
+          title: 'Energie',
+          infoTitle: 'Energie',
+          infoBody:
+              'KNX-groepsadressen voor net, PV, accu en tellers. De NUC leest de '
+              'bus en stuurt één snapshot naar de app. Een ontbrekend telegram '
+              'blijft leeg en wordt geen 0 W.\n\n'
+              'Net: positief is afname, negatief is teruglevering. '
+              'Accu: positief is ontladen, negatief is laden. '
+              'Woning is net + PV + accu. Schaalfactor 1 als de bus al in die '
+              'eenheid staat, 1000 als de bus kW stuurt en het veld watt is, '
+              '-1 om het teken te draaien.',
         ),
         const SizedBox(height: 16),
         Row(
@@ -67,15 +60,13 @@ class EnergyInstallerSection extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 20),
-        for (final point in _points) ...[
+        for (final point in _points)
           _EnergyPointEditor(
             key: ValueKey(point.key),
             spec: point,
             knx: _knx,
             onChanged: onChanged,
           ),
-          const SizedBox(height: 18),
-        ],
         const SizedBox(height: 8),
         _PricesEditor(energy: energy, onChanged: onChanged),
       ],
@@ -155,7 +146,10 @@ class _PricesEditorState extends State<_PricesEditor> {
     final exportMode = prices['exportMode'] == 'fixed' || prices['exportMode'] == 'market'
         ? prices['exportMode'] as String
         : 'none';
-    return ExpansionTile(
+    return LuxeInsetCard(
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
       initiallyExpanded: false,
       tilePadding: EdgeInsets.zero,
       childrenPadding: const EdgeInsets.only(top: 4),
@@ -281,6 +275,8 @@ class _PricesEditorState extends State<_PricesEditor> {
           },
         ),
       ],
+        ),
+      ),
     );
   }
 }
@@ -390,7 +386,10 @@ class _EnergyPointEditorState extends State<_EnergyPointEditor> {
     final scaleText = _scale.text.trim().replaceAll(',', '.');
     final scaleBad = scaleText.isNotEmpty &&
         (double.tryParse(scaleText) == null || double.tryParse(scaleText) == 0);
-    return ExpansionTile(
+    return LuxeInsetCard(
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
       initiallyExpanded: false,
       tilePadding: EdgeInsets.zero,
       childrenPadding: const EdgeInsets.only(bottom: 8),
@@ -434,6 +433,8 @@ class _EnergyPointEditorState extends State<_EnergyPointEditor> {
           onChanged: (_) => _write(),
         ),
       ],
+        ),
+      ),
     );
   }
 }

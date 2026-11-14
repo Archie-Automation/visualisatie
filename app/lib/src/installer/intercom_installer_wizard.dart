@@ -69,6 +69,7 @@ class _StepTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final split = splitTitleInfo(trailing);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
@@ -95,13 +96,23 @@ class _StepTitle extends StatelessWidget {
           const SizedBox(width: 10),
           Icon(icon, color: LuxeColors.ink, size: 20),
           const SizedBox(width: 8),
-          Expanded(
+          Flexible(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title.toUpperCase(),
-                  style: Theme.of(context).textTheme.labelLarge,
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        title.toUpperCase(),
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                    ),
+                    if (split.info != null) ...[
+                      const SizedBox(width: 2),
+                      split.info!,
+                    ],
+                  ],
                 ),
                 if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
                   const SizedBox(height: 2),
@@ -116,7 +127,10 @@ class _StepTitle extends StatelessWidget {
               ],
             ),
           ),
-          if (trailing != null) trailing!,
+          if (split.actions != null) ...[
+            const SizedBox(width: 8),
+            split.actions!,
+          ],
         ],
       ),
     );

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../theme.dart';
 import '../responsive.dart';
 import 'back_pill.dart';
+import 'confirm_dialog.dart';
 import 'luxe_backdrop.dart';
 
 /// Pinned-style header for function/category screens — matches [RoomScreen] layout.
@@ -37,46 +38,55 @@ class FunctionScreenHeader extends StatelessWidget {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            IgnorePointer(
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: backSize + 8),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (subtitle != null &&
-                        subtitle!.trim().isNotEmpty) ...[
-                      Text(
-                        subtitle!.toUpperCase(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: subtitleFontSize ?? (isPhone ? 10 : 11),
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: subtitleFontSize == null ? 0.9 : 0.55,
-                          color: LuxeColors.inkSoft,
-                          height: 1.3,
-                        ),
-                      ),
-                      SizedBox(height: 3),
-                    ],
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: backSize + 8),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (subtitle != null &&
+                      subtitle!.trim().isNotEmpty) ...[
                     Text(
-                      title,
+                      subtitle!.toUpperCase(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                        fontSize: titleFont,
-                        fontWeight: FontWeight.w700,
-                        color: LuxeColors.ink,
-                        height: 1.25,
+                        fontSize: subtitleFontSize ?? (isPhone ? 10 : 11),
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: subtitleFontSize == null ? 0.9 : 0.55,
+                        color: LuxeColors.inkSoft,
+                        height: 1.3,
                       ),
                     ),
+                    SizedBox(height: 3),
                   ],
-                ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: titleFont,
+                            fontWeight: FontWeight.w700,
+                            color: LuxeColors.ink,
+                            height: 1.25,
+                          ),
+                        ),
+                      ),
+                      if (trailing is LuxeInfoIconButton) ...[
+                        const SizedBox(width: 4),
+                        trailing!,
+                      ],
+                    ],
+                  ),
+                ],
               ),
             ),
-            if (trailing != null)
+            if (trailing != null && trailing is! LuxeInfoIconButton)
               Align(
                 alignment: Alignment.centerRight,
                 child: trailing!,

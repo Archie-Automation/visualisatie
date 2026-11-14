@@ -355,27 +355,30 @@ class _SceneEditorSheetState extends ConsumerState<SceneEditorSheet> {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            IgnorePointer(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: HeaderIconButton.size + 8),
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: LuxeColors.ink,
-                    height: 1.25,
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: HeaderIconButton.size + 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: LuxeColors.ink,
+                        height: 1.25,
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 4),
+                  LuxeInfoIconButton(title: infoTitle, body: infoBody),
+                ],
               ),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: LuxeInfoIconButton(title: infoTitle, body: infoBody),
             ),
             Align(
               alignment: Alignment.centerLeft,

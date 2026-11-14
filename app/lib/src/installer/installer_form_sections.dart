@@ -331,15 +331,66 @@ class _KnxValueField extends StatelessWidget {
 }
 
 /// Lutron keypad → KNX mappings (geen JSON).
+String lutronButtonAddress(LutronButtonInfo button) {
+  final path = '/button/${button.id}';
+  if (button.buttonNumber > 0) return '${button.buttonNumber} · $path';
+  return path;
+}
+
+bool lutronButtonNameIsGeneric(String raw, LutronButtonInfo button) {
+  final n = raw.trim().toLowerCase();
+  if (n.isEmpty || n == 'knop' || n == 'button') return true;
+  final ids = <String>{'${button.id}'};
+  if (button.buttonNumber > 0) ids.add('${button.buttonNumber}');
+  for (final id in ids) {
+    if (n == 'knop $id' || n == 'button $id') return true;
+  }
+  return false;
+}
+
+/// Adres eerst, daarna de graveernaam als die niet de standaard "Knop" is.
 String lutronButtonChoiceLabel(LutronButtonInfo button) {
-  final keypad = button.deviceName.trim();
   final raw = button.name.trim();
-  final generic = raw.isEmpty || raw == 'Knop ${button.id}';
-  final title = !generic
-      ? raw
-      : (button.buttonNumber > 0 ? 'Knop ${button.buttonNumber}' : 'Knop ${button.id}');
-  final core = '$title · /button/${button.id}';
-  return keypad.isEmpty ? core : '$keypad · $core';
+  final keypad = button.deviceName.trim();
+  final parts = <String>[
+    lutronButtonAddress(button),
+    if (!lutronButtonNameIsGeneric(raw, button)) raw,
+    if (keypad.isNotEmpty) keypad,
+  ];
+  return parts.join(' · ');
+}
+
+String lutronMappingHeading(
+  Map<String, dynamic> mapping,
+  List<LutronButtonInfo> buttons,
+) {
+  final id = (mapping['integrationId'] as num?)?.toInt();
+  LutronButtonInfo? button;
+  for (final candidate in buttons) {
+    if (candidate.id == id) {
+      button = candidate;
+      break;
+    }
+  }
+  final stored = (mapping['label'] as String? ?? '').trim();
+  if (button != null) {
+    final generated = lutronButtonChoiceLabel(button);
+    final addr = lutronButtonAddress(button);
+    if (stored.isEmpty ||
+        stored == generated ||
+        stored.contains('/button/${button.id}')) {
+      return generated;
+    }
+    if (stored.startsWith(addr)) return stored;
+    return '$addr · $stored';
+  }
+  if (id != null && id >= 1) {
+    final addr = '/button/$id';
+    if (stored.isEmpty) return addr;
+    if (stored.contains(addr)) return stored;
+    return '$stored · $addr';
+  }
+  return stored.isEmpty ? 'Knop' : stored;
 }
 
 class LutronButtonToKnxListEditor extends StatelessWidget {
@@ -364,8 +415,13 @@ class LutronButtonToKnxListEditor extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(
-          'Keypad-knoppen → KNX',
+        LuxeInfoHeading(
+          title: 'Keypad-knoppen → KNX',
+          infoTitle: 'Keypad-knoppen',
+          infoBody:
+              'Elke regel is één moment op één knop. In de lijst staat het '
+              'knopnummer, het adres /button/… en de naam uit Lutron Designer. '
+              'Op een los HomeWorks-apparaat stel je de koppeling bij de processor in.',
           style: Theme.of(context).textTheme.titleSmall,
         ),
         const SizedBox(height: 8),
@@ -472,7 +528,7 @@ class _LutronMappingCardState extends State<_LutronMappingCard> {
             'dim_control' ||
         canonicalLutronDptRole(knx['role'] as String? ?? 'bit') == 'up_down';
 
-    final label = mapping['label'] as String? ?? 'Mapping';
+    final label = lutronMappingHeading(mapping, widget.buttons);
     return LuxeInsetCard(
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -853,7 +909,7 @@ class _LutronButtonPicker extends StatelessWidget {
           ),
         ),
       if (current != null && current >= 1 && !known.contains(current))
-        DropdownMenuItem(value: current, child: Text('Knop $current')),
+        DropdownMenuItem(value: current, child: Text('/button/$current')),
     ];
     if (items.isEmpty) {
       return Padding(
@@ -1901,11 +1957,20 @@ class _InstallerInfoTitle extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 6),
       child: Row(
         children: [
-          Expanded(
-            child: Text(title, style: Theme.of(context).textTheme.titleSmall),
+          Flexible(
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.titleSmall,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
+          const SizedBox(width: 4),
           LuxeInfoIconButton(title: title, body: body),
-          if (trailing != null) trailing!,
+          if (trailing != null) ...[
+            const Spacer(),
+            trailing!,
+          ],
         ],
       ),
     );
@@ -4882,27 +4947,30 @@ class _WtwLogicEditorSheetState extends State<_WtwLogicEditorSheet> {
         child: Stack(
           alignment: Alignment.center,
           children: [
-            IgnorePointer(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: HeaderIconButton.size + 8),
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: LuxeColors.ink,
-                    height: 1.25,
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: HeaderIconButton.size + 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: LuxeColors.ink,
+                        height: 1.25,
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 4),
+                  LuxeInfoIconButton(title: infoTitle, body: infoBody),
+                ],
               ),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: LuxeInfoIconButton(title: infoTitle, body: infoBody),
             ),
             Align(
               alignment: Alignment.centerLeft,

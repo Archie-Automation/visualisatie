@@ -2416,9 +2416,25 @@ class _SettingsToggle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final info = infoTitle != null && infoBody != null;
-    return _LabeledBox(
-      label: label,
-      child: Column(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.labelMedium,
+              ),
+            ),
+            if (info) ...[
+              const SizedBox(width: 4),
+              LuxeInfoIconButton(title: infoTitle!, body: infoBody!),
+            ],
+          ],
+        ),
+        const SizedBox(height: 6),
+        Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -2428,10 +2444,6 @@ class _SettingsToggle extends StatelessWidget {
                 onChanged: onChanged,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              if (info) ...[
-                const Spacer(),
-                LuxeInfoIconButton(title: infoTitle!, body: infoBody!),
-              ],
             ],
           ),
           if (hint != null) ...[
@@ -2444,7 +2456,8 @@ class _SettingsToggle extends StatelessWidget {
             ),
           ],
         ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -2495,11 +2508,24 @@ class _SettingsSectionTitle extends StatelessWidget {
       children: [
         Icon(icon, color: LuxeColors.ink, size: 20),
         const SizedBox(width: 8),
-        Expanded(
+        Flexible(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: Theme.of(context).textTheme.labelLarge),
+              Row(
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
+                      style: Theme.of(context).textTheme.labelLarge,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  LuxeInfoIconButton(title: infoTitle, body: infoBody),
+                ],
+              ),
               if (subtitle != null) ...[
                 const SizedBox(height: 2),
                 Text(
@@ -2513,8 +2539,10 @@ class _SettingsSectionTitle extends StatelessWidget {
             ],
           ),
         ),
-        LuxeInfoIconButton(title: infoTitle, body: infoBody),
-        if (trailing != null) trailing!,
+        if (trailing != null) ...[
+          const SizedBox(width: 8),
+          trailing!,
+        ],
       ],
     );
   }

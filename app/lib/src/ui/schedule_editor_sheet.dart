@@ -660,27 +660,30 @@ class _ScheduleEditorSheetState
         child: Stack(
           alignment: Alignment.center,
           children: [
-            IgnorePointer(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: HeaderIconButton.size + 8),
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: LuxeColors.ink,
-                    height: 1.25,
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: HeaderIconButton.size + 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: LuxeColors.ink,
+                        height: 1.25,
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 4),
+                  LuxeInfoIconButton(title: infoTitle, body: infoBody),
+                ],
               ),
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: LuxeInfoIconButton(title: infoTitle, body: infoBody),
             ),
             Align(
               alignment: Alignment.centerLeft,
@@ -1191,11 +1194,22 @@ class _SubBlock extends StatelessWidget {
       children: [
         Row(
           children: [
-            Expanded(child: Text(title, style: _kSectionStyle)),
-            if (trailing != null)
-              Text(trailing!, style: Theme.of(context).textTheme.titleMedium),
-            if (infoTitle != null && infoBody != null)
+            Flexible(
+              child: Text(
+                title,
+                style: _kSectionStyle,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (infoTitle != null && infoBody != null) ...[
+              const SizedBox(width: 4),
               LuxeInfoIconButton(title: infoTitle!, body: infoBody!),
+            ],
+            if (trailing != null) ...[
+              const Spacer(),
+              Text(trailing!, style: Theme.of(context).textTheme.titleMedium),
+            ],
           ],
         ),
         const SizedBox(height: 8),

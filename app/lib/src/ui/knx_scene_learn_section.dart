@@ -332,13 +332,16 @@ Scene? _sceneForAddress(
 _ButtonRow _buttonFromAddress(KnxSceneLearnAddress a, Scene? learned) {
   final button = (a.buttonName ?? '').trim();
   final scene = (a.name ?? '').trim();
+  final phys = (a.physicalAddress ?? '').trim();
   final learnedName = (learned?.name ?? '').trim();
   final titleParts = <String>[
-    if (button.isNotEmpty) button else 'Knop',
+    if (phys.isNotEmpty) phys,
+    if (button.isNotEmpty) button,
     if (scene.isNotEmpty) scene,
     if (learnedName.isNotEmpty && learnedName.toLowerCase() != scene.toLowerCase())
       learnedName,
   ];
+  if (titleParts.isEmpty) titleParts.add('Knop');
   final sub = <String>[
     a.ga,
     if (learned?.knxNumber != null) 'scene ${learned!.knxNumber}',
@@ -354,8 +357,10 @@ _ButtonRow _buttonFromAddress(KnxSceneLearnAddress a, Scene? learned) {
 
 _ButtonRow _buttonFromScene(Scene s) {
   final button = (s.knxButtonName ?? '').trim();
+  final phys = (s.knxSrc ?? '').trim();
   final titleParts = <String>[
-    if (button.isNotEmpty) button else 'Knop',
+    if (phys.isNotEmpty) phys,
+    if (button.isNotEmpty) button,
     s.name,
   ];
   return _ButtonRow(

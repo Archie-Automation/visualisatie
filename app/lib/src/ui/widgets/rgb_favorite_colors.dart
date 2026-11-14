@@ -104,13 +104,13 @@ class _RgbFavoriteColorsSheetState extends State<RgbFavoriteColorsSheet> {
             children: [
               Row(
                 children: [
-                  Expanded(
+                  Flexible(
                     child: Text(
                       'Favoriete kleuren',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 4),
                   const LuxeInfoIconButton(
                     title: 'Favoriete kleuren',
                     body: 'Tik op een kleur om die toe te passen. '

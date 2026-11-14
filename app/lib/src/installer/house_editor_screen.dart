@@ -2144,16 +2144,14 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
       children: [
-        const Align(
-          alignment: Alignment.centerRight,
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(28, 4, 12, 0),
-            child: LuxeInfoIconButton(
-              title: "Camera's",
-              body:
-                  'Voeg een camera toe met een naam en de stream-URL. '
-                  'Ze horen bij het hele huis, niet bij één kamer.',
-            ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(28, 8, 16, 0),
+          child: LuxeInfoHeading(
+            title: "Camera's",
+            infoTitle: "Camera's",
+            infoBody:
+                'Voeg een camera toe met een naam en de stream-URL. '
+                'Ze horen bij het hele huis, niet bij één kamer.',
           ),
         ),
         LuxeListCard(
@@ -2287,14 +2285,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
       children: [
-        const Align(
-          alignment: Alignment.centerRight,
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(28, 4, 12, 0),
-            child: LuxeInfoIconButton(
-              title: 'Audio',
-              body: 'Apparaten staan in de gekozen kamer. Tik om te bewerken.',
-            ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(28, 8, 16, 0),
+          child: LuxeInfoHeading(
+            title: 'Audio',
+            infoTitle: 'Audio',
+            infoBody: 'Apparaten staan in de gekozen kamer. Tik om te bewerken.',
           ),
         ),
         LuxeListCard(
@@ -6157,21 +6153,12 @@ class _LutronForm extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(24),
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Lutron QSX/QS Processor',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ),
-            const LuxeInfoIconButton(
-              title: 'Lutron QSX/QS',
-              body:
-                  'Vul het IP-adres in en koppel hierboven. Zones en keypad-knoppen komen daarna.\n\n'
-                  'Koppel eerst de processor. Daarna zet je zones in het huis en koppel je keypad-knoppen.',
-            ),
-          ],
+        const LuxeInfoHeading(
+          title: 'Lutron QSX/QS Processor',
+          infoTitle: 'Lutron QSX/QS',
+          infoBody:
+              'Vul het IP-adres in en koppel hierboven. Zones en keypad-knoppen komen daarna.\n\n'
+              'Koppel eerst de processor. Daarna zet je zones in het huis en koppel je keypad-knoppen.',
         ),
         const SizedBox(height: 20),
         _BoundStrField(
@@ -6292,27 +6279,18 @@ class _KnxForm extends StatelessWidget {
             ),
           ),
           const Divider(height: 32),
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  "KNX scene's inleren",
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-              ),
-              const LuxeInfoIconButton(
-                title: "KNX scene's inleren",
-                body:
-                    'Per knop: ruimte, schakelaar (positie in de kamer), knopnaam, '
-                    'optioneel scene (avond, dag, sfeer), het scene-groepsadres '
-                    '(DPT 18.001) en het fysieke adres van die schakelaar.\n\n'
-                    'Meerdere schakelaars in één ruimte mogen hetzelfde groepsadres '
-                    'delen. Bij inlezen wordt het fysieke adres van de drukker '
-                    'gecontroleerd, zodat de juiste schakelaar wordt herkend.\n\n'
-                    'In Instellingen verschijnt het overzicht per ruimte. '
-                    'Scene opslaan in KNX werkt alleen als store/leren in ETS is vrijgegeven.',
-              ),
-            ],
+          const LuxeInfoHeading(
+            title: "KNX scene's inleren",
+            infoTitle: "KNX scene's inleren",
+            infoBody:
+                'Per knop: ruimte, schakelaar (positie in de kamer), knopnaam, '
+                'optioneel scene (avond, dag, sfeer), het scene-groepsadres '
+                '(DPT 18.001) en het fysieke adres van die schakelaar.\n\n'
+                'Meerdere schakelaars in één ruimte mogen hetzelfde groepsadres '
+                'delen. Bij inlezen wordt het fysieke adres van de drukker '
+                'gecontroleerd, zodat de juiste schakelaar wordt herkend.\n\n'
+                'In Instellingen verschijnt het overzicht per ruimte. '
+                'Scene opslaan in KNX werkt alleen als store/leren in ETS is vrijgegeven.',
           ),
           const SizedBox(height: 8),
           _SceneAddressList(
@@ -6519,16 +6497,17 @@ class _SceneAddressList extends StatelessWidget {
   }
 
   String _addressCardTitle(Map<String, dynamic> row) {
-    final sw = '${row['switchName'] ?? ''}'.trim();
+    final phys = '${row['physicalAddress'] ?? ''}'.trim();
     final btn = '${row['buttonName'] ?? ''}'.trim();
     final scene = '${row['name'] ?? ''}'.trim();
-    final parts = [
-      if (sw.isNotEmpty) sw,
+    final parts = <String>[
+      if (phys.isNotEmpty) phys,
       if (btn.isNotEmpty) btn,
       if (scene.isNotEmpty) scene,
     ];
-    if (parts.isEmpty) return 'Knop';
-    return parts.join(' · ');
+    if (parts.isNotEmpty) return parts.join(' · ');
+    final sw = '${row['switchName'] ?? ''}'.trim();
+    return sw.isEmpty ? 'Knop' : sw;
   }
 
   Widget _sceneRoomDropdown(
@@ -6896,20 +6875,14 @@ class _ShadingSubtypeSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text('Type zonwering',
-                    style: Theme.of(context).textTheme.titleSmall),
-              ),
-              const LuxeInfoIconButton(
-                title: 'Type zonwering',
-                body:
-                    'Bepaalt het icoon en de bediening in de app: '
-                    'open/dicht (gordijn, vitrage) of omhoog/omlaag '
-                    '(jaloezie, rolluik, screen).',
-              ),
-            ],
+          LuxeInfoHeading(
+            title: 'Type zonwering',
+            infoTitle: 'Type zonwering',
+            infoBody:
+                'Bepaalt het icoon en de bediening in de app: '
+                'open/dicht (gordijn, vitrage) of omhoog/omlaag '
+                '(jaloezie, rolluik, screen).',
+            style: Theme.of(context).textTheme.titleSmall,
           ),
           const SizedBox(height: 12),
           Wrap(
@@ -7046,19 +7019,14 @@ class _ShadingUiSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(title, style: Theme.of(context).textTheme.titleSmall),
-              ),
-              const LuxeInfoIconButton(
-                title: 'Zichtbare bediening',
-                body:
-                    'Kies welke knoppen en sliders in de app staan. '
-                    'Zonder eigen keuze toont de app wat de groepadressen toelaten. '
-                    'Lamellen stap zet het lamellen-adres telkens 5 procent bij of af.',
-              ),
-            ],
+          LuxeInfoHeading(
+            title: title,
+            infoTitle: 'Zichtbare bediening',
+            infoBody:
+                'Kies welke knoppen en sliders in de app staan. '
+                'Zonder eigen keuze toont de app wat de groepadressen toelaten. '
+                'Lamellen stap zet het lamellen-adres telkens 5 procent bij of af.',
+            style: Theme.of(context).textTheme.titleSmall,
           ),
           const SizedBox(height: 8),
           if (hasPos)
@@ -8306,17 +8274,6 @@ class _DeviceForm extends StatelessWidget {
                   onChanged: onChanged,
                 ),
               if (type == 'lutron_homeworks') ...[
-                const Padding(
-                  padding: EdgeInsets.only(bottom: 12),
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: LuxeInfoIconButton(
-                      title: 'Keypad-knoppen',
-                      body:
-                          'Keypad-knoppen kies je bij de QSX-processor, nadat ze zijn uitgelezen.',
-                    ),
-                  ),
-                ),
                 LutronButtonToKnxListEditor(
                   parent: _ensureChildMap(device, 'lutronHomeworks'),
                   onChanged: onChanged,
@@ -9106,15 +9063,12 @@ class _IntercomKnxExtras extends StatelessWidget {
                 ),
               ],
               const SizedBox(height: 12),
-              const Row(
-                children: [
-                  Expanded(child: Text('Aanbel-link')),
-                  LuxeInfoIconButton(
-                    title: 'Aanbel-link',
-                    body:
-                        'Alleen als het toestel zelf moet melden dat er gebeld wordt. Bij SIP hoeft dit niet.',
-                  ),
-                ],
+              const LuxeInfoHeading(
+                title: 'Aanbel-link',
+                infoTitle: 'Aanbel-link',
+                infoBody:
+                    'Alleen als het toestel zelf moet melden dat er gebeld wordt. Bij SIP hoeft dit niet.',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 6),
               SelectableText(
@@ -9349,25 +9303,16 @@ class _LogsInstallerPanel extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.all(20),
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Logs / grafieken',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-            ),
-            const LuxeInfoIconButton(
-              title: 'Logs / grafieken',
-              body:
-                  'Maak grafieken van groepsadressen. Waarden worden op de server '
-                  'gelogd zodra ze veranderen (numerieke DPT\'s, ongeveer 90 dagen bewaard). '
-                  'Zet een grafiek aan voor gebruikers om hem onder Systemen, Grafieken '
-                  'te tonen.\n\n'
-                  'Thermostaten worden automatisch gelogd (gemeten en ingestelde '
-                  'temperatuur) en hoeven hier niet te worden toegevoegd.',
-            ),
-          ],
+        const LuxeInfoHeading(
+          title: 'Logs / grafieken',
+          infoTitle: 'Logs / grafieken',
+          infoBody:
+              'Maak grafieken van groepsadressen. Waarden worden op de server '
+              'gelogd zodra ze veranderen (numerieke DPT\'s, ongeveer 90 dagen bewaard). '
+              'Zet een grafiek aan voor gebruikers om hem onder Systemen, Grafieken '
+              'te tonen.\n\n'
+              'Thermostaten worden automatisch gelogd (gemeten en ingestelde '
+              'temperatuur) en hoeven hier niet te worden toegevoegd.',
         ),
         const SizedBox(height: 20),
         if (logs.isEmpty)

@@ -127,10 +127,11 @@ class _PairInviteSheetState extends ConsumerState<_PairInviteSheet> {
               children: [
                 Row(
                   children: [
-                    Expanded(
+                    Flexible(
                       child: Text('Koppellink voor ${widget.label}',
                           style: t.titleLarge),
                     ),
+                    const SizedBox(width: 4),
                     const LuxeInfoIconButton(
                       title: 'Apparaat koppelen',
                       body: 'Stuur de link naar een telefoon, tablet of computer. '

@@ -2,6 +2,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../theme.dart';
+import 'confirm_dialog.dart';
 import 'glass_card.dart';
 
 /// Compact toggle, same as tijdschema / account (not the Material yellow pill).
@@ -315,6 +316,60 @@ class LuxeListCard extends StatelessWidget {
   }
 }
 
+/// Title with the brass “i” directly beside the words, not at the row’s end.
+class LuxeInfoHeading extends StatelessWidget {
+  const LuxeInfoHeading({
+    super.key,
+    required this.title,
+    required this.infoTitle,
+    required this.infoBody,
+    this.style,
+  });
+
+  final String title;
+  final String infoTitle;
+  final String infoBody;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Flexible(
+          child: Text(
+            title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: style ?? Theme.of(context).textTheme.titleLarge,
+          ),
+        ),
+        const SizedBox(width: 4),
+        LuxeInfoIconButton(title: infoTitle, body: infoBody),
+      ],
+    );
+  }
+}
+
+/// Pulls a [LuxeInfoIconButton] out of [trailing] so it can sit on the title.
+({Widget? info, Widget? actions}) splitTitleInfo(Widget? trailing) {
+  if (trailing is LuxeInfoIconButton) {
+    return (info: trailing, actions: null);
+  }
+  if (trailing is Row && trailing.children.isNotEmpty) {
+    final kids = List<Widget>.of(trailing.children);
+    final index = kids.indexWhere((w) => w is LuxeInfoIconButton);
+    if (index >= 0) {
+      final info = kids.removeAt(index);
+      if (kids.isEmpty) return (info: info, actions: null);
+      return (
+        info: info,
+        actions: Row(mainAxisSize: MainAxisSize.min, children: kids),
+      );
+    }
+  }
+  return (info: null, actions: trailing);
+}
+
 /// Section header matching Settings: icon + small-caps title + optional hint.
 class LuxeSectionTitle extends StatelessWidget {
   const LuxeSectionTitle({
@@ -332,21 +387,32 @@ class LuxeSectionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final split = splitTitleInfo(trailing);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         children: [
           Icon(icon, color: LuxeColors.ink, size: 20),
           const SizedBox(width: 8),
-          Expanded(
+          Flexible(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title.toUpperCase(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelLarge,
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        title.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                    ),
+                    if (split.info != null) ...[
+                      const SizedBox(width: 2),
+                      split.info!,
+                    ],
+                  ],
                 ),
                 if (subtitle != null && subtitle!.trim().isNotEmpty) ...[
                   const SizedBox(height: 2),
@@ -361,7 +427,10 @@ class LuxeSectionTitle extends StatelessWidget {
               ],
             ),
           ),
-          if (trailing != null) trailing!,
+          if (split.actions != null) ...[
+            const SizedBox(width: 8),
+            split.actions!,
+          ],
         ],
       ),
     );
