@@ -82,11 +82,23 @@ class LiveVideoFittedStage extends StatelessWidget {
   }
 }
 
-/// Keeps [LiveVideoFittedStage] on [fallbackAspect] until the player reports
-/// the real frame size, then resizes the frame to that ratio.
-///
-/// [BoxFit.contain] inside a matching frame has no leftover black and does
-/// not crop or stretch.
+/// Last committed frame ratio per camera. Reopening starts at this size
+/// instead of the configured 16:9 and then growing when live starts.
+final Map<Object, double> _cameraFrameAspect = {};
+
+double? cachedCameraFrameAspect(Object id) => _cameraFrameAspect[id];
+
+void rememberCameraFrameAspect(Object id, double aspect) {
+  _cameraFrameAspect[id] = aspect;
+}
+
+void clearCameraFrameAspectCache() => _cameraFrameAspect.clear();
+
+bool _plausibleFrameAspect(double aspect) =>
+    aspect.isFinite && aspect >= 0.2 && aspect <= 5;
+
+/// One stable frame for snapshot and live. The first real ratio (cache, else
+/// the first measurement) is kept; later reports do not resize the picture.
 class LiveVideoHuggingStage extends StatefulWidget {
   const LiveVideoHuggingStage({
     super.key,
@@ -108,28 +120,49 @@ class LiveVideoHuggingStage extends StatefulWidget {
 }
 
 class _LiveVideoHuggingStageState extends State<LiveVideoHuggingStage> {
-  double? _intrinsic;
+  /// Null until a real ratio is committed. The fallback box stays invisible
+  /// so the first thing on screen is already the final size.
+  double? _locked;
+
+  @override
+  void initState() {
+    super.initState();
+    _locked = _cached();
+  }
 
   @override
   void didUpdateWidget(covariant LiveVideoHuggingStage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.identity != widget.identity) _intrinsic = null;
+    if (oldWidget.identity != widget.identity) {
+      _locked = _cached();
+    }
+  }
+
+  double? _cached() {
+    final id = widget.identity;
+    if (id == null) return null;
+    return cachedCameraFrameAspect(id);
   }
 
   void _onIntrinsic(double aspect) {
-    if (!aspect.isFinite || aspect < 0.2 || aspect > 5) return;
-    final current = _intrinsic;
-    if (current != null && (current - aspect).abs() < 0.02) return;
-    setState(() => _intrinsic = aspect);
+    if (!_plausibleFrameAspect(aspect)) return;
+    if (_locked != null) return;
+    final id = widget.identity;
+    if (id != null) rememberCameraFrameAspect(id, aspect);
+    setState(() => _locked = aspect);
   }
 
   @override
   Widget build(BuildContext context) {
-    return LiveVideoFittedStage(
-      aspectRatio: _intrinsic ?? widget.fallbackAspect,
-      heroTag: widget.heroTag,
-      factor: widget.factor,
-      child: widget.builder(_onIntrinsic),
+    final known = _locked != null;
+    return Opacity(
+      opacity: known ? 1 : 0,
+      child: LiveVideoFittedStage(
+        aspectRatio: _locked ?? widget.fallbackAspect,
+        heroTag: widget.heroTag,
+        factor: widget.factor,
+        child: widget.builder(_onIntrinsic),
+      ),
     );
   }
 }

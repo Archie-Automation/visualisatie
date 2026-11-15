@@ -61,6 +61,7 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
   bool _failedNotified = false;
   int _attempt = 0;
   bool _rendererReady = false;
+  bool _videoSized = false;
   double? _reportedAspect;
 
   static const _retryDelay = Duration(seconds: 2);
@@ -76,8 +77,14 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
     if (!mounted) return;
     final w = _renderer.videoWidth;
     final h = _renderer.videoHeight;
-    if (w <= 0 || h <= 0) return;
+    // 0×0 reports aspect 1. RTCVideoView would paint that square and then
+    // jump to the real frame. Wait until the stream has a real picture.
+    if (w < 64 || h < 64) return;
     final aspect = w / h;
+    if (!aspect.isFinite || aspect < 0.2 || aspect > 5) return;
+    if (!_videoSized) {
+      setState(() => _videoSized = true);
+    }
     final prev = _reportedAspect;
     if (prev != null && (prev - aspect).abs() < 0.02) return;
     _reportedAspect = aspect;
@@ -95,6 +102,7 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
     if (old.signallingPath != widget.signallingPath) {
       _attempt = 0;
       _reportedAspect = null;
+      _videoSized = false;
       _restart();
     }
   }
@@ -106,6 +114,7 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
     if (!mounted) return;
     setState(() {
       _connected = false;
+      _videoSized = false;
       _error = null;
       _failedNotified = false;
     });
@@ -266,18 +275,14 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
       fit: StackFit.expand,
       children: [
         if (widget.opaqueBackground) Container(color: Colors.black),
-        if (_connected || widget.opaqueBackground)
-          AnimatedOpacity(
-            opacity: _connected ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 300),
-            child: RTCVideoView(
+        if (_videoSized)
+          RTCVideoView(
             _renderer,
             objectFit: widget.fit == BoxFit.cover
                 ? RTCVideoViewObjectFit.RTCVideoViewObjectFitCover
                 : RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
             mirror: false,
           ),
-        ),
         if (widget.opaqueBackground && !_connected && _error == null)
           Center(
             child: SizedBox(

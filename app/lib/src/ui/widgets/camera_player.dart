@@ -163,17 +163,16 @@ class _CameraPlayerState extends ConsumerState<CameraPlayer> {
       fit: StackFit.expand,
       children: [
         if (!widget.poster) Container(color: Colors.black),
-        if (_ready && _ctrl != null)
+        if (_ready &&
+            _ctrl != null &&
+            _ctrl!.value.size.width >= 64 &&
+            _ctrl!.value.size.height >= 64)
           FittedBox(
             fit: widget.fit,
             clipBehavior: Clip.hardEdge,
             child: SizedBox(
-              width: _ctrl!.value.size.width == 0
-                  ? 1920
-                  : _ctrl!.value.size.width,
-              height: _ctrl!.value.size.height == 0
-                  ? 1080
-                  : _ctrl!.value.size.height,
+              width: _ctrl!.value.size.width,
+              height: _ctrl!.value.size.height,
               child: VideoPlayer(_ctrl!),
             ),
           )

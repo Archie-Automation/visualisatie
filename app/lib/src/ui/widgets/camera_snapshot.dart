@@ -58,6 +58,7 @@ class _CameraSnapshotState extends ConsumerState<CameraSnapshot> {
   int _failStreak = 0;     // consecutive failures (used to slow retries)
   int _frameGen = 0;       // unique key so equal-sized JPEGs still swap
   double? _intrinsic;      // decoded frame ratio, so the box hugs the picture
+  bool _reportedFallback = false;
 
   @override
   void initState() {
@@ -113,6 +114,9 @@ class _CameraSnapshotState extends ConsumerState<CameraSnapshot> {
             (_intrinsic == null || (intrinsic - _intrinsic!).abs() >= 0.02)) {
           _intrinsic = intrinsic;
           widget.onIntrinsicAspect?.call(intrinsic);
+        } else if (intrinsic == null && !_reportedFallback) {
+          _reportedFallback = true;
+          widget.onIntrinsicAspect?.call(widget.aspectRatio);
         }
         setState(() {
           _frame = bytes;
