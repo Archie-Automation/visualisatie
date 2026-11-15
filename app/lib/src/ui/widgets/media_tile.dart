@@ -586,6 +586,7 @@ class _MediaPlayerScreenState extends ConsumerState<MediaPlayerScreen> {
                             ? 'Starten…'
                             : state.metaLine(revealMetadata: reveal);
                         return Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
                               title,
@@ -699,6 +700,9 @@ enum _PlayerSlot { art, meta, controls, volume, presets }
 /// Hoes krijgt wat overblijft. Favorieten worden op hun eigen hoogte
 /// neergezet, zodat een groepsslider ze niet onder de rand duwt.
 /// Volumeregels scrollen pas als de hoes anders onder 72 px zou zakken.
+/// Kinderen die hier met de volledige body-hoogte worden gemeten moeten
+/// [MainAxisSize.min] hebben, anders vult de titel de body en vallen
+/// hoes, transport en volume buiten beeld.
 class _PlayerBodyDelegate extends MultiChildLayoutDelegate {
   _PlayerBodyDelegate({
     required this.titleGap,
@@ -841,6 +845,7 @@ class _GroupedPlayerVolumesState extends State<_GroupedPlayerVolumes> {
         );
 
     return Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _VolumeSlider.dark(
@@ -1464,6 +1469,7 @@ class _VolumeSliderState extends State<_VolumeSlider> {
     final caption = widget.caption?.trim();
     if (caption == null || caption.isEmpty) return row;
     return Column(
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Padding(
@@ -1683,6 +1689,7 @@ class _Presets extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(

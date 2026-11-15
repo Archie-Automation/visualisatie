@@ -29,7 +29,7 @@ class LiveVideoStage extends StatelessWidget {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(radius),
-        child: ColoredBox(color: Colors.black, child: child),
+        child: child,
       ),
     );
     final tag = heroTag;

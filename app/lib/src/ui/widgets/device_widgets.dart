@@ -1,6 +1,7 @@
 ﻿import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -1334,6 +1335,9 @@ class _HsvWheelPicker extends StatefulWidget {
 }
 
 class _HsvWheelPickerState extends State<_HsvWheelPicker> {
+  Offset? _down;
+  bool _moved = false;
+
   void _handle(Offset local, bool isEnd) {
     final r  = widget.diameter / 2;
     final dx = local.dx - r;
@@ -1349,13 +1353,44 @@ class _HsvWheelPickerState extends State<_HsvWheelPicker> {
     }
   }
 
+  void _finish() {
+    final down = _down;
+    if (!_moved && down != null) {
+      _handle(down, true);
+    } else {
+      widget.onChangeEnd(widget.hue, widget.saturation);
+    }
+    _down = null;
+    _moved = false;
+  }
+
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onPanStart:  (e) => _handle(e.localPosition, false),
-      onPanUpdate: (e) => _handle(e.localPosition, false),
-      onPanEnd:    (e) => widget.onChangeEnd(widget.hue, widget.saturation),
-      onTapDown:   (e) => _handle(e.localPosition, true),
+    return RawGestureDetector(
+      behavior: HitTestBehavior.opaque,
+      gestures: <Type, GestureRecognizerFactory>{
+        _WheelPanRecognizer:
+            GestureRecognizerFactoryWithHandlers<_WheelPanRecognizer>(
+          () => _WheelPanRecognizer(),
+          (instance) {
+            instance
+              ..onDown = (d) {
+                _moved = false;
+                _down = d.localPosition;
+                _handle(d.localPosition, false);
+              }
+              ..onStart = (d) {
+                _moved = true;
+                _handle(d.localPosition, false);
+              }
+              ..onUpdate = (d) {
+                _moved = true;
+                _handle(d.localPosition, false);
+              }
+              ..onEnd = (_) => _finish();
+          },
+        ),
+      },
       child: CustomPaint(
         size: Size(widget.diameter, widget.diameter),
         painter: _HsvWheelPainter(
@@ -1364,6 +1399,16 @@ class _HsvWheelPickerState extends State<_HsvWheelPicker> {
         ),
       ),
     );
+  }
+}
+
+/// Wint de gesture-arena meteen, zodat een verticale sleep op de cirkel
+/// niet door de omsluitende lijst (iOS én Android) wordt opgegeten.
+class _WheelPanRecognizer extends PanGestureRecognizer {
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    super.addAllowedPointer(event);
+    resolve(GestureDisposition.accepted);
   }
 }
 

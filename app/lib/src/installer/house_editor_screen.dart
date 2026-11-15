@@ -9,7 +9,9 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
 import '../ac_mode_config.dart';
+import 'device_reorder.dart';
 import 'energy_installer_section.dart';
+import 'ga_offset.dart';
 import 'lutron_zone_import.dart';
 import '../api.dart';
 import '../fireplace_step_ranges.dart';
@@ -1094,7 +1096,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     );
   }
 
-  /// Grip: tik opent de kamerkeuze, vasthouden sleept naar een kamerrij.
+  /// Grip: tik opent de kamerkeuze, vasthouden sleept.
   Widget _deviceMoveHandle(
     _DeviceDrag drag,
     String name, {
@@ -1103,7 +1105,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   }) {
     Widget button() => IconButton(
           tooltip:
-              'Sleep naar een andere kamer, of tik om een kamer te kiezen',
+              'Sleep om te ordenen of naar een andere kamer. Tik om een kamer te kiezen',
           visualDensity: compact ? VisualDensity.compact : null,
           padding: compact ? EdgeInsets.zero : null,
           constraints: compact
@@ -1139,13 +1141,22 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       id: '${device['id'] ?? ''}',
     );
     Widget row() {
-      return LuxeNavRow(
+      return         LuxeNavRow(
         icon: Icons.tune_outlined,
         title: name,
         subtitle: _deviceRowSubtitle(device),
         selectedTextMatchesIcon: true,
         selected: selected,
         rounded: rounded,
+        onSecondaryTap: (pos) => _showDeviceClipboardMenu(
+          pos,
+          device: device,
+          onPaste: () => _pasteDeviceIntoList(
+            _deviceList(fi, ri),
+            afterIndex: di,
+            onPasted: (i) => _selectFocus(_Focus.device(fi, ri, i)),
+          ),
+        ),
         onTap: () => _selectFocus(_Focus.device(fi, ri, di)),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1161,13 +1172,23 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       );
     }
 
-    return LongPressDraggable<_DeviceDrag>(
-      data: drag,
-      dragAnchorStrategy: pointerDragAnchorStrategy,
-      hapticFeedbackOnStart: true,
-      feedback: _deviceDragFeedback(name),
-      childWhenDragging: Opacity(opacity: 0.35, child: row()),
-      child: row(),
+    return DragTarget<_DeviceDrag>(
+      onWillAcceptWithDetails: (d) =>
+          d.data.fi == fi && d.data.ri == ri && d.data.id != drag.id,
+      onAcceptWithDetails: (d) => _reorderDeviceInRoom(d.data, di),
+      builder: (context, candidate, rejected) {
+        return _dropHighlight(
+          hot: candidate.isNotEmpty,
+          child: LongPressDraggable<_DeviceDrag>(
+            data: drag,
+            dragAnchorStrategy: pointerDragAnchorStrategy,
+            hapticFeedbackOnStart: true,
+            feedback: _deviceDragFeedback(name),
+            childWhenDragging: Opacity(opacity: 0.35, child: row()),
+            child: row(),
+          ),
+        );
+      },
     );
   }
 
@@ -1292,6 +1313,20 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('${_namedOr(device, 'Apparaat')} verplaatst')),
     );
+  }
+
+  void _reorderDeviceInRoom(_DeviceDrag drag, int toIndex) {
+    final list = _deviceList(drag.fi, drag.ri);
+    var from = drag.di;
+    if (from < 0 ||
+        from >= list.length ||
+        '${list[from]['id'] ?? ''}' != drag.id) {
+      from = list.indexWhere((d) => '${d['id'] ?? ''}' == drag.id);
+    }
+    if (from < 0) return;
+    final landed = placeListItem(list, from, toIndex);
+    if (landed == null) return;
+    _selectFocus(_Focus.device(drag.fi, drag.ri, landed));
   }
 
   Future<void> _pickRoomAndMove(_DeviceDrag drag, {int? onlyFi}) async {
@@ -2179,6 +2214,15 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                     tooltip: 'Camera verwijderen',
                     onPressed: () => _deleteCameraAt(i),
                   ),
+                  onSecondaryTap: (pos) => _showDeviceClipboardMenu(
+                    pos,
+                    device: list[i],
+                    onPaste: () => _pasteDeviceIntoList(
+                      list,
+                      afterIndex: i,
+                      onPasted: (n) => _selectFocus(_Focus.cameraDetail(n)),
+                    ),
+                  ),
                   onTap: () => _selectFocus(_Focus.cameraDetail(i)),
                 ),
               ],
@@ -2419,6 +2463,15 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   }(),
                   selected:
                       _sel.kind == _FocusKind.intercomDetail && _sel.ci == i,
+                  onSecondaryTap: (pos) => _showDeviceClipboardMenu(
+                    pos,
+                    device: list[i],
+                    onPaste: () => _pasteDeviceIntoList(
+                      list,
+                      afterIndex: i,
+                      onPasted: (n) => _selectFocus(_Focus.intercomDetail(n)),
+                    ),
+                  ),
                   trailing: _rowTrash(
                     tooltip: 'Intercom verwijderen',
                     onPressed: () => _deleteIntercomAt(i),
@@ -2738,7 +2791,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       SnackBar(
         content: Text(
           '${device['name'] ?? device['id']} gekopieerd. '
-          'Open de andere kamer en tik op Plakken.',
+          'Rechtermuisklik of Plakken om het te plakken.',
         ),
       ),
     );
@@ -2795,6 +2848,31 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('${clone['name'] ?? clone['id']} geplakt')),
     );
+  }
+
+  Future<void> _showDeviceClipboardMenu(
+    Offset global, {
+    required Map<String, dynamic> device,
+    required Future<void> Function() onPaste,
+  }) async {
+    final overlay = Overlay.of(context).context.findRenderObject() as RenderBox;
+    final choice = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromRect(
+        Rect.fromLTWH(global.dx, global.dy, 0, 0),
+        Offset.zero & overlay.size,
+      ),
+      items: const [
+        PopupMenuItem(value: 'copy', child: Text('Kopiëren')),
+        PopupMenuItem(value: 'paste', child: Text('Plakken')),
+      ],
+    );
+    if (!mounted || choice == null) return;
+    if (choice == 'copy') {
+      await _copyDevice(device);
+    } else if (choice == 'paste') {
+      await onPaste();
+    }
   }
 
   Future<void> _pasteIntoRoom(int fi, int ri) {
@@ -3453,6 +3531,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               color: color,
             ),
             title: _namedOr(b, 'Gebouw'),
+            selectedTextMatchesIcon: true,
             selected: b['id'] == active,
             rounded: true,
             onTap: () => _setVizBuilding(b['id'] as String),
@@ -3628,6 +3707,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
             LuxeNavRow(
               icon: Icons.home_work_outlined,
               title: _namedOr(buildings[i], 'Gebouw'),
+              selectedTextMatchesIcon: true,
               selected: buildings[i]['id'] == active,
               rounded: true,
               trailing: _rowTrash(
@@ -3874,6 +3954,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   LuxeNavRow(
                     icon: Icons.home_work_outlined,
                     title: _namedOr(buildings[i], 'Gebouw'),
+                    selectedTextMatchesIcon: true,
                     selected: buildings[i]['id'] == active,
                     trailing: _rowTrash(
                       tooltip: 'Gebouw verwijderen',
@@ -3954,6 +4035,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                       color: color,
                     ),
                     title: _namedOr(buildings[i], 'Gebouw'),
+                    selectedTextMatchesIcon: true,
                     selected: buildings[i]['id'] == active,
                     onTap: () => _setVizBuilding(buildings[i]['id'] as String),
                   ),
@@ -4338,6 +4420,15 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                   trailing: _rowTrash(
                     tooltip: 'Apparaat verwijderen',
                     onPressed: () => _deleteGlobalDeviceAt(i),
+                  ),
+                  onSecondaryTap: (pos) => _showDeviceClipboardMenu(
+                    pos,
+                    device: list[i],
+                    onPaste: () => _pasteDeviceIntoList(
+                      list,
+                      afterIndex: i,
+                      onPasted: (n) => _selectFocus(_Focus.globalDevice(n)),
+                    ),
                   ),
                   onTap: () => _selectFocus(_Focus.globalDevice(i)),
                 ),
@@ -6551,6 +6642,33 @@ class _SceneAddressList extends StatelessWidget {
   }
 }
 
+/// Standaardnamen van een net toegevoegd apparaat. De eerste toetsaanslag
+/// vervangt die naam in plaats van erachter te typen.
+const freshDeviceNames = {
+  'Lamp',
+  'Dimmer',
+  'RGBWW',
+  'Zonwering',
+  'Raam',
+  'Thermostaat',
+  'Sonos',
+  'Bluesound',
+  'Camera',
+  'Voordeur',
+  'Haard',
+  'Airco',
+  'Ventilator',
+  'WTW',
+  'Meldingen',
+  'Universeel paneel',
+  'Lutron lamp',
+  'Lutron dimlamp',
+  'Lutron kleur',
+  'Lutron gordijn',
+  'Lutron → KNX',
+  'Apparaat',
+};
+
 class _BoundStrField extends StatefulWidget {
   const _BoundStrField(
     this.keyName,
@@ -6564,6 +6682,7 @@ class _BoundStrField extends StatefulWidget {
     this.emptyMeansRemove = false,
     this.gaSearch = false,
     this.gaDptHint,
+    this.selectAllWhileFresh = false,
   });
   final String keyName;
   final Map<String, dynamic> map;
@@ -6579,6 +6698,8 @@ class _BoundStrField extends StatefulWidget {
   final bool gaSearch;
   /// DPT-hint (bv. "DPT1.001") waarmee passende adressen bovenaan komen.
   final String? gaDptHint;
+  /// Eerste klik selecteert de hele standaardnaam, zodat typen die vervangt.
+  final bool selectAllWhileFresh;
 
   @override
   State<_BoundStrField> createState() => _BoundStrFieldState();
@@ -6586,6 +6707,10 @@ class _BoundStrField extends StatefulWidget {
 
 class _BoundStrFieldState extends State<_BoundStrField> {
   late TextEditingController _c;
+  late final FocusNode _focus;
+  late String _openedAs;
+  bool _selectFresh = false;
+  bool _freshArmed = false;
 
   String _initialText() {
     final v = widget.map[widget.keyName];
@@ -6597,7 +6722,24 @@ class _BoundStrFieldState extends State<_BoundStrField> {
   @override
   void initState() {
     super.initState();
-    _c = TextEditingController(text: _initialText());
+    _openedAs = _initialText();
+    _selectFresh = widget.selectAllWhileFresh &&
+        freshDeviceNames.contains(_openedAs.trim());
+    _c = TextEditingController(text: _openedAs);
+    _focus = FocusNode();
+    _focus.addListener(_onFocus);
+  }
+
+  void _onFocus() {
+    if (!_focus.hasFocus || !_selectFresh || _c.text != _openedAs) return;
+    _selectFreshText();
+  }
+
+  void _selectFreshText() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_selectFresh || _c.text != _openedAs) return;
+      _c.selection = TextSelection(baseOffset: 0, extentOffset: _c.text.length);
+    });
   }
 
   @override
@@ -6614,6 +6756,8 @@ class _BoundStrFieldState extends State<_BoundStrField> {
 
   @override
   void dispose() {
+    _focus.removeListener(_onFocus);
+    _focus.dispose();
     _c.dispose();
     super.dispose();
   }
@@ -6649,6 +6793,16 @@ class _BoundStrFieldState extends State<_BoundStrField> {
           LuxeFieldLabel(widget.labelOverride ?? widget.keyName),
           TextField(
             controller: _c,
+            focusNode: _focus,
+            onTap: () {
+              if (!_selectFresh || _c.text != _openedAs) return;
+              if (_freshArmed) {
+                _selectFresh = false;
+                return;
+              }
+              _freshArmed = true;
+              _selectFreshText();
+            },
             decoration: luxeFilledDecoration(
               hint: widget.hintText,
               helper: resolvedName,
@@ -6691,6 +6845,7 @@ class _BoundStrFieldState extends State<_BoundStrField> {
               widget.map[widget.keyName] = s;
             }
           }
+          if (s != _openedAs) _selectFresh = false;
           widget.onNotify();
           if (gaSearch) setState(() {});
             },
@@ -8098,8 +8253,13 @@ class _DeviceForm extends StatelessWidget {
                 ),
               ),
               if (type != 'intercom')
-                _BoundStrField('name', device, onChanged,
-                    labelOverride: 'Naam'),
+                _BoundStrField(
+                  'name',
+                  device,
+                  onChanged,
+                  labelOverride: 'Naam',
+                  selectAllWhileFresh: true,
+                ),
               LuxeSwitchRow(
                 title: 'Toon als favoriet op het dashboard',
                 subtitle:
@@ -8137,6 +8297,7 @@ class _DeviceForm extends StatelessWidget {
             ],
           ),
         ),
+        DeviceGaOffsetCard(device: device, onChanged: onChanged),
         if (showBus)
           LuxeListCard(
             child: _DeviceBusControlSection(

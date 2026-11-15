@@ -169,6 +169,7 @@ class LuxeNavRow extends StatelessWidget {
     this.rounded = false,
     this.selectedTextMatchesIcon = false,
     this.leading,
+    this.onSecondaryTap,
   });
 
   final IconData icon;
@@ -182,6 +183,8 @@ class LuxeNavRow extends StatelessWidget {
   final bool selectedTextMatchesIcon;
   final Widget Function(Color color)? leading;
   final VoidCallback onTap;
+  /// Rechtermuisklik, met de schermpositie van de klik.
+  final ValueChanged<Offset>? onSecondaryTap;
 
   @override
   Widget build(BuildContext context) {
@@ -232,6 +235,9 @@ class LuxeNavRow extends StatelessWidget {
             Expanded(
               child: InkWell(
                 onTap: onTap,
+                onSecondaryTapUp: onSecondaryTap == null
+                    ? null
+                    : (details) => onSecondaryTap!(details.globalPosition),
                 borderRadius: radius,
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(14, 11, 4, 11),

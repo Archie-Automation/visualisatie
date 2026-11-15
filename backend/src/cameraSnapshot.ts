@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -15,6 +16,71 @@ export const snapshotCache = new Map<string, SnapshotCacheEntry>();
 export const SNAP_FRESH_MS = 10_000;
 /** Return stale frames while a slow refresh is in-flight. */
 export const SNAP_STALE_MS = 120_000;
+/** Same JPEG this many times, and at least SNAP_FREEZE_MS apart, before we probe. */
+export const SNAP_FREEZE_HITS = 3;
+/** go2rtc can keep serving one keyframe while the camera's own app is still live. */
+export const SNAP_FREEZE_MS = 90_000;
+/** Don't open a second RTSP session again until this long after a probe. */
+export const SNAP_FREEZE_COOLDOWN_MS = 5 * 60_000;
+
+export type SnapshotFreeze = {
+  hash: string;
+  since: number;
+  hits: number;
+  kickedAt: number;
+};
+
+/**
+ * Identical bytes across several refreshes means go2rtc is repeating one
+ * keyframe. A static live scene can do that too, so this only decides when
+ * to spend one direct RTSP grab as a second opinion.
+ */
+export function noteSnapshotFrame(
+  state: SnapshotFreeze | undefined,
+  hash: string,
+  now: number
+): { state: SnapshotFreeze; probe: boolean } {
+  if (state && state.hash === hash) {
+    const hits = state.hits + 1;
+    const probe =
+      hits >= SNAP_FREEZE_HITS &&
+      now - state.since >= SNAP_FREEZE_MS &&
+      now - state.kickedAt >= SNAP_FREEZE_COOLDOWN_MS;
+    return {
+      state: {
+        hash,
+        since: state.since,
+        hits,
+        kickedAt: probe ? now : state.kickedAt
+      },
+      probe
+    };
+  }
+  return {
+    state: { hash, since: now, hits: 1, kickedAt: state?.kickedAt ?? 0 },
+    probe: false
+  };
+}
+
+/**
+ * A new direct RTSP frame that differs from the repeated JPEG proves the
+ * go2rtc session is stale. The same bytes from a fresh connection means the
+ * source itself is still on that picture, so restarting the session won't help.
+ */
+export function classifyFrozenSnapshot(
+  directHash: string | null,
+  cachedHash: string
+): "stale-session" | "source-frozen" | "direct-failed" {
+  if (!directHash) return "direct-failed";
+  if (directHash !== cachedHash) return "stale-session";
+  return "source-frozen";
+}
+
+const freezeState = new Map<string, SnapshotFreeze>();
+
+function hashSnapshot(buf: Buffer): string {
+  return createHash("sha1").update(buf).digest("hex");
+}
 
 const refreshInFlight = new Set<string>();
 
@@ -157,6 +223,38 @@ export async function refreshSnapshotCache(
       buf = await fetchSnapshotFromGo2rtc(url, 8_000);
     }
 
+    if (buf && target.type === "camera") {
+      const now = Date.now();
+      const hash = hashSnapshot(buf);
+      const noted = noteSnapshotFrame(freezeState.get(cacheKey), hash, now);
+      freezeState.set(cacheKey, noted.state);
+      if (noted.probe && rtsp) {
+        const live = await captureSnapshotFfmpeg(rtsp, { width, timeoutMs: 8_000 });
+        const verdict = classifyFrozenSnapshot(
+          live ? hashSnapshot(live) : null,
+          hash
+        );
+        logger.warn(
+          { cacheKey, verdict, hits: noted.state.hits },
+          "camerabeeld staat stil"
+        );
+        if (verdict === "stale-session" && live) {
+          buf = live;
+          freezeState.set(cacheKey, {
+            hash: hashSnapshot(live),
+            since: now,
+            hits: 1,
+            kickedAt: now
+          });
+        }
+        if (verdict !== "source-frozen") {
+          void bounceGo2rtcPreload(mediaBase, p).catch((err) => {
+            logger.warn({ err, cacheKey }, "go2rtc preload herstart mislukt");
+          });
+        }
+      }
+    }
+
     if (buf) {
       snapshotCache.set(cacheKey, { buf, ts: Date.now() });
     }
@@ -247,6 +345,26 @@ export function triggerBackgroundSnapshotRefresh(
   }
 }
 
+/**
+ * Drop the keep-alive consumer and open it again. That closes a wedged RTSP
+ * session so the next viewer gets a new one. go2rtc has no per-stream restart
+ * that leaves the config alone; preload delete+put is the narrowest kick.
+ */
+export async function bounceGo2rtcPreload(
+  mediaBase: string,
+  streamPath: string
+): Promise<void> {
+  const base = mediaBase.replace(/\/+$/, "");
+  const src = encodeURIComponent(streamPath);
+  await fetch(`${base}/api/preload?src=${src}`, { method: "DELETE" }).catch(
+    () => undefined
+  );
+  const res = await fetch(`${base}/api/preload?src=${src}`, { method: "PUT" });
+  if (!res.ok) {
+    throw new Error(`preload ${res.status}`);
+  }
+}
+
 /** Warm a go2rtc producer via HLS manifest (less disruptive than frame.jpeg). */
 export async function warmGo2rtcProducer(
   mediaBase: string,
@@ -274,5 +392,3 @@ export async function warmGo2rtcProducer(
   }
   return false;
 }
-
-/** Warm a go2rtc producer via HLS manifest (less disruptive than frame.jpeg). */

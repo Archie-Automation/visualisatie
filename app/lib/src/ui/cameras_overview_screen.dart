@@ -266,44 +266,44 @@ class _FullscreenCameraView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          Positioned.fill(child: child),
-          // Terug — zelfde BackPill linksboven als de rest van de app
-          Positioned(
-            top: 0,
-            left: 0,
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
-                child: BackPill(onTap: onBack),
-              ),
-            ),
-          ),
-          // Cameranaam rechtsonder
-          Positioned(
-            bottom: 16,
-            right: 16,
-            child: SafeArea(
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(10),
-                  color: Colors.black.withValues(alpha: 0.5),
-                ),
-                child: Text(
-                  deviceName,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500),
+      backgroundColor: Colors.transparent,
+      body: LuxeBackdrop(
+        child: Stack(
+          children: [
+            Positioned.fill(child: child),
+            Positioned(
+              top: 0,
+              left: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
+                  child: BackPill(onTap: onBack),
                 ),
               ),
             ),
-          ),
-        ],
+            Positioned(
+              bottom: 16,
+              right: 16,
+              child: SafeArea(
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    color: Colors.black.withValues(alpha: 0.5),
+                  ),
+                  child: Text(
+                    deviceName,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

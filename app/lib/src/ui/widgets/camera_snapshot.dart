@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import '../../api.dart';
 import '../../demo/demo_camera_view.dart';
 import '../../demo/demo_session.dart';
+import '../../theme.dart';
 
 /// Live snapshot preview that fetches JPEG bytes manually.
 ///
@@ -150,7 +151,6 @@ class _CameraSnapshotState extends ConsumerState<CameraSnapshot> {
     final stack = Stack(
       fit: StackFit.expand,
       children: [
-        Container(color: Colors.black),
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 250),
           child: _frame != null
@@ -160,10 +160,10 @@ class _CameraSnapshotState extends ConsumerState<CameraSnapshot> {
                   fit: widget.fit,
                   gaplessPlayback: true,
                 )
-              : const Center(
-                  key: ValueKey('offline'),
+              : Center(
+                  key: const ValueKey('offline'),
                   child: Icon(Icons.videocam_off_outlined,
-                      color: Colors.white54, size: 28),
+                      color: LuxeColors.inkSoft, size: 28),
                 ),
         ),
         if (widget.showLiveBadge)
