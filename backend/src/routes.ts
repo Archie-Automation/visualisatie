@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
-import { Readable } from "node:stream";
+import { Readable, Transform } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { Router } from "express";
 import { z } from "zod";
 import {
@@ -611,29 +612,17 @@ export function buildRouter(
         return;
       }
 
-      // Send headers before talking to GitHub. The installed tablet APK
-      // uses HttpClient idleTimeout 15s — waiting for GitHub first closed
-      // the socket with "Connection closed before full header was received".
-      res.setHeader(
-        "Content-Type",
-        "application/vnd.android.package-archive"
-      );
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="${meta.name.replace(/"/g, "")}"`
-      );
-      if (meta.sizeBytes > 0) {
-        res.setHeader("Content-Length", String(meta.sizeBytes));
-      }
-      res.flushHeaders();
-
+      // Geen headers vóór de eerste byte. Anders zit het tablet vast aan een
+      // Content-Length terwijl GitHub nog niets stuurt, of halverwege afbreekt.
       const result = await fetchAndroidApkFromGithub(updateChannel);
       if (!result.ok) {
         logger.warn(
           { error: result.error, status: result.status },
-          "GitHub APK-fetch na headers mislukt"
+          "GitHub APK-fetch mislukt"
         );
-        if (!res.writableEnded) res.destroy();
+        res.status(result.status === 404 ? 404 : 502).json({
+          error: result.error
+        });
         return;
       }
 
@@ -647,42 +636,69 @@ export function buildRouter(
         /* ignore */
       }
       const fileOut = fs.createWriteStream(tmp);
-      const github = Readable.fromWeb(result.body);
-
+      let fileFailed = false;
       const failCache = () => {
+        fileFailed = true;
         try {
           fs.unlinkSync(tmp);
         } catch {
           /* ignore */
         }
       };
-      fileOut.on("error", failCache);
-      github.on("error", (err) => {
-        logger.warn({ err }, "GitHub APK-stream onderbroken");
+      fileOut.on("error", (err) => {
+        logger.warn({ err }, "APK-cache schrijven mislukt");
         failCache();
-        if (!res.writableEnded) res.destroy();
       });
-      fileOut.on("finish", () => {
-        try {
-          if (result.sizeBytes > 0 && fileOut.bytesWritten !== result.sizeBytes) {
-            failCache();
+      const tee = new Transform({
+        transform(chunk, _enc, cb) {
+          if (fileFailed) {
+            cb(null, chunk);
             return;
           }
-          fs.renameSync(tmp, dest);
-        } catch (err) {
-          logger.warn({ err }, "APK-cache hernoemen mislukt");
-          failCache();
+          if (!fileOut.write(chunk)) fileOut.once("drain", () => cb(null, chunk));
+          else cb(null, chunk);
+        },
+        final(cb) {
+          if (fileFailed) {
+            cb();
+            return;
+          }
+          fileOut.end(() => cb());
         }
       });
 
-      github.pipe(fileOut);
-      await new Promise<void>((resolve, reject) => {
-        res.on("finish", resolve);
-        res.on("close", () => resolve());
-        github.on("error", reject);
-        res.on("error", reject);
-        github.pipe(res);
-      });
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.android.package-archive"
+      );
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="${result.name.replace(/"/g, "")}"`
+      );
+      if (result.sizeBytes > 0) {
+        res.setHeader("Content-Length", String(result.sizeBytes));
+      }
+
+      const github = Readable.fromWeb(result.body);
+      try {
+        await pipeline(github, tee, res);
+        if (
+          !fileFailed &&
+          (result.sizeBytes <= 0 || fileOut.bytesWritten === result.sizeBytes)
+        ) {
+          try {
+            fs.renameSync(tmp, dest);
+          } catch (err) {
+            logger.warn({ err }, "APK-cache hernoemen mislukt");
+            failCache();
+          }
+        } else {
+          failCache();
+        }
+      } catch (err) {
+        failCache();
+        throw err;
+      }
     } catch (err) {
       logger.warn({ err }, "APK-download naar tablet mislukt");
       if (!res.headersSent) {

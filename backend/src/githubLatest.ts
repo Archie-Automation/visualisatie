@@ -465,7 +465,9 @@ export async function fetchAndroidApkFromGithub(
     ...headers(),
     Accept: "application/octet-stream"
   };
-      const signal = AbortSignal.timeout(60_000);
+  // Hele body, niet alleen de eerste byte. 60 s sneed een trage GitHub-download
+  // doormidden; het tablet had Content-Length al en bleef op de rest wachten.
+  const signal = AbortSignal.timeout(10 * 60 * 1000);
   try {
     let res = await fetch(apk.apiUrl, {
       headers: apkHeaders,
