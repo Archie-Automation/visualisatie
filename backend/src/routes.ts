@@ -155,6 +155,7 @@ import {
   assertUserLoginCredentials,
   mergePasswordHashes,
   mergeKnxAlarmPin,
+  exclusiveAlarm,
   mergeLutronTelnetPasswords,
   validateHouseJson,
   validateFireplaceSemantics,
@@ -765,6 +766,7 @@ export function buildRouter(
     updateConfig((draft) => {
       draft.satel = draft.satel ?? {};
       if (enabled !== undefined) draft.satel.enabled = Boolean(enabled);
+      if (enabled === true && draft.knxAlarm) draft.knxAlarm.enabled = false;
       if (Array.isArray(partitions)) {
         draft.satel.partitions = (partitions as Array<{ number: unknown; name: unknown }>)
           .filter((p) => typeof p.number === "number" && typeof p.name === "string")
@@ -1493,6 +1495,7 @@ export function buildRouter(
     const next = parsed.data;
     mergePasswordHashes(next, getConfig());
     mergeKnxAlarmPin(next, getConfig());
+    exclusiveAlarm(next, getConfig());
     mergeLutronTelnetPasswords(next, getConfig());
     mergeVoipSecrets(next, getConfig());
     normalizeVoip(next);

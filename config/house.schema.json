@@ -259,7 +259,8 @@
                   "rookmelder",
                   "watermelder",
                   "gasmelder",
-                  "paniekknop"
+                  "paniekknop",
+                  "sabotage"
                 ]
               },
               "aanwezig": { "type": "boolean" },

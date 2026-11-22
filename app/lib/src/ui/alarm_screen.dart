@@ -5,6 +5,8 @@
 /// never transmitted from the Flutter app — just press the button.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -17,7 +19,7 @@ import '../satel_api.dart';
 import '../theme.dart';
 import 'app_nav.dart';
 import 'responsive.dart';
-import 'knx_alarm_body.dart';
+import 'widgets/alarm_keypad.dart';
 import 'widgets/function_screen_header.dart';
 import 'widgets/luxe_backdrop.dart';
 
@@ -60,42 +62,261 @@ class _AlarmChooserState extends ConsumerState<_AlarmChooser> {
   @override
   Widget build(BuildContext context) {
     final knx = ref.watch(knxAlarmStatusProvider);
-    final satelOn = ref.watch(satelEnabledProvider).value ?? false;
-    if (!knx.enabled) return _AlarmBody();
-    if (!satelOn) return const KnxAlarmBody();
-    return const _AlarmSources();
+    if (knx.enabled) return const _KnxAlarmPage();
+    return _AlarmBody();
   }
 }
 
-class _AlarmSources extends StatefulWidget {
-  const _AlarmSources();
+class _KnxAlarmPage extends ConsumerStatefulWidget {
+  const _KnxAlarmPage();
 
   @override
-  State<_AlarmSources> createState() => _AlarmSourcesState();
+  ConsumerState<_KnxAlarmPage> createState() => _KnxAlarmPageState();
 }
 
-class _AlarmSourcesState extends State<_AlarmSources> {
-  bool _knx = true;
+class _KnxAlarmPageState extends ConsumerState<_KnxAlarmPage> {
+  String _pin = '';
+  bool _busy = false;
+  String? _feedback;
+  Timer? _tick;
+
+  static const _minPin = 4;
+  static const _maxPin = 8;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _tick?.cancel();
+    super.dispose();
+  }
+
+  int? _secondsLeft(int? deadlineMs) {
+    if (deadlineMs == null) return null;
+    final left = ((deadlineMs - DateTime.now().millisecondsSinceEpoch) / 1000)
+        .ceil();
+    return left < 0 ? 0 : left;
+  }
+
+  Future<void> _run(
+    Future<({bool ok, String? message, Map<String, dynamic>? status})> call,
+  ) async {
+    setState(() {
+      _busy = true;
+      _feedback = null;
+    });
+    final result = await call;
+    if (!mounted) return;
+    if (result.status != null) {
+      ref.read(knxAlarmStatusProvider.notifier).apply(result.status!);
+    }
+    setState(() {
+      _busy = false;
+      _pin = '';
+      _feedback = result.ok ? null : result.message;
+    });
+    if (result.ok) HapticFeedback.lightImpact();
+  }
+
+  Future<String?> _pickMode() {
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: LuxeColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 18, 20, 6),
+              child: Text(
+                'Kies inschakelmodus',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: LuxeColors.ink,
+                ),
+              ),
+            ),
+            for (final mode in const [
+              ('aanwezig', 'Aanwezig'),
+              ('afwezig', 'Afwezig'),
+            ])
+              ListTile(
+                leading: Icon(Icons.shield_outlined, color: LuxeColors.brass),
+                title: Text(mode.$2, style: TextStyle(color: LuxeColors.ink)),
+                onTap: () => Navigator.of(ctx).pop(mode.$1),
+              ),
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirm(KnxAlarmStatus status) async {
+    if (_pin.length < _minPin || _busy) return;
+    final token = ref.read(authProvider).token;
+    if (status.phase == 'off') {
+      final mode = await _pickMode();
+      if (mode == null || !mounted) return;
+      await _run(knxAlarmArm(mode, _pin, token));
+      return;
+    }
+    await _run(knxAlarmDisarm(_pin, token));
+  }
+
+  Future<void> _bypass(SatelZone zone) async {
+    if (_busy) return;
+    final status = ref.read(knxAlarmStatusProvider);
+    if (status.phase != 'off' && _pin.length < _minPin) {
+      setState(() => _feedback = 'Code nodig om te overbruggen terwijl het alarm aan staat.');
+      return;
+    }
+    final id = zone.roomId;
+    if (id == null || id.isEmpty) return;
+    await _run(knxAlarmBypass(
+      id: id,
+      bypass: !zone.bypassed,
+      pin: _pin,
+      token: ref.read(authProvider).token,
+    ));
+  }
+
+  Future<void> _bypassAll(List<SatelZone> zones) async {
+    if (_busy || zones.isEmpty) return;
+    final status = ref.read(knxAlarmStatusProvider);
+    if (status.phase != 'off' && _pin.length < _minPin) {
+      setState(() => _feedback =
+          'Code nodig om te overbruggen terwijl het alarm aan staat.');
+      return;
+    }
+    final pin = _pin;
+    final token = ref.read(authProvider).token;
+    for (final zone in zones) {
+      final id = zone.roomId;
+      if (id == null || id.isEmpty) continue;
+      await _run(knxAlarmBypass(
+        id: id,
+        bypass: true,
+        pin: pin,
+        token: token,
+      ));
+      if (!mounted) return;
+    }
+  }
+
+  SatelPartitionState _stateFor(String phase) => switch (phase) {
+        'exit' => SatelPartitionState.exitDelay,
+        'entry' => SatelPartitionState.entryDelay,
+        'armed' || 'alarm' => SatelPartitionState.armed,
+        _ => SatelPartitionState.disarmed,
+      };
+
+  String _name(KnxAlarmStatus status, int? left) {
+    final mode = switch (status.mode) {
+      'aanwezig' => 'Aanwezig',
+      'afwezig' => 'Afwezig',
+      _ => 'Alarm',
+    };
+    if ((status.phase == 'entry' || status.phase == 'exit') && left != null) {
+      return '$mode · ${left}s';
+    }
+    if (!status.pinSet && status.phase == 'off') return 'Nog geen code';
+    return mode;
+  }
+
+  SatelStatus _zones(KnxAlarmStatus status) {
+    final zones = <SatelZone>[
+      for (var i = 0; i < status.sensors.length; i++)
+        SatelZone(
+          zoneNumber: i + 1,
+          name: status.sensors[i].name.isEmpty
+              ? status.sensors[i].ga
+              : status.sensors[i].name,
+          room: status.sensors[i].inloop ? 'Inloop' : '',
+          roomId: status.sensors[i].id,
+          deviceType: status.sensors[i].kind.isEmpty
+              ? 'magneetcontact'
+              : status.sensors[i].kind,
+          violated: status.sensors[i].open && !status.sensors[i].bypassed,
+          bypassed: status.sensors[i].bypassed,
+        ),
+    ];
+    return SatelStatus(
+      connected: true,
+      partitions: const [],
+      rooms: const [],
+      allZones: zones,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
+    final status = ref.watch(knxAlarmStatusProvider);
+    final left = _secondsLeft(status.deadlineMs);
+    final partition = SatelPartitionInfo(
+      number: 1,
+      name: _name(status, left),
+      state: _stateFor(status.phase),
+    );
+    final hp = context.hPad;
     return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-          child: SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(value: false, label: Text('Satel')),
-              ButtonSegment(value: true, label: Text('KNX')),
-            ],
-            selected: {_knx},
-            onSelectionChanged: (next) {
-              if (next.isEmpty) return;
-              setState(() => _knx = next.first);
-            },
+        FunctionScreenHeader(
+          onBack: () => appBack(context),
+          title: 'Alarm',
+        ),
+        Expanded(
+          child: SafeArea(
+            top: false,
+            bottom: false,
+            child: SingleChildScrollView(
+              padding: EdgeInsets.symmetric(horizontal: hp),
+              child: Column(
+                children: [
+                  const SizedBox(height: 20),
+                  _PartitionCard(partition: partition),
+                  const SizedBox(height: 28),
+                  AlarmPinSection(
+                    pin: _pin,
+                    busy: _busy,
+                    feedback: _feedback,
+                    canConfirm: _pin.length >= _minPin,
+                    arming: status.phase == 'off',
+                    onDigit: (d) {
+                      if (_pin.length >= _maxPin) return;
+                      setState(() {
+                        _pin += d;
+                        _feedback = null;
+                      });
+                    },
+                    onBackspace: () {
+                      if (_pin.isEmpty) return;
+                      setState(() => _pin = _pin.substring(0, _pin.length - 1));
+                    },
+                    onConfirm: () => _confirm(status),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+              ),
+            ),
           ),
         ),
-        Expanded(child: _knx ? const KnxAlarmBody() : _AlarmBody()),
+        _ZoneDock(
+          status: _zones(status),
+          busy: _busy,
+          onToggleBypass: _bypass,
+          onBypassAll: _bypassAll,
+        ),
       ],
     );
   }
@@ -307,7 +528,7 @@ class _AlarmBodyState extends ConsumerState<_AlarmBody> {
                         ),
                   ),
                   const SizedBox(height: 28),
-                  _PinSection(
+                  AlarmPinSection(
                     pin: _pin,
                     busy: _busy,
                     feedback: _feedback,
@@ -502,235 +723,6 @@ class _PartitionCard extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// PIN entry panel (real mode)
-// ---------------------------------------------------------------------------
-
-class _PinSection extends StatelessWidget {
-  const _PinSection({
-    required this.pin,
-    required this.busy,
-    required this.feedback,
-    required this.canConfirm,
-    required this.partition,
-    required this.onDigit,
-    required this.onBackspace,
-    required this.onConfirm,
-  });
-
-  final String pin;
-  final bool busy;
-  final String? feedback;
-  final bool canConfirm;
-  final SatelPartitionInfo? partition;
-  final ValueChanged<String> onDigit;
-  final VoidCallback onBackspace;
-  final VoidCallback? onConfirm;
-
-  @override
-  Widget build(BuildContext context) {
-    final doArm = partition == null ||
-        partition!.isDisarmed ||
-        partition!.isExitDelay;
-    final label = doArm ? 'Inschakelen' : 'Uitschakelen';
-    final color = doArm
-        ? const Color(0xFFD64545)
-        : const Color(0xFF4CAF50);
-
-    return ConstrainedBox(
-      constraints: BoxConstraints(maxWidth: 320),
-      child: Column(
-        children: [
-          // PIN dots display
-          Container(
-            height: 52,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            decoration: BoxDecoration(
-              color: LuxeColors.surfaceDim,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: LuxeColors.line),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(8, (i) {
-                final filled = i < pin.length;
-                return Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 6),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 120),
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: filled
-                          ? color
-                          : LuxeColors.inkFaint.withValues(alpha: 0.3),
-                    ),
-                  ),
-                );
-              }),
-            ),
-          ),
-          SizedBox(height: 16),
-
-          // Numeric keypad
-          _NumPad(onDigit: onDigit, onBackspace: onBackspace),
-          const SizedBox(height: 16),
-
-          // Confirm button
-          SizedBox(
-            width: double.infinity,
-            height: 54,
-            child: Material(
-              color: canConfirm
-                  ? color.withValues(alpha: 0.12)
-                  : LuxeColors.surfaceDim,
-              borderRadius: BorderRadius.circular(16),
-              child: InkWell(
-                borderRadius: BorderRadius.circular(16),
-                onTap: (busy || !canConfirm || onConfirm == null)
-                    ? null
-                    : onConfirm,
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: canConfirm
-                          ? color.withValues(alpha: 0.40)
-                          : LuxeColors.line,
-                    ),
-                  ),
-                  alignment: Alignment.center,
-                  child: busy
-                      ? SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            color: color,
-                          ),
-                        )
-                      : Text(
-                          label,
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: canConfirm ? color : LuxeColors.inkFaint,
-                          ),
-                        ),
-                ),
-              ),
-            ),
-          ),
-
-          if (feedback != null) ...[
-            const SizedBox(height: 10),
-            Text(
-              feedback!,
-              style: const TextStyle(
-                color: Color(0xFFD64545),
-                fontSize: 13,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Numeric keypad widget
-// ---------------------------------------------------------------------------
-
-class _NumPad extends StatelessWidget {
-  const _NumPad({required this.onDigit, required this.onBackspace});
-
-  final ValueChanged<String> onDigit;
-  final VoidCallback onBackspace;
-
-  @override
-  Widget build(BuildContext context) {
-    const rows = [
-      ['1', '2', '3'],
-      ['4', '5', '6'],
-      ['7', '8', '9'],
-      ['', '0', '⌫'],
-    ];
-
-    return Column(
-      children: rows.map((row) {
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: Row(
-            children: row.map((key) {
-              final isEmpty = key.isEmpty;
-              final isBack  = key == '⌫';
-              return Expanded(
-                child: isEmpty
-                    ? const SizedBox()
-                    : Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: _PadKey(
-                          label: key,
-                          isBackspace: isBack,
-                          onTap: isBack
-                              ? onBackspace
-                              : () => onDigit(key),
-                        ),
-                      ),
-              );
-            }).toList(),
-          ),
-        );
-      }).toList(),
-    );
-  }
-}
-
-class _PadKey extends StatelessWidget {
-  const _PadKey({
-    required this.label,
-    required this.isBackspace,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool isBackspace;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: LuxeColors.surfaceDim,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: onTap,
-        child: Container(
-          height: 52,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: LuxeColors.line),
-          ),
-          alignment: Alignment.center,
-          child: isBackspace
-              ? Icon(Icons.backspace_outlined,
-                  size: 20, color: LuxeColors.inkSoft)
-              : Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    color: LuxeColors.ink,
-                  ),
-                ),
-        ),
-      ),
-    );
-  }
-}
 
 // ---------------------------------------------------------------------------
 // State helper
@@ -1245,6 +1237,9 @@ _DeviceCfg satelDeviceConfig(String type, bool violated) {
     'paniekknop' => _DeviceCfg(
         Icons.warning_amber_rounded, violated ? red : muted,
         'Paniekknop', 'Alarm!'),
+    'sabotage' => _DeviceCfg(
+        Icons.gpp_bad_outlined, violated ? red : muted,
+        'Sabotagecontact', 'Sabotage!'),
     _ => _DeviceCfg(
         Icons.sensors_outlined, violated ? orange : muted,
         type, 'Actief'),

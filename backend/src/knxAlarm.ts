@@ -91,9 +91,12 @@ export async function knxAlarmArm(
   if (phase !== "off") {
     return fail(409, "busy", "Het alarm staat al aan. Schakel het eerst uit.");
   }
-  const blocking = sensorsFor(nextMode).filter(
-    (s) => s.open && !s.bypassed && !s.inloop
-  );
+  const blocking = [
+    ...sensorsFor(nextMode).filter(
+      (s) => s.open && !s.bypassed && !s.inloop && s.kind !== "sabotage"
+    ),
+    ...openSabotage()
+  ];
   if (blocking.length > 0) {
     const names = blocking.map((s) => s.name).join(", ");
     return fail(409, "zone_open", `Nog open: ${names}. Overbruggen of sluiten.`);
@@ -120,6 +123,7 @@ export async function knxAlarmDisarm(pin: string): Promise<KnxAlarmResult> {
   mode = null;
   deadlineMs = null;
   bypassed.clear();
+  sabotageHoldingSiren = false;
   await setSiren(false);
   emit();
   return { ok: true, status: snapshot() };
@@ -142,6 +146,7 @@ export async function knxAlarmBypass(
   if (bypass) bypassed.add(id);
   else bypassed.delete(id);
   if (phase === "armed" || phase === "entry") reactToOpenSensors();
+  void syncSabotageSiren();
   emit();
   return { ok: true, status: snapshot() };
 }
@@ -233,7 +238,9 @@ function ensureFresh(): void {
     if (!ids.has(id)) openById.delete(id);
   }
   for (const sensor of cfg.sensors ?? []) {
-    const cached = busRef?.getState(sensor.ga)?.value;
+    const cached =
+      busRef?.getState(sensor.ga)?.value ??
+      busRef?.getState(sensor.ga.trim())?.value;
     if (cached !== undefined) openById.set(sensor.id, isOpen(sensor, cached));
   }
   if (!cfg.enabled && phase !== "off") {
@@ -288,6 +295,7 @@ function tick(): void {
     if (phase === "exit") becomeArmed();
     else triggerAlarm();
   }
+  void syncSabotageSiren();
   const after = `${phase}|${deadlineMs}|${sirenOn}`;
   if (configChanged || before !== after) emit();
 }
@@ -297,26 +305,65 @@ function onGa(ga: string, value: unknown): void {
   const cfg = readCfg();
   let changed = false;
   for (const sensor of cfg.sensors ?? []) {
-    if (sensor.ga !== ga) continue;
+    if (!sameGa(sensor.ga, ga)) continue;
     const open = isOpen(sensor, value);
     if (openById.get(sensor.id) === open) continue;
     openById.set(sensor.id, open);
     changed = true;
   }
   if (!changed || !cfg.enabled) return;
+  for (const sensor of cfg.sensors ?? []) {
+    if (sensor.kind !== "sabotage") continue;
+    if (openById.get(sensor.id) !== true) bypassed.delete(sensor.id);
+  }
   if (phase === "armed" || phase === "entry") reactToOpenSensors();
+  void syncSabotageSiren();
   emit();
 }
 
 function isOn(value: unknown): boolean {
   if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value !== 0;
+  if (typeof value === "number") return Number.isFinite(value) && value !== 0;
+  if (typeof value === "string") {
+    const s = value.trim().toLowerCase();
+    if (s === "1" || s === "true" || s === "on" || s === "aan") return true;
+    return false;
+  }
   return false;
+}
+
+function sameGa(a: string, b: string): boolean {
+  return a.trim().replace(/\s+/g, "") === b.trim().replace(/\s+/g, "");
 }
 
 function isOpen(sensor: KnxAlarmSensor, value: unknown): boolean {
   const on = isOn(value);
   return sensor.alarmOn === "0" ? !on : on;
+}
+
+function openSabotage(): KnxAlarmSensorState[] {
+  return snapshot().sensors.filter(
+    (s) => s.kind === "sabotage" && s.open && !s.bypassed
+  );
+}
+
+let sabotageHoldingSiren = false;
+
+/** Sirene alleen als het alarm aan staat én een sabotagecontact open is. */
+async function syncSabotageSiren(): Promise<void> {
+  if (!readCfg().enabled || phase === "alarm") {
+    sabotageHoldingSiren = false;
+    return;
+  }
+  const want = phase !== "off" && openSabotage().length > 0;
+  if (want) {
+    sabotageHoldingSiren = true;
+    await setSiren(true);
+    return;
+  }
+  if (!sabotageHoldingSiren) return;
+  sabotageHoldingSiren = false;
+  await setSiren(false);
 }
 
 function sensorsFor(which: KnxAlarmMode): KnxAlarmSensorState[] {
@@ -329,23 +376,20 @@ function becomeArmed(): void {
   phase = "armed";
   deadlineMs = null;
   reactToOpenSensors();
+  void syncSabotageSiren();
 }
 
 function reactToOpenSensors(): void {
   if (!mode || (phase !== "armed" && phase !== "entry")) return;
-  const active = sensorsFor(mode).filter((s) => s.open && !s.bypassed);
+  const active = sensorsFor(mode).filter(
+    (s) => s.open && !s.bypassed && s.kind !== "sabotage"
+  );
   if (active.some((s) => !s.inloop)) {
     triggerAlarm();
     return;
   }
-  if (active.some((s) => s.inloop)) {
-    if (phase === "armed") startEntry();
-    return;
-  }
-  if (phase === "entry") {
-    phase = "armed";
-    deadlineMs = null;
-  }
+  // Dichtgaan stopt de inloop niet. Satel telt door tot de code of de sirene.
+  if (phase === "armed" && active.some((s) => s.inloop)) startEntry();
 }
 
 function startEntry(): void {
@@ -361,6 +405,7 @@ function startEntry(): void {
 function triggerAlarm(): void {
   phase = "alarm";
   deadlineMs = null;
+  sabotageHoldingSiren = false;
   void setSiren(true);
 }
 

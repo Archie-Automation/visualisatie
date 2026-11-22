@@ -32,6 +32,7 @@ import 'ui/alarm_screen.dart';
 import 'ui/energy_screen.dart';
 import 'ui/widgets/inactivity_layer.dart';
 import 'ui/widgets/media_tile.dart';
+import 'ui/widgets/knx_sabotage_notice.dart';
 import 'ui/widgets/melding_alert_sound_layer.dart';
 import 'ui/widgets/satel_entry_delay_layer.dart';
 import 'ui/widgets/server_link_banner.dart';
@@ -344,10 +345,12 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
         // Warm the version check (server + GitHub latest) early.
         ref.watch(softwareVersionStatusProvider);
         final layered = SatelEntryDelayLayer(
-          child: MeldingAlertSoundLayer(
-            child: InactivityLayer(
-              router: _router,
-              child: child ?? const SizedBox.shrink(),
+          child: KnxSabotageNotice(
+            child: MeldingAlertSoundLayer(
+              child: InactivityLayer(
+                router: _router,
+                child: child ?? const SizedBox.shrink(),
+              ),
             ),
           ),
         );

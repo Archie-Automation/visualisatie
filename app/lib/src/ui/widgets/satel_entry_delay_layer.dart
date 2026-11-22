@@ -14,8 +14,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../api.dart';
+import '../../knx_alarm.dart';
+import '../../knx_alarm_api.dart';
 import '../../satel_api.dart';
 import 'alarm_delay_sound.dart';
+import 'alarm_keypad.dart';
 
 class SatelEntryDelayLayer extends ConsumerStatefulWidget {
   const SatelEntryDelayLayer({super.key, required this.child});
@@ -33,7 +36,7 @@ class _SatelEntryDelayLayerState extends ConsumerState<SatelEntryDelayLayer>
   late final Animation<double> _fadeAnim;
 
   Timer? _fastTimer;
-  SatelPartitionState? _lastState;
+  String? _lastKey;
   DateTime? _trackedDeadline;
   DateTime? _panelDeadline;
 
@@ -62,41 +65,57 @@ class _SatelEntryDelayLayerState extends ConsumerState<SatelEntryDelayLayer>
     super.dispose();
   }
 
-  void _syncState(SatelStatus status) {
-    final worst = status.worstState;
-    if (worst == _lastState) return;
-    _lastState = worst;
+  void _sync() {
+    final satel = ref.read(satelStatusProvider);
+    final knx = ref.read(knxAlarmStatusProvider);
+    final knxOn = knx.enabled;
+    final knxEntry = knxOn && knx.phase == 'entry';
+    final knxExit = knxOn && knx.phase == 'exit';
+    final worst = knxOn ? SatelPartitionState.disarmed : satel.worstState;
+    final key = knxOn ? 'knx:${knx.phase}' : 'satel:${worst.name}';
+    if (key != _lastKey) {
+      _lastKey = key;
+      final shouldShow = knxEntry || worst == SatelPartitionState.entryDelay;
+      if (shouldShow && !_overlayVisible) {
+        setState(() => _overlayVisible = true);
+        _animCtrl.forward();
+        HapticFeedback.heavyImpact();
+      } else if (!shouldShow && _overlayVisible) {
+        _animCtrl.reverse().then((_) {
+          if (mounted) setState(() => _overlayVisible = false);
+        });
+      }
 
-    // Overlay ─────────────────────────────────────────────────────────────
-    final shouldShow = worst == SatelPartitionState.entryDelay;
-    if (shouldShow && !_overlayVisible) {
-      setState(() => _overlayVisible = true);
-      _animCtrl.forward();
-      HapticFeedback.heavyImpact();
-    } else if (!shouldShow && _overlayVisible) {
-      _animCtrl.reverse().then((_) {
-        if (mounted) setState(() => _overlayVisible = false);
-      });
+      _fastTimer?.cancel();
+      _fastTimer = null;
+      _trackedDeadline = null;
+      _panelDeadline = null;
+      alarmDelayStop();
+
+      if (knxEntry) {
+        alarmDelaySlow();
+        _armFast(_deadline(knx.deadlineMs));
+      } else if (knxExit) {
+        alarmDelaySlow();
+        _armFast(_deadline(knx.deadlineMs));
+      } else if (worst == SatelPartitionState.entryDelay) {
+        alarmDelaySlow();
+      } else if (worst == SatelPartitionState.exitDelay) {
+        alarmDelaySlow();
+        _armFast(satel.exitDeadline);
+      }
     }
 
-    // Beep. Slow chirp for the delay; the fast tail only in the last seconds
-    // before the partition actually arms.
-    _fastTimer?.cancel();
-    _fastTimer = null;
-    _trackedDeadline = null;
-    _panelDeadline = null;
-    alarmDelayStop();
-
-    switch (worst) {
-      case SatelPartitionState.entryDelay:
-        alarmDelaySlow();
-      case SatelPartitionState.exitDelay:
-        alarmDelaySlow();
-        _armFast(status.exitDeadline);
-      default:
-        break;
+    if (!knxOn && worst == SatelPartitionState.exitDelay) {
+      _syncExitCountdown(satel);
+    } else if (knxEntry || knxExit) {
+      final deadline = _deadline(knx.deadlineMs);
+      if (deadline != _trackedDeadline) _armFast(deadline);
     }
   }
+
+  DateTime? _deadline(int? ms) =>
+      ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
 
   void _syncExitCountdown(SatelStatus status) {
     if (status.worstState != SatelPartitionState.exitDelay) return;
@@ -129,10 +148,8 @@ class _SatelEntryDelayLayerState extends ConsumerState<SatelEntryDelayLayer>
 
   @override
   Widget build(BuildContext context) {
-    ref.listen<SatelStatus>(satelStatusProvider, (_, next) {
-      _syncState(next);
-      _syncExitCountdown(next);
-    });
+    ref.listen<SatelStatus>(satelStatusProvider, (_, __) => _sync());
+    ref.listen<KnxAlarmStatus>(knxAlarmStatusProvider, (_, __) => _sync());
 
     final status = ref.watch(satelStatusProvider);
 
@@ -169,6 +186,7 @@ class _EntryDelayOverlayState extends ConsumerState<_EntryDelayOverlay>
     with SingleTickerProviderStateMixin {
   bool _busy = false;
   String? _error;
+  String _pin = '';
 
   late final AnimationController _pulseCtrl;
   late final Animation<double> _pulse;
@@ -208,10 +226,38 @@ class _EntryDelayOverlayState extends ConsumerState<_EntryDelayOverlay>
     // auto-dismisses this overlay.
   }
 
+  Future<void> _disarmKnx() async {
+    if (_pin.length < 4 || _busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final result = await knxAlarmDisarm(_pin, ref.read(authProvider).token);
+    if (!mounted) return;
+    final status = result.status;
+    if (status != null) {
+      ref.read(knxAlarmStatusProvider.notifier).apply(status);
+    }
+    setState(() {
+      _busy = false;
+      if (result.ok) _pin = '';
+      _error = result.ok ? null : (result.message ?? 'Uitschakelen mislukt.');
+    });
+    if (!result.ok) HapticFeedback.heavyImpact();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final status   = ref.watch(satelStatusProvider);
-    final violated = status.allZones.where((z) => z.violated).toList();
+    final status = ref.watch(satelStatusProvider);
+    final knx = ref.watch(knxAlarmStatusProvider);
+    final knxEntry = knx.enabled && knx.phase == 'entry';
+    final names = knxEntry
+        ? [
+            for (final sensor in knx.sensors)
+              if (sensor.open && !sensor.bypassed)
+                sensor.name.isEmpty ? sensor.ga : sensor.name,
+          ]
+        : status.allZones.where((z) => z.violated).map((z) => z.name).toList();
 
     return Material(
       color: Colors.transparent,
@@ -273,13 +319,13 @@ class _EntryDelayOverlayState extends ConsumerState<_EntryDelayOverlay>
               ),
 
               // Violated zones hint
-              if (violated.isNotEmpty) ...[
+              if (names.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 Wrap(
                   spacing: 6,
                   runSpacing: 6,
                   alignment: WrapAlignment.center,
-                  children: violated.take(4).map((z) {
+                  children: names.take(4).map((name) {
                     return Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 4),
@@ -291,7 +337,7 @@ class _EntryDelayOverlayState extends ConsumerState<_EntryDelayOverlay>
                             width: 0.5),
                       ),
                       child: Text(
-                        z.name,
+                        name,
                         style: const TextStyle(
                           fontSize: 11,
                           color: Color(0xFFD64545),
@@ -302,10 +348,35 @@ class _EntryDelayOverlayState extends ConsumerState<_EntryDelayOverlay>
                 ),
               ],
 
-              const SizedBox(height: 40),
+              const SizedBox(height: 28),
 
-              // ── Single disarm button ─────────────────────────────
-              ConstrainedBox(
+              if (knxEntry)
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: AlarmPinSection(
+                      pin: _pin,
+                      busy: _busy,
+                      feedback: _error,
+                      canConfirm: _pin.length >= 4,
+                      arming: false,
+                      onDigit: (d) {
+                        if (_pin.length >= 8) return;
+                        setState(() {
+                          _pin += d;
+                          _error = null;
+                        });
+                      },
+                      onBackspace: () {
+                        if (_pin.isEmpty) return;
+                        setState(() => _pin = _pin.substring(0, _pin.length - 1));
+                      },
+                      onConfirm: _disarmKnx,
+                    ),
+                  ),
+                )
+              else
+                ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 280),
                 child: SizedBox(
                   width: double.infinity,
@@ -340,11 +411,11 @@ class _EntryDelayOverlayState extends ConsumerState<_EntryDelayOverlay>
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+                    ),
                   ),
                 ),
-              ),
 
-              if (_error != null) ...[
+              if (_error != null && !knxEntry) ...[
                 const SizedBox(height: 12),
                 Text(
                   _error!,

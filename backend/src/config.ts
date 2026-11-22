@@ -496,6 +496,13 @@ export function buildGAIndex(cfg: HouseConfig): Map<GA, GARole[]> {
     if (role) pushGA(index, point.ga, role, "energy", "energy");
   }
 
+  for (const sensor of cfg.knxAlarm?.sensors ?? []) {
+    pushGA(index, sensor.ga?.trim(), "bit", `knx-alarm:${sensor.id}`, "universal");
+  }
+  if (cfg.knxAlarm?.sirenGa) {
+    pushGA(index, cfg.knxAlarm.sirenGa.trim(), "switch", "knx-alarm:siren", "universal");
+  }
+
   return index;
 }
 

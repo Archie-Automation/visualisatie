@@ -5047,13 +5047,27 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           onChanged: () => setState(() {}),
         );
       case _FocusKind.satel:
-        return const _SatelInstallerPanel();
+        return _SatelInstallerPanel(
+          onEnable: () {
+            final alarm = _house?['knxAlarm'];
+            if (alarm is Map) alarm['enabled'] = false;
+            setState(() {});
+          },
+        );
       case _FocusKind.knxAlarm:
         final house = _house;
         if (house == null) return const SizedBox.shrink();
         return KnxAlarmInstaller(
           house: house,
-          onChanged: () => setState(() {}),
+          onChanged: () {
+            final alarm = house['knxAlarm'];
+            final knxOn = alarm is Map && alarm['enabled'] == true;
+            final satelOn = ref.read(satelEnabledProvider).value ?? false;
+            if (knxOn && satelOn) {
+              ref.read(satelEnabledProvider.notifier).setEnabled(false);
+            }
+            setState(() {});
+          },
         );
       case _FocusKind.energy:
         return EnergyInstallerSection(
@@ -9728,7 +9742,9 @@ class _IntegrationBadge extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 class _SatelInstallerPanel extends ConsumerWidget {
-  const _SatelInstallerPanel();
+  const _SatelInstallerPanel({this.onEnable});
+
+  final VoidCallback? onEnable;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -9769,9 +9785,12 @@ class _SatelInstallerPanel extends ConsumerWidget {
               else
                 LuxeSwitchRow(
                   title: 'Integratie',
+                  subtitle: 'Aanzetten schakelt het KNX-alarm uit.',
                   value: enabled,
-                  onChanged: (v) =>
-                      ref.read(satelEnabledProvider.notifier).setEnabled(v),
+                  onChanged: (v) {
+                    if (v) onEnable?.call();
+                    ref.read(satelEnabledProvider.notifier).setEnabled(v);
+                  },
                 ),
               if (enabled) ...[
                 const SizedBox(height: 8),

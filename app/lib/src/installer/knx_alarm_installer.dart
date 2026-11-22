@@ -106,17 +106,22 @@ class _KnxAlarmInstallerState extends State<KnxAlarmInstaller> {
                 trailing: LuxeInfoIconButton(
                   title: 'KNX-alarm',
                   body:
-                      'Naast Satel. Sensoren op de bus, een code, sirene, inloop en uitloop. '
+                      'Eén alarm in huis. Satel of KNX, niet allebei. '
+                      'Sensoren op de bus, een code, sirene, inloop en uitloop. '
                       'Elke gebruiker kan daarnaast een eigen alarmcode krijgen onder Gebruikers.',
                 ),
               ),
               LuxeSwitchRow(
                 title: 'KNX-alarm',
                 subtitle:
-                    'Sensoren op de bus, een code, sirene, inloop en uitloop.',
+                    'Zet Satel uit. Deur met inloop start de tijd; die loopt door tot de code.',
                 value: _alarm['enabled'] == true,
                 onChanged: (v) {
                   _alarm['enabled'] = v;
+                  if (v) {
+                    final satel = widget.house['satel'];
+                    if (satel is Map) satel['enabled'] = false;
+                  }
                   _commit();
                   setState(() {});
                 },
@@ -325,11 +330,20 @@ class _SensorCardState extends State<_SensorCard> {
               setState(() {});
             },
           ),
-          LuxeSwitchRow(
-            title: 'Alarm als het bit uit staat',
-            value: widget.sensor['alarmOn'] == '0',
+          const LuxeFieldLabel('Contact'),
+          DropdownButtonFormField<String>(
+            initialValue: widget.sensor['alarmOn'] == '0' ? '0' : '1',
+            decoration: luxeFilledDecoration(
+              helper:
+                  'NO: alarm als de ingang aan gaat. NC: alarm als de ingang uit gaat.',
+            ),
+            items: const [
+              DropdownMenuItem(value: '1', child: Text('NO — normaal open')),
+              DropdownMenuItem(value: '0', child: Text('NC — normaal gesloten')),
+            ],
             onChanged: (v) {
-              widget.sensor['alarmOn'] = v ? '0' : '1';
+              if (v == null) return;
+              widget.sensor['alarmOn'] = v;
               widget.onChanged();
               setState(() {});
             },

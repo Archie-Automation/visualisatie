@@ -142,6 +142,20 @@ export function mergeKnxAlarmPin(incoming: HouseConfig, previous: HouseConfig): 
   next.pinHash = prev;
 }
 
+/** Eén alarm. Het systeem dat net aan gaat, zet het andere uit. */
+export function exclusiveAlarm(incoming: HouseConfig, previous: HouseConfig): void {
+  const knxOn = incoming.knxAlarm?.enabled === true;
+  const satelOn = incoming.satel?.enabled === true;
+  if (!knxOn || !satelOn) return;
+  const knxWas = previous.knxAlarm?.enabled === true;
+  const satelWas = previous.satel?.enabled === true;
+  if (satelOn && !satelWas && knxWas) {
+    if (incoming.knxAlarm) incoming.knxAlarm.enabled = false;
+    return;
+  }
+  incoming.satel = { ...(incoming.satel ?? {}), enabled: false };
+}
+
 /** Preserve bcrypt hashes when the installer omits or clears `passwordHash`. */
 export function mergePasswordHashes(incoming: HouseConfig, previous: HouseConfig): void {
   const prevById = new Map((previous.users ?? []).map((u: User) => [u.id, u]));

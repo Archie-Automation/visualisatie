@@ -1515,7 +1515,8 @@ export type KnxAlarmSensorKind =
   | "rookmelder"
   | "watermelder"
   | "gasmelder"
-  | "paniekknop";
+  | "paniekknop"
+  | "sabotage";
 
 export type KnxAlarmSensor = {
   id: string;
@@ -1529,7 +1530,11 @@ export type KnxAlarmSensor = {
   afwezig?: boolean;
   /** Openen start de inlooptijd in plaats van meteen de sirene. */
   inloop?: boolean;
-  /** "0" = alarm als het bit uit staat. Standaard "1". */
+  /**
+   * "1" = NO, normaal open: alarm als de ingang aan gaat.
+   * "0" = NC, normaal gesloten: alarm als de ingang uit gaat.
+   * Standaard NO.
+   */
   alarmOn?: "0" | "1";
 };
 

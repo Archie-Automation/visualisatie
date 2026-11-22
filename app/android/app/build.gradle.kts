@@ -15,8 +15,8 @@ if (keystorePropertiesFile.exists()) {
 
 android {
     namespace = "com.example.archie_os"
-    // file_picker / flutter_plugin_android_lifecycle require API 36+.
-    compileSdk = 36
+    // flutter_local_notifications and androidx.core 1.19 require API 37.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

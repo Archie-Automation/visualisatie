@@ -10,6 +10,7 @@ const knxAlarmSensorKinds = <String, String>{
   'watermelder': 'Watermelder',
   'gasmelder': 'Gasdetector',
   'paniekknop': 'Paniekknop',
+  'sabotage': 'Sabotagecontact',
 };
 
 String knxAlarmSensorKindLabel(String? kind) =>
