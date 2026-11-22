@@ -155,14 +155,30 @@ class _LiveVideoHuggingStageState extends State<LiveVideoHuggingStage> {
   @override
   Widget build(BuildContext context) {
     final known = _locked != null;
-    return Opacity(
-      opacity: known ? 1 : 0,
-      child: LiveVideoFittedStage(
-        aspectRatio: _locked ?? widget.fallbackAspect,
-        heroTag: widget.heroTag,
-        factor: widget.factor,
-        child: widget.builder(_onIntrinsic),
-      ),
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        Opacity(
+          opacity: known ? 1 : 0,
+          child: LiveVideoFittedStage(
+            aspectRatio: _locked ?? widget.fallbackAspect,
+            heroTag: widget.heroTag,
+            factor: widget.factor,
+            child: widget.builder(_onIntrinsic),
+          ),
+        ),
+        if (!known)
+          Center(
+            child: SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: LuxeColors.brass,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

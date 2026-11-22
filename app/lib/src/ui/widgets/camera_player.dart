@@ -44,6 +44,7 @@ class _CameraPlayerState extends ConsumerState<CameraPlayer> {
   VideoPlayerController? _ctrl;
   bool _ready = false;
   String? _err;
+  Size? _frozenSize;
   late bool _muted;
   Timer? _liveChase;
   Duration _lastPosition = Duration.zero;
@@ -75,13 +76,16 @@ class _CameraPlayerState extends ConsumerState<CameraPlayer> {
       await c.initialize();
       await c.setLooping(false);
       await c.setVolume(_muted ? 0 : 1);
+      c.addListener(_onVideoValue);
       await c.play();
-      if (!mounted) return;
-      setState(() {
-        _ctrl = c;
-        _ready = true;
-      });
-      _reportAspect(c.value.size);
+      if (!mounted) {
+        c.removeListener(_onVideoValue);
+        await c.dispose();
+        return;
+      }
+      _ctrl = c;
+      _captureSize(c);
+      setState(() => _ready = true);
       _startLiveChase(c);
     } catch (e) {
       if (!mounted) return;
@@ -89,15 +93,26 @@ class _CameraPlayerState extends ConsumerState<CameraPlayer> {
     }
   }
 
+  void _captureSize(VideoPlayerController c) {
+    if (_frozenSize != null) return;
+    final size = c.value.size;
+    if (size.width < 64 || size.height < 64) return;
+    _frozenSize = size;
+    _reportAspect(size);
+  }
+
+  void _onVideoValue() {
+    final c = _ctrl;
+    if (c == null || _frozenSize != null) return;
+    _captureSize(c);
+    if (_frozenSize != null && mounted) setState(() {});
+  }
+
   void _reportAspect(Size size) {
     if (size.width <= 0 || size.height <= 0) return;
     final aspect = size.width / size.height;
-    final cb = widget.onIntrinsicAspect;
-    if (cb == null) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      widget.onIntrinsicAspect?.call(aspect);
-    });
+    if (!aspect.isFinite || aspect < 0.2 || aspect > 5) return;
+    widget.onIntrinsicAspect?.call(aspect);
   }
 
   void _startLiveChase(VideoPlayerController c) {
@@ -134,9 +149,11 @@ class _CameraPlayerState extends ConsumerState<CameraPlayer> {
     super.didUpdateWidget(old);
     if (old.hlsUrl != widget.hlsUrl) {
       _liveChase?.cancel();
+      _ctrl?.removeListener(_onVideoValue);
       _ctrl?.dispose();
       _ctrl = null;
       _ready = false;
+      _frozenSize = null;
       _err = null;
       _stallTicks = 0;
       _lastPosition = Duration.zero;
@@ -147,6 +164,7 @@ class _CameraPlayerState extends ConsumerState<CameraPlayer> {
   @override
   void dispose() {
     _liveChase?.cancel();
+    _ctrl?.removeListener(_onVideoValue);
     _ctrl?.dispose();
     super.dispose();
   }
@@ -163,16 +181,13 @@ class _CameraPlayerState extends ConsumerState<CameraPlayer> {
       fit: StackFit.expand,
       children: [
         if (!widget.poster) Container(color: Colors.black),
-        if (_ready &&
-            _ctrl != null &&
-            _ctrl!.value.size.width >= 64 &&
-            _ctrl!.value.size.height >= 64)
+        if (_ready && _ctrl != null && _frozenSize != null)
           FittedBox(
             fit: widget.fit,
             clipBehavior: Clip.hardEdge,
             child: SizedBox(
-              width: _ctrl!.value.size.width,
-              height: _ctrl!.value.size.height,
+              width: _frozenSize!.width,
+              height: _frozenSize!.height,
               child: VideoPlayer(_ctrl!),
             ),
           )

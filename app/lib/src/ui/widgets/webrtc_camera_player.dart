@@ -62,38 +62,72 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
   int _attempt = 0;
   bool _rendererReady = false;
   bool _videoSized = false;
-  double? _reportedAspect;
+  double? _frozenW;
+  double? _frozenH;
+  Timer? _stableTimer;
+  DateTime? _firstPlausibleAt;
+  int _stableToken = 0;
 
   static const _retryDelay = Duration(seconds: 2);
 
   @override
   void initState() {
     super.initState();
-    _renderer.onResize = _publishAspect;
+    _renderer.onResize = _scheduleStable;
+    _renderer.onFirstFrameRendered = _scheduleStable;
     _start();
   }
 
-  void _publishAspect() {
-    if (!mounted) return;
-    final w = _renderer.videoWidth;
-    final h = _renderer.videoHeight;
-    // 0×0 reports aspect 1. RTCVideoView would paint that square and then
-    // jump to the real frame. Wait until the stream has a real picture.
+  /// Android meldt eerst een vierkant of een te kleine texture. RTCVideoView
+  /// tekent die meteen en verspringt als de echte maat volgt. Pas schilderen
+  /// als breedte, hoogte en rotatie even blijven.
+  void _scheduleStable() {
+    if (!mounted || _videoSized) return;
+    final v = _renderer.value;
+    final w = v.width;
+    final h = v.height;
     if (w < 64 || h < 64) return;
-    final aspect = w / h;
+    final rot = v.rotation;
+    final swapped = rot == 90 || rot == 270;
+    final dw = swapped ? h : w;
+    final dh = swapped ? w : h;
+    final aspect = dw / dh;
     if (!aspect.isFinite || aspect < 0.2 || aspect > 5) return;
-    if (!_videoSized) {
-      setState(() => _videoSized = true);
+    _firstPlausibleAt ??= DateTime.now();
+    final waited = DateTime.now().difference(_firstPlausibleAt!);
+    final token = ++_stableToken;
+    _stableTimer?.cancel();
+    final delay = waited >= const Duration(milliseconds: 800)
+        ? Duration.zero
+        : const Duration(milliseconds: 150);
+    _stableTimer = Timer(delay, () => _commitStable(token, w, h, rot));
+  }
+
+  void _commitStable(int token, double w, double h, int rot) {
+    if (!mounted || token != _stableToken || _videoSized) return;
+    final v = _renderer.value;
+    if (v.width != w || v.height != h || v.rotation != rot) return;
+    if (!v.renderVideo || _renderer.textureId == null) {
+      final waited = DateTime.now().difference(
+        _firstPlausibleAt ?? DateTime.now(),
+      );
+      if (waited >= const Duration(seconds: 3)) return;
+      _stableTimer = Timer(
+        const Duration(milliseconds: 50),
+        () => _commitStable(token, w, h, rot),
+      );
+      return;
     }
-    final prev = _reportedAspect;
-    if (prev != null && (prev - aspect).abs() < 0.02) return;
-    _reportedAspect = aspect;
-    final cb = widget.onIntrinsicAspect;
-    if (cb == null) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      widget.onIntrinsicAspect?.call(aspect);
-    });
+    final swapped = rot == 90 || rot == 270;
+    final dw = swapped ? h : w;
+    final dh = swapped ? w : h;
+    final aspect = dw / dh;
+    if (!aspect.isFinite || aspect < 0.2 || aspect > 5) return;
+    _frozenW = dw;
+    _frozenH = dh;
+    _videoSized = true;
+    widget.onIntrinsicAspect?.call(aspect);
+    setState(() {});
   }
 
   @override
@@ -101,8 +135,12 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
     super.didUpdateWidget(old);
     if (old.signallingPath != widget.signallingPath) {
       _attempt = 0;
-      _reportedAspect = null;
       _videoSized = false;
+      _frozenW = null;
+      _frozenH = null;
+      _firstPlausibleAt = null;
+      _stableTimer?.cancel();
+      _stableToken++;
       _restart();
     }
   }
@@ -185,7 +223,7 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
           _connectTimeout?.cancel();
           setState(() => _connected = true);
           widget.onConnected?.call();
-          _publishAspect();
+          _scheduleStable();
         }
       };
       pc.onConnectionState = (s) {
@@ -254,7 +292,9 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
   void dispose() {
     _connectTimeout?.cancel();
     _iceWatchdog?.cancel();
+    _stableTimer?.cancel();
     _renderer.onResize = null;
+    _renderer.onFirstFrameRendered = null;
     try {
       _renderer.srcObject = null;
     } catch (_) {}
@@ -275,13 +315,21 @@ class _WebRTCCameraPlayerState extends ConsumerState<WebRTCCameraPlayer> {
       fit: StackFit.expand,
       children: [
         if (widget.opaqueBackground) Container(color: Colors.black),
-        if (_videoSized)
-          RTCVideoView(
-            _renderer,
-            objectFit: widget.fit == BoxFit.cover
-                ? RTCVideoViewObjectFit.RTCVideoViewObjectFitCover
-                : RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
-            mirror: false,
+        if (_videoSized &&
+            _frozenW != null &&
+            _frozenH != null &&
+            _renderer.textureId != null)
+          FittedBox(
+            fit: widget.fit,
+            clipBehavior: Clip.hardEdge,
+            child: SizedBox(
+              width: _frozenW,
+              height: _frozenH,
+              child: Texture(
+                textureId: _renderer.textureId!,
+                filterQuality: FilterQuality.low,
+              ),
+            ),
           ),
         if (widget.opaqueBackground && !_connected && _error == null)
           Center(
