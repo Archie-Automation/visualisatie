@@ -612,8 +612,6 @@ export function buildRouter(
         return;
       }
 
-      // Geen headers vóór de eerste byte. Anders zit het tablet vast aan een
-      // Content-Length terwijl GitHub nog niets stuurt, of halverwege afbreekt.
       const result = await fetchAndroidApkFromGithub(updateChannel);
       if (!result.ok) {
         logger.warn(
@@ -649,23 +647,6 @@ export function buildRouter(
         logger.warn({ err }, "APK-cache schrijven mislukt");
         failCache();
       });
-      const tee = new Transform({
-        transform(chunk, _enc, cb) {
-          if (fileFailed) {
-            cb(null, chunk);
-            return;
-          }
-          if (!fileOut.write(chunk)) fileOut.once("drain", () => cb(null, chunk));
-          else cb(null, chunk);
-        },
-        final(cb) {
-          if (fileFailed) {
-            cb();
-            return;
-          }
-          fileOut.end(() => cb());
-        }
-      });
 
       res.setHeader(
         "Content-Type",
@@ -678,24 +659,48 @@ export function buildRouter(
       if (result.sizeBytes > 0) {
         res.setHeader("Content-Length", String(result.sizeBytes));
       }
+      res.flushHeaders();
 
       const github = Readable.fromWeb(result.body);
+      let received = 0;
+      let lastByteAt = Date.now();
+      const tee = new Transform({
+        transform(chunk: Buffer, _enc, cb) {
+          received += chunk.length;
+          lastByteAt = Date.now();
+          if (!fileFailed) fileOut.write(chunk);
+          cb(null, chunk);
+        }
+      });
+      const stall = setInterval(() => {
+        if (Date.now() - lastByteAt < 45_000) return;
+        logger.warn(
+          { received, expected: result.sizeBytes, assetId: result.id },
+          "APK-stream stil, verbinding verbroken"
+        );
+        github.destroy(new Error("apk stream stalled"));
+      }, 5_000);
       try {
         await pipeline(github, tee, res);
-        if (
-          !fileFailed &&
-          (result.sizeBytes <= 0 || fileOut.bytesWritten === result.sizeBytes)
-        ) {
+        clearInterval(stall);
+        fileOut.end(() => {
+          if (
+            fileFailed ||
+            (result.sizeBytes > 0 && received !== result.sizeBytes)
+          ) {
+            failCache();
+            return;
+          }
           try {
             fs.renameSync(tmp, dest);
           } catch (err) {
             logger.warn({ err }, "APK-cache hernoemen mislukt");
             failCache();
           }
-        } else {
-          failCache();
-        }
+        });
       } catch (err) {
+        clearInterval(stall);
+        fileOut.destroy();
         failCache();
         throw err;
       }

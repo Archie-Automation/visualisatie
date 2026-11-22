@@ -465,29 +465,54 @@ export async function fetchAndroidApkFromGithub(
     ...headers(),
     Accept: "application/octet-stream"
   };
-  // Hele body, niet alleen de eerste byte. 60 s sneed een trage GitHub-download
-  // doormidden; het tablet had Content-Length al en bleef op de rest wachten.
-  const signal = AbortSignal.timeout(10 * 60 * 1000);
+  // api.github.com antwoordt met een redirect naar de CDN. De Authorization-header
+  // mag niet mee naar die andere host: dan blijft de download hangen zonder bytes.
+  const headSignal = AbortSignal.timeout(25_000);
+  const bodySignal = AbortSignal.timeout(10 * 60 * 1000);
   try {
     let res = await fetch(apk.apiUrl, {
       headers: apkHeaders,
-      redirect: "follow",
-      signal
+      redirect: "manual",
+      signal: headSignal
     });
 
-    // Expired / wrong token → retry anonymously (only works for public repos).
     if ((res.status === 401 || res.status === 403) && githubToken()) {
       logger.warn(
         { status: res.status, assetId: apk.id, name: apk.name },
         "GitHub APK-download: token geweigerd – opnieuw zonder token"
       );
+      try {
+        await res.body?.cancel();
+      } catch {
+        /* ignore */
+      }
       res = await fetch(apk.apiUrl, {
         headers: {
           Accept: "application/octet-stream",
           "User-Agent": "archie-os-version-check"
         },
+        redirect: "manual",
+        signal: headSignal
+      });
+    }
+
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get("location");
+      try {
+        await res.body?.cancel();
+      } catch {
+        /* ignore */
+      }
+      if (!loc) {
+        return { ok: false, status: 502, error: "github_apk_no_redirect" };
+      }
+      res = await fetch(loc, {
+        headers: {
+          Accept: "application/octet-stream",
+          "User-Agent": "archie-os-version-check"
+        },
         redirect: "follow",
-        signal
+        signal: bodySignal
       });
     }
 
@@ -511,11 +536,14 @@ export async function fetchAndroidApkFromGithub(
       };
     }
 
+    const cdnLength = Number(res.headers.get("content-length"));
+    const sizeBytes =
+      Number.isFinite(cdnLength) && cdnLength > 0 ? cdnLength : apk.sizeBytes;
     return {
       ok: true,
       id: apk.id,
       name: apk.name,
-      sizeBytes: apk.sizeBytes,
+      sizeBytes,
       body: res.body as ReadableStream<Uint8Array>
     };
   } catch (err) {
