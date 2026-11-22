@@ -253,6 +253,7 @@ export function assertUsersMutation(
       n.username = prev.username;
       n.role = "installer";
       n.passwordHash = prev.passwordHash;
+      n.alarmPinHash = prev.alarmPinHash;
       n.access = prev.access;
     }
   }

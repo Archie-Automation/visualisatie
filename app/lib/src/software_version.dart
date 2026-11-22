@@ -223,9 +223,7 @@ final softwareVersionStatusProvider =
     final res = await http
         .get(
           Uri.parse(
-            supportsAndroidApkUpdate
-                ? '$apiBase/api/version'
-                : '$apiBase/api/version?refresh=1',
+            '$apiBase/api/version?refresh=1',
           ),
         )
         .timeout(const Duration(seconds: 12));

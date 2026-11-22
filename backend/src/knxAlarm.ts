@@ -86,7 +86,7 @@ export async function knxAlarmArm(
   ensureFresh();
   const cfg = readCfg();
   if (!cfg.enabled) return fail(409, "disabled", "KNX-alarm staat uit.");
-  const pinErr = await checkPin(cfg.pinHash, pin);
+  const pinErr = await checkPin(pin);
   if (pinErr) return pinErr;
   if (phase !== "off") {
     return fail(409, "busy", "Het alarm staat al aan. Schakel het eerst uit.");
@@ -114,7 +114,7 @@ export async function knxAlarmDisarm(pin: string): Promise<KnxAlarmResult> {
   ensureFresh();
   const cfg = readCfg();
   if (!cfg.enabled) return fail(409, "disabled", "KNX-alarm staat uit.");
-  const pinErr = await checkPin(cfg.pinHash, pin);
+  const pinErr = await checkPin(pin);
   if (pinErr) return pinErr;
   phase = "off";
   mode = null;
@@ -136,7 +136,7 @@ export async function knxAlarmBypass(
   const sensor = (cfg.sensors ?? []).find((s) => s.id === id);
   if (!sensor) return fail(404, "unknown_sensor", "Die sensor bestaat niet.");
   if (phase !== "off") {
-    const pinErr = await checkPin(cfg.pinHash, pin);
+    const pinErr = await checkPin(pin);
     if (pinErr) return pinErr;
   }
   if (bypass) bypassed.add(id);
@@ -154,17 +154,35 @@ function fail(
   return { ok: false, statusCode, error, message };
 }
 
-async function checkPin(
-  pinHash: string | undefined,
-  pin: string
-): Promise<KnxAlarmResult | null> {
+function alarmPinHashes(): string[] {
+  const cfg = getConfig();
+  const hashes: string[] = [];
+  const house = cfg.knxAlarm?.pinHash?.trim();
+  if (house) hashes.push(house);
+  for (const user of cfg.users ?? []) {
+    if (user.enabled === false) continue;
+    const pin = user.alarmPinHash?.trim();
+    if (pin) hashes.push(pin);
+  }
+  return hashes;
+}
+
+async function checkPin(pin: string): Promise<KnxAlarmResult | null> {
   if (Date.now() < lockedUntil) {
     return fail(429, "locked", "Te vaak een verkeerde code. Wacht een minuut.");
   }
-  if (!pinHash) {
+  const hashes = alarmPinHashes();
+  if (hashes.length === 0) {
     return fail(409, "no_pin", "Er is nog geen alarmcode ingesteld.");
   }
-  const ok = await bcrypt.compare(pin, pinHash).catch(() => false);
+  const typed = pin.trim();
+  let ok = false;
+  for (const hash of hashes) {
+    if (await bcrypt.compare(typed, hash).catch(() => false)) {
+      ok = true;
+      break;
+    }
+  }
   if (!ok) {
     fails += 1;
     if (fails >= 8) {

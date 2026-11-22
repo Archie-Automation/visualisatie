@@ -209,7 +209,7 @@ export function sessionLive(sessionId: string | undefined | null): boolean {
 }
 
 function publicUser(user: User): Omit<User, "passwordHash"> {
-  const { passwordHash: _ph, ...rest } = user;
+  const { passwordHash: _ph, alarmPinHash: _alarmPin, alarmPinSet: _alarmSet, ...rest } = user;
   return { ...rest, role: normalizeRole(user.role), enabled: isUserEnabled(user) };
 }
 

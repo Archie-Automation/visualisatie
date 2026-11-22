@@ -511,10 +511,10 @@ class _VoipInstallerSectionState extends State<VoipInstallerSection> {
         if (enabled) ...[
           Align(
             alignment: Alignment.centerLeft,
-            child: TextButton.icon(
+            child: LuxePrimaryButton(
+              label: ami ? 'Server bereikbaar' : 'Verbinding controleren',
+              icon: Icons.refresh,
               onPressed: _refreshStatus,
-              icon: const Icon(Icons.refresh, size: 18),
-              label: Text(ami ? 'Server bereikbaar' : 'Verbinding controleren'),
             ),
           ),
           if (_statusErr != null)

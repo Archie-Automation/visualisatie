@@ -9,6 +9,21 @@ import {
   type AppVersionInfo
 } from "./version";
 
+/**
+ * Versie die de tablet vergelijkt. Ontbreekt het releaselabel, of loopt het
+ * achter op deze server, dan blijft de tablet anders op “wordt voorbereid”
+ * staan terwijl Server bijwerken al klaar is.
+ */
+export function apkVersionAdvertised(
+  apk: GithubAndroidApkInfo | null | undefined,
+  server: AppVersionInfo
+): string | null {
+  if (!apk) return null;
+  const labeled = apk.version ? parseVersion(apk.version) : null;
+  if (!labeled || compareVersion(labeled, server) < 0) return server.version;
+  return labeled.version;
+}
+
 /** Android APK attached to a GitHub Release (private-repo safe via API URL). */
 export interface GithubAndroidApkInfo {
   id: number;

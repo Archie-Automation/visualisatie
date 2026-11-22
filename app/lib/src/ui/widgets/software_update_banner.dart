@@ -234,11 +234,32 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
     }
 
     if (apkWaiting && !apkReady) {
+      final apk = status.latest?.androidApk;
+      final canTry = apk != null &&
+          apk.available &&
+          apk.name.toLowerCase() != 'app-release.apk';
+      if (canTry) {
+        return _Banner(
+          message: _error ??
+              (_installing
+                  ? (_received > 0
+                      ? 'App-update downloaden… ${(_received / (1024 * 1024)).toStringAsFixed(1)} MB. '
+                          'Bevestig daarna Installeren op het tablet.'
+                      : 'De server haalt de app op. De balk loopt zodra de bytes binnenkomen.')
+                  : 'De server is nieuwer dan deze tablet. Tik op Installeren.'),
+          actionLabel: _installing ? null : 'Installeren',
+          onAction: _installing ? null : () => _installApk(apk),
+          progress: _installing ? (_progress ?? 0) : null,
+        );
+      }
       return _Banner(
         message: _error ??
-            'Server heeft een nieuwere versie. '
-            'Nieuwe app-versie wordt voorbereid. '
-            'Dit duurt vaak 10–15 minuten.',
+            'De server is nieuwer dan deze tablet. '
+            'Het installatiebestand is er nog niet.',
+        actionLabel: 'Opnieuw controleren',
+        onAction: () {
+          ref.invalidate(softwareVersionStatusProvider);
+        },
       );
     }
 

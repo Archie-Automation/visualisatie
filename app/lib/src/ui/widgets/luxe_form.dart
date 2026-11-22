@@ -272,6 +272,45 @@ class LuxeNavRow extends StatelessWidget {
   }
 }
 
+/// Zelfde knop als in de IP-pagina’s: KNX, Lutron, energie, alarm, intercom.
+class LuxePrimaryButton extends StatelessWidget {
+  const LuxePrimaryButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.busy = false,
+    this.icon,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+  final bool busy;
+  final IconData? icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final spinner = SizedBox(
+      width: 18,
+      height: 18,
+      child: CircularProgressIndicator(
+        strokeWidth: 2,
+        color: Theme.of(context).colorScheme.onPrimary,
+      ),
+    );
+    if (icon == null || busy) {
+      return FilledButton(
+        onPressed: busy ? null : onPressed,
+        child: busy ? spinner : Text(label),
+      );
+    }
+    return FilledButton.icon(
+      onPressed: onPressed,
+      icon: Icon(icon, size: 18),
+      label: Text(label),
+    );
+  }
+}
+
 class LuxeAddRow extends StatelessWidget {
   const LuxeAddRow({super.key, required this.label, required this.onTap});
 

@@ -73,6 +73,7 @@ import type {
 } from "./types";
 import { appVersionInfo } from "./version";
 import {
+  apkVersionAdvertised,
   getGithubLatest,
   isUpdateAvailableOnGithub,
   normalizeUpdateChannel
@@ -183,7 +184,7 @@ import {
 
 function stripHash(u: User): User {
   // Keep the shape but blank out the hash. Clients should never see it.
-  return { ...u, passwordHash: "" };
+  return { ...u, passwordHash: "", alarmPinHash: undefined };
 }
 
 /** Nonce → expiry timestamp (ms). Replaces the old Set + setTimeout pattern
@@ -398,7 +399,11 @@ function keepUpdateChannel(raw: unknown): void {
 function installerHouseForClient(cfg: HouseConfig): HouseConfig {
   const copy = structuredClone(cfg);
   if (copy.users) {
-    for (const u of copy.users) u.passwordHash = "";
+    for (const u of copy.users) {
+      u.alarmPinSet = Boolean(u.alarmPinHash);
+      u.passwordHash = "";
+      u.alarmPinHash = undefined;
+    }
   }
   walkDevices(copy, (d) => {
     if (d.type !== "lutron_homeworks") return;
@@ -559,7 +564,7 @@ export function buildRouter(
                   name: latest.androidApk.name,
                   sizeBytes: latest.androidApk.sizeBytes,
                   downloadPath: "/api/app/android.apk",
-                  version: latest.androidApk.version ?? null
+                  version: apkVersionAdvertised(latest.androidApk, appVersionInfo)
                 }
               : null
           }

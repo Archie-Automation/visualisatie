@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../knx_alarm.dart';
+import '../ui/widgets/confirm_dialog.dart';
+import '../ui/widgets/luxe_form.dart';
 
 /// Installateur: KNX-sensoren voor alarm aanwezig en afwezig.
 class KnxAlarmInstaller extends StatefulWidget {
@@ -91,81 +94,90 @@ class _KnxAlarmInstallerState extends State<KnxAlarmInstaller> {
     final sensors = _sensors;
     final pinSet = _alarm['pinSet'] == true;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(4, 8, 4, 28),
+      padding: const EdgeInsets.only(bottom: 36),
       children: [
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('KNX-alarm'),
-          subtitle: const Text(
-            'Naast Satel. Sensoren op de bus, een eigen code, sirene, inloop en uitloop.',
+        LuxeListCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const LuxeSectionTitle(
+                icon: Icons.security_outlined,
+                title: 'KNX-alarm',
+                trailing: LuxeInfoIconButton(
+                  title: 'KNX-alarm',
+                  body:
+                      'Naast Satel. Sensoren op de bus, een code, sirene, inloop en uitloop. '
+                      'Elke gebruiker kan daarnaast een eigen alarmcode krijgen onder Gebruikers.',
+                ),
+              ),
+              LuxeSwitchRow(
+                title: 'KNX-alarm',
+                subtitle:
+                    'Sensoren op de bus, een code, sirene, inloop en uitloop.',
+                value: _alarm['enabled'] == true,
+                onChanged: (v) {
+                  _alarm['enabled'] = v;
+                  _commit();
+                  setState(() {});
+                },
+              ),
+              const LuxeFieldLabel('Nieuwe code'),
+              TextField(
+                controller: _pin,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(8),
+                ],
+                decoration: luxeFilledDecoration(
+                  helper: pinSet
+                      ? 'Er staat al een code. Leeg laten houdt die. 4 tot 8 cijfers.'
+                      : '4 tot 8 cijfers. Wordt bij opslaan gezet.',
+                ),
+                onChanged: (_) => _commit(),
+              ),
+              const SizedBox(height: 12),
+              const LuxeFieldLabel('Uitloop (seconden)'),
+              TextField(
+                controller: _exit,
+                keyboardType: TextInputType.number,
+                decoration: luxeFilledDecoration(),
+                onChanged: (_) => _commit(),
+              ),
+              const SizedBox(height: 12),
+              const LuxeFieldLabel('Inloop (seconden)'),
+              TextField(
+                controller: _entry,
+                keyboardType: TextInputType.number,
+                decoration: luxeFilledDecoration(),
+                onChanged: (_) => _commit(),
+              ),
+              const SizedBox(height: 12),
+              const LuxeFieldLabel('Sirene (groepadres)'),
+              TextField(
+                controller: _siren,
+                decoration: luxeFilledDecoration(
+                  helper: '1 = sirene aan, 0 = uit. Leeg = geen sirene.',
+                ),
+                onChanged: (_) => _commit(),
+              ),
+            ],
           ),
-          value: _alarm['enabled'] == true,
-          onChanged: (v) {
-            _alarm['enabled'] = v;
-            _commit();
-            setState(() {});
-          },
         ),
-        TextField(
-          controller: _pin,
-          obscureText: true,
-          keyboardType: TextInputType.number,
-          decoration: InputDecoration(
-            labelText: 'Nieuwe code',
-            helperText: pinSet
-                ? 'Er staat al een code. Leeg laten houdt die. Minimaal 4 cijfers.'
-                : 'Minimaal 4 cijfers. Wordt bij opslaan gezet.',
-          ),
-          onChanged: (_) => _commit(),
-        ),
-        TextField(
-          controller: _exit,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Uitloop (seconden)'),
-          onChanged: (_) => _commit(),
-        ),
-        TextField(
-          controller: _entry,
-          keyboardType: TextInputType.number,
-          decoration: const InputDecoration(labelText: 'Inloop (seconden)'),
-          onChanged: (_) => _commit(),
-        ),
-        TextField(
-          controller: _siren,
-          decoration: const InputDecoration(
-            labelText: 'Sirene (groepadres)',
-            helperText: '1 = sirene aan, 0 = uit. Leeg = geen sirene.',
-          ),
-          onChanged: (_) => _commit(),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Text('Sensoren', style: Theme.of(context).textTheme.titleMedium),
-            const Spacer(),
-            TextButton(
-              onPressed: () {
-                final next = [...sensors];
-                next.add({
-                  'id': 's${DateTime.now().microsecondsSinceEpoch}',
-                  'name': 'Sensor ${next.length + 1}',
-                  'ga': '',
-                  'kind': 'magneetcontact',
-                  'aanwezig': false,
-                  'afwezig': true,
-                  'inloop': false,
-                  'alarmOn': '1',
-                });
-                _alarm['sensors'] = next;
-                _commit();
-                setState(() {});
-              },
-              child: const Text('Sensor toevoegen'),
-            ),
-          ],
-        ),
-        for (var i = 0; i < sensors.length; i++)
-          _SensorCard(
+        LuxeListCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 12, 8, 4),
+                child: LuxeSectionTitle(
+                  icon: Icons.sensors,
+                  title: 'Sensoren',
+                ),
+              ),
+              for (var i = 0; i < sensors.length; i++)
+                _SensorCard(
             key: ValueKey(sensors[i]['id'] ?? i),
             sensor: sensors[i],
             onChanged: _commit,
@@ -176,6 +188,28 @@ class _KnxAlarmInstallerState extends State<KnxAlarmInstaller> {
               setState(() {});
             },
           ),
+              LuxeAddRow(
+                label: 'Sensor toevoegen',
+                onTap: () {
+                  final next = [...sensors];
+                  next.add({
+                    'id': 's${DateTime.now().microsecondsSinceEpoch}',
+                    'name': 'Sensor ${next.length + 1}',
+                    'ga': '',
+                    'kind': 'magneetcontact',
+                    'aanwezig': false,
+                    'afwezig': true,
+                    'inloop': false,
+                    'alarmOn': '1',
+                  });
+                  _alarm['sensors'] = next;
+                  _commit();
+                  setState(() {});
+                },
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }
@@ -226,90 +260,88 @@ class _SensorCardState extends State<_SensorCard> {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            TextField(
-              controller: _name,
-              decoration: const InputDecoration(labelText: 'Naam'),
-              onChanged: (_) => _write(),
-            ),
-            TextField(
-              controller: _ga,
-              decoration: const InputDecoration(labelText: 'Groepadres'),
-              onChanged: (_) => _write(),
-            ),
-            DropdownButtonFormField<String>(
-              initialValue: knxAlarmSensorKinds.containsKey(widget.sensor['kind'])
-                  ? widget.sensor['kind'] as String
-                  : 'magneetcontact',
-              decoration: const InputDecoration(labelText: 'Type sensor'),
-              items: [
-                for (final e in knxAlarmSensorKinds.entries)
-                  DropdownMenuItem(value: e.key, child: Text(e.value)),
-              ],
-              onChanged: (v) {
-                if (v == null) return;
-                widget.sensor['kind'] = v;
-                widget.onChanged();
-                setState(() {});
-              },
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Alarm aanwezig'),
-              value: widget.sensor['aanwezig'] == true,
-              onChanged: (v) {
-                widget.sensor['aanwezig'] = v;
-                widget.onChanged();
-                setState(() {});
-              },
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Alarm afwezig'),
-              value: widget.sensor['afwezig'] == true,
-              onChanged: (v) {
-                widget.sensor['afwezig'] = v;
-                widget.onChanged();
-                setState(() {});
-              },
-            ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Hier mag worden ingelopen'),
-              subtitle: const Text(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const LuxeFieldLabel('Naam'),
+          TextField(
+            controller: _name,
+            decoration: luxeFilledDecoration(),
+            onChanged: (_) => _write(),
+          ),
+          const SizedBox(height: 8),
+          const LuxeFieldLabel('Groepadres'),
+          TextField(
+            controller: _ga,
+            decoration: luxeFilledDecoration(),
+            onChanged: (_) => _write(),
+          ),
+          const SizedBox(height: 8),
+          const LuxeFieldLabel('Type sensor'),
+          DropdownButtonFormField<String>(
+            initialValue: knxAlarmSensorKinds.containsKey(widget.sensor['kind'])
+                ? widget.sensor['kind'] as String
+                : 'magneetcontact',
+            decoration: luxeFilledDecoration(),
+            items: [
+              for (final e in knxAlarmSensorKinds.entries)
+                DropdownMenuItem(value: e.key, child: Text(e.value)),
+            ],
+            onChanged: (v) {
+              if (v == null) return;
+              widget.sensor['kind'] = v;
+              widget.onChanged();
+              setState(() {});
+            },
+          ),
+          LuxeSwitchRow(
+            title: 'Alarm aanwezig',
+            value: widget.sensor['aanwezig'] == true,
+            onChanged: (v) {
+              widget.sensor['aanwezig'] = v;
+              widget.onChanged();
+              setState(() {});
+            },
+          ),
+          LuxeSwitchRow(
+            title: 'Alarm afwezig',
+            value: widget.sensor['afwezig'] == true,
+            onChanged: (v) {
+              widget.sensor['afwezig'] = v;
+              widget.onChanged();
+              setState(() {});
+            },
+          ),
+          LuxeSwitchRow(
+            title: 'Hier mag worden ingelopen',
+            subtitle:
                 'Openen start de inlooptijd. Andere sensoren zetten meteen de sirene aan.',
-              ),
-              value: widget.sensor['inloop'] == true,
-              onChanged: (v) {
-                widget.sensor['inloop'] = v;
-                widget.onChanged();
-                setState(() {});
-              },
+            value: widget.sensor['inloop'] == true,
+            onChanged: (v) {
+              widget.sensor['inloop'] = v;
+              widget.onChanged();
+              setState(() {});
+            },
+          ),
+          LuxeSwitchRow(
+            title: 'Alarm als het bit uit staat',
+            value: widget.sensor['alarmOn'] == '0',
+            onChanged: (v) {
+              widget.sensor['alarmOn'] = v ? '0' : '1';
+              widget.onChanged();
+              setState(() {});
+            },
+          ),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton(
+              onPressed: widget.onDelete,
+              child: const Text('Verwijderen'),
             ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Alarm als het bit uit staat'),
-              value: widget.sensor['alarmOn'] == '0',
-              onChanged: (v) {
-                widget.sensor['alarmOn'] = v ? '0' : '1';
-                widget.onChanged();
-                setState(() {});
-              },
-            ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: widget.onDelete,
-                child: const Text('Verwijderen'),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

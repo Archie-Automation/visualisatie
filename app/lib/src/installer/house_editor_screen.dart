@@ -1528,33 +1528,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     return ref.read(installerAuthProvider).token;
   }
 
-  static const _knxImportInfo =
-      'Importeer een KNX Group Address XML (ETS-export of de Archie '
-      'Groepsadressentool). De hoofdfuncties (verlichting, dimmers, zonwering, '
-      'klimaat) worden automatisch per verdieping en ruimte aangemaakt. Alle '
-      'groepsadressen komen ook in de zoekfunctie bij de GA-velden.\n\n'
-      'Gebruikt u de Archie Groepsadressentool? Zorg er dan voor dat u de XML '
-      'exporteert MET volledige groepsadresnamen (verdieping.ruimte, ruimtenaam, '
-      'devicenaam en objectnaam). Zonder volledige namen kunnen ruimtes en '
-      'apparaten niet betrouwbaar worden herkend.';
-
-  Future<void> _showKnxImportInfo() async {
-    if (!mounted) return;
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('KNX-import'),
-        content: const SingleChildScrollView(child: Text(_knxImportInfo)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Sluiten'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _importKnx() async {
     final token = _currentToken();
     if (token == null) return;
@@ -4993,7 +4966,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
           rooms: _sceneLearnRooms(),
           onChanged: () => setState(() {}),
           onImport: _importKnx,
-          onImportInfo: _showKnxImportInfo,
           getToken: () async {
             if (widget.useCustomerSession) {
               return ref.read(authProvider).token;
@@ -5483,11 +5455,13 @@ class _InstallerUserForm extends StatefulWidget {
 
 class _InstallerUserFormState extends State<_InstallerUserForm> {
   late TextEditingController _password;
+  late TextEditingController _alarmPin;
 
   @override
   void initState() {
     super.initState();
     _password = TextEditingController();
+    _alarmPin = TextEditingController();
     final r = normalizeRole(widget.user['role'] as String?);
     widget.user['role'] = switch (r) {
       AppRole.installer => 'installer',
@@ -5500,6 +5474,7 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
   @override
   void dispose() {
     _password.dispose();
+    _alarmPin.dispose();
     super.dispose();
   }
 
@@ -5605,6 +5580,43 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
             ],
           ),
         ),
+        if (widget.house['knxAlarm'] is Map &&
+            (widget.house['knxAlarm'] as Map)['enabled'] == true)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                LuxeFieldLabel(
+                  u['alarmPinSet'] == true
+                      ? 'Alarmcode (leeg = ongewijzigd)'
+                      : 'Alarmcode',
+                ),
+                TextField(
+                  controller: _alarmPin,
+                  obscureText: true,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(8),
+                  ],
+                  decoration: luxeFilledDecoration(
+                    helper: u['alarmPinSet'] == true
+                        ? '4 tot 8 cijfers. Leeg laten houdt de huidige code.'
+                        : '4 tot 8 cijfers. Alleen voor het KNX-alarm.',
+                  ),
+                  onChanged: (s) {
+                    if (s.isEmpty) {
+                      u.remove('alarmPin');
+                    } else {
+                      u['alarmPin'] = s;
+                    }
+                    widget.onChanged();
+                  },
+                ),
+              ],
+            ),
+          ),
         Padding(
           padding: const EdgeInsets.only(bottom: 16),
           child: Column(
@@ -5744,7 +5756,6 @@ class _KnxInstallerSection extends StatefulWidget {
     required this.onChanged,
     required this.getToken,
     required this.onImport,
-    required this.onImportInfo,
   });
 
   final Map<String, dynamic> knx;
@@ -5753,7 +5764,6 @@ class _KnxInstallerSection extends StatefulWidget {
   final VoidCallback onChanged;
   final Future<String?> Function() getToken;
   final VoidCallback onImport;
-  final VoidCallback onImportInfo;
 
   @override
   State<_KnxInstallerSection> createState() => _KnxInstallerSectionState();
@@ -5824,97 +5834,68 @@ class _KnxInstallerSectionState extends State<_KnxInstallerSection> {
     }
   }
 
+  Color get _knxStatusColor {
+    if (_status == null) return Colors.grey.shade400;
+    if (_status!.simulate || _status!.reconnecting) return Colors.amber.shade700;
+    if (_status!.connected) return Colors.green.shade600;
+    return Colors.grey.shade500;
+  }
+
+  String get _knxStatusLine {
+    if (_status == null) return _statusErr ?? 'Status laden…';
+    if (_status!.simulate) {
+      return 'Simulatie actief (${_status!.host}:${_status!.port})';
+    }
+    if (_status!.connected) {
+      return 'Verbonden met ${_status!.host}:${_status!.port}';
+    }
+    if (_status!.reconnecting) {
+      return 'Opnieuw verbinden met ${_status!.host}:${_status!.port}';
+    }
+    return 'Niet verbonden — backend: ${_status!.host}:${_status!.port}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Material(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.35),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Tooltip(
-                      message: _status == null
-                          ? 'Status wordt geladen?'
-                          : _status!.simulate
-                              ? 'Simulatiemodus (KNX_SIMULATE=1): geen echte bus'
-                              : (_status!.connected
-                                  ? 'Tunnel actief naar gateway'
-                                  : _status!.reconnecting
-                                      ? 'Tunnel weg, opnieuw verbinden'
-                                      : 'Geen verbinding met KNX-gateway'),
-                      child: Icon(
-                        Icons.circle,
-                        size: 22,
-                        color: _status == null
-                            ? Colors.grey.shade400
-                            : _status!.simulate
-                                ? Colors.amber.shade700
-                                : _status!.connected
-                                    ? Colors.green.shade600
-                                    : _status!.reconnecting
-                                        ? Colors.amber.shade700
-                                        : Colors.grey.shade500,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Gateway-verbinding',
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _status == null
-                                ? (_statusErr ?? 'Status laden?')
-                                : _status!.simulate
-                                    ? 'Simulatie actief (${_status!.host}:${_status!.port})'
-                                    : _status!.connected
-                                        ? 'Verbonden met ${_status!.host}:${_status!.port}'
-                                        : _status!.reconnecting
-                                            ? 'Opnieuw verbinden met ${_status!.host}:${_status!.port}'
-                                            : 'Niet verbonden — backend: ${_status!.host}:${_status!.port}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton.icon(
-                      onPressed: _reconnectBusy ? null : _reconnect,
-                      icon: _reconnectBusy
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.sync, size: 20),
-                      label: const Text('Opnieuw verbinden'),
-                    ),
-                  ],
+        LuxeListCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const LuxeSectionTitle(
+                icon: Icons.settings_ethernet,
+                title: 'KNX-gateway',
+                trailing: LuxeInfoIconButton(
+                  title: 'KNX-gateway',
+                  body:
+                      'Nieuw IP of poort? Eerst onderaan Opslaan, daarna Opnieuw verbinden.',
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'Nieuw IP of poort? Eerst onderaan Opslaan (house.json), daarna opnieuw verbinden.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).hintColor,
-                        fontSize: 11,
-                      ),
+              ),
+              Row(
+                children: [
+                  Icon(Icons.circle, size: 10, color: _knxStatusColor),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _knxStatusLine,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: LuxePrimaryButton(
+                  label: 'Opnieuw verbinden',
+                  icon: Icons.sync,
+                  busy: _reconnectBusy,
+                  onPressed: _reconnect,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
         Expanded(
@@ -5924,7 +5905,6 @@ class _KnxInstallerSectionState extends State<_KnxInstallerSection> {
             rooms: widget.rooms,
             onChanged: widget.onChanged,
             onImport: widget.onImport,
-            onImportInfo: widget.onImportInfo,
           ),
         ),
       ],
@@ -6124,103 +6104,61 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Material(
-          color: Theme.of(context)
-              .colorScheme
-              .surfaceContainerHighest
-              .withValues(alpha: 0.35),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 14, 20, 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Tooltip(
-                      message: _status == null
-                          ? 'Status wordt geladen…'
-                          : (_status!.connected && _status!.loggedIn
-                              ? 'QSX LEAP verbonden'
-                              : 'Geen verbinding'),
-                      child: Icon(
-                        Icons.circle,
-                        size: 22,
-                        color: _status == null
-                            ? Colors.grey.shade400
-                            : (_status!.connected && _status!.loggedIn
-                                ? Colors.green.shade600
-                                : Colors.grey.shade500),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                'HomeWorks QSX',
-                                style: Theme.of(context).textTheme.titleSmall,
-                              ),
-                              const SizedBox(width: 8),
-                              const LuxeInfoIconButton(
-                                title: 'HomeWorks QSX',
-                                body:
-                                    'Vul het IP-adres in en tik op Koppelen. Druk daarna de knop op de processor in tot het lampje knippert. Houd hem vast tot het lampje stopt.\n\n'
-                                    'Een knop zonder actie in Lutron Designer stuurt vaak niets. Dual action geeft druk en loslaten. Vasthouden en dubbel tikken komen alleen binnen als die actie in Designer staat, bijvoorbeeld Conditional met een loze actie.\n\n'
-                                    'Koppel dezelfde knop per moment: korte druk, loslaten, vasthouden. Blijft de vinger 0,6 s liggen en komt loslaten wél binnen, dan telt dat ook als vasthouden. Sla daarna op.',
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            _statusLine(),
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    FilledButton.icon(
-                      onPressed: _reconnectBusy ? null : _reconnect,
-                      icon: _reconnectBusy
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.sync, size: 20),
-                      label: const Text('Opnieuw verbinden'),
-                    ),
-                  ],
+        LuxeListCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const LuxeSectionTitle(
+                icon: Icons.lightbulb_outline,
+                title: 'Lutron QSX',
+                trailing: LuxeInfoIconButton(
+                  title: 'HomeWorks QSX',
+                  body:
+                      'Vul het IP-adres in en tik op Koppelen. Druk daarna de knop op de processor in tot het lampje knippert. Houd hem vast tot het lampje stopt.\n\n'
+                      'Een knop zonder actie in Lutron Designer stuurt vaak niets. Dual action geeft druk en loslaten. Vasthouden en dubbel tikken komen alleen binnen als die actie in Designer staat, bijvoorbeeld Conditional met een loze actie.\n\n'
+                      'Koppel dezelfde knop per moment: korte druk, loslaten, vasthouden. Blijft de vinger 0,6 s liggen en komt loslaten wél binnen, dan telt dat ook als vasthouden. Sla daarna op.',
                 ),
-                const SizedBox(height: 8),
-                Align(
-                    alignment: Alignment.centerLeft,
-                    child: FilledButton.icon(
-                      onPressed: _pairBusy ? null : _pair,
-                      icon: _pairBusy
-                          ? const SizedBox(
-                              width: 18,
-                              height: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: Colors.white,
-                              ),
-                            )
-                          : const Icon(Icons.link, size: 20),
-                      label: Text(_pairBusy
-                          ? 'Druk nu op de knop…'
-                          : 'Koppelen'),
+              ),
+              Row(
+                children: [
+                  Icon(
+                    Icons.circle,
+                    size: 10,
+                    color: _status == null
+                        ? Colors.grey.shade400
+                        : (_status!.connected && _status!.loggedIn
+                            ? Colors.green.shade600
+                            : Colors.grey.shade500),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _statusLine(),
+                      style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
-              ],
-            ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  LuxePrimaryButton(
+                    label: 'Opnieuw verbinden',
+                    icon: Icons.sync,
+                    busy: _reconnectBusy,
+                    onPressed: _reconnect,
+                  ),
+                  LuxePrimaryButton(
+                    label: _pairBusy ? 'Druk nu op de knop…' : 'Koppelen',
+                    icon: Icons.link,
+                    busy: _pairBusy,
+                    onPressed: _pair,
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
         Expanded(
@@ -6283,33 +6221,33 @@ class _LutronForm extends StatelessWidget {
     }
 
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.only(bottom: 36),
       children: [
-        const LuxeInfoHeading(
-          title: 'Lutron QSX/QS Processor',
-          infoTitle: 'Lutron QSX/QS',
-          infoBody:
-              'Vul het IP-adres in en koppel hierboven. Zones en keypad-knoppen komen daarna.\n\n'
-              'Koppel eerst de processor. Daarna zet je zones in het huis en koppel je keypad-knoppen.',
-        ),
-        const SizedBox(height: 20),
-        _BoundStrField(
-          'host',
-          telm,
-          onChanged,
-          labelOverride: 'IP-adres (verplicht)',
-          hintText: 'bijv. 192.168.1.50 (IP van de QSX/QS processor)',
-        ),
-        const SizedBox(height: 16),
-        if (paired) ...[
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton.icon(
-              onPressed: canImportZones ? onImportZones : null,
-              icon: const Icon(Icons.playlist_add_outlined, size: 20),
-              label: const Text('Zones in het huis zetten'),
-            ),
+        LuxeListCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const LuxeSectionTitle(
+                icon: Icons.router_outlined,
+                title: 'Processor',
+              ),
+              _BoundStrField(
+                'host',
+                telm,
+                onChanged,
+                labelOverride: 'IP-adres (verplicht)',
+                hintText: 'bijv. 192.168.1.50 (IP van de QSX/QS processor)',
+              ),
+              if (paired)
+                LuxePrimaryButton(
+                  label: 'Zones in het huis zetten',
+                  icon: Icons.playlist_add_outlined,
+                  onPressed: canImportZones ? onImportZones : null,
+                ),
+            ],
           ),
+        ),
+        if (paired) ...[
           if (zonesLoaded && !canImportZones) ...[
             const SizedBox(height: 8),
             Text(
@@ -6342,14 +6280,12 @@ class _KnxForm extends StatelessWidget {
     required this.rooms,
     required this.onChanged,
     required this.onImport,
-    required this.onImportInfo,
   });
   final Map<String, dynamic> knx;
   final Map<String, dynamic> sceneLearn;
   final List<({String id, String label})> rooms;
   final VoidCallback onChanged;
   final VoidCallback onImport;
-  final VoidCallback onImportInfo;
 
   @override
   Widget build(BuildContext context) {
@@ -6363,90 +6299,104 @@ class _KnxForm extends StatelessWidget {
       knx['gateway'] = gwm;
     }
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.only(bottom: 36),
       children: [
-        Text('KNX', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 16),
-        // ?? Enabled toggle ??????????????????????????????????????????
-        LuxeSwitchRow(
-          title: 'KNX ingeschakeld',
-          subtitle:
-              'Schakel uit als er geen KNX-bus aanwezig is. '
-              'De app start dan direct op zonder verbindingspogingen.',
-          value: enabled,
-          onChanged: (v) {
-            knx['enabled'] = v;
-            onChanged();
-          },
-        ),
-        const Divider(height: 24),
-        if (enabled) ...[
-          Text('Gateway', style: Theme.of(context).textTheme.titleSmall),
-          _BoundStrField('host', gwm, onChanged),
-          _BoundStrField('port', gwm, onChanged, number: true),
-          _DropdownField(
-            label: 'mode',
-            value: gwm['mode'] as String? ?? 'tunneling',
-            options: const ['tunneling', 'routing'],
-            onChanged: (v) {
-              gwm['mode'] = v;
-              onChanged();
-            },
-          ),
-          const SizedBox(height: 12),
-          _BoundStrField('physicalAddress', knx, onChanged),
-          const Divider(height: 32),
-          Text('Import', style: Theme.of(context).textTheme.titleSmall),
-          Card(
-            margin: const EdgeInsets.only(top: 8),
-            child: ListTile(
-              leading: const Icon(Icons.file_download_outlined),
-              title: const Text('Importeer uit KNX (.xml)'),
-              trailing: IconButton(
-                icon: const Icon(Icons.info_outline),
-                tooltip: 'Uitleg KNX-import',
-                onPressed: onImportInfo,
+        LuxeListCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              LuxeSwitchRow(
+                title: 'KNX ingeschakeld',
+                subtitle:
+                    'Schakel uit als er geen KNX-bus aanwezig is. '
+                    'De app start dan direct op zonder verbindingspogingen.',
+                value: enabled,
+                onChanged: (v) {
+                  knx['enabled'] = v;
+                  onChanged();
+                },
               ),
-              onTap: onImport,
-            ),
+              if (!enabled)
+                Text(
+                  'KNX is uitgeschakeld. Schakel in om de gateway in te stellen.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              if (enabled) ...[
+                _BoundStrField('host', gwm, onChanged),
+                _BoundStrField('port', gwm, onChanged, number: true),
+                _DropdownField(
+                  label: 'mode',
+                  value: gwm['mode'] as String? ?? 'tunneling',
+                  options: const ['tunneling', 'routing'],
+                  onChanged: (v) {
+                    gwm['mode'] = v;
+                    onChanged();
+                  },
+                ),
+                const SizedBox(height: 12),
+                _BoundStrField('physicalAddress', knx, onChanged),
+              ],
+            ],
           ),
-          const Divider(height: 32),
-          const LuxeInfoHeading(
-            title: "KNX scene's inleren",
-            infoTitle: "KNX scene's inleren",
-            infoBody:
-                'Per knop: ruimte, schakelaar (positie in de kamer), knopnaam, '
-                'optioneel scene (avond, dag, sfeer), het scene-groepsadres '
-                '(DPT 18.001) en het fysieke adres van die schakelaar.\n\n'
-                'Meerdere schakelaars in één ruimte mogen hetzelfde groepsadres '
-                'delen. Bij inlezen wordt het fysieke adres van de drukker '
-                'gecontroleerd, zodat de juiste schakelaar wordt herkend.\n\n'
-                'In Instellingen verschijnt het overzicht per ruimte. '
-                'Scene opslaan in KNX werkt alleen als store/leren in ETS is vrijgegeven.',
-          ),
-          const SizedBox(height: 8),
-          _SceneAddressList(
-            sceneLearn: sceneLearn,
-            rooms: rooms,
-            onChanged: onChanged,
-          ),
-        ] else
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
-            child: Row(
+        ),
+        if (enabled) ...[
+          LuxeListCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(Icons.info_outline_rounded,
-                    size: 18, color: Colors.grey),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'KNX is uitgeschakeld. Schakel in om de gateway-instellingen te configureren.',
-                    style: TextStyle(color: Colors.grey),
+                const LuxeSectionTitle(
+                  icon: Icons.file_download_outlined,
+                  title: 'Import',
+                  trailing: LuxeInfoIconButton(
+                    title: 'KNX-import',
+                    body:
+                        'Importeer een KNX Group Address XML (ETS-export of de Archie '
+                        'Groepsadressentool). De hoofdfuncties (verlichting, dimmers, zonwering, '
+                        'klimaat) worden automatisch per verdieping en ruimte aangemaakt. Alle '
+                        'groepsadressen komen ook in de zoekfunctie bij de GA-velden.\n\n'
+                        'Gebruikt u de Archie Groepsadressentool? Zorg er dan voor dat u de XML '
+                        'exporteert MET volledige groepsadresnamen (verdieping.ruimte, ruimtenaam, '
+                        'devicenaam en objectnaam). Zonder volledige namen kunnen ruimtes en '
+                        'apparaten niet betrouwbaar worden herkend.',
                   ),
+                ),
+                LuxePrimaryButton(
+                  label: 'Importeer uit KNX (.xml)',
+                  icon: Icons.file_download_outlined,
+                  onPressed: onImport,
                 ),
               ],
             ),
           ),
+          LuxeListCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const LuxeSectionTitle(
+                  icon: Icons.auto_awesome_outlined,
+                  title: "Scene's inleren",
+                  trailing: LuxeInfoIconButton(
+                    title: "KNX scene's inleren",
+                    body:
+                        'Per knop: ruimte, schakelaar (positie in de kamer), knopnaam, '
+                        'optioneel scene (avond, dag, sfeer), het scene-groepsadres '
+                        '(DPT 18.001) en het fysieke adres van die schakelaar.\n\n'
+                        'Meerdere schakelaars in één ruimte mogen hetzelfde groepsadres '
+                        'delen. Bij inlezen wordt het fysieke adres van de drukker '
+                        'gecontroleerd, zodat de juiste schakelaar wordt herkend.\n\n'
+                        'In Instellingen verschijnt het overzicht per ruimte. '
+                        'Scene opslaan in KNX werkt alleen als store/leren in ETS is vrijgegeven.',
+                  ),
+                ),
+                _SceneAddressList(
+                  sceneLearn: sceneLearn,
+                  rooms: rooms,
+                  onChanged: onChanged,
+                ),
+              ],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -10012,16 +9962,12 @@ class _SatelConnectionCardState extends ConsumerState<_SatelConnectionCard> {
         ],
         const SizedBox(height: 12),
         Align(
-          alignment: Alignment.centerRight,
-          child: FilledButton(
-            onPressed: _saving ? null : _save,
-            child: _saving
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white))
-                : const Text('Opslaan'),
+          alignment: Alignment.centerLeft,
+          child: LuxePrimaryButton(
+            label: 'Opslaan',
+            icon: Icons.save_outlined,
+            busy: _saving,
+            onPressed: _save,
           ),
         ),
       ],
@@ -10094,18 +10040,12 @@ class _SatelDiscoverCardState extends ConsumerState<_SatelDiscoverCard> {
           const SizedBox(height: 12),
         ],
         Align(
-          alignment: Alignment.centerRight,
-          child: FilledButton.icon(
-            onPressed: _busy ? null : _run,
-            icon: _busy
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
-                  )
-                : const Icon(Icons.download_outlined, size: 18),
-            label: Text(_busy ? 'Uitlezen…' : 'Uitlezen van paneel'),
+          alignment: Alignment.centerLeft,
+          child: LuxePrimaryButton(
+            label: _busy ? 'Uitlezen…' : 'Uitlezen van paneel',
+            icon: Icons.download_outlined,
+            busy: _busy,
+            onPressed: _run,
           ),
         ),
         if (_error != null) ...[
@@ -10319,23 +10259,19 @@ class _SatelPartitionsCardState extends ConsumerState<_SatelPartitionsCard> {
               style: TextStyle(color: LuxeColors.danger, fontSize: 12)),
         ],
         const SizedBox(height: 12),
-        Row(
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            const Spacer(),
+            LuxePrimaryButton(
+              label: 'Opslaan',
+              icon: Icons.save_outlined,
+              busy: _saving,
+              onPressed: (list == null || _saving) ? null : _save,
+            ),
             TextButton(
               onPressed: list == null ? null : _load,
               child: const Text('Herladen'),
-            ),
-            const SizedBox(width: 8),
-            FilledButton(
-              onPressed: (list == null || _saving) ? null : _save,
-              child: _saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
-                  : const Text('Opslaan'),
             ),
           ],
         ),
@@ -10687,23 +10623,19 @@ class _SatelZonesCardState extends ConsumerState<_SatelZonesCard> {
               style: TextStyle(color: LuxeColors.danger, fontSize: 12)),
         ],
         const SizedBox(height: 12),
-        Row(
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            const Spacer(),
+            LuxePrimaryButton(
+              label: 'Opslaan',
+              icon: Icons.save_outlined,
+              busy: _saving,
+              onPressed: (list == null || _saving) ? null : _save,
+            ),
             TextButton(
               onPressed: list == null ? null : _load,
               child: const Text('Herladen'),
-            ),
-            const SizedBox(width: 8),
-            FilledButton(
-              onPressed: (list == null || _saving) ? null : _save,
-              child: _saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
-                  : const Text('Opslaan'),
             ),
           ],
         ),
@@ -10844,20 +10776,16 @@ class _SatelPinCardState extends ConsumerState<_SatelPinCard> {
               style: TextStyle(color: LuxeColors.inkSoft, fontSize: 13)),
         ],
         const SizedBox(height: 14),
-        Row(
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            FilledButton.icon(
-              icon: _saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.save_outlined, size: 16),
-              label: const Text('Opslaan'),
-              onPressed: _saving ? null : _save,
+            LuxePrimaryButton(
+              label: 'Opslaan',
+              icon: Icons.save_outlined,
+              busy: _saving,
+              onPressed: _save,
             ),
-            const SizedBox(width: 8),
             TextButton.icon(
               icon: const Icon(Icons.refresh_rounded, size: 16),
               label: const Text('Wissen'),
@@ -10952,17 +10880,14 @@ class _SatelEncryptionCardState extends ConsumerState<_SatelEncryptionCard> {
               style: TextStyle(color: LuxeColors.inkSoft, fontSize: 13)),
         ],
         const SizedBox(height: 14),
-        Row(
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: [
-            FilledButton.icon(
-              icon: _saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white))
-                  : const Icon(Icons.save_outlined, size: 16),
-              label: const Text('Opslaan'),
+            LuxePrimaryButton(
+              label: 'Opslaan',
+              icon: Icons.save_outlined,
+              busy: _saving,
               onPressed: _saving
                   ? null
                   : () {
@@ -10977,7 +10902,6 @@ class _SatelEncryptionCardState extends ConsumerState<_SatelEncryptionCard> {
                       _saveKey(k);
                     },
             ),
-            const SizedBox(width: 8),
             if (hasEnc)
               TextButton.icon(
                 icon: const Icon(Icons.lock_open_outlined, size: 16),

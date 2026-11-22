@@ -1818,6 +1818,10 @@
           "enum": ["installer", "superuser", "user", "admin"]
         },
         "passwordHash": { "type": "string" },
+        "alarmPinHash": {
+          "type": "string",
+          "description": "Bcrypt van de persoonlijke KNX-alarmcode. Niet naar clients."
+        },
         "enabled": { "type": "boolean" },
         "sipEndpointId": {
           "type": "string",

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme.dart';
+import '../ui/widgets/confirm_dialog.dart';
 import '../ui/widgets/luxe_form.dart';
 
 /// Installer form for `house.energy`. KNX group addresses only.
@@ -26,49 +27,54 @@ class EnergyInstallerSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = energy['enabled'] == true;
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.only(bottom: 36),
       children: [
-        const LuxeInfoHeading(
-          title: 'Energie',
-          infoTitle: 'Energie',
-          infoBody:
-              'KNX-groepsadressen voor net, PV, accu en tellers. De NUC leest de '
-              'bus en stuurt één snapshot naar de app. Een ontbrekend telegram '
-              'blijft leeg en wordt geen 0 W.\n\n'
-              'Net: positief is afname, negatief is teruglevering. '
-              'Accu: positief is ontladen, negatief is laden. '
-              'Woning is net + PV + accu. Schaalfactor 1 als de bus al in die '
-              'eenheid staat, 1000 als de bus kW stuurt en het veld watt is, '
-              '-1 om het teken te draaien.',
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'Tonen onder Systemen',
-                style: Theme.of(context).textTheme.titleSmall,
+        LuxeListCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const LuxeSectionTitle(
+                icon: Icons.bolt_outlined,
+                title: 'Energie',
+                trailing: LuxeInfoIconButton(
+                  title: 'Energie',
+                  body:
+                      'KNX-groepsadressen voor net, PV, accu en tellers. De NUC leest de '
+                      'bus en stuurt één snapshot naar de app. Een ontbrekend telegram '
+                      'blijft leeg en wordt geen 0 W.\n\n'
+                      'Net: positief is afname, negatief is teruglevering. '
+                      'Accu: positief is ontladen, negatief is laden. '
+                      'Woning is net + PV + accu. Schaalfactor 1 als de bus al in die '
+                      'eenheid staat, 1000 als de bus kW stuurt en het veld watt is, '
+                      '-1 om het teken te draaien.',
+                ),
               ),
-            ),
-            LuxeOnOffSwitch(
-              value: enabled,
-              onChanged: (v) {
-                energy['enabled'] = v;
-                onChanged();
-              },
-            ),
-          ],
+              LuxeSwitchRow(
+                title: 'Tonen onder Systemen',
+                value: enabled,
+                onChanged: (v) {
+                  energy['enabled'] = v;
+                  onChanged();
+                },
+              ),
+            ],
+          ),
         ),
-        const SizedBox(height: 20),
         for (final point in _points)
-          _EnergyPointEditor(
-            key: ValueKey(point.key),
-            spec: point,
-            knx: _knx,
-            onChanged: onChanged,
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 22),
+            child: _EnergyPointEditor(
+              key: ValueKey(point.key),
+              spec: point,
+              knx: _knx,
+              onChanged: onChanged,
+            ),
           ),
         const SizedBox(height: 8),
-        _PricesEditor(energy: energy, onChanged: onChanged),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 22),
+          child: _PricesEditor(energy: energy, onChanged: onChanged),
+        ),
       ],
     );
   }
@@ -167,23 +173,14 @@ class _PricesEditorState extends State<_PricesEditor> {
               ?.copyWith(color: LuxeColors.inkFaint),
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                'EnergyZero-prijzen',
-                style: Theme.of(context).textTheme.titleSmall,
-              ),
-            ),
-            LuxeOnOffSwitch(
-              value: enabled,
-              onChanged: (v) {
-                _prices(create: true)['enabled'] = v;
-                widget.onChanged();
-                setState(() {});
-              },
-            ),
-          ],
+        LuxeSwitchRow(
+          title: 'EnergyZero-prijzen',
+          value: enabled,
+          onChanged: (v) {
+            _prices(create: true)['enabled'] = v;
+            widget.onChanged();
+            setState(() {});
+          },
         ),
         const SizedBox(height: 12),
         const LuxeFieldLabel('Opslag afname (€/kWh, excl. btw)'),
@@ -193,9 +190,8 @@ class _PricesEditorState extends State<_PricesEditor> {
           decoration: luxeFilledDecoration(hint: '0'),
           onChanged: (v) => _writeNumber('importSurchargeEurPerKwh', v),
         ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Btw op afname'),
+        LuxeSwitchRow(
+          title: 'Btw op afname',
           value: prices['importVat'] == true,
           onChanged: (v) {
             _prices(create: true)['importVat'] = v;
@@ -246,9 +242,8 @@ class _PricesEditorState extends State<_PricesEditor> {
           ),
         ],
         if (exportMode != 'none')
-          SwitchListTile(
-            contentPadding: EdgeInsets.zero,
-            title: const Text('Btw op teruglevering'),
+          LuxeSwitchRow(
+            title: 'Btw op teruglevering',
             value: prices['exportVat'] == true,
             onChanged: (v) {
               _prices(create: true)['exportVat'] = v;
@@ -264,9 +259,8 @@ class _PricesEditorState extends State<_PricesEditor> {
           decoration: luxeFilledDecoration(hint: '0'),
           onChanged: (v) => _writeNumber('gasSurchargeEurPerM3', v),
         ),
-        SwitchListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text('Btw op gas'),
+        LuxeSwitchRow(
+          title: 'Btw op gas',
           value: prices['gasVat'] == true,
           onChanged: (v) {
             _prices(create: true)['gasVat'] = v;

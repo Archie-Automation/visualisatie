@@ -116,7 +116,7 @@ export async function authenticate(
     role
   };
   const token = jwt.sign(payload, SECRET, { expiresIn: TTL as jwt.SignOptions["expiresIn"] });
-  const { passwordHash: _ph, ...rest } = user;
+  const { passwordHash: _ph, alarmPinHash: _alarmPin, alarmPinSet: _alarmSet, ...rest } = user;
   const publicUser: Omit<User, "passwordHash"> = {
     ...rest,
     role,

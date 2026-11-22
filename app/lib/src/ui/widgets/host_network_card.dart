@@ -7,7 +7,6 @@ import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api.dart';
-import '../../theme.dart';
 import 'glass_card.dart';
 
 /// Installer: DHCP of een vast adres voor de server zelf. Niet de KNX-gateway.
@@ -25,7 +24,6 @@ class _HostNetworkCardState extends ConsumerState<HostNetworkCard> {
   bool _pending = false;
   String? _error;
   String? _info;
-  String _iface = '';
   final _address = TextEditingController();
   final _prefix = TextEditingController(text: '24');
   final _gateway = TextEditingController();
@@ -69,7 +67,6 @@ class _HostNetworkCardState extends ConsumerState<HostNetworkCard> {
     final dns = body['dns'];
     _static = mode == 'static';
     _pending = body['pending'] == true;
-    _iface = '${body['iface'] ?? ''}';
     _address.text = '${body['address'] ?? ''}';
     final prefix = body['prefix'];
     if (prefix is num) _prefix.text = '${prefix.toInt()}';
@@ -279,19 +276,9 @@ class _HostNetworkCardState extends ConsumerState<HostNetworkCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.lan_outlined, color: LuxeColors.brassDeep, size: 22),
-              const SizedBox(width: 10),
-              Text('SERVERADRES', style: Theme.of(context).textTheme.labelLarge),
-            ],
-          ),
-          const SizedBox(height: 8),
           Text(
-            _iface.isEmpty
-                ? 'DHCP of een vast adres voor deze server. Niet het KNX-adres.'
-                : 'Netwerkkaart $_iface. DHCP of een vast adres. Niet het KNX-adres.',
-            style: Theme.of(context).textTheme.bodyMedium,
+            'IP-adres Archie OS server',
+            style: Theme.of(context).textTheme.labelLarge,
           ),
           const SizedBox(height: 12),
           if (_loading)

@@ -1547,6 +1547,10 @@ export interface User {
    */
   role: UserRole;
   passwordHash: string;
+  /** Alarmcode voor het KNX-alarm. Nooit naar de app sturen. */
+  alarmPinHash?: string;
+  /** Alleen in het installateurscherm: er staat al een alarmcode. */
+  alarmPinSet?: boolean;
   /** If false, login is rejected. Super user uses this to block the installer. */
   enabled?: boolean;
   /** Indoor SIP-toestel voor deze login (voip.endpoints id). Uniek: elk account hoogstens één toestel. */

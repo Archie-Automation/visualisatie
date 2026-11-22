@@ -111,6 +111,12 @@ export async function applyPlaintextPasswords(body: unknown): Promise<void> {
       u.passwordHash = await bcrypt.hash(plain, 10);
       delete u.password;
     }
+    delete u.alarmPinSet;
+    const alarmPin = u.alarmPin;
+    delete u.alarmPin;
+    if (typeof alarmPin === "string" && /^\d{4,8}$/.test(alarmPin.trim())) {
+      u.alarmPinHash = await bcrypt.hash(alarmPin.trim(), 10);
+    }
   }
 }
 
@@ -144,6 +150,10 @@ export function mergePasswordHashes(incoming: HouseConfig, previous: HouseConfig
     if (!u.passwordHash?.trim()) {
       const old = prevById.get(u.id);
       if (old?.passwordHash) u.passwordHash = old.passwordHash;
+    }
+    if (!u.alarmPinHash?.trim()) {
+      const old = prevById.get(u.id);
+      if (old?.alarmPinHash) u.alarmPinHash = old.alarmPinHash;
     }
   }
 }
