@@ -196,7 +196,7 @@ Na toepassen moet dat adres binnen 2 minuten openen. De pagina die daarna laadt,
 
 Instellingen → **Kioskmodus**. Alleen in de Android-app, niet in de browser. Standaard uit. De stand blijft op dat tablet staan.
 
-Aan maakt Archie OS het startscherm. Android vraagt dat één keer. Home opent daarna de app, ook na een herstart. Daarna vraagt Android om het scherm vast te zetten. Tot dat venster bevestigd is, blijft de menubalk een uitweg. Zolang de schakelaar aan staat en het scherm niet vastzit, komt die vraag terug. Losmaken kan daarna nog met het systeemgebaar.
+Aan maakt Archie OS het startscherm. Android vraagt dat één keer. Home opent daarna hetzelfde scherm, ook na een herstart. Daarna vraagt Android om het scherm vast te zetten. Tot dat venster bevestigd is, blijft de menubalk een uitweg. Zolang de schakelaar aan staat en het scherm niet vastzit, komt die vraag terug. Losmaken kan daarna nog met het systeemgebaar.
 
 Uit haalt het vastzetten weg en opent de keuze voor een ander startscherm. Een app mag zichzelf niet stil als startscherm verwijderen.
 

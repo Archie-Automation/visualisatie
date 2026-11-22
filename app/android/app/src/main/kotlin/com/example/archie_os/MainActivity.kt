@@ -19,17 +19,13 @@ import android.hardware.SensorManager
 import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
-import android.os.CancellationSignal
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.view.View
 import android.view.WindowInsets
-import android.view.WindowInsetsAnimationControlListener
-import android.view.WindowInsetsAnimationController
 import android.view.WindowInsetsController
 import android.view.WindowManager
-import android.view.animation.LinearInterpolator
 import androidx.core.view.WindowCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -485,7 +481,6 @@ class MainActivity : FlutterActivity(), SensorEventListener {
         window.setFormat(PixelFormat.RGBA_8888)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         hideSystemUi()
-        installKioskBarGuard()
         registerScreenOnReceiver()
         // lockNow() maakte het aanraakscherm dood. Die beheerdersrol is niet meer nodig.
         releaseScreenOffAdmin()
@@ -574,7 +569,10 @@ class MainActivity : FlutterActivity(), SensorEventListener {
         return am.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
     }
 
-    private fun homeComponent() = ComponentName(this, KioskHomeActivity::class.java)
+    private fun homeComponent() = ComponentName(
+        this,
+        "com.example.archie_os.KioskHomeActivity",
+    )
 
     private fun setHomeComponentEnabled(enabled: Boolean) {
         packageManager.setComponentEnabledSetting(
@@ -653,22 +651,21 @@ class MainActivity : FlutterActivity(), SensorEventListener {
     }
 
     private var lastPinAttemptMs = 0L
-    private var suppressingBars = false
-    private var nextBarSuppressMs = 0L
-    private var controllableGuard: WindowInsetsController.OnControllableInsetsChangedListener? =
-        null
 
     /**
      * Zolang de schakelaar aan staat en het scherm niet vastzit, opnieuw vragen.
-     * Anders blijft de menubalk een uitweg. Niet vaker dan eens per 8 s,
-     * anders stapelt het systeemvenster.
+     * Niet vanuit onCreate en niet vaker dan eens per 8 s: het systeemvenster
+     * dekte het scherm af voordat de app getekend was.
      */
     private fun ensurePinned() {
-        if (!kioskEnabled || inLockTask()) return
+        if (!kioskEnabled || inLockTask() || isFinishing) return
         val now = System.currentTimeMillis()
         if (now - lastPinAttemptMs < 8_000L) return
         lastPinAttemptMs = now
-        applyKioskLock(prompt = true)
+        mainHandler.post {
+            if (!kioskEnabled || inLockTask() || isFinishing) return@post
+            applyKioskLock(prompt = true)
+        }
     }
 
     /**
@@ -702,77 +699,6 @@ class MainActivity : FlutterActivity(), SensorEventListener {
         if (!hasFocus) return
         hideSystemUi()
         ensurePinned()
-    }
-
-    /** Menubalk die toch verschijnt met kiosk aan: meteen weg, en opnieuw vastzetten. */
-    private fun installKioskBarGuard() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val bars = WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars()
-            val controller = window.insetsController
-            if (controller != null && controllableGuard == null) {
-                val guard =
-                    WindowInsetsController.OnControllableInsetsChangedListener { c, typeMask ->
-                        val now = System.currentTimeMillis()
-                        if (!kioskEnabled ||
-                            suppressingBars ||
-                            now < nextBarSuppressMs ||
-                            typeMask and bars == 0
-                        ) {
-                            return@OnControllableInsetsChangedListener
-                        }
-                        suppressingBars = true
-                        nextBarSuppressMs = now + 400L
-                        try {
-                            c.controlWindowInsetsAnimation(
-                                bars,
-                                0,
-                                LinearInterpolator(),
-                                CancellationSignal(),
-                                object : WindowInsetsAnimationControlListener {
-                                    override fun onReady(
-                                        ctrl: WindowInsetsAnimationController,
-                                        types: Int,
-                                    ) {
-                                        ctrl.finish(false)
-                                        suppressingBars = false
-                                    }
-
-                                    override fun onFinished(ctrl: WindowInsetsAnimationController) {
-                                        suppressingBars = false
-                                    }
-
-                                    override fun onCancelled(ctrl: WindowInsetsAnimationController?) {
-                                        suppressingBars = false
-                                        c.hide(bars)
-                                    }
-                                },
-                            )
-                        } catch (_: Exception) {
-                            suppressingBars = false
-                            c.hide(bars)
-                        }
-                    }
-                controllableGuard = guard
-                controller.addOnControllableInsetsChangedListener(guard)
-            }
-            window.decorView.setOnApplyWindowInsetsListener { view, insets ->
-                if (kioskEnabled && insets.isVisible(WindowInsets.Type.navigationBars())) {
-                    window.insetsController?.hide(bars)
-                    ensurePinned()
-                }
-                view.onApplyWindowInsets(insets)
-            }
-        } else {
-            @Suppress("DEPRECATION")
-            window.decorView.setOnSystemUiVisibilityChangeListener { visibility ->
-                if (!kioskEnabled) return@setOnSystemUiVisibilityChangeListener
-                val navHidden = visibility and View.SYSTEM_UI_FLAG_HIDE_NAVIGATION != 0
-                if (!navHidden) {
-                    hideSystemUi()
-                    ensurePinned()
-                }
-            }
-        }
     }
 
     /** Immersive sticky: no status bar / nav buttons on wall tablets. */
