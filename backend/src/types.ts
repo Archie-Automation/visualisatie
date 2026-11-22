@@ -1507,10 +1507,22 @@ export interface GatewayConfig {
   mode?: "tunneling" | "routing";
 }
 
+export type KnxAlarmSensorKind =
+  | "magneetcontact"
+  | "pir_beweging"
+  | "trilcontact"
+  | "glasbreuk"
+  | "rookmelder"
+  | "watermelder"
+  | "gasmelder"
+  | "paniekknop";
+
 export type KnxAlarmSensor = {
   id: string;
   name: string;
   ga: GA;
+  /** Deur, beweging, rook, water, … Alleen voor de weergave. */
+  kind?: KnxAlarmSensorKind;
   /** Meenemen als het alarm op aanwezig staat. */
   aanwezig?: boolean;
   /** Meenemen als het alarm op afwezig staat. */

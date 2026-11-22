@@ -42,6 +42,7 @@ class ApkInstaller(private val activity: Activity) {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             if (!activity.packageManager.canRequestPackageInstalls()) {
+                (activity as? MainActivity)?.releasePinForInstall()
                 activity.startActivity(
                     Intent(
                         Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
@@ -79,6 +80,8 @@ class ApkInstaller(private val activity: Activity) {
             completeError("install_failed", e.message ?: "session")
         }
     }
+
+    fun hasPending(): Boolean = pendingResult != null
 
     fun dispose() {
         if (pendingResult != null) {
@@ -170,6 +173,7 @@ class ApkInstaller(private val activity: Activity) {
                     intent.getParcelableExtra(Intent.EXTRA_INTENT)
                 }
                 if (confirm != null) {
+                    (activity as? MainActivity)?.releasePinForInstall()
                     confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     activity.startActivity(confirm)
                 }

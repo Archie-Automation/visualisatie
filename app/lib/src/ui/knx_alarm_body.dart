@@ -190,6 +190,7 @@ class _KnxAlarmBodyState extends ConsumerState<KnxAlarmBody> {
         for (final sensor in status.sensors)
           ListTile(
             contentPadding: EdgeInsets.zero,
+            leading: Icon(_sensorIcon(sensor.kind)),
             title: Text(sensor.name.isEmpty ? sensor.ga : sensor.name),
             subtitle: Text(_sensorLine(sensor, status.mode)),
             trailing: TextButton(
@@ -201,8 +202,21 @@ class _KnxAlarmBodyState extends ConsumerState<KnxAlarmBody> {
     );
   }
 
+  IconData _sensorIcon(String kind) => switch (kind) {
+        'magneetcontact' => Icons.sensor_door_outlined,
+        'pir_beweging' => Icons.directions_run_rounded,
+        'trilcontact' => Icons.vibration_rounded,
+        'glasbreuk' => Icons.broken_image_outlined,
+        'rookmelder' => Icons.local_fire_department_outlined,
+        'watermelder' => Icons.water_damage_outlined,
+        'gasmelder' => Icons.masks_outlined,
+        'paniekknop' => Icons.warning_amber_rounded,
+        _ => Icons.sensors_outlined,
+      };
+
   String _sensorLine(KnxAlarmSensorState sensor, String? mode) {
     final bits = <String>[
+      knxAlarmSensorKindLabel(sensor.kind.isEmpty ? null : sensor.kind),
       if (sensor.aanwezig) 'aanwezig',
       if (sensor.afwezig) 'afwezig',
       if (sensor.inloop) 'inloop',

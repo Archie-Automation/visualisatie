@@ -249,6 +249,19 @@
               "id": { "type": "string", "minLength": 1 },
               "name": { "type": "string" },
               "ga": { "$ref": "#/definitions/gaPattern" },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "magneetcontact",
+                  "pir_beweging",
+                  "trilcontact",
+                  "glasbreuk",
+                  "rookmelder",
+                  "watermelder",
+                  "gasmelder",
+                  "paniekknop"
+                ]
+              },
               "aanwezig": { "type": "boolean" },
               "afwezig": { "type": "boolean" },
               "inloop": { "type": "boolean" },

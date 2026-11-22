@@ -501,6 +501,7 @@ class MainActivity : FlutterActivity(), SensorEventListener {
 
     override fun onResume() {
         super.onResume()
+        finishInstallUiIfReturned()
         if (awaitingWriteSettings) {
             awaitingWriteSettings = false
             val pending = pendingBrightnessResult
@@ -517,6 +518,7 @@ class MainActivity : FlutterActivity(), SensorEventListener {
 
     override fun onPause() {
         if (pendingKioskResult != null) leftForHomeRequest = true
+        if (installUiOpen) leftForInstallUi = true
         super.onPause()
     }
 
@@ -651,6 +653,25 @@ class MainActivity : FlutterActivity(), SensorEventListener {
     }
 
     private var lastPinAttemptMs = 0L
+    /** Systeemscherm (installatie) mag niet meteen weer onder de pin verdwijnen. */
+    private var installUiOpen = false
+    private var leftForInstallUi = false
+
+    fun releasePinForInstall() {
+        installUiOpen = true
+        leftForInstallUi = false
+        try {
+            stopLockTask()
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun finishInstallUiIfReturned() {
+        if (!installUiOpen || !leftForInstallUi) return
+        if (apkInstaller?.hasPending() == true) return
+        installUiOpen = false
+        leftForInstallUi = false
+    }
 
     /**
      * Zolang de schakelaar aan staat en het scherm niet vastzit, opnieuw vragen.
@@ -658,12 +679,12 @@ class MainActivity : FlutterActivity(), SensorEventListener {
      * dekte het scherm af voordat de app getekend was.
      */
     private fun ensurePinned() {
-        if (!kioskEnabled || inLockTask() || isFinishing) return
+        if (installUiOpen || !kioskEnabled || inLockTask() || isFinishing) return
         val now = System.currentTimeMillis()
         if (now - lastPinAttemptMs < 8_000L) return
         lastPinAttemptMs = now
         mainHandler.post {
-            if (!kioskEnabled || inLockTask() || isFinishing) return@post
+            if (installUiOpen || !kioskEnabled || inLockTask() || isFinishing) return@post
             applyKioskLock(prompt = true)
         }
     }
@@ -678,7 +699,15 @@ class MainActivity : FlutterActivity(), SensorEventListener {
             val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
             if (dpm.isDeviceOwnerApp(packageName)) {
                 val who = ComponentName(this, ScreenOffAdminReceiver::class.java)
-                dpm.setLockTaskPackages(who, arrayOf(packageName))
+                dpm.setLockTaskPackages(
+                    who,
+                    arrayOf(
+                        packageName,
+                        "com.android.packageinstaller",
+                        "com.google.android.packageinstaller",
+                        "com.android.permissioncontroller",
+                    ),
+                )
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     dpm.setLockTaskFeatures(who, DevicePolicyManager.LOCK_TASK_FEATURE_NONE)
                 }

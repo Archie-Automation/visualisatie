@@ -15,6 +15,7 @@ export type KnxAlarmSensorState = {
   id: string;
   name: string;
   ga: string;
+  kind?: string;
   aanwezig: boolean;
   afwezig: boolean;
   inloop: boolean;
@@ -240,6 +241,7 @@ function snapshot(): KnxAlarmPublic {
       id: s.id,
       name: s.name || s.ga,
       ga: s.ga,
+      kind: s.kind,
       aanwezig: s.aanwezig === true,
       afwezig: s.afwezig === true,
       inloop: s.inloop === true,

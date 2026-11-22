@@ -1,11 +1,26 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// Live stand van het KNX-alarm. Geen code, alleen wat de server meestuurt.
+const knxAlarmSensorKinds = <String, String>{
+  'magneetcontact': 'Deur- / raamcontact',
+  'pir_beweging': 'Bewegingsmelder',
+  'trilcontact': 'Trilcontact',
+  'glasbreuk': 'Glasbreuk',
+  'rookmelder': 'Rookmelder',
+  'watermelder': 'Watermelder',
+  'gasmelder': 'Gasdetector',
+  'paniekknop': 'Paniekknop',
+};
+
+String knxAlarmSensorKindLabel(String? kind) =>
+    knxAlarmSensorKinds[kind] ?? 'Sensor';
+
 class KnxAlarmSensorState {
   const KnxAlarmSensorState({
     required this.id,
     required this.name,
     required this.ga,
+    required this.kind,
     required this.aanwezig,
     required this.afwezig,
     required this.inloop,
@@ -16,6 +31,7 @@ class KnxAlarmSensorState {
   final String id;
   final String name;
   final String ga;
+  final String kind;
   final bool aanwezig;
   final bool afwezig;
   final bool inloop;
@@ -27,6 +43,7 @@ class KnxAlarmSensorState {
       id: '${j['id'] ?? ''}',
       name: '${j['name'] ?? ''}',
       ga: '${j['ga'] ?? ''}',
+      kind: '${j['kind'] ?? ''}',
       aanwezig: j['aanwezig'] == true,
       afwezig: j['afwezig'] == true,
       inloop: j['inloop'] == true,

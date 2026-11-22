@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../knx_alarm.dart';
+
 /// Installateur: KNX-sensoren voor alarm aanwezig en afwezig.
 class KnxAlarmInstaller extends StatefulWidget {
   const KnxAlarmInstaller({
@@ -148,6 +150,7 @@ class _KnxAlarmInstallerState extends State<KnxAlarmInstaller> {
                   'id': 's${DateTime.now().microsecondsSinceEpoch}',
                   'name': 'Sensor ${next.length + 1}',
                   'ga': '',
+                  'kind': 'magneetcontact',
                   'aanwezig': false,
                   'afwezig': true,
                   'inloop': false,
@@ -201,6 +204,9 @@ class _SensorCardState extends State<_SensorCard> {
   @override
   void initState() {
     super.initState();
+    if (!knxAlarmSensorKinds.containsKey('${widget.sensor['kind']}')) {
+      widget.sensor['kind'] = 'magneetcontact';
+    }
     _name = TextEditingController(text: '${widget.sensor['name'] ?? ''}');
     _ga = TextEditingController(text: '${widget.sensor['ga'] ?? ''}');
   }
@@ -235,6 +241,22 @@ class _SensorCardState extends State<_SensorCard> {
               controller: _ga,
               decoration: const InputDecoration(labelText: 'Groepadres'),
               onChanged: (_) => _write(),
+            ),
+            DropdownButtonFormField<String>(
+              initialValue: knxAlarmSensorKinds.containsKey(widget.sensor['kind'])
+                  ? widget.sensor['kind'] as String
+                  : 'magneetcontact',
+              decoration: const InputDecoration(labelText: 'Type sensor'),
+              items: [
+                for (final e in knxAlarmSensorKinds.entries)
+                  DropdownMenuItem(value: e.key, child: Text(e.value)),
+              ],
+              onChanged: (v) {
+                if (v == null) return;
+                widget.sensor['kind'] = v;
+                widget.onChanged();
+                setState(() {});
+              },
             ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
