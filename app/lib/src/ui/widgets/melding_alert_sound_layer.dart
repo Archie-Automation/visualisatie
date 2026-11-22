@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../api.dart';
 import '../../inactivity_controller.dart';
 import '../../melding_alert_sound.dart';
+import '../../melding_nav.dart';
 import '../../proximity_wake.dart';
 
 /// App-wide listener: urgent meldingen ring even if the tile is off-screen.
@@ -20,6 +21,8 @@ class MeldingAlertSoundLayer extends ConsumerStatefulWidget {
 class _MeldingAlertSoundLayerState
     extends ConsumerState<MeldingAlertSoundLayer> {
   var _playing = false;
+  var _seenSnapshot = false;
+  Set<String> _notifyKeys = {};
 
   @override
   void initState() {
@@ -35,6 +38,13 @@ class _MeldingAlertSoundLayerState
     super.dispose();
   }
 
+  void _openMeldingen() {
+    ProximityWake.wakeScreen();
+    ref.read(inactivityControllerProvider.notifier).hideScreensaver();
+    ref.read(inactivityControllerProvider.notifier).registerActivity();
+    MeldingNav.request();
+  }
+
   void _sync() {
     if (!mounted) return;
     final cfg = ref.read(configProvider).value;
@@ -43,6 +53,16 @@ class _MeldingAlertSoundLayerState
     final active = collectActiveUrgentMeldingKeys(cfg, bus.values);
     ref.read(meldingAlertSilenceProvider.notifier).retainOnly(active);
     _apply(active.any((k) => !silenced.contains(k)));
+    if (bus.snapshotEpoch == 0) return;
+    final notify = collectActiveNotifyMeldingKeys(cfg, bus.values);
+    if (!_seenSnapshot) {
+      _seenSnapshot = true;
+      _notifyKeys = notify;
+      return;
+    }
+    final fresh = notify.difference(_notifyKeys);
+    _notifyKeys = notify;
+    if (fresh.isNotEmpty) _openMeldingen();
   }
 
   void _apply(bool shouldPlay) {

@@ -1247,6 +1247,11 @@ export interface MeldingItem {
   /** Optioneel: custom tekst als de melding inactief is. */
   inactiveLabel?: string;
   /**
+   * Notificatie naar de apps zodra de melding actief wordt.
+   * Weglaten: aan bij urgent, uit bij de rest.
+   */
+  notify?: boolean;
+  /**
    * Reset vanuit de app.
    * `same_ga`: schrijf 0 op [ga]. `reset_ga`: schrijf 1 op [resetGa].
    * Ontbreekt = geen resetknop. Zet in ETS cyclisch zenden op [ga],

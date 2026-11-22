@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'api.dart';
 import 'call_service.dart';
 import 'kiosk_mode.dart';
+import 'melding_nav.dart';
 import 'kiosk_system_ui.dart';
 import 'server_route.dart';
 import 'theme.dart';
@@ -56,6 +57,7 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
     WidgetsBinding.instance.addObserver(this);
     _routerRefresh = _RouterRefresh(ref);
     _router = _buildRouter();
+    MeldingNav.router = _router;
     // Initialise native call UI bridge.
     Future.microtask(() async {
       await CallService.init(ref, _router);

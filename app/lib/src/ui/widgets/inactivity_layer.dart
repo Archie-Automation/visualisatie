@@ -22,6 +22,7 @@ import '../../kiosk_system_ui.dart';
 import '../../media_api.dart';
 import '../../proximity_wake.dart';
 import '../../knx_alarm.dart';
+import '../../melding_alert_sound.dart';
 import '../../satel_api.dart';
 import '../../theme.dart';
 import '../responsive.dart';
@@ -422,6 +423,11 @@ class _InactivityLayerState extends ConsumerState<InactivityLayer> {
     if (satel.worstState == SatelPartitionState.entryDelay) return true;
     final knx = ref.read(knxAlarmStatusProvider);
     if (knx.phase == 'entry' || knx.phase == 'alarm') return true;
+    final urgent = collectActiveUrgentMeldingKeys(
+      ref.read(configProvider).value,
+      ref.read(busProvider).values,
+    );
+    if (urgent.isNotEmpty) return true;
     final sip = ref.read(intercomSipControllerProvider);
     if (sip.phase == IntercomSipPhase.ringing ||
         sip.phase == IntercomSipPhase.inCall) {

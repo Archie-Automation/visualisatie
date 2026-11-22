@@ -765,8 +765,11 @@ final serverLinkProvider =
 
 class BusState {
   final Map<String, dynamic> values;
-  const BusState(this.values);
-  BusState update(String ga, dynamic v) => BusState({...values, ga: v});
+  /// 0 tot de eerste volledige busfoto. Daarna omhoog bij elke nieuwe foto.
+  final int snapshotEpoch;
+  const BusState(this.values, {this.snapshotEpoch = 0});
+  BusState update(String ga, dynamic v) =>
+      BusState({...values, ga: v}, snapshotEpoch: snapshotEpoch);
 }
 
 class BusController extends Notifier<BusState> {
@@ -820,7 +823,9 @@ class BusController extends Notifier<BusState> {
     final next = Map<String, dynamic>.from(state.values);
     next.addAll(_pendingGas);
     _pendingGas.clear();
-    state = _mergeDimHolds(BusState(next));
+    state = _mergeDimHolds(
+      BusState(next, snapshotEpoch: state.snapshotEpoch),
+    );
   }
 
   BusState _mergeDimHolds(BusState base) {
@@ -990,7 +995,10 @@ class BusController extends Notifier<BusState> {
     try {
     if (isDemoToken(auth.token)) {
       if (!_demoSeeded) {
-        state = BusState(Map<String, dynamic>.from(demoHouse.bus));
+        state = BusState(
+          Map<String, dynamic>.from(demoHouse.bus),
+          snapshotEpoch: 1,
+        );
         _demoSeeded = true;
         demoSessionHook?.call(ref, active: true);
       }
@@ -1008,9 +1016,12 @@ class BusController extends Notifier<BusState> {
       if (snap.statusCode == 200) {
         final data = jsonDecode(snap.body) as Map<String, dynamic>;
         final list = (data['states'] as List).cast<Map<String, dynamic>>();
-        state = _mergeDimHolds(BusState({
-          for (final s in list) s['ga'] as String: s['value'],
-        }));
+        state = _mergeDimHolds(BusState(
+          {
+            for (final s in list) s['ga'] as String: s['value'],
+          },
+          snapshotEpoch: state.snapshotEpoch + 1,
+        ));
         final locks = (data['hvacLocks'] as List?)?.cast<Map<String, dynamic>>() ??
             const [];
         ref.read(hvacLockProvider.notifier).snapshot(locks);
@@ -1074,9 +1085,12 @@ class BusController extends Notifier<BusState> {
             case 'snapshot':
               final list =
                   (msg['payload'] as List).cast<Map<String, dynamic>>();
-              state = _mergeDimHolds(BusState({
-                for (final s in list) s['ga'] as String: s['value'],
-              }));
+              state = _mergeDimHolds(BusState(
+                {
+                  for (final s in list) s['ga'] as String: s['value'],
+                },
+                snapshotEpoch: state.snapshotEpoch + 1,
+              ));
             case 'state':
               final s = msg['payload'] as Map<String, dynamic>;
               _applyIncomingGa(s['ga'] as String, s['value']);
@@ -1263,7 +1277,7 @@ class BusController extends Notifier<BusState> {
   void reflectAll(Map<String, dynamic> patches) {
     if (patches.isEmpty) return;
     final next = Map<String, dynamic>.from(state.values)..addAll(patches);
-    state = BusState(next);
+    state = BusState(next, snapshotEpoch: state.snapshotEpoch);
   }
 
   void _applyDemoCommand(Map<String, dynamic> command) {

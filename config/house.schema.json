@@ -1582,7 +1582,11 @@
         },
         "icon": { "type": "string", "description": "Icoon-sleutel uit de icon-library." },
         "activeLabel": { "type": "string", "description": "Weergave-tekst als melding actief is." },
-        "inactiveLabel": { "type": "string", "description": "Weergave-tekst als melding inactief is." }
+        "inactiveLabel": { "type": "string", "description": "Weergave-tekst als melding inactief is." },
+        "notify": {
+          "type": "boolean",
+          "description": "Notificatie in de apps zodra de melding actief wordt. Weglaten: aan bij urgent, uit bij de rest."
+        }
       }
     },
     "universalAction": {

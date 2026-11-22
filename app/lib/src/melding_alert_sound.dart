@@ -21,6 +21,24 @@ List<Map<String, dynamic>> meldingItemsOf(Device device) {
   return (cfg['items'] as List<dynamic>? ?? []).cast<Map<String, dynamic>>();
 }
 
+Set<String> collectActiveNotifyMeldingKeys(
+  HouseConfig? cfg,
+  Map<String, dynamic> busValues,
+) {
+  if (cfg == null) return {};
+  final keys = <String>{};
+  for (final d in cfg.allDevices) {
+    if (d.type != DeviceType.melding) continue;
+    for (final item in meldingItemsOf(d)) {
+      if (!meldingItemNotifies(item)) continue;
+      final ga = item['ga'] as String? ?? '';
+      if (!meldingItemIsActive(item, busValues[ga])) continue;
+      keys.add(meldingItemSoundKey(d.id, item));
+    }
+  }
+  return keys;
+}
+
 Set<String> collectActiveUrgentMeldingKeys(
   HouseConfig? cfg,
   Map<String, dynamic> busValues,

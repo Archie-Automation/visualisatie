@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 
 import '../api.dart';
+import '../melding_nav.dart';
 import '../demo/demo_session.dart';
 import '../server_route.dart';
 import '../theme.dart';
@@ -171,7 +172,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
       if (left || !mounted) return;
     }
     if (!mounted) return;
-    context.go(auth.isAuthed ? (next ?? '/') : '/login');
+    final melding = MeldingNav.take() ? MeldingNav.path : null;
+    context.go(auth.isAuthed ? (melding ?? next ?? '/') : '/login');
   }
 
   @override

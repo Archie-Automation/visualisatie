@@ -22,6 +22,7 @@ import { attachMediaKnxBridge } from "./media/knxBridge";
 import { LutronIntegrationManager } from "./lutron/manager";
 import { attachWtwRuntime } from "./wtwRuntime";
 import { attachKnxAlarm } from "./knxAlarm";
+import { attachMeldingNotify } from "./meldingNotify";
 import { attachEnergyRuntime } from "./energy/runtime";
 import {
   getConnectivitySnapshot,
@@ -158,6 +159,7 @@ function main() {
   attachMediaKnxBridge(bus, media);
   attachWtwRuntime(bus);
   attachKnxAlarm(bus);
+  attachMeldingNotify(bus);
 
   void bus
     .connect(collectAllGAs(cfg))

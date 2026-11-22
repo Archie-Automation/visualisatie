@@ -42,6 +42,13 @@ bool meldingItemCanReset(Map<String, dynamic> item) {
   return false;
 }
 
+/// Notificatie naar de apps. Zonder vinkje: aan bij urgent, uit bij de rest.
+bool meldingItemNotifies(Map<String, dynamic> item) {
+  final flag = item['notify'];
+  if (flag is bool) return flag;
+  return (item['urgency'] as String? ?? '') == 'urgent';
+}
+
 String meldingItemId(Map<String, dynamic> item) {
   final id = (item['id'] as String?)?.trim() ?? '';
   if (id.isNotEmpty) return id;

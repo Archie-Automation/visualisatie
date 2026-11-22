@@ -119,8 +119,11 @@ export function removeTokens(tokens: string[]): void {
   if (store.tokens.length !== before) save(store);
 }
 
-/** Alleen tokens van actieve sessies, van ingeschakelde gebruikers die de bel niet stil hebben. */
-function activeTokens(userFilter: Set<string> | null): PushToken[] {
+/** Alleen tokens van actieve sessies en ingeschakelde gebruikers. Deurbel-stilte geldt niet voor meldingen. */
+function activeTokens(
+  userFilter: Set<string> | null,
+  opts?: { doorbellMute?: boolean }
+): PushToken[] {
   const store = load();
   const cfg = getConfig();
   const sessions = new Set(listSessions(null).map((s) => s.id));
@@ -142,7 +145,7 @@ function activeTokens(userFilter: Set<string> | null): PushToken[] {
     if (!u || u.enabled === false) continue;
     if (userFilter && !userFilter.has(t.userId)) continue;
     const muted = u.doorbellMutedUntil ? Date.parse(u.doorbellMutedUntil) > now : false;
-    if (muted) continue;
+    if (opts?.doorbellMute !== false && muted) continue;
     out.push(t);
   }
   if (stale.length) removeTokens(stale);
@@ -157,10 +160,15 @@ export interface RingPush {
   userIds?: Set<string> | null;
 }
 
-async function send(data: Record<string, string>, userIds: Set<string> | null, ttlSeconds: number): Promise<void> {
+async function send(
+  data: Record<string, string>,
+  userIds: Set<string> | null,
+  ttlSeconds: number,
+  opts?: { doorbellMute?: boolean }
+): Promise<void> {
   const relay = relayUrl();
   if (!relay) return;
-  const tokens = activeTokens(userIds);
+  const tokens = activeTokens(userIds, opts);
   if (tokens.length === 0) return;
   const body = {
     serverId: serverId(),
@@ -200,6 +208,47 @@ export function pushRing(ring: RingPush): void {
     },
     ring.userIds ?? null,
     30
+  );
+}
+
+export interface MeldingPush {
+  deviceId: string;
+  itemId: string;
+  title: string;
+  body: string;
+  /** Gebruikers met de functie meldingen, plus installateur en superuser. */
+  userIds: Set<string>;
+}
+
+/** Rookmelder of andere melding: notificatie, ook als de app dicht is. */
+export function pushMelding(alert: MeldingPush): void {
+  void send(
+    {
+      type: "melding.alert",
+      deviceId: alert.deviceId,
+      itemId: alert.itemId,
+      title: alert.title,
+      body: alert.body,
+      serverId: serverId() ?? ""
+    },
+    alert.userIds,
+    120,
+    { doorbellMute: false }
+  );
+}
+
+/** Melding voorbij: de notificatie van het scherm halen. */
+export function pushMeldingClear(deviceId: string, itemId: string, userIds: Set<string>): void {
+  void send(
+    {
+      type: "melding.clear",
+      deviceId,
+      itemId,
+      serverId: serverId() ?? ""
+    },
+    userIds,
+    60,
+    { doorbellMute: false }
   );
 }
 

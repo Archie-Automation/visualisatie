@@ -6304,6 +6304,8 @@ class _MeldingInstallerSectionState extends State<MeldingInstallerSection> {
               'Bij 1-bit is actief = 1. Bij andere DPT’s: gelijk, hoger dan of lager dan een waarde. '
               'Reset (optioneel): 0 op hetzelfde groepsadres, of 1 op een eigen reset-adres. '
               'Zet in ETS cyclisch zenden op het meldingsadres, anders blijft een cruciale storing na reset weg zolang de oorzaak bestaat. '
+              'Notificatie stuurt een bericht naar de apps zodra het punt actief wordt. '
+              'Bij urgent (rook, gas, water) staat dat aan tot je het uitvinkt: het tablet wordt wakker en de telefoon krijgt een melding, ook als de app dicht is. '
               'Optionele teksten en icoon voor actief/inactief.',
           trailing: TextButton.icon(
             onPressed: _items.length < 24 ? _addItem : null,
@@ -6380,6 +6382,9 @@ class _MeldingItemEditor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final urgency = item['urgency'] as String? ?? 'minder_belangrijk';
+    final notifies = item['notify'] is bool
+        ? item['notify'] as bool
+        : urgency == 'urgent';
     final dpt = item['dpt'] as String? ?? '1.001';
     final is1bit = dpt.startsWith('1.');
     final resetMode = const {'same_ga', 'reset_ga'}.contains(item['resetMode'])
@@ -6582,6 +6587,12 @@ class _MeldingItemEditor extends StatelessWidget {
                     }
                   },
                 ),
+              ),
+              const SizedBox(width: 10),
+              FilterChip(
+                label: const Text('Notificatie'),
+                selected: notifies,
+                onSelected: (v) => _set('notify', v),
               ),
               if (resetMode == 'reset_ga') ...[
                 const SizedBox(width: 10),

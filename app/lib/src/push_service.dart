@@ -4,12 +4,15 @@ import 'dart:convert';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_callkit_incoming/entities/entities.dart';
 import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api.dart';
+import 'melding_nav.dart';
+import 'melding_push.dart';
 
 /// Deurbel terwijl de app dicht is.
 ///
@@ -55,8 +58,21 @@ class PushService {
       final fm = FirebaseMessaging.instance;
       await fm.requestPermission(alert: true, sound: true, badge: false);
       FirebaseMessaging.onBackgroundMessage(archiePushBackgroundHandler);
+      await MeldingPush.ensureReady(listen: true);
       _msgSub?.cancel();
       _msgSub = FirebaseMessaging.onMessage.listen((m) {
+        final type = m.data['type'];
+        if (type == 'melding.alert') {
+          MeldingNav.request();
+          return;
+        }
+        if (type == 'melding.clear') {
+          unawaited(MeldingPush.cancel(
+            (m.data['deviceId'] as String?) ?? '',
+            (m.data['itemId'] as String?) ?? '',
+          ));
+          return;
+        }
         if (_appRinging?.call() == true) {
           debugPrint('[push] genegeerd, app rinkelt zelf');
           return;
@@ -227,6 +243,18 @@ class PushService {
         );
       case 'intercom.cleared':
         await FlutterCallkitIncoming.endAllCalls();
+      case 'melding.alert':
+        await MeldingPush.show(
+          deviceId: (data['deviceId'] as String?) ?? '',
+          itemId: (data['itemId'] as String?) ?? '',
+          title: (data['title'] as String?) ?? 'Melding',
+          body: (data['body'] as String?) ?? '',
+        );
+      case 'melding.clear':
+        await MeldingPush.cancel(
+          (data['deviceId'] as String?) ?? '',
+          (data['itemId'] as String?) ?? '',
+        );
       default:
         break;
     }
@@ -242,6 +270,7 @@ class PushService {
 /// Achtergrond-isolate (app dicht of in de achtergrond). Moet top-level zijn.
 @pragma('vm:entry-point')
 Future<void> archiePushBackgroundHandler(RemoteMessage message) async {
+  WidgetsFlutterBinding.ensureInitialized();
   try {
     await PushService.ensureFirebaseFromPrefs();
   } catch (_) {}
