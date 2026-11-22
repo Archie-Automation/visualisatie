@@ -480,6 +480,7 @@ class MainActivity : FlutterActivity(), SensorEventListener {
         window.setFormat(PixelFormat.RGBA_8888)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         hideSystemUi()
+        installKioskBarGuard()
         registerScreenOnReceiver()
         // lockNow() maakte het aanraakscherm dood. Die beheerdersrol is niet meer nodig.
         releaseScreenOffAdmin()
@@ -509,8 +510,8 @@ class MainActivity : FlutterActivity(), SensorEventListener {
         if (pendingKioskResult != null && leftForHomeRequest) {
             leftForHomeRequest = false
             finishHomeRequest()
-        } else if (kioskEnabled) {
-            applyKioskLock(prompt = false)
+        } else {
+            ensurePinned()
         }
     }
 
@@ -646,10 +647,24 @@ class MainActivity : FlutterActivity(), SensorEventListener {
         result.success(kioskStatus())
     }
 
+    private var lastPinAttemptMs = 0L
+
+    /**
+     * Zolang de schakelaar aan staat en het scherm niet vastzit, opnieuw vragen.
+     * Anders blijft de menubalk een uitweg. Niet vaker dan eens per 8 s,
+     * anders stapelt het systeemvenster.
+     */
+    private fun ensurePinned() {
+        if (!kioskEnabled || inLockTask()) return
+        val now = System.currentTimeMillis()
+        if (now - lastPinAttemptMs < 8_000L) return
+        lastPinAttemptMs = now
+        applyKioskLock(prompt = true)
+    }
+
     /**
      * Device-owner: stille lock, ook na herstart.
-     * Anders alleen pinnen als de gebruiker de schakelaar net aanzette.
-     * Elke resume opnieuw het pin-venster tonen maakt een wandtablet onbruikbaar.
+     * Anders het Android-venster om het scherm vast te zetten.
      */
     private fun applyKioskLock(prompt: Boolean) {
         if (!kioskEnabled) return
@@ -675,7 +690,37 @@ class MainActivity : FlutterActivity(), SensorEventListener {
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
-        if (hasFocus) hideSystemUi()
+        if (!hasFocus) return
+        hideSystemUi()
+        ensurePinned()
+    }
+
+    /** Menubalk die toch verschijnt met kiosk aan: meteen weg, en opnieuw vastzetten. */
+    private fun installKioskBarGuard() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            window.decorView.setOnApplyWindowInsetsListener { view, insets ->
+                if (kioskEnabled &&
+                    insets.isVisible(WindowInsets.Type.navigationBars())
+                ) {
+                    window.insetsController?.hide(
+                        WindowInsets.Type.statusBars() or
+                            WindowInsets.Type.navigationBars(),
+                    )
+                    ensurePinned()
+                }
+                view.onApplyWindowInsets(insets)
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.setOnSystemUiVisibilityChangeListener { visibility ->
+                if (!kioskEnabled) return@setOnSystemUiVisibilityChangeListener
+                val navHidden = visibility and View.SYSTEM_UI_FLAG_HIDE_NAVIGATION != 0
+                if (!navHidden) {
+                    hideSystemUi()
+                    ensurePinned()
+                }
+            }
+        }
     }
 
     /** Immersive sticky: no status bar / nav buttons on wall tablets. */
@@ -686,8 +731,13 @@ class MainActivity : FlutterActivity(), SensorEventListener {
                 controller.hide(
                     WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars(),
                 )
+                // Met kiosk aan meteen weer verbergen als een swipe de balk toont.
                 controller.systemBarsBehavior =
-                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    if (kioskEnabled) {
+                        WindowInsetsController.BEHAVIOR_DEFAULT
+                    } else {
+                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                    }
             }
         } else {
             @Suppress("DEPRECATION")

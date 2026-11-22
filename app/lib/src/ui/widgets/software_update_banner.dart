@@ -29,6 +29,7 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
   String? _error;
   String? _serverProgress;
   Timer? _poll;
+  int? _pollSeconds;
   /// GitHub-APK die Android weigerde (`apk_not_newer`). Niet opnieuw aanbieden
   /// tot naam/grootte/versie verandert — anders blijft Installeren dezelfde
   /// oude binary downloaden terwijl de server al verder is.
@@ -40,13 +41,17 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
     super.dispose();
   }
 
-  void _setPoll(bool on) {
-    if (!on) {
+  void _setPoll(int? seconds) {
+    if (seconds == null) {
       _poll?.cancel();
       _poll = null;
+      _pollSeconds = null;
       return;
     }
-    _poll ??= Timer.periodic(const Duration(seconds: 8), (_) async {
+    if (_poll != null && _pollSeconds == seconds) return;
+    _poll?.cancel();
+    _pollSeconds = seconds;
+    _poll = Timer.periodic(Duration(seconds: seconds), (_) async {
       if (!mounted) return;
       final prev = _apkIdentity(
         ref.read(softwareVersionStatusProvider).asData?.value?.latest?.androidApk,
@@ -173,14 +178,17 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
         (status?.androidApkPending == true ||
             (status?.androidApkUpdateAvailable == true && !apkOffered) ||
             status?.clientStale == true);
-    // Ook polllen als er al een Installeren-banner hangt. Anders blijft een
-    // overgeslagen 230-prompt staan terwijl GitHub/server al 231+ zijn.
-    _setPoll(
-      supportsAndroidApkUpdate &&
-          !_serverUpdating &&
-          !_installing &&
-          (apkOffered || apkWaiting),
-    );
+    // Android vraagt ook als er nog geen banner is. Anders blijft een tablet
+    // op de eerste controle staan tot de app even weg is (swipe naar de balk).
+    // Met een banner vaker, tot de APK er is.
+    final pollSeconds = !supportsAndroidApkUpdate ||
+            _serverUpdating ||
+            _installing
+        ? null
+        : (apkOffered || apkWaiting)
+            ? 8
+            : 45;
+    _setPoll(pollSeconds);
 
     if (_serverUpdating) {
       return _Banner(
