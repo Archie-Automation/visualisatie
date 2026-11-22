@@ -173,9 +173,16 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
 
   @override
   Widget build(BuildContext context) {
+    final admin = ref.watch(authProvider).isInstaller;
+    // Een gewoon account kan de server niet bijwerken en de app niet
+    // installeren. De melding heeft dan geen actie.
+    if (!admin) {
+      _setPoll(null);
+      return const SizedBox.shrink();
+    }
+
     final outdated = ref.watch(softwareUpdateAvailableProvider);
     final status = ref.watch(softwareVersionStatusProvider).asData?.value;
-    final admin = ref.watch(authProvider).isInstaller;
     final apkOffered = supportsAndroidApkUpdate &&
         status?.androidApkUpdateAvailable == true &&
         _apkIdentity(status?.latest?.androidApk) != _rejectedApkKey;
@@ -233,18 +240,19 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
 
     if (apkWaiting && !apkReady) {
       final fileVer = status.latest?.androidApk?.version;
-      return _Banner(
-        message: _error ??
-            (fileVer == null || fileVer.isEmpty
-                ? 'De server is nieuwer dan deze tablet. '
-                    'Het installatiebestand wordt nog opgehaald.'
-                : 'Het installatiebestand is $fileVer. '
-                    'Dat is niet nieuwer dan deze tablet.'),
-        actionLabel: 'Opnieuw controleren',
-        onAction: () {
-          ref.invalidate(softwareVersionStatusProvider);
-        },
-      );
+      // Bestand staat er al, maar is niet nieuwer dan deze tablet.
+      // Geen balk: er valt niets te installeren.
+      if (fileVer == null || fileVer.isEmpty) {
+        return _Banner(
+          message: _error ??
+              'De server is nieuwer dan deze tablet. '
+                  'Het installatiebestand wordt nog opgehaald.',
+          actionLabel: 'Opnieuw controleren',
+          onAction: () {
+            ref.invalidate(softwareVersionStatusProvider);
+          },
+        );
+      }
     }
 
     if (status.updateAvailable) {
@@ -261,21 +269,10 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
           onAction: _updateServerThenApp,
         );
       }
-      if (admin) {
-        return _Banner(
-          message: ver.isEmpty
-              ? 'Nieuwe versie. Eenmalig op de NUC: sudo bash docker/install.sh. Daarna vanaf de tablet.'
-              : 'Nieuwe versie ($ver). Eenmalig op de NUC: sudo bash docker/install.sh. Daarna vanaf de tablet.',
-          actionLabel: latest?.htmlUrl != null ? 'Bekijken' : null,
-          onAction: latest?.htmlUrl != null
-              ? () => openReleasePage(latest!.htmlUrl)
-              : null,
-        );
-      }
       return _Banner(
         message: ver.isEmpty
-            ? 'Er is nieuwere software. Vraag de beheerder de server bij te werken.'
-            : 'Nieuwe software ($ver). Vraag de beheerder de server bij te werken.',
+            ? 'Nieuwe versie. Eenmalig op de NUC: sudo bash docker/install.sh. Daarna vanaf de tablet.'
+            : 'Nieuwe versie ($ver). Eenmalig op de NUC: sudo bash docker/install.sh. Daarna vanaf de tablet.',
         actionLabel: latest?.htmlUrl != null ? 'Bekijken' : null,
         onAction: latest?.htmlUrl != null
             ? () => openReleasePage(latest!.htmlUrl)
@@ -283,7 +280,7 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
       );
     }
 
-    if (status.clientStale) {
+    if (status.clientStale && kIsWeb) {
       return _Banner(
         message: status.running.version.isEmpty
             ? 'Nieuwe softwarestand beschikbaar. Vernieuw de app.'
