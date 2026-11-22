@@ -1,7 +1,7 @@
 ﻿import 'dart:async';
 import 'dart:math';
 
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -529,8 +529,9 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody>
   }
 }
 
-/// Sticky header bij kamer-browse. Terug staat in de bovenste rij, naast
-/// het gekozen gebouw. Gebouw wisselen kan alleen op het startscherm.
+/// Sticky header bij kamer-browse. Op Android staan terug, gebouw en
+/// verdiepingen op één regel. Elders blijft het gebouw boven de verdiepingen.
+/// Gebouw wisselen kan alleen op het startscherm.
 class _FloorBrowseHeader extends StatelessWidget {
   const _FloorBrowseHeader({
     required this.floors,
@@ -554,11 +555,28 @@ class _FloorBrowseHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final name = buildingName?.trim();
     final showBuilding = name != null && name.isNotEmpty;
+    final oneRow = showBuilding &&
+        !kIsWeb &&
+        defaultTargetPlatform == TargetPlatform.android;
     final top = MediaQuery.paddingOf(context).top;
-    final buildingBlock = showBuilding ? _scopeTileH + 8 : 0.0;
+    final buildingBlock = showBuilding && !oneRow ? _scopeTileH + 8 : 0.0;
     // Zelfde inspringing als de gebouwchip: knopbreedte plus tussenruimte.
     const backGap = 10.0;
+    const floorGap = 20.0;
     final buildingLead = HeaderIconButton.size + backGap;
+    final floorsBar = _FloorTabBar(
+      floors: floors,
+      selectedIndex: selectedIndex,
+      scrollController: scrollController,
+      onSelect: onSelect,
+      bottomPadding: 0,
+      listPadding: EdgeInsets.fromLTRB(
+        showBuilding ? 0 : 12,
+        0,
+        12,
+        0,
+      ),
+    );
     return StickyHeaderSurface(
       height: top + 14 + buildingBlock + _scopeTileH + 14,
       child: Padding(
@@ -568,64 +586,68 @@ class _FloorBrowseHeader extends StatelessWidget {
           8,
           14,
         ),
-        child: Column(
-          children: [
-            if (showBuilding)
-              SizedBox(
-                height: _scopeTileH,
-                child: Row(
-                  children: [
-                    HeaderIconButton(
-                      icon: Icons.arrow_back_ios_new,
-                      onTap: onBack,
-                      tooltip: 'Terug',
-                    ),
-                    const SizedBox(width: backGap),
-                    Flexible(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: _SelectedBuildingChip(
-                          name: name,
-                          iconKey: buildingIcon,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            if (showBuilding) const SizedBox(height: 8),
-            Expanded(
-              child: Row(
+        child: oneRow
+            ? Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
+                  HeaderIconButton(
+                    icon: Icons.arrow_back_ios_new,
+                    onTap: onBack,
+                    tooltip: 'Terug',
+                  ),
+                  const SizedBox(width: backGap),
+                  _SelectedBuildingChip(
+                    name: name,
+                    iconKey: buildingIcon,
+                  ),
+                  const SizedBox(width: floorGap),
+                  Expanded(child: floorsBar),
+                ],
+              )
+            : Column(
+                children: [
                   if (showBuilding)
-                    SizedBox(width: buildingLead)
-                  else
-                    HeaderIconButton(
-                      icon: Icons.arrow_back_ios_new,
-                      onTap: onBack,
-                      tooltip: 'Terug',
-                    ),
-                  Expanded(
-                    child: _FloorTabBar(
-                      floors: floors,
-                      selectedIndex: selectedIndex,
-                      scrollController: scrollController,
-                      onSelect: onSelect,
-                      bottomPadding: 0,
-                      listPadding: EdgeInsets.fromLTRB(
-                        showBuilding ? 0 : 12,
-                        0,
-                        12,
-                        0,
+                    SizedBox(
+                      height: _scopeTileH,
+                      child: Row(
+                        children: [
+                          HeaderIconButton(
+                            icon: Icons.arrow_back_ios_new,
+                            onTap: onBack,
+                            tooltip: 'Terug',
+                          ),
+                          const SizedBox(width: backGap),
+                          Flexible(
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: _SelectedBuildingChip(
+                                name: name,
+                                iconKey: buildingIcon,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
+                    ),
+                  if (showBuilding) const SizedBox(height: 8),
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        if (showBuilding)
+                          SizedBox(width: buildingLead)
+                        else
+                          HeaderIconButton(
+                            icon: Icons.arrow_back_ios_new,
+                            onTap: onBack,
+                            tooltip: 'Terug',
+                          ),
+                        Expanded(child: floorsBar),
+                      ],
                     ),
                   ),
                 ],
               ),
-            ),
-          ],
-        ),
       ),
     );
   }
