@@ -1,10 +1,5 @@
-/// Full-screen PIN overlay that fires automatically when the Satel partition
-/// enters "Entry_Delay" (inlooptijd). The user must enter their code to disarm
-/// before the delay runs out. The overlay dismisses itself as soon as the
-/// state returns to "Disarmed".
-///
-/// Usage (wrap the navigator child in app.dart):
-///   builder: (context, child) => SatelEntryDelayLayer(child: child!),
+/// Piept tijdens in- en uitloop en opent de alarmpagina bij inloop of alarm.
+/// Geen eigen scherm: dezelfde route als Systemen → Alarm.
 library;
 
 import 'dart:async';
@@ -12,13 +7,13 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
-import '../../api.dart';
+import '../../inactivity_controller.dart';
 import '../../knx_alarm.dart';
-import '../../knx_alarm_api.dart';
+import '../../proximity_wake.dart';
 import '../../satel_api.dart';
 import 'alarm_delay_sound.dart';
-import 'alarm_keypad.dart';
 
 class SatelEntryDelayLayer extends ConsumerStatefulWidget {
   const SatelEntryDelayLayer({super.key, required this.child});
@@ -29,12 +24,7 @@ class SatelEntryDelayLayer extends ConsumerStatefulWidget {
       _SatelEntryDelayLayerState();
 }
 
-class _SatelEntryDelayLayerState extends ConsumerState<SatelEntryDelayLayer>
-    with TickerProviderStateMixin {
-  bool _overlayVisible = false;
-  late final AnimationController _animCtrl;
-  late final Animation<double> _fadeAnim;
-
+class _SatelEntryDelayLayerState extends ConsumerState<SatelEntryDelayLayer> {
   Timer? _fastTimer;
   String? _lastKey;
   DateTime? _trackedDeadline;
@@ -45,15 +35,6 @@ class _SatelEntryDelayLayerState extends ConsumerState<SatelEntryDelayLayer>
   @override
   void initState() {
     super.initState();
-    _animCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 300),
-    );
-    _fadeAnim = CurvedAnimation(
-      parent: _animCtrl,
-      curve: Curves.easeOutCubic,
-      reverseCurve: Curves.easeInCubic,
-    );
     alarmDelayPrepare();
   }
 
@@ -61,8 +42,30 @@ class _SatelEntryDelayLayerState extends ConsumerState<SatelEntryDelayLayer>
   void dispose() {
     _fastTimer?.cancel();
     alarmDelayStop();
-    _animCtrl.dispose();
     super.dispose();
+  }
+
+  void _openAlarmPage() {
+    final router = GoRouter.maybeOf(context);
+    if (router == null || !mounted) return;
+    final uri = router.state.uri;
+    if (uri.path == '/alarm' ||
+        uri.path == '/splash' ||
+        uri.path == '/login' ||
+        uri.path == '/wachtwoord') {
+      return;
+    }
+    final from = uri.hasQuery ? '${uri.path}?${uri.query}' : uri.path;
+    router.push(
+      Uri(
+        path: '/alarm',
+        queryParameters: {'from': from.isEmpty ? '/' : from},
+      ).toString(),
+    );
+    HapticFeedback.mediumImpact();
+    ProximityWake.wakeScreen();
+    ref.read(inactivityControllerProvider.notifier).hideScreensaver();
+    ref.read(inactivityControllerProvider.notifier).registerActivity();
   }
 
   void _sync() {
@@ -71,19 +74,14 @@ class _SatelEntryDelayLayerState extends ConsumerState<SatelEntryDelayLayer>
     final knxOn = knx.enabled;
     final knxEntry = knxOn && knx.phase == 'entry';
     final knxExit = knxOn && knx.phase == 'exit';
+    final knxAlarm = knxOn && knx.phase == 'alarm';
     final worst = knxOn ? SatelPartitionState.disarmed : satel.worstState;
     final key = knxOn ? 'knx:${knx.phase}' : 'satel:${worst.name}';
     if (key != _lastKey) {
+      final prev = _lastKey;
       _lastKey = key;
-      final shouldShow = knxEntry || worst == SatelPartitionState.entryDelay;
-      if (shouldShow && !_overlayVisible) {
-        setState(() => _overlayVisible = true);
-        _animCtrl.forward();
-        HapticFeedback.heavyImpact();
-      } else if (!shouldShow && _overlayVisible) {
-        _animCtrl.reverse().then((_) {
-          if (mounted) setState(() => _overlayVisible = false);
-        });
+      if (knxEntry || knxAlarm || worst == SatelPartitionState.entryDelay) {
+        _openAlarmPage();
       }
 
       _fastTimer?.cancel();
@@ -103,6 +101,10 @@ class _SatelEntryDelayLayerState extends ConsumerState<SatelEntryDelayLayer>
       } else if (worst == SatelPartitionState.exitDelay) {
         alarmDelaySlow();
         _armFast(satel.exitDeadline);
+      } else if (prev != null && _turnedOff(prev, key)) {
+        alarmDelayDouble();
+      } else if (prev != null && _armedAfterExit(prev, key)) {
+        alarmDelayArmed();
       }
     }
 
@@ -117,6 +119,20 @@ class _SatelEntryDelayLayerState extends ConsumerState<SatelEntryDelayLayer>
   DateTime? _deadline(int? ms) =>
       ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
 
+  bool _turnedOff(String prev, String key) {
+    if (key == 'knx:off' && prev.startsWith('knx:') && prev != 'knx:off') {
+      return true;
+    }
+    return key == 'satel:disarmed' &&
+        prev.startsWith('satel:') &&
+        prev != 'satel:disarmed';
+  }
+
+  bool _armedAfterExit(String prev, String key) {
+    return (prev == 'knx:exit' && key == 'knx:armed') ||
+        (prev == 'satel:exitDelay' && key == 'satel:armed');
+  }
+
   void _syncExitCountdown(SatelStatus status) {
     if (status.worstState != SatelPartitionState.exitDelay) return;
     if (status.exitDeadline != null) {
@@ -126,8 +142,6 @@ class _SatelEntryDelayLayerState extends ConsumerState<SatelEntryDelayLayer>
       return;
     }
     if (status.exitFinal && _panelDeadline == null) {
-      // The panel only reports "under 10 seconds", and that poll is a few
-      // seconds late. Count from here so the fast beeps sit in the last ~3s.
       _panelDeadline = DateTime.now().add(const Duration(seconds: 8));
       _armFast(_panelDeadline);
     }
@@ -150,286 +164,6 @@ class _SatelEntryDelayLayerState extends ConsumerState<SatelEntryDelayLayer>
   Widget build(BuildContext context) {
     ref.listen<SatelStatus>(satelStatusProvider, (_, __) => _sync());
     ref.listen<KnxAlarmStatus>(knxAlarmStatusProvider, (_, __) => _sync());
-
-    final status = ref.watch(satelStatusProvider);
-
-    return Stack(
-      children: [
-        widget.child,
-        if (_overlayVisible)
-          FadeTransition(
-            opacity: _fadeAnim,
-            child: _EntryDelayOverlay(
-              status: status,
-              // The overlay itself cannot be popped — it auto-dismisses on disarm.
-            ),
-          ),
-      ],
-    );
+    return widget.child;
   }
 }
-
-// ---------------------------------------------------------------------------
-// Overlay contents
-// ---------------------------------------------------------------------------
-
-class _EntryDelayOverlay extends ConsumerStatefulWidget {
-  const _EntryDelayOverlay({required this.status});
-  final SatelStatus status;
-
-  @override
-  ConsumerState<_EntryDelayOverlay> createState() =>
-      _EntryDelayOverlayState();
-}
-
-class _EntryDelayOverlayState extends ConsumerState<_EntryDelayOverlay>
-    with SingleTickerProviderStateMixin {
-  bool _busy = false;
-  String? _error;
-  String _pin = '';
-
-  late final AnimationController _pulseCtrl;
-  late final Animation<double> _pulse;
-
-  @override
-  void initState() {
-    super.initState();
-    _pulseCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 900),
-    )..repeat(reverse: true);
-    _pulse = CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut);
-  }
-
-  @override
-  void dispose() {
-    _pulseCtrl.dispose();
-    super.dispose();
-  }
-
-  Future<void> _disarm() async {
-    setState(() { _busy = true; _error = null; });
-    final token  = ref.read(authProvider).token;
-    final status = ref.read(satelStatusProvider);
-    final target = status.partitions
-        .where((p) => p.isEntryDelay)
-        .map((p) => p.number)
-        .firstOrNull ?? 1;
-    final result = await satelDisarm(target, token: token);
-    if (!mounted) return;
-    setState(() { _busy = false; });
-    if (!result.ok) {
-      setState(() => _error = result.error ?? 'Uitschakelen mislukt.');
-      HapticFeedback.heavyImpact();
-    }
-    // On success the status provider flips to Disarmed and the layer
-    // auto-dismisses this overlay.
-  }
-
-  Future<void> _disarmKnx() async {
-    if (_pin.length < 4 || _busy) return;
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    final result = await knxAlarmDisarm(_pin, ref.read(authProvider).token);
-    if (!mounted) return;
-    final status = result.status;
-    if (status != null) {
-      ref.read(knxAlarmStatusProvider.notifier).apply(status);
-    }
-    setState(() {
-      _busy = false;
-      if (result.ok) _pin = '';
-      _error = result.ok ? null : (result.message ?? 'Uitschakelen mislukt.');
-    });
-    if (!result.ok) HapticFeedback.heavyImpact();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final status = ref.watch(satelStatusProvider);
-    final knx = ref.watch(knxAlarmStatusProvider);
-    final knxEntry = knx.enabled && knx.phase == 'entry';
-    final names = knxEntry
-        ? [
-            for (final sensor in knx.sensors)
-              if (sensor.open && !sensor.bypassed)
-                sensor.name.isEmpty ? sensor.ga : sensor.name,
-          ]
-        : status.allZones.where((z) => z.violated).map((z) => z.name).toList();
-
-    return Material(
-      color: Colors.transparent,
-      child: Container(
-        color: const Color(0xE8181820),
-        child: SafeArea(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // ── Pulsing warning icon ─────────────────────────────
-              AnimatedBuilder(
-                animation: _pulse,
-                builder: (_, __) => Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Color.lerp(
-                      const Color(0xFFD64545).withValues(alpha: 0.15),
-                      const Color(0xFFD64545).withValues(alpha: 0.30),
-                      _pulse.value,
-                    ),
-                    border: Border.all(
-                      color: Color.lerp(
-                        const Color(0xFFD64545).withValues(alpha: 0.40),
-                        const Color(0xFFD64545).withValues(alpha: 0.80),
-                        _pulse.value,
-                      )!,
-                      width: 2,
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.warning_amber_rounded,
-                    color: Color(0xFFD64545),
-                    size: 40,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-              const Text(
-                'INLOOPTIJD',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 3.0,
-                  color: Color(0xFFD64545),
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Druk op Uitschakelen om het\nalarm te stoppen.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.white70,
-                  height: 1.5,
-                ),
-              ),
-
-              // Violated zones hint
-              if (names.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  alignment: WrapAlignment.center,
-                  children: names.take(4).map((name) {
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFD64545).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                            color: const Color(0xFFD64545).withValues(alpha: 0.30),
-                            width: 0.5),
-                      ),
-                      child: Text(
-                        name,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFFD64545),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                ),
-              ],
-
-              const SizedBox(height: 28),
-
-              if (knxEntry)
-                Flexible(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: AlarmPinSection(
-                      pin: _pin,
-                      busy: _busy,
-                      feedback: _error,
-                      canConfirm: _pin.length >= 4,
-                      arming: false,
-                      onDigit: (d) {
-                        if (_pin.length >= 8) return;
-                        setState(() {
-                          _pin += d;
-                          _error = null;
-                        });
-                      },
-                      onBackspace: () {
-                        if (_pin.isEmpty) return;
-                        setState(() => _pin = _pin.substring(0, _pin.length - 1));
-                      },
-                      onConfirm: _disarmKnx,
-                    ),
-                  ),
-                )
-              else
-                ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 280),
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 58,
-                  child: ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF4CAF50).withValues(alpha: 0.20),
-                      foregroundColor: const Color(0xFF4CAF50),
-                      side: const BorderSide(
-                        color: Color(0xFF4CAF50),
-                        width: 1.5,
-                      ),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18)),
-                      elevation: 0,
-                    ),
-                    onPressed: _busy ? null : _disarm,
-                    icon: _busy
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              color: Color(0xFF4CAF50),
-                            ),
-                          )
-                        : const Icon(Icons.lock_open_outlined, size: 22),
-                    label: const Text(
-                      'Uitschakelen',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    ),
-                  ),
-                ),
-
-              if (_error != null && !knxEntry) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _error!,
-                  style: const TextStyle(
-                    color: Color(0xFFD64545),
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-

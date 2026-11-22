@@ -323,29 +323,6 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody>
       }
     });
 
-    // Auto-open alarm screen when entry delay starts (on any device).
-    ref.listen<SatelPartitionState?>(
-      _alarmStateProvider,
-      (prev, next) {
-        if (next == SatelPartitionState.entryDelay &&
-            prev != SatelPartitionState.entryDelay) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) appOpen(context, '/alarm');
-          });
-        }
-      },
-    );
-    ref.listen<String>(
-      knxAlarmStatusProvider.select((s) => s.phase),
-      (prev, next) {
-        if (next == 'entry' && prev != 'entry') {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) appOpen(context, '/alarm');
-          });
-        }
-      },
-    );
-
     final cfg = widget.cfg;
     final auth = ref.watch(authProvider);
     final canEdit = canEditScenesInApp(auth, cfg);

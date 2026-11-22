@@ -138,7 +138,8 @@ class MainActivity : FlutterActivity(), SensorEventListener {
             when (call.method) {
                 "play" -> {
                     val which = call.argument<String>("which") ?: "slow"
-                    alarmDelayRinger?.play(which)
+                    val loop = call.argument<Boolean>("loop") ?: true
+                    alarmDelayRinger?.play(which, loop)
                     result.success(null)
                 }
                 "stop" -> {

@@ -412,8 +412,6 @@ class _InactivityLayerState extends ConsumerState<InactivityLayer> {
     _wakePanel();
     ref.read(inactivityControllerProvider.notifier).hideScreensaver();
     ref.read(inactivityControllerProvider.notifier).registerActivity();
-    final loc = widget.router.state.matchedLocation;
-    if (loc != '/alarm') widget.router.go('/alarm');
   }
 
   bool _isPaused() {
@@ -515,7 +513,10 @@ class _InactivityLayerState extends ConsumerState<InactivityLayer> {
     ref.listen<String>(
       knxAlarmStatusProvider.select((s) => s.phase),
       (prev, next) {
-        if (next == 'entry' && prev != 'entry') _onEntryDelayStarted();
+        if ((next == 'entry' && prev != 'entry') ||
+            (next == 'alarm' && prev != 'alarm')) {
+          _onEntryDelayStarted();
+        }
       },
     );
 

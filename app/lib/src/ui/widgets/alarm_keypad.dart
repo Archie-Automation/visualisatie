@@ -53,23 +53,20 @@ class AlarmPinSection extends StatelessWidget {
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(8, (i) {
-                final filled = i < pin.length;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 120),
-                    width: 12,
-                    height: 12,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: filled
-                          ? color
-                          : LuxeColors.inkFaint.withValues(alpha: 0.3),
+              children: [
+                for (var i = 0; i < pin.length; i++)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    child: Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: color,
+                      ),
                     ),
                   ),
-                );
-              }),
+              ],
             ),
           ),
           const SizedBox(height: 16),

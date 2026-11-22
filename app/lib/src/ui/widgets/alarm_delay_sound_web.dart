@@ -7,9 +7,13 @@ import 'package:flutter/services.dart';
 
 const _slowAsset = 'assets/sounds/alarm_delay_slow.mp3';
 const _fastAsset = 'assets/sounds/alarm_delay_fast.mp3';
+const _doubleAsset = 'assets/sounds/alarm_ack_double.mp3';
+const _armedAsset = 'assets/sounds/alarm_armed_tone.mp3';
 
 String? _slowUrl;
 String? _fastUrl;
+String? _doubleUrl;
+String? _armedUrl;
 Future<void>? _loading;
 
 Future<void> alarmDelayPrepare() {
@@ -20,14 +24,28 @@ Future<void> alarmDelaySlow() async {
   await alarmDelayPrepare();
   final url = _slowUrl;
   if (url == null) return;
-  _play(url);
+  _play(url, loop: true);
 }
 
 Future<void> alarmDelayFast() async {
   await alarmDelayPrepare();
   final url = _fastUrl;
   if (url == null) return;
-  _play(url);
+  _play(url, loop: true);
+}
+
+Future<void> alarmDelayDouble() async {
+  await alarmDelayPrepare();
+  final url = _doubleUrl;
+  if (url == null) return;
+  _play(url, loop: false);
+}
+
+Future<void> alarmDelayArmed() async {
+  await alarmDelayPrepare();
+  final url = _armedUrl;
+  if (url == null) return;
+  _play(url, loop: false);
 }
 
 void alarmDelayStop() {
@@ -47,8 +65,12 @@ void alarmDelayStop() {
 Future<void> _load() async {
   final slow = await rootBundle.load(_slowAsset);
   final fast = await rootBundle.load(_fastAsset);
+  final doubleBeep = await rootBundle.load(_doubleAsset);
+  final armed = await rootBundle.load(_armedAsset);
   _slowUrl = _blobUrl(slow);
   _fastUrl = _blobUrl(fast);
+  _doubleUrl = _blobUrl(doubleBeep);
+  _armedUrl = _blobUrl(armed);
 }
 
 String _blobUrl(ByteData data) {
@@ -70,7 +92,8 @@ String _blobUrl(ByteData data) {
   return url as String;
 }
 
-void _play(String url) {
+void _play(String url, {required bool loop}) {
+  final loopJs = loop ? 'true' : 'false';
   js.context.callMethod('eval', [
     '''
 (function(){
@@ -80,7 +103,7 @@ void _play(String url) {
     slot.a.src = "";
   }
   var a = new Audio("$url");
-  a.loop = true;
+  a.loop = $loopJs;
   a.volume = 1;
   slot.a = a;
   var p = a.play();

@@ -11,9 +11,14 @@ import android.media.MediaPlayer
 class AlarmDelayRinger(private val context: Context) {
     private var player: MediaPlayer? = null
 
-    fun play(which: String) {
+    fun play(which: String, loop: Boolean) {
         stop()
-        val res = if (which == "fast") R.raw.alarm_delay_fast else R.raw.alarm_delay_slow
+        val res = when (which) {
+            "fast" -> R.raw.alarm_delay_fast
+            "double" -> R.raw.alarm_ack_double
+            "armed" -> R.raw.alarm_armed_tone
+            else -> R.raw.alarm_delay_slow
+        }
         val created = MediaPlayer.create(context, res) ?: return
         created.setAudioAttributes(
             AudioAttributes.Builder()
@@ -21,8 +26,14 @@ class AlarmDelayRinger(private val context: Context) {
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build(),
         )
-        created.isLooping = true
+        created.isLooping = loop
         created.setVolume(1f, 1f)
+        created.setOnCompletionListener {
+            if (player == it) {
+                player = null
+                it.release()
+            }
+        }
         created.start()
         player = created
     }
