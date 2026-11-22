@@ -13,6 +13,7 @@ import {
   pruneApkCache,
   readCachedApk
 } from "./apkCache";
+import { apkVersionLabel, readApkIdentity } from "./apkIdentity";
 import { fetchAndroidApkFromGithub, getGithubLatest } from "./githubLatest";
 import type { UpdateChannel } from "./githubLatest";
 import { logger } from "./logger";
@@ -31,6 +32,30 @@ type Job = {
 };
 
 let job: Job | null = null;
+const versionMemo = new Map<string, string | null>();
+
+/** Versie uit de bytes op schijf. Geen cache-hit: nog niet bekend, niet gokken. */
+export function cachedApkVersionLabel(
+  assetId: number,
+  sizeBytes: number
+): string | null {
+  const key = `${assetId}:${sizeBytes}`;
+  if (versionMemo.has(key)) return versionMemo.get(key) ?? null;
+  const file = readCachedApk(assetId, sizeBytes);
+  if (!file) return null;
+  try {
+    const id = readApkIdentity(fs.readFileSync(file));
+    const label = id ? apkVersionLabel(id) : null;
+    if (!label) logger.warn({ assetId }, "APK-versie niet leesbaar uit het bestand");
+    else logger.info({ assetId, version: label }, "APK-versie uit het bestand");
+    versionMemo.set(key, label);
+    return label;
+  } catch (err) {
+    logger.warn({ err, assetId }, "APK-versie lezen mislukt");
+    versionMemo.set(key, null);
+    return null;
+  }
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -248,11 +273,12 @@ export async function sendAndroidApk(res: Response, channel: UpdateChannel): Pro
     res.status(404).json({ error: "no_android_apk_on_latest_release" });
     return;
   }
+  const downloadName = `archie-os-${meta.id}.apk`;
   const cached = readCachedApk(meta.id, meta.sizeBytes);
   if (cached) {
-    await pipeFile(res, cached, meta.name, fs.statSync(cached).size);
+    await pipeFile(res, cached, downloadName, fs.statSync(cached).size);
     return;
   }
-  const created = startJob(meta.id, meta.name, meta.sizeBytes, channel);
+  const created = startJob(meta.id, downloadName, meta.sizeBytes, channel);
   await tailJob(res, created);
 }

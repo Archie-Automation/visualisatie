@@ -56,7 +56,9 @@ class ApkInstaller(private val activity: Activity) {
 
         val incomingCode = archiveVersionCode(file)
         val installedCode = installedVersionCode()
-        if (incomingCode != null && installedCode != null && incomingCode <= installedCode) {
+        // 0 of onleesbaar is geen "ouder". Een eerder bestand op hetzelfde pad
+        // liet Android de oude versionCode teruggeven en blokkeerde 428 op een 425.
+        if (incomingCode != null && incomingCode > 0L && installedCode != null && incomingCode <= installedCode) {
             result.error(
                 "apk_not_newer",
                 "APK $incomingCode is niet nieuwer dan $installedCode",
@@ -210,12 +212,17 @@ class ApkInstaller(private val activity: Activity) {
     private fun archiveVersionCode(file: File): Long? {
         val info = activity.packageManager.getPackageArchiveInfo(file.absolutePath, 0)
             ?: return null
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        info.applicationInfo?.apply {
+            sourceDir = file.absolutePath
+            publicSourceDir = file.absolutePath
+        }
+        val code = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             info.longVersionCode
         } else {
             @Suppress("DEPRECATION")
             info.versionCode.toLong()
         }
+        return if (code > 0L) code else null
     }
 
     private fun installedVersionCode(): Long? {

@@ -73,12 +73,11 @@ import type {
 } from "./types";
 import { appVersionInfo } from "./version";
 import {
-  apkVersionAdvertised,
   getGithubLatest,
   isUpdateAvailableOnGithub,
   normalizeUpdateChannel
 } from "./githubLatest";
-import { sendAndroidApk, warmAndroidApk } from "./apkDownload";
+import { cachedApkVersionLabel, sendAndroidApk, warmAndroidApk } from "./apkDownload";
 import { readServerUpdateStatus, requestServerUpdate } from "./serverUpdate";
 import {
   knxAlarmArm,
@@ -542,6 +541,10 @@ export function buildRouter(
     const latest = await getGithubLatest(force, updateChannel);
     const updateAvailable = isUpdateAvailableOnGithub(latest);
     const serverUpdate = readServerUpdateStatus();
+    const apk = latest?.androidApk ?? null;
+    const apkVersion = apk
+      ? cachedApkVersionLabel(apk.id, apk.sizeBytes)
+      : null;
     res.json({
       version: appVersionInfo.version,
       semver: appVersionInfo.semver,
@@ -558,13 +561,13 @@ export function buildRouter(
             htmlUrl: latest.htmlUrl,
             source: latest.source,
             checkedAt: latest.checkedAt,
-            androidApk: latest.androidApk
+            androidApk: apk
               ? {
-                  available: true,
-                  name: latest.androidApk.name,
-                  sizeBytes: latest.androidApk.sizeBytes,
+                  available: apkVersion != null,
+                  name: `archie-os-${apk.id}.apk`,
+                  sizeBytes: apk.sizeBytes,
                   downloadPath: "/api/app/android.apk",
-                  version: apkVersionAdvertised(latest.androidApk, appVersionInfo)
+                  version: apkVersion
                 }
               : null
           }

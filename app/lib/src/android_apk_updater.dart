@@ -112,9 +112,14 @@ Future<AndroidApkInstallResult> downloadAndInstallAndroidApk({
 
     final total = response.contentLength ?? 0;
     final dir = await getTemporaryDirectory();
-    final safeName = (fileName == null || fileName.trim().isEmpty)
-        ? 'archie-os-update.apk'
-        : p.basename(fileName);
+    // Altijd een nieuw pad. Android onthoudt de versionCode van een APK-pad
+    // en bleef daardoor een ouder bestand zien na een nieuwe download.
+    final stem = p.basenameWithoutExtension(
+      (fileName == null || fileName.trim().isEmpty)
+          ? 'archie-os.apk'
+          : p.basename(fileName),
+    );
+    final safeName = '$stem-${DateTime.now().millisecondsSinceEpoch}.apk';
     final file = File(p.join(dir.path, safeName));
     final sink = file.openWrite();
     var received = 0;

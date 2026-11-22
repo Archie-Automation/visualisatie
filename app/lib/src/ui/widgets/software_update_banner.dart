@@ -213,9 +213,7 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
     final apkReady = apkOffered;
     if (apkReady) {
       final latest = status.latest;
-      final ver = latest?.androidApk?.version ??
-          latest?.version ??
-          status.running.version;
+      final ver = latest?.androidApk?.version ?? '';
       final message = _error ??
           (_installing
               ? (_received > 0
@@ -234,28 +232,14 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
     }
 
     if (apkWaiting && !apkReady) {
-      final apk = status.latest?.androidApk;
-      final canTry = apk != null &&
-          apk.available &&
-          apk.name.toLowerCase() != 'app-release.apk';
-      if (canTry) {
-        return _Banner(
-          message: _error ??
-              (_installing
-                  ? (_received > 0
-                      ? 'App-update downloaden… ${(_received / (1024 * 1024)).toStringAsFixed(1)} MB. '
-                          'Bevestig daarna Installeren op het tablet.'
-                      : 'De server haalt de app op. De balk loopt zodra de bytes binnenkomen.')
-                  : 'De server is nieuwer dan deze tablet. Tik op Installeren.'),
-          actionLabel: _installing ? null : 'Installeren',
-          onAction: _installing ? null : () => _installApk(apk),
-          progress: _installing ? (_progress ?? 0) : null,
-        );
-      }
+      final fileVer = status.latest?.androidApk?.version;
       return _Banner(
         message: _error ??
-            'De server is nieuwer dan deze tablet. '
-            'Het installatiebestand is er nog niet.',
+            (fileVer == null || fileVer.isEmpty
+                ? 'De server is nieuwer dan deze tablet. '
+                    'Het installatiebestand wordt nog opgehaald.'
+                : 'Het installatiebestand is $fileVer. '
+                    'Dat is niet nieuwer dan deze tablet.'),
         actionLabel: 'Opnieuw controleren',
         onAction: () {
           ref.invalidate(softwareVersionStatusProvider);
