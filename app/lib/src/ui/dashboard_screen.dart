@@ -18,6 +18,7 @@ import '../media_api.dart';
 import '../melding_active.dart';
 import '../models.dart';
 import '../room_control_category.dart';
+import '../knx_alarm.dart';
 import '../satel_api.dart';
 import '../theme.dart';
 import '../user_favorite_shortcuts.dart';
@@ -328,6 +329,16 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody>
       (prev, next) {
         if (next == SatelPartitionState.entryDelay &&
             prev != SatelPartitionState.entryDelay) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) appOpen(context, '/alarm');
+          });
+        }
+      },
+    );
+    ref.listen<String>(
+      knxAlarmStatusProvider.select((s) => s.phase),
+      (prev, next) {
+        if (next == 'entry' && prev != 'entry') {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) appOpen(context, '/alarm');
           });

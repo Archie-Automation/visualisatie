@@ -263,6 +263,9 @@ export function collectAllGAs(cfg: HouseConfig): GA[] {
 
   for (const { point } of configuredEnergyPoints(cfg)) add(point.ga);
 
+  for (const sensor of cfg.knxAlarm?.sensors ?? []) add(sensor.ga);
+  add(cfg.knxAlarm?.sirenGa);
+
   return [...out];
 }
 

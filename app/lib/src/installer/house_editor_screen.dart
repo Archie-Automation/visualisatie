@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 import '../ac_mode_config.dart';
 import 'device_reorder.dart';
 import 'energy_installer_section.dart';
+import 'knx_alarm_installer.dart';
 import 'ga_offset.dart';
 import 'lutron_zone_import.dart';
 import '../api.dart';
@@ -453,6 +454,7 @@ enum _FocusKind {
   logs,
   backup,
   satel,
+  knxAlarm,
   energy,
   floors,
   floor,
@@ -534,6 +536,12 @@ class _Focus {
         ci = null;
   const _Focus.satel()
       : kind = _FocusKind.satel,
+        fi = -1,
+        ri = -1,
+        di = -1,
+        ci = null;
+  const _Focus.knxAlarm()
+      : kind = _FocusKind.knxAlarm,
         fi = -1,
         ri = -1,
         di = -1,
@@ -812,6 +820,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       }
       _stripEmptyPasswordFields();
       _normalizeHouseIntercoms();
+      _normalizeKnxAlarm();
       final payload = Map<String, dynamic>.from(house);
       payload['users'] = usersPayloadForSave(_users());
       await putInstallerHouse(token, payload);
@@ -2134,6 +2143,21 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
   }
 
   /// Verplaats intercoms uit kamers naar `intercoms` (zoals camera's).
+  void _normalizeKnxAlarm() {
+    final alarm = _house?['knxAlarm'];
+    if (alarm is! Map) return;
+    final ga = RegExp(r'^([0-9]{1,2})/([0-9]{1,2})/([0-9]{1,3})$');
+    final sensors = alarm['sensors'];
+    if (sensors is List) {
+      alarm['sensors'] = [
+        for (final s in sensors)
+          if (s is Map && ga.hasMatch('${s['ga'] ?? ''}'.trim())) s,
+      ];
+    }
+    final siren = '${alarm['sirenGa'] ?? ''}'.trim();
+    if (siren.isEmpty) alarm.remove('sirenGa');
+  }
+
   void _normalizeHouseIntercoms() {
     final h = _house;
     if (h == null) return;
@@ -2968,6 +2992,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         _FocusKind.logs => 'Logs / grafieken',
         _FocusKind.backup => 'Backup',
         _FocusKind.satel => 'Satel alarm',
+        _FocusKind.knxAlarm => 'KNX-alarm',
         _FocusKind.energy => 'Energie',
         _FocusKind.floors => 'Kamergebonden devices',
         _FocusKind.floor => 'Verdieping',
@@ -3273,6 +3298,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               title: 'Satel alarm',
               selected: _sel.kind == _FocusKind.satel,
               onTap: () => _selectFocus(const _Focus.satel()),
+            ),
+            LuxeNavRow(
+              icon: Icons.sensors_outlined,
+              title: 'KNX-alarm',
+              selected: _sel.kind == _FocusKind.knxAlarm,
+              onTap: () => _selectFocus(const _Focus.knxAlarm()),
             ),
           ],
         ),
@@ -5045,6 +5076,13 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         );
       case _FocusKind.satel:
         return const _SatelInstallerPanel();
+      case _FocusKind.knxAlarm:
+        final house = _house;
+        if (house == null) return const SizedBox.shrink();
+        return KnxAlarmInstaller(
+          house: house,
+          onChanged: () => setState(() {}),
+        );
       case _FocusKind.energy:
         return EnergyInstallerSection(
           energy: _ensureEnergy(),

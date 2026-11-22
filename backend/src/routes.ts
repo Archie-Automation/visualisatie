@@ -79,6 +79,12 @@ import {
 } from "./githubLatest";
 import { sendAndroidApk, warmAndroidApk } from "./apkDownload";
 import { readServerUpdateStatus, requestServerUpdate } from "./serverUpdate";
+import {
+  knxAlarmArm,
+  knxAlarmBypass,
+  knxAlarmDisarm,
+  knxAlarmStatus
+} from "./knxAlarm";
 import { confirmHostNetworkIfReached, readHostNetwork, requestHostNetwork } from "./hostNetwork";
 import {
   normalizeEnrollCode,
@@ -144,9 +150,11 @@ import { normalizeHouseCamerasRaw } from "./houseCameras";
 import { normalizeHouseIntercomsRaw } from "./houseIntercoms";
 import {
   applyPlaintextPasswords,
+  applyKnxAlarmPin,
   assertUsersHaveHashes,
   assertUserLoginCredentials,
   mergePasswordHashes,
+  mergeKnxAlarmPin,
   mergeLutronTelnetPasswords,
   validateHouseJson,
   validateFireplaceSemantics,
@@ -400,6 +408,11 @@ function installerHouseForClient(cfg: HouseConfig): HouseConfig {
   const hlTel = copy.lutron?.telnet;
   if (hlTel && hlTel.password != null) hlTel.password = "";
   if (copy.voip) copy.voip.amiSecret = "";
+  if (copy.knxAlarm) {
+    const set = Boolean(copy.knxAlarm.pinHash);
+    delete copy.knxAlarm.pinHash;
+    copy.knxAlarm.pinSet = set;
+  }
   return copy;
 }
 
@@ -753,6 +766,86 @@ export function buildRouter(
     return res.status(204).end();
   });
 
+  function alarmAllowed(req: AuthedRequest): boolean {
+    const u = currentUser(req);
+    return (
+      isStaffRole(req.user?.role) ||
+      isStaffRole(u?.role) ||
+      houseFunctionAllowed(u?.access, "alarm")
+    );
+  }
+
+  r.get("/knx-alarm", requireAuth, (req: AuthedRequest, res) => {
+    if (!alarmAllowed(req)) {
+      res.json({ ...knxAlarmStatus(), enabled: false, sensors: [] });
+      return;
+    }
+    res.json(knxAlarmStatus());
+  });
+
+  r.post("/knx-alarm/arm", requireAuth, async (req: AuthedRequest, res) => {
+    if (!alarmAllowed(req)) {
+      res.status(403).json({ error: "forbidden", message: "Geen alarmrechten." });
+      return;
+    }
+    const mode = (req.body as { mode?: unknown })?.mode;
+    const pin = (req.body as { pin?: unknown })?.pin;
+    if (mode !== "aanwezig" && mode !== "afwezig") {
+      res.status(400).json({ error: "bad_mode", message: "Kies aanwezig of afwezig." });
+      return;
+    }
+    if (typeof pin !== "string") {
+      res.status(400).json({ error: "bad_pin", message: "Code ontbreekt." });
+      return;
+    }
+    const result = await knxAlarmArm(mode, pin);
+    if (!result.ok) {
+      res.status(result.statusCode).json({ error: result.error, message: result.message });
+      return;
+    }
+    res.json(result.status);
+  });
+
+  r.post("/knx-alarm/disarm", requireAuth, async (req: AuthedRequest, res) => {
+    if (!alarmAllowed(req)) {
+      res.status(403).json({ error: "forbidden", message: "Geen alarmrechten." });
+      return;
+    }
+    const pin = (req.body as { pin?: unknown })?.pin;
+    if (typeof pin !== "string") {
+      res.status(400).json({ error: "bad_pin", message: "Code ontbreekt." });
+      return;
+    }
+    const result = await knxAlarmDisarm(pin);
+    if (!result.ok) {
+      res.status(result.statusCode).json({ error: result.error, message: result.message });
+      return;
+    }
+    res.json(result.status);
+  });
+
+  r.post("/knx-alarm/bypass", requireAuth, async (req: AuthedRequest, res) => {
+    if (!alarmAllowed(req)) {
+      res.status(403).json({ error: "forbidden", message: "Geen alarmrechten." });
+      return;
+    }
+    const body = (req.body ?? {}) as { id?: unknown; bypass?: unknown; pin?: unknown };
+    if (typeof body.id !== "string" || typeof body.bypass !== "boolean") {
+      res.status(400).json({ error: "bad_args", message: "Sensor en overbruggen ontbreken." });
+      return;
+    }
+    const result = await knxAlarmBypass(
+      body.id,
+      body.bypass,
+      typeof body.pin === "string" ? body.pin : ""
+    );
+    if (!result.ok) {
+      res.status(result.statusCode).json({ error: result.error, message: result.message });
+      return;
+    }
+    res.json(result.status);
+  });
+
   r.post("/auth/login", async (req, res) => {
     const { username, password } = req.body ?? {};
     if (!username || !password)
@@ -1010,6 +1103,7 @@ export function buildRouter(
 
     const body = { users: parsed.data.users as unknown as User[] };
     await applyPlaintextPasswords(body);
+    await applyKnxAlarmPin(body);
 
     const prevById = new Map((previous.users ?? []).map((u) => [u.id, u]));
     const nextUsers = body.users.map((u) => {
@@ -1288,6 +1382,7 @@ export function buildRouter(
       return;
     }
     await applyPlaintextPasswords(raw);
+    await applyKnxAlarmPin(raw);
     normalizeHouseCamerasRaw(raw);
     normalizeHouseIntercomsRaw(raw);
     const parsed = validateHouseJson(raw);
@@ -1378,6 +1473,7 @@ export function buildRouter(
     if (credErr) return res.status(400).json({ error: credErr });
 
     await applyPlaintextPasswords(req.body);
+    await applyKnxAlarmPin(req.body);
     normalizeHouseCamerasRaw(req.body);
     normalizeHouseIntercomsRaw(req.body);
     const parsed = validateHouseJson(req.body);
@@ -1388,6 +1484,7 @@ export function buildRouter(
     }
     const next = parsed.data;
     mergePasswordHashes(next, getConfig());
+    mergeKnxAlarmPin(next, getConfig());
     mergeLutronTelnetPasswords(next, getConfig());
     mergeVoipSecrets(next, getConfig());
     normalizeVoip(next);

@@ -16,6 +16,7 @@ import { fireplaceVirtual, type FireplaceVirtualEntry } from "./fireplaceVirtual
 import { wtwRuntime, type WtwLogicStatus } from "./wtwRuntime";
 import { energyRuntime } from "./energy/runtime";
 import type { EnergySnapshot } from "./energy/snapshot";
+import { knxAlarmStatus, onKnxAlarm, type KnxAlarmPublic } from "./knxAlarm";
 import { captureOnIntercomRing } from "./intercomCaptures";
 import { userIdsInVoipGroup } from "./voip/ringTargets";
 import { pushCleared, pushRing } from "./push";
@@ -66,6 +67,7 @@ type Outgoing =
   | { type: "fireplace.virtual"; payload: FireplaceVirtualEntry }
   | { type: "wtw.logic.snapshot"; payload: WtwLogicStatus[] }
   | { type: "energy.state"; payload: EnergySnapshot }
+  | { type: "knxAlarm.state"; payload: KnxAlarmPublic }
   | {
       type: "intercom.ring";
       payload: { intercomId: string; name: string; ts: number; timeoutSec: number };
@@ -190,6 +192,10 @@ export function attachWebSocket(
     broadcastAll({ type: "energy.state", payload: snapshot });
   });
 
+  const unsubKnxAlarm = onKnxAlarm((status) => {
+    broadcastAll({ type: "knxAlarm.state", payload: status });
+  });
+
   const wsUser = new WeakMap<WebSocket, string>();
 
   wss.on("connection", (ws, req) => {
@@ -227,6 +233,7 @@ export function attachWebSocket(
     });
     send(ws, { type: "wtw.logic.snapshot", payload: wtwRuntime.getAll() });
     send(ws, { type: "energy.state", payload: energyRuntime.getSnapshot() });
+    send(ws, { type: "knxAlarm.state", payload: knxAlarmStatus() });
     send(ws, { type: "lutron.zones", payload: lutronZones() });
   });
 
@@ -332,6 +339,7 @@ export function attachWebSocket(
       unsubFireplace();
       unsubWtwLogic();
       unsubEnergy();
+      unsubKnxAlarm();
       media.off("stateChanged", onMediaState);
       bus.off("stateChanged", onBusState);
       for (const client of wss.clients) {

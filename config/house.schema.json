@@ -228,6 +228,35 @@
       "enum": ["stable", "beta"],
       "default": "stable",
       "description": "stable (standaard, ook bij een nieuwe installatie) volgt branch main. beta volgt branch beta."
+    },
+    "knxAlarm": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "pinHash": { "type": "string" },
+        "exitSeconds": { "type": "integer", "minimum": 0, "maximum": 600 },
+        "entrySeconds": { "type": "integer", "minimum": 0, "maximum": 600 },
+        "sirenGa": { "$ref": "#/definitions/gaPattern" },
+        "sensors": {
+          "type": "array",
+          "maxItems": 128,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "name", "ga"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1 },
+              "name": { "type": "string" },
+              "ga": { "$ref": "#/definitions/gaPattern" },
+              "aanwezig": { "type": "boolean" },
+              "afwezig": { "type": "boolean" },
+              "inloop": { "type": "boolean" },
+              "alarmOn": { "type": "string", "enum": ["0", "1"] }
+            }
+          }
+        }
+      }
     }
   },
   "definitions": {

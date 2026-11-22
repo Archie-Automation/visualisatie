@@ -11,10 +11,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../api.dart';
 import '../demo/demo_session.dart';
+import '../knx_alarm.dart';
+import '../knx_alarm_api.dart';
 import '../satel_api.dart';
 import '../theme.dart';
 import 'app_nav.dart';
 import 'responsive.dart';
+import 'knx_alarm_body.dart';
 import 'widgets/function_screen_header.dart';
 import 'widgets/luxe_backdrop.dart';
 
@@ -26,7 +29,7 @@ class AlarmScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: LuxeBackdrop(
-        child: _AlarmBody(),
+        child: const _AlarmChooser(),
       ),
     );
   }
@@ -35,6 +38,68 @@ class AlarmScreen extends ConsumerWidget {
 // ---------------------------------------------------------------------------
 // Body
 // ---------------------------------------------------------------------------
+
+class _AlarmChooser extends ConsumerStatefulWidget {
+  const _AlarmChooser();
+
+  @override
+  ConsumerState<_AlarmChooser> createState() => _AlarmChooserState();
+}
+
+class _AlarmChooserState extends ConsumerState<_AlarmChooser> {
+  @override
+  void initState() {
+    super.initState();
+    Future<void>(() async {
+      final raw = await fetchKnxAlarm(ref.read(authProvider).token);
+      if (!mounted || raw == null) return;
+      ref.read(knxAlarmStatusProvider.notifier).apply(raw);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final knx = ref.watch(knxAlarmStatusProvider);
+    final satelOn = ref.watch(satelEnabledProvider).value ?? false;
+    if (!knx.enabled) return _AlarmBody();
+    if (!satelOn) return const KnxAlarmBody();
+    return const _AlarmSources();
+  }
+}
+
+class _AlarmSources extends StatefulWidget {
+  const _AlarmSources();
+
+  @override
+  State<_AlarmSources> createState() => _AlarmSourcesState();
+}
+
+class _AlarmSourcesState extends State<_AlarmSources> {
+  bool _knx = true;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(value: false, label: Text('Satel')),
+              ButtonSegment(value: true, label: Text('KNX')),
+            ],
+            selected: {_knx},
+            onSelectionChanged: (next) {
+              if (next.isEmpty) return;
+              setState(() => _knx = next.first);
+            },
+          ),
+        ),
+        Expanded(child: _knx ? const KnxAlarmBody() : _AlarmBody()),
+      ],
+    );
+  }
+}
 
 class _AlarmBody extends ConsumerStatefulWidget {
   @override

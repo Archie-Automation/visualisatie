@@ -21,6 +21,7 @@ import '../../inactivity_controller.dart';
 import '../../kiosk_system_ui.dart';
 import '../../media_api.dart';
 import '../../proximity_wake.dart';
+import '../../knx_alarm.dart';
 import '../../satel_api.dart';
 import '../../theme.dart';
 import '../responsive.dart';
@@ -406,13 +407,21 @@ class _InactivityLayerState extends ConsumerState<InactivityLayer> {
 
   void _onProximityNear() => _wakePanel();
 
-  void _onEntryDelayStarted() => _wakePanel();
+  void _onEntryDelayStarted() {
+    _wakePanel();
+    ref.read(inactivityControllerProvider.notifier).hideScreensaver();
+    ref.read(inactivityControllerProvider.notifier).registerActivity();
+    final loc = widget.router.state.matchedLocation;
+    if (loc != '/alarm') widget.router.go('/alarm');
+  }
 
   bool _isPaused() {
     final ring = ref.read(intercomRingProvider);
     if (ring != null && !ring.answeredElsewhere) return true;
     final satel = ref.read(satelStatusProvider);
     if (satel.worstState == SatelPartitionState.entryDelay) return true;
+    final knx = ref.read(knxAlarmStatusProvider);
+    if (knx.phase == 'entry' || knx.phase == 'alarm') return true;
     final sip = ref.read(intercomSipControllerProvider);
     if (sip.phase == IntercomSipPhase.ringing ||
         sip.phase == IntercomSipPhase.inCall) {
@@ -495,6 +504,12 @@ class _InactivityLayerState extends ConsumerState<InactivityLayer> {
             was != SatelPartitionState.entryDelay) {
           _onEntryDelayStarted();
         }
+      },
+    );
+    ref.listen<String>(
+      knxAlarmStatusProvider.select((s) => s.phase),
+      (prev, next) {
+        if (next == 'entry' && prev != 'entry') _onEntryDelayStarted();
       },
     );
 

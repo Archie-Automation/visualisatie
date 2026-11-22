@@ -1502,6 +1502,20 @@ export interface GatewayConfig {
   mode?: "tunneling" | "routing";
 }
 
+export type KnxAlarmSensor = {
+  id: string;
+  name: string;
+  ga: GA;
+  /** Meenemen als het alarm op aanwezig staat. */
+  aanwezig?: boolean;
+  /** Meenemen als het alarm op afwezig staat. */
+  afwezig?: boolean;
+  /** Openen start de inlooptijd in plaats van meteen de sirene. */
+  inloop?: boolean;
+  /** "0" = alarm als het bit uit staat. Standaard "1". */
+  alarmOn?: "0" | "1";
+};
+
 export type UserRole = "installer" | "superuser" | "user" | "admin";
 
 export interface User {
@@ -1655,6 +1669,20 @@ export interface HouseConfig {
   satel?: {
     enabled?: boolean;
     partitions?: Array<{ number: number; name: string }>;
+  };
+  /**
+   * Alarm op KNX-sensoren, naast Satel. Code staat alleen als hash.
+   * `pin` is een eenmalig veld van de installateur en wordt niet bewaard.
+   */
+  knxAlarm?: {
+    enabled?: boolean;
+    pinHash?: string;
+    /** Alleen naar de app. Niet opslaan. */
+    pinSet?: boolean;
+    exitSeconds?: number;
+    entrySeconds?: number;
+    sirenGa?: GA;
+    sensors?: KnxAlarmSensor[];
   };
   /**
    * Automatische software-updates. `true` (standaard) = update-banners en

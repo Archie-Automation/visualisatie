@@ -20,6 +20,7 @@ import 'server_route.dart';
 import 'hvac_switch_lock.dart';
 import 'fireplace_virtual.dart';
 import 'wtw_logic.dart';
+import 'knx_alarm.dart';
 import 'models.dart';
 import 'roles.dart';
 
@@ -1120,6 +1121,13 @@ class BusController extends Notifier<BusState> {
               if (energy is Map) {
                 ref.read(energyStateProvider.notifier).apply(
                       Map<String, dynamic>.from(energy),
+                    );
+              }
+            case 'knxAlarm.state':
+              final knxAlarm = msg['payload'];
+              if (knxAlarm is Map) {
+                ref.read(knxAlarmStatusProvider.notifier).apply(
+                      Map<String, dynamic>.from(knxAlarm),
                     );
               }
             case 'lutron.zones':

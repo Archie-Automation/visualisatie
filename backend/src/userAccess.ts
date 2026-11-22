@@ -180,6 +180,14 @@ export function filterConfigForUser(cfg: HouseConfig, user: User): HouseConfig {
   if (satel && !houseFunctionAllowed(access, "alarm")) {
     satel = { ...satel, enabled: false };
   }
+  let knxAlarm = cfg.knxAlarm;
+  if (knxAlarm) {
+    const pinSet = Boolean(knxAlarm.pinHash);
+    knxAlarm = { ...knxAlarm, pinHash: undefined, pinSet };
+    if (!houseFunctionAllowed(access, "alarm")) {
+      knxAlarm = { ...knxAlarm, enabled: false };
+    }
+  }
 
   return {
     ...cfg,
@@ -188,6 +196,7 @@ export function filterConfigForUser(cfg: HouseConfig, user: User): HouseConfig {
     cameras,
     intercoms,
     satel,
+    knxAlarm,
     scenes
   };
 }
