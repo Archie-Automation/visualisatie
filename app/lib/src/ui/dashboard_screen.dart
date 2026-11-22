@@ -401,6 +401,63 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody>
           ),
         ],
       );
+    } else if (isPanel) {
+      // Tablet/Android-paneel: de drie blokken delen het scherm. Ruimtes
+      // niet in de reststrook onderaan plakken.
+      final homeBottom = MediaQuery.paddingOf(context).bottom + 36;
+      page = LayoutBuilder(
+        builder: (context, constraints) {
+          return SingleChildScrollView(
+            controller: _mainScroll,
+            physics: const ClampingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: constraints.maxHeight),
+              child: IntrinsicHeight(
+                child: Padding(
+                  padding: EdgeInsets.only(bottom: homeBottom),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _header(context, cfg, auth, ref, buildingId: buildingId),
+                      _scenes(
+                        context,
+                        cfg,
+                        canEdit,
+                        ref,
+                        scrollController: _sceneScroll,
+                        buildingId: buildingId,
+                        after: 0,
+                      ),
+                      _Systemen(
+                        cfg: cfg,
+                        buildingId: buildingId,
+                        scrollController: _systemScroll,
+                        bottomGap: 0,
+                      ),
+                      if (showBuildings || floors.isNotEmpty)
+                        _FloorsHomeBand(
+                          buildings: showBuildings ? buildings : const [],
+                          selectedBuildingIndex: selectedBuildingIndex,
+                          buildingScrollController: _buildingScroll,
+                          onSelectBuilding: (i) =>
+                              _selectBuilding(buildings, i),
+                          floors: floors,
+                          scrollController: _floorScroll,
+                          onSelect: (i) => _openFloor(floors, i, buildingId),
+                        )
+                      else
+                        const SizedBox(height: 8),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      );
     } else {
       page = CustomScrollView(
       controller: _mainScroll,
@@ -425,20 +482,7 @@ class _DashboardBodyState extends ConsumerState<_DashboardBody>
           buildingId: buildingId,
           scrollController: _systemScroll,
         )),
-        if ((showBuildings || floors.isNotEmpty) && isPanel)
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: _FloorsHomeBand(
-              buildings: showBuildings ? buildings : const [],
-              selectedBuildingIndex: selectedBuildingIndex,
-              buildingScrollController: _buildingScroll,
-              onSelectBuilding: (i) => _selectBuilding(buildings, i),
-              floors: floors,
-              scrollController: _floorScroll,
-              onSelect: (i) => _openFloor(floors, i, buildingId),
-            ),
-          )
-        else if (showBuildings || floors.isNotEmpty) ...[
+        if (showBuildings || floors.isNotEmpty) ...[
           const SliverToBoxAdapter(
             child: _SectionTitleRow(title: 'RUIMTES', bottom: 6),
           ),
@@ -507,6 +551,9 @@ class _FloorBrowseHeader extends StatelessWidget {
     final showBuilding = name != null && name.isNotEmpty;
     final top = MediaQuery.paddingOf(context).top;
     final buildingBlock = showBuilding ? _scopeTileH + 8 : 0.0;
+    // Zelfde inspringing als de gebouwchip: knopbreedte plus tussenruimte.
+    const backGap = 10.0;
+    final buildingLead = HeaderIconButton.size + backGap;
     return StickyHeaderSurface(
       height: top + 14 + buildingBlock + _scopeTileH + 14,
       child: Padding(
@@ -528,7 +575,7 @@ class _FloorBrowseHeader extends StatelessWidget {
                       onTap: onBack,
                       tooltip: 'Terug',
                     ),
-                    const SizedBox(width: 10),
+                    const SizedBox(width: backGap),
                     Flexible(
                       child: Align(
                         alignment: Alignment.centerLeft,
@@ -546,7 +593,9 @@ class _FloorBrowseHeader extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  if (!showBuilding)
+                  if (showBuilding)
+                    SizedBox(width: buildingLead)
+                  else
                     HeaderIconButton(
                       icon: Icons.arrow_back_ios_new,
                       onTap: onBack,
@@ -908,35 +957,30 @@ class _FloorsHomeBand extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final showBuildings = buildings.length >= 2 && onSelectBuilding != null;
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Zelfde kopregel als Scenes en Systemen.
-          const _SectionTitleRow(title: 'RUIMTES', bottom: 6),
-          if (showBuildings)
-            _BuildingTabBar(
-              buildings: buildings,
-              selectedIndex: selectedBuildingIndex,
-              scrollController: buildingScrollController,
-              onSelect: onSelectBuilding!,
-              bottomPadding: 8,
-            ),
-          if (floors.isNotEmpty)
-            _FloorTabBar(
-              floors: floors,
-              selectedIndex: -1,
-              scrollController: scrollController,
-              onSelect: onSelect,
-              bottomPadding: 0,
-            )
-          else
-            // Zelfde hoogte als de verdiepingsbalk, anders schuift
-            // de gecentreerde gebouwenrij omhoog.
-            const SizedBox(height: _scopeTileH + 16),
-        ],
-      ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const _SectionTitleRow(title: 'RUIMTES', bottom: 6),
+        if (showBuildings)
+          _BuildingTabBar(
+            buildings: buildings,
+            selectedIndex: selectedBuildingIndex,
+            scrollController: buildingScrollController,
+            onSelect: onSelectBuilding!,
+            bottomPadding: 8,
+          ),
+        if (floors.isNotEmpty)
+          _FloorTabBar(
+            floors: floors,
+            selectedIndex: -1,
+            scrollController: scrollController,
+            onSelect: onSelect,
+            bottomPadding: 0,
+          )
+        else
+          const SizedBox(height: _scopeTileH + 16),
+      ],
     );
   }
 }
@@ -1750,6 +1794,7 @@ Widget _scenes(
   WidgetRef ref, {
   ScrollController? scrollController,
   String? buildingId,
+  double after = 24,
 }) {
   final scenes = cfg.scenesIn(buildingId);
   // Meerdere gebouwen: blok altijd even hoog, ook zonder scenes.
@@ -1795,7 +1840,7 @@ Widget _scenes(
           buildingId: buildingId,
           onEdited: (_) => ref.invalidate(configProvider),
         ),
-      const SizedBox(height: 24),
+      SizedBox(height: after),
     ],
   );
 }
@@ -1809,10 +1854,13 @@ class _Systemen extends ConsumerWidget {
     required this.cfg,
     this.scrollController,
     this.buildingId,
+    this.bottomGap = 44,
   });
   final HouseConfig cfg;
   final ScrollController? scrollController;
   final String? buildingId;
+  /// Vaste ruimte onder de chips. 0 als de pagina de secties zelf verdeelt.
+  final double bottomGap;
 
   String _chipKey(_SystemChipData c) {
     final id = cfg.scopedBuildingId(buildingId);
@@ -1964,7 +2012,7 @@ class _Systemen extends ConsumerWidget {
     return Padding(
       // Bottom gap (chip vPad + this) matches the gap between the scene
       // buttons and the "Systemen" line above (~54px) for a consistent rhythm.
-      padding: EdgeInsets.fromLTRB(0, 16, 0, 44),
+      padding: EdgeInsets.fromLTRB(0, bottomGap == 0 ? 0 : 16, 0, bottomGap),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
