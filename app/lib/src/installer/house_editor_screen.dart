@@ -50,6 +50,7 @@ import '../ui/responsive.dart';
 import '../ui/user_access_editor.dart';
 import '../ui/widgets/admin_full_restart_card.dart';
 import '../ui/widgets/admin_server_update_card.dart';
+import '../ui/widgets/host_network_card.dart';
 import '../ui/widgets/remote_enroll_card.dart';
 import '../ui/widgets/back_pill.dart';
 import '../ui/widgets/confirm_dialog.dart';
@@ -5687,6 +5688,8 @@ class _ProjectForm extends ConsumerWidget {
           const RemoteEnrollCard(),
           const SizedBox(height: 16),
           const AdminServerUpdateCard(),
+          const SizedBox(height: 16),
+          const HostNetworkCard(),
           const SizedBox(height: 16),
           const AdminFullRestartCard(),
         ],

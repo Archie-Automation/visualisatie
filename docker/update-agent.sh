@@ -504,12 +504,13 @@ PY
 # kort script op de host zelf uitvoeren.
 run_host_script() {
   script="$1"
+  shift
   chmod 700 "$script" 2>/dev/null || true
   if [ "$(id -u)" -eq 0 ]; then
-    /bin/sh "$script" >>"$LOG" 2>&1
+    /bin/sh "$script" "$@" >>"$LOG" 2>&1
     return $?
   fi
-  if command -v sudo >/dev/null 2>&1 && sudo -n /bin/sh "$script" >>"$LOG" 2>&1; then
+  if command -v sudo >/dev/null 2>&1 && sudo -n /bin/sh "$script" "$@" >>"$LOG" 2>&1; then
     return 0
   fi
   log "sudo geweigerd, vervolg via docker"
@@ -523,7 +524,7 @@ run_host_script() {
   $DOCKER run --rm --privileged --pid=host --network host \
     --entrypoint /bin/busybox \
     archie-os-stack:latest \
-    chroot /proc/1/root /bin/sh "$script" >>"$LOG" 2>&1
+    chroot /proc/1/root /bin/sh "$script" "$@" >>"$LOG" 2>&1
 }
 
 run_enroll() {
@@ -671,6 +672,103 @@ EOF
   return 0
 }
 
+# LAN-adres (dhcp of vast). Verzoek komt uit de installateur; zonder bevestiging
+# binnen 2 minuten zet apply-network.sh het vorige netplan terug.
+apply_public_api_base() {
+  addr="$1"
+  envf="$DOCKER_DIR/.env"
+  port=4000
+  if [ -f "$envf" ]; then
+    old=$(grep '^PUBLIC_API_BASE=' "$envf" 2>/dev/null | head -n 1 | cut -d= -f2- || true)
+    case "$old" in
+      *:*)
+        port=${old##*:}
+        port=${port%%/*}
+        ;;
+    esac
+  fi
+  case "$port" in
+    ''|*[!0-9]*) port=4000 ;;
+  esac
+  touch "$envf"
+  if grep -q '^PUBLIC_API_BASE=' "$envf" 2>/dev/null; then
+    sed -i.bak "s|^PUBLIC_API_BASE=.*|PUBLIC_API_BASE=http://${addr}:${port}|" "$envf"
+    rm -f "$envf.bak"
+  else
+    printf 'PUBLIC_API_BASE=http://%s:%s\n' "$addr" "$port" >> "$envf"
+  fi
+}
+
+check_network() {
+  if [ -f "$DATA/network-request.json" ]; then
+    if mkdir "$DATA/network.lock" 2>/dev/null; then
+      log "network apply"
+      if run_host_script "$DOCKER_DIR/apply-network.sh"; then
+        log "network apply ok"
+      else
+        log "network apply failed"
+      fi
+      rmdir "$DATA/network.lock" 2>/dev/null || true
+    fi
+    return 0
+  fi
+  if [ ! -f "$DATA/network-pending.json" ]; then
+    return 0
+  fi
+  action=$(python3 - "$DATA/network-pending.json" "$DATA/network-confirm.json" <<'PY'
+import json, sys, time
+from pathlib import Path
+pending, confirm = Path(sys.argv[1]), Path(sys.argv[2])
+try:
+    d = json.loads(pending.read_text(encoding="utf-8"))
+except Exception:
+    print("drop")
+    raise SystemExit(0)
+if confirm.exists():
+    print("confirm")
+    raise SystemExit(0)
+try:
+    deadline = float(d.get("deadlineEpoch") or 0)
+except Exception:
+    deadline = 0
+print("revert" if time.time() > deadline else "wait")
+PY
+)
+  case "$action" in
+    confirm)
+      addr=$(python3 - "$DATA/network-pending.json" <<'PY'
+import json, sys
+from pathlib import Path
+print(json.loads(Path(sys.argv[1]).read_text(encoding="utf-8")).get("address") or "")
+PY
+)
+      rm -f "$DATA/network-pending.json" "$DATA/network-confirm.json"
+      if [ -n "$addr" ]; then
+        apply_public_api_base "$addr"
+        log "network confirmed addr=$addr"
+        DOCKER="$(detect_docker)"
+        if [ -n "$DOCKER" ]; then
+          ( cd "$DOCKER_DIR" && $DOCKER compose --env-file .env up -d --force-recreate --no-deps knx-stack >>"$LOG" 2>&1 ) || \
+            log "network compose reload failed"
+        fi
+      fi
+      ;;
+    revert)
+      log "network revert (geen bevestiging)"
+      if mkdir "$DATA/network.lock" 2>/dev/null; then
+        run_host_script "$DOCKER_DIR/apply-network.sh" revert || true
+        rmdir "$DATA/network.lock" 2>/dev/null || true
+      fi
+      ;;
+    drop)
+      rm -f "$DATA/network-pending.json"
+      ;;
+    *)
+      heartbeat
+      ;;
+  esac
+}
+
 log "agent start root=$ROOT"
 if [ -d "$LOCK" ]; then
   rmdir "$LOCK" 2>/dev/null || true
@@ -679,6 +777,10 @@ fi
 if [ -d "$DATA/enroll.lock" ]; then
   rmdir "$DATA/enroll.lock" 2>/dev/null || true
   log "cleared stale enroll lock"
+fi
+if [ -d "$DATA/network.lock" ]; then
+  rmdir "$DATA/network.lock" 2>/dev/null || true
+  log "cleared stale network lock"
 fi
 # Do not clobber a just-finished success: tablets poll this file and the
 # previous line used to reset to idle immediately after re-exec.
@@ -736,6 +838,8 @@ PY
         exec /bin/sh "$DOCKER_DIR/update-agent.sh"
       fi
     fi
+  elif [ -f "$DATA/network-request.json" ] || [ -f "$DATA/network-pending.json" ]; then
+    check_network || true
   elif [ -f "$DATA/enroll-request.json" ]; then
     if mkdir "$DATA/enroll.lock" 2>/dev/null; then
       run_enroll || true

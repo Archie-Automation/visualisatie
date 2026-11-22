@@ -182,6 +182,16 @@ git pull          # of nieuwe ZIP uitpakken over de map (house.json niet wissen)
 
 ---
 
+## Adres van de server
+
+Technische configuratie → Project → **Serveradres**. Alleen de installateur. Dit is het adres van de NUC, niet de KNX-gateway.
+
+DHCP laat de router het adres kiezen. Vast adres vraagt adres, netmasker (8–30), gateway in hetzelfde net, en optioneel DNS.
+
+Na toepassen moet dat adres binnen 2 minuten openen. De pagina die daarna laadt, is de bevestiging. Gebeurt dat niet, dan zet de server het vorige netwerk terug. Een vast adres dat de tablet niet haalt, zet het tablet zijn oude serveradres terug; het nieuwe adres moet je dan zelf openen om te bevestigen.
+
+---
+
 ## Kioskmodus op een Android-tablet
 
 Instellingen → **Kioskmodus**. Alleen in de Android-app, niet in de browser. Standaard uit. De stand blijft op dat tablet staan.

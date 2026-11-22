@@ -25,7 +25,7 @@ export interface ServerUpdateStatus {
 const HEARTBEAT_MS = 20_000;
 const RUNNING_STALE_MS = 45 * 60 * 1000;
 
-function dataDir(): string {
+export function dataDir(): string {
   const fromEnv = process.env.LOG_STORE_PATH?.trim();
   if (fromEnv) return path.dirname(path.resolve(fromEnv));
   return path.join(process.cwd(), "data");

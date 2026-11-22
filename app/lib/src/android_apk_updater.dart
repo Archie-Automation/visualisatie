@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -54,6 +55,7 @@ class AndroidApkInstallResult {
 /// system package installer. User must confirm the Android install prompt.
 Future<AndroidApkInstallResult> downloadAndInstallAndroidApk({
   void Function(double progress)? onProgress,
+  void Function(int received, int total)? onBytes,
   String? fileName,
   String? token,
 }) async {
@@ -73,7 +75,7 @@ Future<AndroidApkInstallResult> downloadAndInstallAndroidApk({
   // before the first header — that was "Connection closed before full header".
   final io = HttpClient()
     ..connectionTimeout = const Duration(seconds: 45)
-    ..idleTimeout = const Duration(minutes: 5);
+    ..idleTimeout = const Duration(minutes: 2);
   final client = IOClient(io);
   try {
     http.StreamedResponse? response;
@@ -85,7 +87,7 @@ Future<AndroidApkInstallResult> downloadAndInstallAndroidApk({
           request.headers['authorization'] = 'Bearer $token';
         }
         response = await client.send(request).timeout(
-              const Duration(minutes: 10),
+              const Duration(minutes: 3),
             );
         lastErr = null;
         break;
@@ -97,6 +99,9 @@ Future<AndroidApkInstallResult> downloadAndInstallAndroidApk({
       }
     }
     if (response == null) {
+      if (lastErr is TimeoutException) {
+        return AndroidApkInstallResult.fail('download_stalled');
+      }
       return AndroidApkInstallResult.fail('$lastErr');
     }
     if (response.statusCode != 200) {
@@ -113,17 +118,28 @@ Future<AndroidApkInstallResult> downloadAndInstallAndroidApk({
     final file = File(p.join(dir.path, safeName));
     final sink = file.openWrite();
     var received = 0;
+    var stalled = false;
     try {
-      await for (final chunk in response.stream) {
+      await for (final chunk
+          in response.stream.timeout(const Duration(seconds: 45))) {
         sink.add(chunk);
         received += chunk.length;
+        onBytes?.call(received, total);
         if (total > 0 && onProgress != null) {
           onProgress(received / total);
         }
       }
       await sink.flush();
+    } on TimeoutException {
+      stalled = true;
     } finally {
       await sink.close();
+    }
+    if (stalled) {
+      try {
+        await file.delete();
+      } catch (_) {}
+      return AndroidApkInstallResult.fail('download_stalled');
     }
 
     if (received < 1024) {

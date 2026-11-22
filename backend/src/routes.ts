@@ -1,7 +1,5 @@
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
-import { Readable, Transform } from "node:stream";
-import { pipeline } from "node:stream/promises";
 import { Router } from "express";
 import { z } from "zod";
 import {
@@ -75,18 +73,13 @@ import type {
 } from "./types";
 import { appVersionInfo } from "./version";
 import {
-  fetchAndroidApkFromGithub,
   getGithubLatest,
   isUpdateAvailableOnGithub,
   normalizeUpdateChannel
 } from "./githubLatest";
-import {
-  apkCacheFile,
-  ensureApkCacheDir,
-  pruneApkCache,
-  readCachedApk
-} from "./apkCache";
+import { sendAndroidApk, warmAndroidApk } from "./apkDownload";
 import { readServerUpdateStatus, requestServerUpdate } from "./serverUpdate";
+import { confirmHostNetworkIfReached, readHostNetwork, requestHostNetwork } from "./hostNetwork";
 import {
   normalizeEnrollCode,
   readRemoteEnrollStatus,
@@ -566,6 +559,7 @@ export function buildRouter(
         error: serverUpdate.error
       }
     });
+    warmAndroidApk(updateChannel);
   });
 
   /**
@@ -589,121 +583,7 @@ export function buildRouter(
 
     try {
       const updateChannel = normalizeUpdateChannel(getConfig().updateChannel);
-      const latest = await getGithubLatest(false, updateChannel);
-      const meta = latest?.androidApk;
-      if (!meta) {
-        res.status(404).json({ error: "no_android_apk_on_latest_release" });
-        return;
-      }
-
-      const cached = readCachedApk(meta.id, meta.sizeBytes);
-      if (cached) {
-        const size = fs.statSync(cached).size;
-        res.setHeader(
-          "Content-Type",
-          "application/vnd.android.package-archive"
-        );
-        res.setHeader(
-          "Content-Disposition",
-          `attachment; filename="${meta.name.replace(/"/g, "")}"`
-        );
-        res.setHeader("Content-Length", String(size));
-        fs.createReadStream(cached).pipe(res);
-        return;
-      }
-
-      const result = await fetchAndroidApkFromGithub(updateChannel);
-      if (!result.ok) {
-        logger.warn(
-          { error: result.error, status: result.status },
-          "GitHub APK-fetch mislukt"
-        );
-        res.status(result.status === 404 ? 404 : 502).json({
-          error: result.error
-        });
-        return;
-      }
-
-      ensureApkCacheDir();
-      pruneApkCache(result.id);
-      const dest = apkCacheFile(result.id);
-      const tmp = `${dest}.part`;
-      try {
-        fs.unlinkSync(tmp);
-      } catch {
-        /* ignore */
-      }
-      const fileOut = fs.createWriteStream(tmp);
-      let fileFailed = false;
-      const failCache = () => {
-        fileFailed = true;
-        try {
-          fs.unlinkSync(tmp);
-        } catch {
-          /* ignore */
-        }
-      };
-      fileOut.on("error", (err) => {
-        logger.warn({ err }, "APK-cache schrijven mislukt");
-        failCache();
-      });
-
-      res.setHeader(
-        "Content-Type",
-        "application/vnd.android.package-archive"
-      );
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename="${result.name.replace(/"/g, "")}"`
-      );
-      if (result.sizeBytes > 0) {
-        res.setHeader("Content-Length", String(result.sizeBytes));
-      }
-      res.flushHeaders();
-
-      const github = Readable.fromWeb(result.body);
-      let received = 0;
-      let lastByteAt = Date.now();
-      const tee = new Transform({
-        transform(chunk: Buffer, _enc, cb) {
-          received += chunk.length;
-          lastByteAt = Date.now();
-          if (!fileFailed) fileOut.write(chunk);
-          cb(null, chunk);
-        }
-      });
-      const stall = setInterval(() => {
-        if (Date.now() - lastByteAt < 45_000) return;
-        logger.warn(
-          { received, expected: result.sizeBytes, assetId: result.id },
-          "APK-stream stil, verbinding verbroken"
-        );
-        github.destroy(new Error("apk stream stalled"));
-      }, 5_000);
-      try {
-        await pipeline(github, tee, res);
-        clearInterval(stall);
-        fileOut.end(() => {
-          if (
-            fileFailed ||
-            (result.sizeBytes > 0 && received !== result.sizeBytes)
-          ) {
-            failCache();
-            return;
-          }
-          try {
-            fs.renameSync(tmp, dest);
-          } catch (err) {
-            logger.warn({ err }, "APK-cache hernoemen mislukt");
-            failCache();
-          }
-        });
-      } catch (err) {
-        clearInterval(stall);
-        fileOut.destroy();
-        failCache();
-        throw err;
-      }
+      await sendAndroidApk(res, updateChannel);
     } catch (err) {
       logger.warn({ err }, "APK-download naar tablet mislukt");
       if (!res.headersSent) {
@@ -1297,6 +1177,52 @@ export function buildRouter(
       return;
     }
     res.json({ ok: true, ...result.status });
+  });
+
+  r.get("/admin/host-network", requireAuth, requireInstaller, async (req: AuthedRequest, res) => {
+    confirmHostNetworkIfReached(
+      req.user?.username || "installer",
+      req.headers.host,
+      req.socket.localAddress
+    );
+    res.json(await readHostNetwork());
+  });
+
+  r.post("/admin/host-network", requireAuth, requireInstaller, (req: AuthedRequest, res) => {
+    const body = (req.body ?? {}) as {
+      mode?: unknown;
+      address?: unknown;
+      prefix?: unknown;
+      gateway?: unknown;
+      dns?: unknown;
+    };
+    if (body.mode !== "dhcp" && body.mode !== "static") {
+      res.status(400).json({
+        error: "bad_mode",
+        message: "Kies dhcp of static."
+      });
+      return;
+    }
+    const dns = Array.isArray(body.dns)
+      ? body.dns.filter((d): d is string => typeof d === "string")
+      : [];
+    const result = requestHostNetwork({
+      mode: body.mode,
+      address: typeof body.address === "string" ? body.address : undefined,
+      prefix: typeof body.prefix === "number" ? body.prefix : undefined,
+      gateway: typeof body.gateway === "string" ? body.gateway : undefined,
+      dns,
+      by: req.user?.username || "installer"
+    });
+    if (!result.ok) {
+      res.status(result.status).json({ error: result.error, message: result.message });
+      return;
+    }
+    res.json({
+      ok: true,
+      mode: body.mode,
+      address: typeof body.address === "string" ? body.address : null
+    });
   });
 
   r.put("/admin/auto-update", requireAuth, requireInstaller, (req, res) => {

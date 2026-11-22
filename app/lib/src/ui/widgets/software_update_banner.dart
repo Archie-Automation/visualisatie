@@ -26,6 +26,7 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
   bool _installing = false;
   bool _serverUpdating = false;
   double? _progress;
+  int _received = 0;
   String? _error;
   String? _serverProgress;
   Timer? _poll;
@@ -71,6 +72,7 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
     setState(() {
       _installing = true;
       _progress = 0;
+      _received = 0;
       _error = null;
     });
     final result = await downloadAndInstallAndroidApk(
@@ -78,6 +80,9 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
       fileName: apk?.name,
       onProgress: (p) {
         if (mounted) setState(() => _progress = p);
+      },
+      onBytes: (got, _) {
+        if (mounted) setState(() => _received = got);
       },
     );
     if (!mounted) return;
@@ -213,7 +218,10 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
           status.running.version;
       final message = _error ??
           (_installing
-              ? 'App-update downloaden… Bevestig daarna Installeren op het tablet.'
+              ? (_received > 0
+                  ? 'App-update downloaden… ${(_received / (1024 * 1024)).toStringAsFixed(1)} MB. '
+                      'Bevestig daarna Installeren op het tablet.'
+                  : 'De server haalt de app op. De balk loopt zodra de bytes binnenkomen.')
               : (ver.isEmpty
                   ? 'Nieuwe app klaar. Tik om te installeren.'
                   : 'Nieuwe app ($ver) klaar. Tik om te installeren.'));
@@ -296,6 +304,8 @@ String _apkInstallErrorMessage(String? code) {
     case 'apk_too_small':
     case 'apk_missing':
       return 'De gedownloade app is ongeldig. Probeer het later opnieuw.';
+    case 'download_stalled':
+      return 'De download bleef stil. Tik Server bijwerken, wacht tot die klaar is, en tik dan opnieuw op Installeren.';
     case 'apk_invalid':
       return 'Het gedownloade bestand is geen geldige app. Probeer het later opnieuw.';
     case 'apk_not_newer':

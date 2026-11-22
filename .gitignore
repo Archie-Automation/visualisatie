@@ -39,6 +39,11 @@ docker/data/update-downgrade-remote.txt
 docker/data/*.update-bak
 docker/data/house.json.keep
 docker/data/intercom-captures/
+docker/data/network-request.json
+docker/data/network-pending.json
+docker/data/network-confirm.json
+docker/data/network-error.json
+docker/data/network.lock/
 
 # KNX project exports (contain real customer group addresses / PII)
 *-group-addresses.xml
