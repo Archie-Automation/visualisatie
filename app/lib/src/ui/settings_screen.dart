@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../api.dart';
 import '../demo/demo_session.dart';
 import '../display_panel_config.dart';
+import '../kiosk_mode.dart';
 import '../proximity_wake.dart';
 import '../doorbell_ringer.dart';
 import '../push_service.dart';
@@ -184,6 +185,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         setState(() => _topic = _SettingsTopic.pairing),
                   ),
                   if (wallTabletDeviceSettingsApply) ...[
+                    Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
+                    const _KioskModeTile(),
                     Divider(height: 1, indent: 50, color: LuxeColors.lineSoft),
                     _SettingsMenuTile(
                       icon: Icons.cleaning_services_outlined,
@@ -2313,6 +2316,48 @@ class _VersionFooter extends ConsumerWidget {
                 fontSize: 11,
               ),
         ),
+      ),
+    );
+  }
+}
+
+class _KioskModeTile extends ConsumerWidget {
+  const _KioskModeTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final on = ref.watch(kioskModeProvider);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 11, 10, 11),
+      child: Row(
+        children: [
+          Icon(Icons.phonelink_lock_outlined, color: LuxeColors.ink, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Kioskmodus',
+                  style: Theme.of(context).textTheme.bodyLarge,
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  on
+                      ? 'Aan. Home blijft in Archie OS.'
+                      : 'Zet dit tablet vast in de app',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          LuxeOnOffSwitch(
+            value: on,
+            onChanged: (next) {
+              ref.read(kioskModeProvider.notifier).setEnabled(next);
+            },
+          ),
+        ],
       ),
     );
   }

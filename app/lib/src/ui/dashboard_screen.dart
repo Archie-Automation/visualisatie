@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../api.dart';
+import '../kiosk_mode.dart';
 import '../energy_state.dart';
 import '../demo/demo_session.dart';
 import '../device_activity.dart';
@@ -55,7 +56,10 @@ class DashboardScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cfgAsync = ref.watch(configProvider);
-    return Scaffold(
+    final kiosk = ref.watch(kioskModeProvider);
+    return PopScope(
+      canPop: !kiosk,
+      child: Scaffold(
       backgroundColor: Colors.transparent,
       body: LuxeBackdrop(
         child: SafeArea(
@@ -100,6 +104,7 @@ class DashboardScreen extends ConsumerWidget {
             data: (cfg) => _DashboardBody(key: ValueKey(cfg.projectName), cfg: cfg),
           ),
         ),
+      ),
       ),
     );
   }

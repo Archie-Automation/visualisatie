@@ -182,6 +182,22 @@ git pull          # of nieuwe ZIP uitpakken over de map (house.json niet wissen)
 
 ---
 
+## Kioskmodus op een Android-tablet
+
+Instellingen → **Kioskmodus**. Alleen in de Android-app, niet in de browser. Standaard uit. De stand blijft op dat tablet staan.
+
+Aan maakt Archie OS het startscherm. Android vraagt dat één keer. Home opent daarna de app, ook na een herstart. Daarna zet Android het scherm vast. Zonder extra voorbereiding kan dat vastzetten nog los met het systeemgebaar.
+
+Uit haalt het vastzetten weg en opent de keuze voor een ander startscherm. Een app mag zichzelf niet stil als startscherm verwijderen.
+
+Een lock waar Home niet meer uit kan, kan alleen als het tablet device-owner is. Dat lukt alleen op een schoon tablet, vóór een Google-account:
+
+```bash
+adb shell dpm set-device-owner com.example.luxe_knx/com.example.archie_os.ScreenOffAdminReceiver
+```
+
+Daarna de schakelaar aan. De app zet zich dan stil vast, ook na een herstart.
+
 ## Problemen
 
 | Symptoom | Wat doen |

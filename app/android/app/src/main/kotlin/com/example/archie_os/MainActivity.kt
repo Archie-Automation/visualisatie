@@ -1,11 +1,14 @@
 package com.example.archie_os
 
+import android.app.ActivityManager
 import android.app.admin.DevicePolicyManager
+import android.app.role.RoleManager
 import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Settings
 import android.graphics.PixelFormat
@@ -32,6 +35,9 @@ private const val PREFS_BRIGHTNESS = "archie_standby_brightness"
 private const val KEY_DIMMED = "dimmed"
 private const val KEY_MODE = "mode"
 private const val KEY_VALUE = "value"
+private const val PREFS_KIOSK = "archie_kiosk"
+private const val KEY_KIOSK = "enabled"
+private const val REQ_HOME_ROLE = 4401
 
 /**
  * Wandtablet wake:
@@ -58,6 +64,9 @@ class MainActivity : FlutterActivity(), SensorEventListener {
     private var awaitingWriteSettings = false
     private var screenOnReceiver: BroadcastReceiver? = null
     private var apkInstaller: ApkInstaller? = null
+    private var kioskEnabled = false
+    private var pendingKioskResult: MethodChannel.Result? = null
+    private var leftForHomeRequest = false
     private var doorbellRinger: DoorbellRinger? = null
     private var meldingAlertRinger: MeldingAlertRinger? = null
     private var alarmDelayRinger: AlarmDelayRinger? = null
@@ -174,6 +183,18 @@ class MainActivity : FlutterActivity(), SensorEventListener {
                 "appVersion" -> {
                     result.success(currentAppVersion())
                 }
+                else -> result.notImplemented()
+            }
+        }
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "archie_os/kiosk",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "status" -> result.success(kioskStatus())
+                "enable" -> enableKiosk(result)
+                "disable" -> disableKiosk(result)
                 else -> result.notImplemented()
             }
         }
@@ -454,6 +475,8 @@ class MainActivity : FlutterActivity(), SensorEventListener {
         // 32-bit color path — reduces 16-bit/565 banding on wall-tablet gradients.
         window.setFormat(PixelFormat.RGBA_8888)
         super.onCreate(savedInstanceState)
+        kioskEnabled = getSharedPreferences(PREFS_KIOSK, Context.MODE_PRIVATE)
+            .getBoolean(KEY_KIOSK, false)
         window.setFormat(PixelFormat.RGBA_8888)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         hideSystemUi()
@@ -467,6 +490,8 @@ class MainActivity : FlutterActivity(), SensorEventListener {
     private fun releaseScreenOffAdmin() {
         try {
             val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+            // Device-owner is de stille kiosk. Die rol niet wissen.
+            if (dpm.isDeviceOwnerApp(packageName)) return
             val who = ComponentName(this, ScreenOffAdminReceiver::class.java)
             if (dpm.isAdminActive(who)) dpm.removeActiveAdmin(who)
         } catch (_: Exception) {
@@ -475,11 +500,177 @@ class MainActivity : FlutterActivity(), SensorEventListener {
 
     override fun onResume() {
         super.onResume()
-        if (!awaitingWriteSettings) return
-        awaitingWriteSettings = false
-        val pending = pendingBrightnessResult ?: return
-        pendingBrightnessResult = null
-        pending.success(canWriteSettings())
+        if (awaitingWriteSettings) {
+            awaitingWriteSettings = false
+            val pending = pendingBrightnessResult
+            pendingBrightnessResult = null
+            pending?.success(canWriteSettings())
+        }
+        if (pendingKioskResult != null && leftForHomeRequest) {
+            leftForHomeRequest = false
+            finishHomeRequest()
+        } else if (kioskEnabled) {
+            applyKioskLock(prompt = false)
+        }
+    }
+
+    override fun onPause() {
+        if (pendingKioskResult != null) leftForHomeRequest = true
+        super.onPause()
+    }
+
+    private fun kioskPrefs() =
+        getSharedPreferences(PREFS_KIOSK, Context.MODE_PRIVATE)
+
+    private fun setKioskEnabled(on: Boolean) {
+        kioskEnabled = on
+        kioskPrefs().edit().putBoolean(KEY_KIOSK, on).apply()
+    }
+
+    private fun kioskStatus(): Map<String, Any> = mapOf(
+        "enabled" to kioskEnabled,
+        "deviceOwner" to isDeviceOwner(),
+        "home" to isHomeApp(),
+        "locked" to inLockTask(),
+    )
+
+    private fun isDeviceOwner(): Boolean {
+        return try {
+            val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+            dpm.isDeviceOwnerApp(packageName)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun isHomeApp(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            try {
+                val roles = getSystemService(RoleManager::class.java)
+                if (roles.isRoleAvailable(RoleManager.ROLE_HOME)) {
+                    return roles.isRoleHeld(RoleManager.ROLE_HOME)
+                }
+            } catch (_: Exception) {
+            }
+        }
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+        val resolved = packageManager.resolveActivity(
+            intent,
+            PackageManager.MATCH_DEFAULT_ONLY,
+        )
+        return resolved?.activityInfo?.packageName == packageName
+    }
+
+    private fun inLockTask(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
+        val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        return am.lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE
+    }
+
+    private fun homeComponent() = ComponentName(this, KioskHomeActivity::class.java)
+
+    private fun setHomeComponentEnabled(enabled: Boolean) {
+        packageManager.setComponentEnabledSetting(
+            homeComponent(),
+            if (enabled) {
+                PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+            } else {
+                PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+            },
+            PackageManager.DONT_KILL_APP,
+        )
+    }
+
+    @Suppress("DEPRECATION")
+    private fun enableKiosk(result: MethodChannel.Result) {
+        if (pendingKioskResult != null) {
+            result.success(kioskStatus())
+            return
+        }
+        setKioskEnabled(true)
+        setHomeComponentEnabled(true)
+        if (isHomeApp()) {
+            applyKioskLock(prompt = true)
+            result.success(kioskStatus())
+            return
+        }
+        pendingKioskResult = result
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val roles = getSystemService(RoleManager::class.java)
+                if (roles.isRoleAvailable(RoleManager.ROLE_HOME)) {
+                    startActivityForResult(
+                        roles.createRequestRoleIntent(RoleManager.ROLE_HOME),
+                        REQ_HOME_ROLE,
+                    )
+                    return
+                }
+            }
+            startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+        } catch (_: Exception) {
+            pendingKioskResult = null
+            setKioskEnabled(false)
+            setHomeComponentEnabled(false)
+            result.success(kioskStatus())
+        }
+    }
+
+    private fun finishHomeRequest() {
+        val pending = pendingKioskResult ?: return
+        pendingKioskResult = null
+        if (isHomeApp()) {
+            setKioskEnabled(true)
+            applyKioskLock(prompt = true)
+        } else {
+            setKioskEnabled(false)
+            setHomeComponentEnabled(false)
+        }
+        pending.success(kioskStatus())
+    }
+
+    private fun disableKiosk(result: MethodChannel.Result) {
+        val wasHome = isHomeApp()
+        setKioskEnabled(false)
+        try {
+            stopLockTask()
+        } catch (_: Exception) {
+        }
+        setHomeComponentEnabled(false)
+        if (wasHome) {
+            try {
+                startActivity(Intent(Settings.ACTION_HOME_SETTINGS))
+            } catch (_: Exception) {
+            }
+        }
+        result.success(kioskStatus())
+    }
+
+    /**
+     * Device-owner: stille lock, ook na herstart.
+     * Anders alleen pinnen als de gebruiker de schakelaar net aanzette.
+     * Elke resume opnieuw het pin-venster tonen maakt een wandtablet onbruikbaar.
+     */
+    private fun applyKioskLock(prompt: Boolean) {
+        if (!kioskEnabled) return
+        try {
+            val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+            if (dpm.isDeviceOwnerApp(packageName)) {
+                val who = ComponentName(this, ScreenOffAdminReceiver::class.java)
+                dpm.setLockTaskPackages(who, arrayOf(packageName))
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                    dpm.setLockTaskFeatures(who, DevicePolicyManager.LOCK_TASK_FEATURE_NONE)
+                }
+                if (!inLockTask()) startLockTask()
+                return
+            }
+        } catch (_: Exception) {
+        }
+        if (!prompt || inLockTask()) return
+        try {
+            startLockTask()
+        } catch (_: Exception) {
+        }
     }
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
@@ -537,6 +728,9 @@ class MainActivity : FlutterActivity(), SensorEventListener {
         pendingBrightnessResult?.success(false)
         pendingBrightnessResult = null
         awaitingWriteSettings = false
+        pendingKioskResult?.success(kioskStatus())
+        pendingKioskResult = null
+        leftForHomeRequest = false
         super.onDestroy()
     }
 }

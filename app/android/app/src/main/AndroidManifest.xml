@@ -44,6 +44,20 @@
                 <data android:pathPrefix="/pair"/>
             </intent-filter>
         </activity>
+        <!-- Uit tot kioskmodus aan staat. Zie KioskHomeActivity. -->
+        <activity
+            android:name=".KioskHomeActivity"
+            android:enabled="false"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:theme="@style/LaunchTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.HOME"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+            </intent-filter>
+        </activity>
         <!-- Standby in een slaapkamer: lockNow() zet de backlight uit.
              Alleen force-lock, geen wipe of wachtwoord. -->
         <receiver
@@ -85,6 +99,10 @@
         <intent>
             <action android:name="android.intent.action.VIEW"/>
             <data android:mimeType="application/vnd.android.package-archive"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.MAIN"/>
+            <category android:name="android.intent.category.HOME"/>
         </intent>
     </queries>
 </manifest>

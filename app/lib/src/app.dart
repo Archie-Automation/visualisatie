@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import 'api.dart';
 import 'call_service.dart';
+import 'kiosk_mode.dart';
 import 'kiosk_system_ui.dart';
 import 'server_route.dart';
 import 'theme.dart';
@@ -58,6 +59,8 @@ class _ArchieOsAppState extends ConsumerState<ArchieOsApp>
     // Initialise native call UI bridge.
     Future.microtask(() async {
       await CallService.init(ref, _router);
+      if (!mounted) return;
+      await ref.read(kioskModeProvider.notifier).reload();
     });
   }
 
