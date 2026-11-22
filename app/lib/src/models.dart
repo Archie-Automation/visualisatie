@@ -924,6 +924,8 @@ class HouseConfig {
   final Map<String, dynamic>? displayPanelJson;
   /// Satel / inbraakalarm aanwezig en aangezet in house.json.
   final bool satelEnabled;
+  /// `house.knxAlarm.enabled` — KNX-alarm onder Systemen, naast of zonder Satel.
+  final bool knxAlarmEnabled;
   /// `house.energy.enabled` — KNX-energiesnapshot onder Systemen.
   final bool energyEnabled;
   /// KNX-scene inlezen vanaf muurknop (installer/superuser).
@@ -947,6 +949,7 @@ class HouseConfig {
     this.me,
     this.displayPanelJson,
     this.satelEnabled = false,
+    this.knxAlarmEnabled = false,
     this.energyEnabled = false,
     this.knxSceneLearnEnabled = false,
     this.knxSceneLearnAddresses = const [],
@@ -994,6 +997,7 @@ class HouseConfig {
       me: me,
       displayPanelJson: j['displayPanel'] as Map<String, dynamic>?,
       satelEnabled: (j['satel'] as Map?)?['enabled'] == true,
+      knxAlarmEnabled: (j['knxAlarm'] as Map?)?['enabled'] == true,
       energyEnabled: (j['energy'] as Map?)?['enabled'] == true,
       knxSceneLearnEnabled: (j['knxSceneLearn'] as Map?)?['enabled'] == true,
       knxSceneLearnAddresses:

@@ -1998,9 +1998,11 @@ class _Systemen extends ConsumerWidget {
       ));
     }
 
-    // Alarm chip â€” tonen zodra de Satel-koppeling is ingeschakeld.
+    // Alarmtegel: Satel of KNX-alarm. Zonder tegel is er geen in- of uitschakelen.
     final satelEnabled = ref.watch(satelEnabledProvider).value ?? false;
-    if (satelEnabled) {
+    final knxAlarmOn = cfg.knxAlarmEnabled ||
+        ref.watch(knxAlarmStatusProvider.select((s) => s.enabled));
+    if (satelEnabled || knxAlarmOn) {
       chips.add(_SystemChipData(
         name: 'Alarm',
         icon: Icons.security_outlined,
@@ -2568,8 +2570,21 @@ class _SystemChipState extends ConsumerState<_SystemChip>
 
     // Watch the live alarm state directly so the chip rebuilds the moment
     // the status changes â€” no prop-passing needed.
-    final SatelPartitionState? alarmState =
+    final SatelPartitionState? satelState =
         isAlarm ? ref.watch(_alarmStateProvider) : null;
+    final knxPhase = isAlarm ? ref.watch(knxAlarmStatusProvider).phase : 'off';
+    final SatelPartitionState? alarmState = switch (satelState) {
+      SatelPartitionState.armed ||
+      SatelPartitionState.entryDelay ||
+      SatelPartitionState.exitDelay =>
+        satelState,
+      _ => switch (knxPhase) {
+          'armed' || 'alarm' => SatelPartitionState.armed,
+          'entry' => SatelPartitionState.entryDelay,
+          'exit' => SatelPartitionState.exitDelay,
+          _ => satelState,
+        },
+    };
 
     if (isAlarm) _syncAnimations(alarmState);
 

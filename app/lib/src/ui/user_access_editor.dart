@@ -87,7 +87,7 @@ class AclHouseExtras {
         scenes: [
           for (final s in cfg.scenes) AclNavScene(id: s.id, name: s.name),
         ],
-        hasAlarm: cfg.satelEnabled,
+        hasAlarm: cfg.satelEnabled || cfg.knxAlarmEnabled,
       );
 
   factory AclHouseExtras.fromHouseMap(Map<String, dynamic> house) {
@@ -114,12 +114,14 @@ class AclHouseExtras {
 
     final satel = house['satel'];
     final satelOn = satel is Map && satel['enabled'] == true;
+    final knxAlarm = house['knxAlarm'];
+    final knxAlarmOn = knxAlarm is Map && knxAlarm['enabled'] == true;
     return AclHouseExtras(
       cameras: list('cameras'),
       intercoms: list('intercoms'),
       globalDevices: list('devices'),
       scenes: scenes,
-      hasAlarm: satelOn,
+      hasAlarm: satelOn || knxAlarmOn,
     );
   }
 }
