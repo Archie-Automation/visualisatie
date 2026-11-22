@@ -154,6 +154,22 @@ Check handmatig: `curl -s http://127.0.0.1:4000/api/version`
 
 ---
 
+## Beta of normale versie
+
+Elke server staat standaard op de **normale** versie, ook een nieuwe installatie.
+Dat is branch `main`. Branch `beta` komt daar niet op binnen.
+
+In de installer, bij **Server bijwerken**: schakelaar **Beta-updates**.
+
+| Schakelaar | Wat **Server bijwerken** installeert |
+|------------|----------------------------------------|
+| Uit | Alleen `main`, plus de tablet-APK van release `android-latest` |
+| Aan | Branch `beta`, plus de tablet-APK van release `android-beta` |
+
+Het kanaal wisselen start zelf geen update. De volgende melding of **Server bijwerken** gebruikt de nieuwe keuze. Staat beta uit terwijl deze server al een nieuwere testversie draait, dan wordt er niet teruggedraaid tot de normale versie nieuwer is.
+
+Publiceren: dagelijks werk gaat naar `beta`. De normale versie is een fast-forward van `beta` naar `main`. Geen aparte selectie van commits, anders installeren huizen zonder beta iets anders dan wat op beta gedraaid heeft.
+
 ## Later: updaten op de NUC
 
 ```bash

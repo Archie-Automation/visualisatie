@@ -3,7 +3,7 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [main, beta]
   pull_request:
 
 # PRs: cancel superseded runs. Main: never cancel — otherwise android-apk
@@ -52,7 +52,7 @@ jobs:
 
   # Same pubspec version as the server. APK is a GitHub Release asset, not a git blob.
   android-apk:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/beta')
     needs: [flutter-web, backend]
     runs-on: ubuntu-latest
     permissions:
@@ -135,15 +135,23 @@ jobs:
             printf '%s\n' "$CERTS"
             exit 1
           fi
-      - name: Publish android-latest
+      - name: Publish rolling APK
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         working-directory: ${{ github.workspace }}
         run: |
           VERSION="$(sed -n 's/^version:[[:space:]]*//p' app/pubspec.yaml | tr -d '\r')"
           cp app/build/app/outputs/flutter-apk/app-release.apk archie-os.apk
-          NOTES="Server + tablet ${VERSION}. NUC: Server bijwerken. Tablet: Installeren."
-          if gh release view android-latest >/dev/null 2>&1; then
+          # main → normale tablets. beta → alleen servers met beta aan.
+          # Prerelease, zodat GitHub releases/latest de beta niet als stabiel ziet.
+          if [ "$GITHUB_REF" = "refs/heads/beta" ]; then
+            TAG=android-beta
+            NOTES="Beta ${VERSION}. Alleen servers met beta aan. NUC: Server bijwerken. Tablet: Installeren."
+          else
+            TAG=android-latest
+            NOTES="Server + tablet ${VERSION}. NUC: Server bijwerken. Tablet: Installeren."
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
             # Leftover app-release.apk (old debug builds) is picked first by
             # naive asset matching and tablets then "install" a downgrade.
             while IFS= read -r name; do
@@ -152,19 +160,19 @@ jobs:
                 archie-os.apk) ;;
                 *.apk)
                   echo "Removing stale APK asset: $name"
-                  gh release delete-asset android-latest "$name" --yes
+                  gh release delete-asset "$TAG" "$name" --yes
                   ;;
               esac
-            done < <(gh release view android-latest --json assets --jq '.assets[].name')
-            gh release edit android-latest --title "$VERSION" --prerelease --notes "$NOTES"
-            gh release upload android-latest archie-os.apk --clobber
+            done < <(gh release view "$TAG" --json assets --jq '.assets[].name')
+            gh release edit "$TAG" --title "$VERSION" --prerelease --notes "$NOTES"
+            gh release upload "$TAG" archie-os.apk --clobber
           else
-            gh release create android-latest archie-os.apk --prerelease --title "$VERSION" --notes "$NOTES"
+            gh release create "$TAG" archie-os.apk --prerelease --title "$VERSION" --notes "$NOTES"
           fi
-          leftover="$(gh release view android-latest --json assets --jq '.assets[].name' | grep -E '\.apk$' | grep -v '^archie-os\.apk$' || true)"
+          leftover="$(gh release view "$TAG" --json assets --jq '.assets[].name' | grep -E '\.apk$' | grep -v '^archie-os\.apk$' || true)"
           if [ -n "$leftover" ]; then
-            echo "android-latest mag alleen archie-os.apk hebben, nog aanwezig:"
+            echo "$TAG mag alleen archie-os.apk hebben, nog aanwezig:"
             echo "$leftover"
             exit 1
           fi
-          gh release view android-latest --json assets --jq '.assets[].name' | grep -qx 'archie-os.apk'
+          gh release view "$TAG" --json assets --jq '.assets[].name' | grep -qx 'archie-os.apk'

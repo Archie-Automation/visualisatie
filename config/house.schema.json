@@ -222,6 +222,12 @@
           "description": "Optioneel label onder de temperatuur (anders ruimtenaam)."
         }
       }
+    },
+    "updateChannel": {
+      "type": "string",
+      "enum": ["stable", "beta"],
+      "default": "stable",
+      "description": "stable (standaard, ook bij een nieuwe installatie) volgt branch main. beta volgt branch beta."
     }
   },
   "definitions": {

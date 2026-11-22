@@ -191,6 +191,7 @@ class SoftwareVersionStatus {
     required this.androidApkUpdateAvailable,
     required this.androidApkPending,
     this.autoUpdateEnabled = true,
+    this.updateChannel = 'stable',
     this.serverUpdate,
     this.clientVersion,
   });
@@ -206,6 +207,8 @@ class SoftwareVersionStatus {
   final bool androidApkPending;
   /// `false` = beheerder heeft automatische updates uitgeschakeld in de config.
   final bool autoUpdateEnabled;
+  /// `beta` volgt branch beta. Alles anders, ook een nieuwe installatie, is normaal.
+  final String updateChannel;
   final ServerUpdateSnapshot? serverUpdate;
   /// Installed app version used for APK comparison (package or dart-define).
   final SoftwareVersionInfo? clientVersion;
@@ -264,6 +267,8 @@ final softwareVersionStatusProvider =
         clientStale &&
         !androidApkUpdateAvailable;
     final autoUpdateEnabled = body['autoUpdate'] != false;
+    final updateChannel =
+        body['updateChannel'] == 'beta' ? 'beta' : 'stable';
     return SoftwareVersionStatus(
       running: running,
       latest: latest,
@@ -272,6 +277,7 @@ final softwareVersionStatusProvider =
       androidApkUpdateAvailable: androidApkUpdateAvailable,
       androidApkPending: androidApkPending,
       autoUpdateEnabled: autoUpdateEnabled,
+      updateChannel: updateChannel,
       serverUpdate: serverUpdate,
       clientVersion: client,
     );

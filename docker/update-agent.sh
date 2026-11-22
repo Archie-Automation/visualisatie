@@ -142,7 +142,62 @@ download_url() {
   fi
 }
 
+# stable unless house.json says exactly beta. A new install has no key.
+update_channel() {
+  python3 - "$ROOT/config/house.json" <<'PY'
+import json, sys
+from pathlib import Path
+p = Path(sys.argv[1])
+try:
+    d = json.loads(p.read_text(encoding="utf-8"))
+except Exception:
+    print("stable")
+    raise SystemExit(0)
+print("beta" if d.get("updateChannel") == "beta" else "stable")
+PY
+}
+
+# exit 0: target is same or newer, or local version unknown
+# exit 2: target is older (refuse)
+# exit 3: target version unreadable
+version_is_downgrade() {
+  python3 - "$1" "$2" <<'PY'
+import sys
+def parse(v):
+    v = (v or "").strip().strip('"').strip("'")
+    if not v:
+        return None
+    if "+" in v:
+        sem, build = v.split("+", 1)
+        b = int(build) if build.isdigit() else 0
+    else:
+        sem, b = v, 0
+    parts = []
+    for x in sem.split("."):
+        parts.append(int(x) if x.isdigit() else 0)
+    while len(parts) < 3:
+        parts.append(0)
+    return (parts[0], parts[1], parts[2], b)
+local, remote = parse(sys.argv[1]), parse(sys.argv[2])
+if remote is None:
+    raise SystemExit(3)
+if local is None:
+    raise SystemExit(0)
+raise SystemExit(2 if remote < local else 0)
+PY
+}
+
+read_pubspec_version() {
+  file="$1"
+  if [ ! -f "$file" ]; then
+    printf ''
+    return
+  fi
+  sed -n 's/^version:[[:space:]]*//p' "$file" | head -n 1 | tr -d '\r" '
+}
+
 # ZIP/USB installs have no .git. GitHub tarball still yields a full tree.
+# Returns 2 when the tarball is older than the tree already on disk.
 apply_github_tarball() {
   branch="$1"
   tok="$2"
@@ -172,6 +227,16 @@ apply_github_tarball() {
   if [ -z "$inner" ]; then
     rm -rf "$tmp"
     return 1
+  fi
+  local_ver="$(read_pubspec_version "$ROOT/app/pubspec.yaml")"
+  remote_ver="$(read_pubspec_version "$inner/app/pubspec.yaml")"
+  dg=0
+  version_is_downgrade "$local_ver" "$remote_ver" || dg=$?
+  if [ "$dg" -eq 2 ]; then
+    printf '%s' "$remote_ver" > "$DATA/update-downgrade-remote.txt"
+    printf '%s' "$local_ver" > "$DATA/update-downgrade-local.txt"
+    rm -rf "$tmp"
+    return 2
   fi
   tar -C "$inner" -cf - . | tar -C "$ROOT" -xf -
   rm -rf "$tmp"
@@ -281,13 +346,14 @@ run_update() {
   }
 
   tok="$(github_token)"
-  branch=main
-  if command -v git >/dev/null 2>&1 && [ -d "$ROOT/.git" ]; then
-    cur="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)"
-    if [ -n "$cur" ] && [ "$cur" != "HEAD" ]; then
-      branch="$cur"
-    fi
+  channel="$(update_channel)"
+  if [ "$channel" = "beta" ]; then
+    branch=beta
+  else
+    branch=main
   fi
+  log "channel=$channel branch=$branch"
+  rm -f "$DATA/update-downgrade-remote.txt" "$DATA/update-downgrade-local.txt"
 
   code_ok=0
   git_err="$(mktemp)"
@@ -319,10 +385,19 @@ run_update() {
         ;;
     esac
     if [ "$code_ok" -eq 1 ]; then
-      if git_with_token "$tok" -C "$ROOT" reset --hard "origin/$branch" >>"$git_err" 2>&1; then
+      local_ver="$(read_pubspec_version "$ROOT/app/pubspec.yaml")"
+      remote_ver="$(git -C "$ROOT" show "origin/${branch}:app/pubspec.yaml" 2>/dev/null | sed -n 's/^version:[[:space:]]*//p' | head -n 1 | tr -d '\r" ' || true)"
+      dg=0
+      version_is_downgrade "$local_ver" "$remote_ver" || dg=$?
+      if [ "$dg" -eq 2 ]; then
+        printf '%s' "$remote_ver" > "$DATA/update-downgrade-remote.txt"
+        printf '%s' "$local_ver" > "$DATA/update-downgrade-local.txt"
+        log "downgrade refused local=$local_ver remote=$remote_ver branch=$branch"
+        code_ok=2
+      elif git -C "$ROOT" checkout -f -B "$branch" "origin/$branch" >>"$git_err" 2>&1; then
         log "git ok branch=$branch"
       else
-        log "git reset failed — tarball fallback"
+        log "git checkout failed — tarball fallback"
         code_ok=0
       fi
     else
@@ -336,17 +411,36 @@ run_update() {
 
   if [ "$code_ok" -eq 0 ]; then
     ST_STATE=running ST_STEP=git ST_MESSAGE="Server wordt bijgewerkt." write_status
-    if apply_github_tarball "$branch" "$tok"; then
+    tb=0
+    apply_github_tarball "$branch" "$tok" || tb=$?
+    if [ "$tb" -eq 0 ]; then
       code_ok=1
       log "tarball ok branch=$branch"
       ensure_git_origin || true
+    elif [ "$tb" -eq 2 ]; then
+      code_ok=2
+      log "tarball downgrade refused branch=$branch"
     fi
+  fi
+
+  if [ "$code_ok" -eq 2 ]; then
+    restore_secrets
+    remote_ver="$(cat "$DATA/update-downgrade-remote.txt" 2>/dev/null || true)"
+    local_ver="$(cat "$DATA/update-downgrade-local.txt" 2>/dev/null || true)"
+    ST_STATE=error ST_STEP=git ST_MESSAGE="De versie op GitHub (${remote_ver}) is ouder dan deze server (${local_ver}). Er wordt niet teruggedraaid." ST_ERROR="downgrade_refused" ST_FINISHED=1 write_status
+    log "fail downgrade_refused local=$local_ver remote=$remote_ver branch=$branch"
+    return 1
   fi
 
   if [ "$code_ok" -eq 0 ]; then
     restore_secrets
-    ST_STATE=error ST_STEP=git ST_MESSAGE="Software ophalen mislukt. Controleer de netwerkverbinding van de NUC." ST_ERROR="git_fetch_failed" ST_FINISHED=1 write_status
-    log "fail git_fetch_failed"
+    if [ "$branch" = "beta" ]; then
+      fail_msg="Beta ophalen mislukt. Branch beta is niet bereikbaar. Er wordt niet overgeschakeld naar de normale versie."
+    else
+      fail_msg="Software ophalen mislukt. Controleer de netwerkverbinding van de NUC."
+    fi
+    ST_STATE=error ST_STEP=git ST_MESSAGE="$fail_msg" ST_ERROR="git_fetch_failed" ST_FINISHED=1 write_status
+    log "fail git_fetch_failed branch=$branch"
     return 1
   fi
 

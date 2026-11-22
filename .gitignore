@@ -34,6 +34,8 @@ docker/data/update-request.json
 docker/data/update-status.json
 docker/data/update-agent.log
 docker/data/update.lock/
+docker/data/update-downgrade-local.txt
+docker/data/update-downgrade-remote.txt
 docker/data/*.update-bak
 docker/data/house.json.keep
 docker/data/intercom-captures/

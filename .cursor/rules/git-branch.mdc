@@ -1,0 +1,14 @@
+---
+description: Pushes go to beta; main only when a normal release is requested
+alwaysApply: true
+---
+
+# Git branches
+
+`main` is the normal version. Servers with beta off only update from `main`.
+`beta` is the test channel. Servers with beta on update from `beta`.
+
+- Push commits and open pull requests against `beta`.
+- Do not push, merge, or fast-forward `main` unless the user explicitly asks to publish the normal version.
+- Publishing the normal version means a fast-forward of `beta` onto `main`. No cherry-pick: non-beta servers must install the tree that was tested on beta.
+- Do not put a semver tag (`v*`) on beta-only commits. The beta APK is the prerelease `android-beta`. The normal APK is `android-latest`, built from `main`.

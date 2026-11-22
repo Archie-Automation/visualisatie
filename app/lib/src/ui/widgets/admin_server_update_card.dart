@@ -26,6 +26,7 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
   String? _progress;
   String? _error;
   bool _togglingAutoUpdate = false;
+  bool _togglingBeta = false;
 
   Future<void> _confirmAndUpdate() async {
     final ok = await showDialog<bool>(
@@ -124,6 +125,36 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
     }
   }
 
+  Future<void> _toggleBeta(bool enabled) async {
+    final token = ref.read(authProvider).token;
+    if (token == null) return;
+    setState(() => _togglingBeta = true);
+    try {
+      final res = await http
+          .put(
+            Uri.parse('$apiBase/api/admin/update-channel'),
+            headers: {
+              'authorization': 'Bearer $token',
+              'content-type': 'application/json',
+            },
+            body: jsonEncode({'channel': enabled ? 'beta' : 'stable'}),
+          )
+          .timeout(const Duration(seconds: 8));
+      if (res.statusCode != 200) {
+        throw StateError('Instelling opslaan mislukt (${res.statusCode})');
+      }
+      ref.invalidate(softwareVersionStatusProvider);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString().replaceFirst('Bad state: ', '');
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _togglingBeta = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final status = ref.watch(softwareVersionStatusProvider).asData?.value;
@@ -133,6 +164,11 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
     final latest = status?.latest?.tag ?? status?.latest?.version;
     final running = status?.running.version;
     final autoUpdate = status?.autoUpdateEnabled ?? true;
+    final beta = status?.updateChannel == 'beta';
+    final latestInfo = status?.latest;
+    final ahead = status != null &&
+        latestInfo != null &&
+        status.running.compareTo(latestInfo.asVersion) > 0;
 
     String body;
     if (_error != null) {
@@ -143,12 +179,18 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
       body =
           'Nog niet beschikbaar. Eenmalig op de NUC: sudo bash docker/install.sh. '
           'Daarna kun je vanaf deze app bijwerken.';
+    } else if (ahead) {
+      body = beta
+          ? 'Deze server draait een nieuwere versie dan de beta. Er wordt niet teruggedraaid.'
+          : 'Beta staat uit. Deze server draait een nieuwere versie dan de normale. Er wordt niet teruggedraaid.';
     } else if (newer) {
       body = latest == null
           ? 'Er is een nieuwere versie beschikbaar.'
           : 'Er is een nieuwere versie ($latest).';
     } else {
-      body = 'Dit is de laatste versie.';
+      body = beta
+          ? 'Dit is de laatste beta.'
+          : 'Dit is de laatste normale versie.';
     }
 
     return GlassCard(
@@ -249,6 +291,41 @@ class _AdminServerUpdateCardState extends ConsumerState<AdminServerUpdateCard> {
                       value: autoUpdate,
                       activeThumbColor: LuxeColors.brassDeep,
                       onChanged: (v) => _toggleAutoUpdate(v),
+                    ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'BETA-UPDATES',
+                      style: Theme.of(context).textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      beta
+                          ? 'Aan. Server bijwerken haalt testversies op.'
+                          : 'Uit. Alleen de normale versie. Een nieuwe installatie staat uit.',
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              _togglingBeta
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Switch(
+                      value: beta,
+                      activeThumbColor: LuxeColors.brassDeep,
+                      onChanged: (v) => _toggleBeta(v),
                     ),
             ],
           ),

@@ -76,7 +76,8 @@ import { appVersionInfo } from "./version";
 import {
   fetchAndroidApkFromGithub,
   getGithubLatest,
-  isUpdateAvailableOnGithub
+  isUpdateAvailableOnGithub,
+  normalizeUpdateChannel
 } from "./githubLatest";
 import {
   apkCacheFile,
@@ -382,6 +383,15 @@ function publicConfig(cfg: HouseConfig, role: string, userId?: string) {
   return filterConfigForUser(scrubbed, me);
 }
 
+/** House saves from the editor omit this key. Keep the installer toggle. */
+function keepUpdateChannel(raw: unknown): void {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return;
+  const body = raw as Record<string, unknown>;
+  if (body.updateChannel === "beta" || body.updateChannel === "stable") return;
+  const current = getConfig().updateChannel;
+  if (current === "beta" || current === "stable") body.updateChannel = current;
+}
+
 /** Full house.json for the installer UI (no password hashes). */
 function installerHouseForClient(cfg: HouseConfig): HouseConfig {
   const copy = structuredClone(cfg);
@@ -515,16 +525,18 @@ export function buildRouter(
   /** Public: running version + optional newer GitHub release/tag. */
   r.get("/version", async (req, res) => {
     const force = req.query.refresh === "1" || req.query.refresh === "true";
-    const latest = await getGithubLatest(force);
+    const cfg = getConfig();
+    const updateChannel = normalizeUpdateChannel(cfg.updateChannel);
+    const latest = await getGithubLatest(force, updateChannel);
     const updateAvailable = isUpdateAvailableOnGithub(latest);
     const serverUpdate = readServerUpdateStatus();
-    const cfg = getConfig();
     res.json({
       version: appVersionInfo.version,
       semver: appVersionInfo.semver,
       build: appVersionInfo.build,
       autoUpdate: cfg.autoUpdate !== false,
       githubRepo: process.env.GITHUB_REPO?.trim() || "Archie-Automation/visualisatie",
+      updateChannel,
       latest: latest
         ? {
             version: latest.version,
@@ -575,7 +587,8 @@ export function buildRouter(
     res.setTimeout(10 * 60 * 1000);
 
     try {
-      const latest = await getGithubLatest(false);
+      const updateChannel = normalizeUpdateChannel(getConfig().updateChannel);
+      const latest = await getGithubLatest(false, updateChannel);
       const meta = latest?.androidApk;
       if (!meta) {
         res.status(404).json({ error: "no_android_apk_on_latest_release" });
@@ -614,7 +627,7 @@ export function buildRouter(
       }
       res.flushHeaders();
 
-      const result = await fetchAndroidApkFromGithub();
+      const result = await fetchAndroidApkFromGithub(updateChannel);
       if (!result.ok) {
         logger.warn(
           { error: result.error, status: result.status },
@@ -1277,6 +1290,21 @@ export function buildRouter(
     res.json({ ok: true, autoUpdate: enabled });
   });
 
+  r.put("/admin/update-channel", requireAuth, requireInstaller, (req, res) => {
+    const channel = (req.body as { channel?: unknown })?.channel;
+    if (channel !== "stable" && channel !== "beta") {
+      res.status(400).json({
+        error: "bad_channel",
+        message: "channel moet stable of beta zijn"
+      });
+      return;
+    }
+    updateConfig((draft) => {
+      draft.updateChannel = channel;
+    });
+    res.json({ ok: true, updateChannel: channel });
+  });
+
   r.get("/installer/house", requireAuth, requireInstaller, (_req, res) => {
     res.json(installerHouseForClient(getConfig()));
   });
@@ -1360,6 +1388,7 @@ export function buildRouter(
 
   r.post("/installer/house/restore", requireAuth, requireInstaller, async (req: AuthedRequest, res) => {
     logger.warn({ userId: req.user?.sub }, "house restore requested");
+    keepUpdateChannel(req.body);
     await replaceHouse(req.body, res, "restore");
   });
 
@@ -1387,6 +1416,7 @@ export function buildRouter(
   });
 
   r.put("/installer/house", requireAuth, requireInstaller, async (req, res) => {
+    keepUpdateChannel(req.body);
     const incomingUsers = (req.body as { users?: unknown })?.users;
     const credErr = assertUserLoginCredentials(
       Array.isArray(incomingUsers)

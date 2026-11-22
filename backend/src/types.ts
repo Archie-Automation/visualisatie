@@ -1662,6 +1662,11 @@ export interface HouseConfig {
    */
   autoUpdate?: boolean;
   /**
+   * Updatekanaal. Ontbreekt of `stable` = alleen branch `main`.
+   * `beta` = branch `beta` (server + tablet-APK). Nieuwe installatie blijft `stable`.
+   */
+  updateChannel?: "stable" | "beta";
+  /**
    * Inlezen van KNX-scenes vanaf een muurknop (twee-pass contrast + store).
    * `addresses` = scene-GAs die de KNX-programmeur heeft aangemaakt (installer).
    */

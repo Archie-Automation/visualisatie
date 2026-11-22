@@ -7,6 +7,7 @@
   "knx": {
     "enabled": false
   },
+  "updateChannel": "stable",
   "floors": [],
   "users": [
     {

@@ -38,8 +38,17 @@ const CACHE_MS = 2 * 60 * 1000; // 2 min — a git push must show up on the tabl
 /** Force-refresh mag GitHub niet vaker dan dit raken (tablets + web-F5). */
 const FORCE_MIN_MS = 15_000;
 const ANDROID_LATEST_TAG = "android-latest";
-let cache: Cache | null = null;
-let inflight: Promise<GithubLatestInfo | null> | null = null;
+const ANDROID_BETA_TAG = "android-beta";
+
+export type UpdateChannel = "stable" | "beta";
+
+/** Missing or anything other than `beta` stays on the normal channel. */
+export function normalizeUpdateChannel(raw: unknown): UpdateChannel {
+  return raw === "beta" ? "beta" : "stable";
+}
+
+const caches = new Map<UpdateChannel, Cache>();
+const inflights = new Map<UpdateChannel, Promise<GithubLatestInfo | null>>();
 
 function githubRepo(): string {
   return (
@@ -182,8 +191,11 @@ function pickNewer(
   return compareVersion(a, b) < 0 ? b : a;
 }
 
-async function fetchBranchPubspec(repo: string): Promise<GithubLatestInfo | null> {
-  for (const ref of ["main", "master"] as const) {
+async function fetchBranchPubspec(
+  repo: string,
+  refs: readonly string[]
+): Promise<GithubLatestInfo | null> {
+  for (const ref of refs) {
     const url = `https://api.github.com/repos/${repo}/contents/app/pubspec.yaml?ref=${ref}`;
     const res = await fetch(url, {
       headers: { ...headers(), Accept: "application/vnd.github.raw" }
@@ -230,18 +242,18 @@ async function fetchReleaseByTag(
   };
 }
 
-/** Rolling `android-latest` is the only APK channel. Official GitHub
- *  "latest" often still has an old debug-signed build (downgrade +
- *  signature mismatch → Android "App niet geïnstalleerd"). */
+/** Rolling release for this channel. Official GitHub "latest" often still
+ *  has an old debug-signed build (downgrade + signature mismatch). */
 function apkFromRolling(
-  rolling: GithubLatestInfo | null
+  rolling: GithubLatestInfo | null,
+  tag: string
 ): GithubAndroidApkInfo | null {
   const apk = rolling?.androidApk;
   if (!apk) return null;
   if (/^app-release\.apk$/i.test(apk.name)) {
     logger.warn(
       { name: apk.name, sizeBytes: apk.sizeBytes },
-      "app-release.apk op android-latest genegeerd (vaak oude debug-build)"
+      `app-release.apk op ${tag} genegeerd (vaak oude debug-build)`
     );
     return null;
   }
@@ -255,19 +267,38 @@ function apkFromRolling(
   // app-release.apk and no-op installs.
   logger.info(
     { name: labeled.name, version: labeled.version, sizeBytes: labeled.sizeBytes },
-    "APK van android-latest"
+    `APK van ${tag}`
   );
   return labeled;
 }
 
-async function fetchLatestUncached(): Promise<GithubLatestInfo | null> {
+async function fetchLatestUncached(
+  channel: UpdateChannel
+): Promise<GithubLatestInfo | null> {
   const repo = githubRepo();
   if (!repo || !repo.includes("/")) {
     logger.warn({ repo }, "GITHUB_REPO ongeldig — GitHub-versiecheck uit");
     return null;
   }
 
-  const branch = await fetchBranchPubspec(repo);
+  if (channel === "beta") {
+    // Beta never falls back to main or to a stable release. A missing
+    // branch must not look like "you are up to date" on the normal version.
+    const branch = await fetchBranchPubspec(repo, ["beta"]);
+    const rolling = await fetchReleaseByTag(repo, ANDROID_BETA_TAG);
+    const newest = pickNewer(branch, rolling);
+    if (!newest) {
+      logger.warn({ repo }, "Beta-branch en android-beta niet gevonden");
+      return null;
+    }
+    return {
+      ...newest,
+      androidApk: apkFromRolling(rolling, ANDROID_BETA_TAG),
+      checkedAt: new Date().toISOString()
+    };
+  }
+
+  const branch = await fetchBranchPubspec(repo, ["main", "master"]);
   const rolling = await fetchReleaseByTag(repo, ANDROID_LATEST_TAG);
 
   const releaseUrl = `https://api.github.com/repos/${repo}/releases/latest`;
@@ -323,7 +354,7 @@ async function fetchLatestUncached(): Promise<GithubLatestInfo | null> {
 
   // Offer the newest APK even if CI lags a git push. Hiding it left tablets
   // stuck on an old build (e.g. +186) while the NUC already ran a newer pubspec.
-  const apkUsable = apkFromRolling(rolling);
+  const apkUsable = apkFromRolling(rolling, ANDROID_LATEST_TAG);
 
   return {
     ...newest,
@@ -347,32 +378,36 @@ export function compareVersion(a: AppVersionInfo, b: AppVersionInfo): number {
 }
 
 export async function getGithubLatest(
-  force = false
+  force = false,
+  channel: UpdateChannel = "stable"
 ): Promise<GithubLatestInfo | null> {
   const now = Date.now();
+  const cache = caches.get(channel) ?? null;
   if (!force && cache && now - cache.atMs < CACHE_MS) {
     return cache.value;
   }
   if (force && cache && now - cache.atMs < FORCE_MIN_MS) {
     return cache.value;
   }
-  if (inflight) return inflight;
+  const pending = inflights.get(channel);
+  if (pending) return pending;
 
-  inflight = (async () => {
+  const run = (async () => {
     try {
-      const value = await fetchLatestUncached();
+      const value = await fetchLatestUncached(channel);
       if (value) {
-        cache = { atMs: Date.now(), value };
+        caches.set(channel, { atMs: Date.now(), value });
         return value;
       }
       // Lege fetch niet over een goede stand heen zetten — anders verdwijnt
       // de web-banner “nieuwe versie op GitHub” na een mislukte Android-poll.
-      if (cache?.value) {
-        logger.warn("GitHub latest leeg, vorige stand gehouden");
-        cache = { atMs: Date.now(), value: cache.value };
-        return cache.value;
+      const prev = caches.get(channel);
+      if (prev?.value) {
+        logger.warn({ channel }, "GitHub latest leeg, vorige stand gehouden");
+        caches.set(channel, { atMs: Date.now(), value: prev.value });
+        return prev.value;
       }
-      cache = { atMs: Date.now(), value: null };
+      caches.set(channel, { atMs: Date.now(), value: null });
       return null;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -382,23 +417,25 @@ export async function getGithubLatest(
         msg.includes("fetch failed") ||
         msg.includes("network");
       logger.warn(
-        { err, hint: isNetworkErr ? "netwerk" : "onbekend" },
+        { err, channel, hint: isNetworkErr ? "netwerk" : "onbekend" },
         isNetworkErr
           ? "GitHub latest ophalen mislukt – geen netwerktoegang tot api.github.com"
           : "GitHub latest ophalen mislukt – onbekende fout"
       );
-      cache = {
+      const prev = caches.get(channel);
+      caches.set(channel, {
         atMs: Date.now(),
-        value: cache?.value ?? null,
+        value: prev?.value ?? null,
         error: msg
-      };
-      return cache.value;
+      });
+      return prev?.value ?? null;
     } finally {
-      inflight = null;
+      inflights.delete(channel);
     }
   })();
 
-  return inflight;
+  inflights.set(channel, run);
+  return run;
 }
 
 export function isUpdateAvailableOnGithub(
@@ -409,14 +446,16 @@ export function isUpdateAvailableOnGithub(
 }
 
 /** Stream the latest release APK from GitHub (uses GITHUB_TOKEN for private repos). */
-export async function fetchAndroidApkFromGithub(): Promise<{
+export async function fetchAndroidApkFromGithub(
+  channel: UpdateChannel = "stable"
+): Promise<{
   ok: true;
   id: number;
   name: string;
   sizeBytes: number;
   body: ReadableStream<Uint8Array>;
 } | { ok: false; status: number; error: string }> {
-  const latest = await getGithubLatest();
+  const latest = await getGithubLatest(false, channel);
   const apk = latest?.androidApk;
   if (!apk) {
     return { ok: false, status: 404, error: "no_android_apk_on_latest_release" };
@@ -455,7 +494,7 @@ export async function fetchAndroidApkFromGithub(): Promise<{
         res.status === 401 || res.status === 403
           ? "Controleer GITHUB_TOKEN in docker/.env (token verlopen of onvoldoende rechten)"
           : res.status === 404
-          ? "APK-asset niet gevonden op release 'android-latest'"
+          ? `APK-asset niet gevonden op release '${channel === "beta" ? ANDROID_BETA_TAG : ANDROID_LATEST_TAG}'`
           : undefined;
       logger.warn(
         { status: res.status, assetId: apk.id, name: apk.name, hint },
