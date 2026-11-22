@@ -16,15 +16,20 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.graphics.Rect
 import android.os.Build
 import android.os.Bundle
+import android.os.CancellationSignal
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.view.View
 import android.view.WindowInsets
+import android.view.WindowInsetsAnimationControlListener
+import android.view.WindowInsetsAnimationController
 import android.view.WindowInsetsController
 import android.view.WindowManager
+import android.view.animation.LinearInterpolator
 import androidx.core.view.WindowCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -648,6 +653,10 @@ class MainActivity : FlutterActivity(), SensorEventListener {
     }
 
     private var lastPinAttemptMs = 0L
+    private var suppressingBars = false
+    private var nextBarSuppressMs = 0L
+    private var controllableGuard: WindowInsetsController.OnControllableInsetsChangedListener? =
+        null
 
     /**
      * Zolang de schakelaar aan staat en het scherm niet vastzit, opnieuw vragen.
@@ -698,14 +707,57 @@ class MainActivity : FlutterActivity(), SensorEventListener {
     /** Menubalk die toch verschijnt met kiosk aan: meteen weg, en opnieuw vastzetten. */
     private fun installKioskBarGuard() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val bars = WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars()
+            val controller = window.insetsController
+            if (controller != null && controllableGuard == null) {
+                val guard =
+                    WindowInsetsController.OnControllableInsetsChangedListener { c, typeMask ->
+                        val now = System.currentTimeMillis()
+                        if (!kioskEnabled ||
+                            suppressingBars ||
+                            now < nextBarSuppressMs ||
+                            typeMask and bars == 0
+                        ) {
+                            return@OnControllableInsetsChangedListener
+                        }
+                        suppressingBars = true
+                        nextBarSuppressMs = now + 400L
+                        try {
+                            c.controlWindowInsetsAnimation(
+                                bars,
+                                0,
+                                LinearInterpolator(),
+                                CancellationSignal(),
+                                object : WindowInsetsAnimationControlListener {
+                                    override fun onReady(
+                                        ctrl: WindowInsetsAnimationController,
+                                        types: Int,
+                                    ) {
+                                        ctrl.finish(false)
+                                        suppressingBars = false
+                                    }
+
+                                    override fun onFinished(ctrl: WindowInsetsAnimationController) {
+                                        suppressingBars = false
+                                    }
+
+                                    override fun onCancelled(ctrl: WindowInsetsAnimationController?) {
+                                        suppressingBars = false
+                                        c.hide(bars)
+                                    }
+                                },
+                            )
+                        } catch (_: Exception) {
+                            suppressingBars = false
+                            c.hide(bars)
+                        }
+                    }
+                controllableGuard = guard
+                controller.addOnControllableInsetsChangedListener(guard)
+            }
             window.decorView.setOnApplyWindowInsetsListener { view, insets ->
-                if (kioskEnabled &&
-                    insets.isVisible(WindowInsets.Type.navigationBars())
-                ) {
-                    window.insetsController?.hide(
-                        WindowInsets.Type.statusBars() or
-                            WindowInsets.Type.navigationBars(),
-                    )
+                if (kioskEnabled && insets.isVisible(WindowInsets.Type.navigationBars())) {
+                    window.insetsController?.hide(bars)
                     ensurePinned()
                 }
                 view.onApplyWindowInsets(insets)
@@ -731,14 +783,10 @@ class MainActivity : FlutterActivity(), SensorEventListener {
                 controller.hide(
                     WindowInsets.Type.statusBars() or WindowInsets.Type.navigationBars(),
                 )
-                // Met kiosk aan meteen weer verbergen als een swipe de balk toont.
                 controller.systemBarsBehavior =
-                    if (kioskEnabled) {
-                        WindowInsetsController.BEHAVIOR_DEFAULT
-                    } else {
-                        WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                    }
+                    WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             }
+            if (kioskEnabled) blockKioskEdgeSwipes()
         } else {
             @Suppress("DEPRECATION")
             window.decorView.systemUiVisibility = (
@@ -749,6 +797,25 @@ class MainActivity : FlutterActivity(), SensorEventListener {
                     or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
                     or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                 )
+        }
+    }
+
+    /** Onder- en zijrand niet aan Android geven, zodat een swipe de balk niet start. */
+    private fun blockKioskEdgeSwipes() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        val root = window.decorView
+        root.post {
+            if (!kioskEnabled) {
+                root.systemGestureExclusionRects = emptyList()
+                return@post
+            }
+            val w = root.width
+            val h = root.height
+            if (w == 0 || h == 0) return@post
+            val edge = (48 * resources.displayMetrics.density).toInt()
+            root.systemGestureExclusionRects = listOf(
+                Rect(0, (h - edge).coerceAtLeast(0), w, h),
+            )
         }
     }
 
