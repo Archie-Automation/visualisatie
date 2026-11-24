@@ -120,15 +120,25 @@ export async function applyPlaintextPasswords(body: unknown): Promise<void> {
   }
 }
 
-/** `pin` van de installateur wordt een hash. `pin` en `pinSet` gaan niet de schijf op. */
+/**
+ * `pin` van een oude client wordt nog een hash. `clearPin` wist de huiscode.
+ * `pin`, `pinSet` en `clearPin` gaan niet de schijf op.
+ * Een lege `pinHash` is het sein voor merge: niet terugzetten.
+ */
 export async function applyKnxAlarmPin(body: unknown): Promise<void> {
   if (typeof body !== "object" || body === null) return;
   const alarm = (body as Record<string, unknown>).knxAlarm;
   if (typeof alarm !== "object" || alarm === null) return;
   const box = alarm as Record<string, unknown>;
   delete box.pinSet;
+  const clear = box.clearPin === true;
+  delete box.clearPin;
   const pin = box.pin;
   delete box.pin;
+  if (clear) {
+    box.pinHash = "";
+    return;
+  }
   if (typeof pin === "string" && pin.trim().length >= 4) {
     box.pinHash = await bcrypt.hash(pin.trim(), 10);
   }
@@ -137,8 +147,13 @@ export async function applyKnxAlarmPin(body: unknown): Promise<void> {
 /** Bewaar de bestaande hash als de installateur geen nieuwe code meestuurt. */
 export function mergeKnxAlarmPin(incoming: HouseConfig, previous: HouseConfig): void {
   const next = incoming.knxAlarm;
+  if (!next) return;
+  if (next.pinHash === "") {
+    delete next.pinHash;
+    return;
+  }
   const prev = previous.knxAlarm?.pinHash;
-  if (!next || next.pinHash || !prev) return;
+  if (next.pinHash || !prev) return;
   next.pinHash = prev;
 }
 

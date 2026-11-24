@@ -255,7 +255,7 @@ function snapshot(): KnxAlarmPublic {
   const cfg = readCfg();
   return {
     enabled: cfg.enabled,
-    pinSet: Boolean(cfg.pinHash),
+    pinSet: alarmPinHashes().length > 0,
     phase: cfg.enabled ? phase : "off",
     mode: cfg.enabled ? mode : null,
     deadlineMs: cfg.enabled ? deadlineMs : null,

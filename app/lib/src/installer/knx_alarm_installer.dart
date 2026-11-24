@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../knx_alarm.dart';
+import '../theme.dart';
 import '../ui/widgets/confirm_dialog.dart';
 import '../ui/widgets/luxe_form.dart';
 
@@ -22,10 +22,10 @@ class KnxAlarmInstaller extends StatefulWidget {
 
 class _KnxAlarmInstallerState extends State<KnxAlarmInstaller> {
   late Map<String, dynamic> _alarm;
-  late final TextEditingController _pin;
   late final TextEditingController _exit;
   late final TextEditingController _entry;
   late final TextEditingController _siren;
+  String? _openId;
 
   @override
   void initState() {
@@ -38,7 +38,6 @@ class _KnxAlarmInstallerState extends State<KnxAlarmInstaller> {
             : <String, dynamic>{};
     widget.house['knxAlarm'] = _alarm;
     _alarm['sensors'] ??= <dynamic>[];
-    _pin = TextEditingController();
     _exit = TextEditingController(text: '${_num(_alarm['exitSeconds'], 30)}');
     _entry = TextEditingController(text: '${_num(_alarm['entrySeconds'], 30)}');
     _siren = TextEditingController(text: '${_alarm['sirenGa'] ?? ''}');
@@ -46,7 +45,6 @@ class _KnxAlarmInstallerState extends State<KnxAlarmInstaller> {
 
   @override
   void dispose() {
-    _pin.dispose();
     _exit.dispose();
     _entry.dispose();
     _siren.dispose();
@@ -69,12 +67,6 @@ class _KnxAlarmInstallerState extends State<KnxAlarmInstaller> {
   }
 
   void _commit() {
-    final pin = _pin.text.trim();
-    if (pin.isEmpty) {
-      _alarm.remove('pin');
-    } else {
-      _alarm['pin'] = pin;
-    }
     final exit = int.tryParse(_exit.text.trim());
     final entry = int.tryParse(_entry.text.trim());
     if (exit != null) _alarm['exitSeconds'] = exit.clamp(0, 600);
@@ -89,10 +81,58 @@ class _KnxAlarmInstallerState extends State<KnxAlarmInstaller> {
     widget.onChanged();
   }
 
+  void _setSensors(List<Map<String, dynamic>> next) {
+    _alarm['sensors'] = next;
+    _commit();
+    setState(() {});
+  }
+
+  Map<String, dynamic>? _open(List<Map<String, dynamic>> sensors) {
+    final id = _openId;
+    if (id == null) return null;
+    for (final sensor in sensors) {
+      if (sensor['id'] == id) return sensor;
+    }
+    return null;
+  }
+
+  String _subtitle(Map<String, dynamic> sensor) {
+    final kind = knxAlarmSensorKindLabel('${sensor['kind']}');
+    final ga = '${sensor['ga'] ?? ''}'.trim();
+    final modes = <String>[
+      if (sensor['aanwezig'] == true) 'Aanwezig',
+      if (sensor['afwezig'] == true) 'Afwezig',
+      if (sensor['inloop'] == true) 'Inloop',
+    ];
+    return [
+      kind,
+      if (ga.isNotEmpty) ga else 'Geen groepadres',
+      if (modes.isNotEmpty) modes.join(', '),
+    ].join(' · ');
+  }
+
+  void _addSensor() {
+    final next = [..._sensors];
+    final id = 's${DateTime.now().microsecondsSinceEpoch}';
+    next.add({
+      'id': id,
+      'name': 'Sensor ${next.length + 1}',
+      'ga': '',
+      'kind': 'magneetcontact',
+      'aanwezig': false,
+      'afwezig': true,
+      'inloop': false,
+      'alarmOn': '1',
+    });
+    _openId = id;
+    _setSensors(next);
+  }
+
   @override
   Widget build(BuildContext context) {
     final sensors = _sensors;
-    final pinSet = _alarm['pinSet'] == true;
+    final open = _open(sensors);
+    final legacyPin = _alarm['pinSet'] == true && _alarm['clearPin'] != true;
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
       children: [
@@ -107,8 +147,8 @@ class _KnxAlarmInstallerState extends State<KnxAlarmInstaller> {
                   title: 'KNX-alarm',
                   body:
                       'Eén alarm in huis. Satel of KNX, niet allebei. '
-                      'Sensoren op de bus, een code, sirene, inloop en uitloop. '
-                      'Elke gebruiker kan daarnaast een eigen alarmcode krijgen onder Gebruikers.',
+                      'Sensoren op de bus, sirene, inloop en uitloop. '
+                      'De alarmcode zet je per gebruiker onder Gebruikers.',
                 ),
               ),
               LuxeSwitchRow(
@@ -126,23 +166,6 @@ class _KnxAlarmInstallerState extends State<KnxAlarmInstaller> {
                   setState(() {});
                 },
               ),
-              const LuxeFieldLabel('Nieuwe code'),
-              TextField(
-                controller: _pin,
-                obscureText: true,
-                keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(8),
-                ],
-                decoration: luxeFilledDecoration(
-                  helper: pinSet
-                      ? 'Er staat al een code. Leeg laten houdt die. 4 tot 8 cijfers.'
-                      : '4 tot 8 cijfers. Wordt bij opslaan gezet.',
-                ),
-                onChanged: (_) => _commit(),
-              ),
-              const SizedBox(height: 12),
               const LuxeFieldLabel('Uitloop (seconden)'),
               TextField(
                 controller: _exit,
@@ -167,61 +190,119 @@ class _KnxAlarmInstallerState extends State<KnxAlarmInstaller> {
                 ),
                 onChanged: (_) => _commit(),
               ),
-            ],
-          ),
-        ),
-        LuxeListCard(
-          padding: EdgeInsets.zero,
-          child: Column(
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 12, 8, 4),
-                child: LuxeSectionTitle(
-                  icon: Icons.sensors,
-                  title: 'Sensoren',
+              if (legacyPin) ...[
+                const SizedBox(height: 12),
+                Text(
+                  'Er staat nog een oude huiscode. Nieuwe codes zet je bij Gebruikers. '
+                  'De oude code blijft geldig tot je hem wist.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: LuxeColors.inkSoft,
+                      ),
                 ),
-              ),
-              for (var i = 0; i < sensors.length; i++)
-                _SensorCard(
-            key: ValueKey(sensors[i]['id'] ?? i),
-            sensor: sensors[i],
-            onChanged: _commit,
-            onDelete: () {
-              final next = [...sensors]..removeAt(i);
-              _alarm['sensors'] = next;
-              _commit();
-              setState(() {});
-            },
-          ),
-              LuxeAddRow(
-                label: 'Sensor toevoegen',
-                onTap: () {
-                  final next = [...sensors];
-                  next.add({
-                    'id': 's${DateTime.now().microsecondsSinceEpoch}',
-                    'name': 'Sensor ${next.length + 1}',
-                    'ga': '',
-                    'kind': 'magneetcontact',
-                    'aanwezig': false,
-                    'afwezig': true,
-                    'inloop': false,
-                    'alarmOn': '1',
-                  });
-                  _alarm['sensors'] = next;
-                  _commit();
-                  setState(() {});
-                },
-              ),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    onPressed: () {
+                      _alarm['clearPin'] = true;
+                      _alarm.remove('pin');
+                      _commit();
+                      setState(() {});
+                    },
+                    child: const Text('Oude huiscode wissen'),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
+        if (open != null)
+          LuxeListCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                    onPressed: () => setState(() => _openId = null),
+                    icon: const Icon(Icons.arrow_back, size: 18),
+                    label: const Text('Sensoren'),
+                  ),
+                ),
+                _SensorForm(
+                  key: ValueKey(open['id'] ?? _openId),
+                  sensor: open,
+                  onChanged: _commit,
+                  onDelete: () {
+                    final next = [
+                      for (final sensor in sensors)
+                        if (sensor['id'] != open['id']) sensor,
+                    ];
+                    _openId = null;
+                    _setSensors(next);
+                  },
+                ),
+              ],
+            ),
+          )
+        else
+          LuxeListCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 12, 8, 4),
+                  child: LuxeSectionTitle(
+                    icon: Icons.sensors,
+                    title: 'Sensoren',
+                  ),
+                ),
+                if (sensors.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Nog geen sensoren',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ),
+                  ),
+                for (var i = 0; i < sensors.length; i++) ...[
+                  if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+                  LuxeNavRow(
+                    icon: Icons.sensors_outlined,
+                    title: () {
+                      final name = '${sensors[i]['name'] ?? ''}'.trim();
+                      return name.isEmpty ? 'Sensor' : name;
+                    }(),
+                    subtitle: _subtitle(sensors[i]),
+                    trailing: IconButton(
+                      tooltip: 'Sensor verwijderen',
+                      icon: const Icon(Icons.delete_outline),
+                      onPressed: () {
+                        final next = [...sensors]..removeAt(i);
+                        _setSensors(next);
+                      },
+                    ),
+                    onTap: () => setState(() => _openId = '${sensors[i]['id']}'),
+                  ),
+                ],
+                if (sensors.isNotEmpty)
+                  Divider(height: 1, color: LuxeColors.lineSoft),
+                LuxeAddRow(
+                  label: 'Sensor toevoegen',
+                  onTap: _addSensor,
+                ),
+              ],
+            ),
+          ),
       ],
     );
   }
 }
 
-class _SensorCard extends StatefulWidget {
-  const _SensorCard({
+class _SensorForm extends StatefulWidget {
+  const _SensorForm({
     super.key,
     required this.sensor,
     required this.onChanged,
@@ -233,10 +314,10 @@ class _SensorCard extends StatefulWidget {
   final VoidCallback onDelete;
 
   @override
-  State<_SensorCard> createState() => _SensorCardState();
+  State<_SensorForm> createState() => _SensorFormState();
 }
 
-class _SensorCardState extends State<_SensorCard> {
+class _SensorFormState extends State<_SensorForm> {
   late final TextEditingController _name;
   late final TextEditingController _ga;
 
@@ -265,98 +346,95 @@ class _SensorCardState extends State<_SensorCard> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const LuxeFieldLabel('Naam'),
-          TextField(
-            controller: _name,
-            decoration: luxeFilledDecoration(),
-            onChanged: (_) => _write(),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const LuxeFieldLabel('Naam'),
+        TextField(
+          controller: _name,
+          decoration: luxeFilledDecoration(),
+          onChanged: (_) => _write(),
+        ),
+        const SizedBox(height: 8),
+        const LuxeFieldLabel('Groepadres'),
+        TextField(
+          controller: _ga,
+          decoration: luxeFilledDecoration(),
+          onChanged: (_) => _write(),
+        ),
+        const SizedBox(height: 8),
+        const LuxeFieldLabel('Type sensor'),
+        DropdownButtonFormField<String>(
+          initialValue: knxAlarmSensorKinds.containsKey(widget.sensor['kind'])
+              ? widget.sensor['kind'] as String
+              : 'magneetcontact',
+          decoration: luxeFilledDecoration(),
+          items: [
+            for (final e in knxAlarmSensorKinds.entries)
+              DropdownMenuItem(value: e.key, child: Text(e.value)),
+          ],
+          onChanged: (v) {
+            if (v == null) return;
+            widget.sensor['kind'] = v;
+            widget.onChanged();
+            setState(() {});
+          },
+        ),
+        LuxeSwitchRow(
+          title: 'Alarm aanwezig',
+          value: widget.sensor['aanwezig'] == true,
+          onChanged: (v) {
+            widget.sensor['aanwezig'] = v;
+            widget.onChanged();
+            setState(() {});
+          },
+        ),
+        LuxeSwitchRow(
+          title: 'Alarm afwezig',
+          value: widget.sensor['afwezig'] == true,
+          onChanged: (v) {
+            widget.sensor['afwezig'] = v;
+            widget.onChanged();
+            setState(() {});
+          },
+        ),
+        LuxeSwitchRow(
+          title: 'Hier mag worden ingelopen',
+          subtitle:
+              'Openen start de inlooptijd. Andere sensoren zetten meteen de sirene aan.',
+          value: widget.sensor['inloop'] == true,
+          onChanged: (v) {
+            widget.sensor['inloop'] = v;
+            widget.onChanged();
+            setState(() {});
+          },
+        ),
+        const LuxeFieldLabel('Contact'),
+        DropdownButtonFormField<String>(
+          initialValue: widget.sensor['alarmOn'] == '0' ? '0' : '1',
+          decoration: luxeFilledDecoration(
+            helper:
+                'NO: alarm als de ingang aan gaat. NC: alarm als de ingang uit gaat.',
           ),
-          const SizedBox(height: 8),
-          const LuxeFieldLabel('Groepadres'),
-          TextField(
-            controller: _ga,
-            decoration: luxeFilledDecoration(),
-            onChanged: (_) => _write(),
+          items: const [
+            DropdownMenuItem(value: '1', child: Text('NO — normaal open')),
+            DropdownMenuItem(value: '0', child: Text('NC — normaal gesloten')),
+          ],
+          onChanged: (v) {
+            if (v == null) return;
+            widget.sensor['alarmOn'] = v;
+            widget.onChanged();
+            setState(() {});
+          },
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            onPressed: widget.onDelete,
+            child: const Text('Verwijderen'),
           ),
-          const SizedBox(height: 8),
-          const LuxeFieldLabel('Type sensor'),
-          DropdownButtonFormField<String>(
-            initialValue: knxAlarmSensorKinds.containsKey(widget.sensor['kind'])
-                ? widget.sensor['kind'] as String
-                : 'magneetcontact',
-            decoration: luxeFilledDecoration(),
-            items: [
-              for (final e in knxAlarmSensorKinds.entries)
-                DropdownMenuItem(value: e.key, child: Text(e.value)),
-            ],
-            onChanged: (v) {
-              if (v == null) return;
-              widget.sensor['kind'] = v;
-              widget.onChanged();
-              setState(() {});
-            },
-          ),
-          LuxeSwitchRow(
-            title: 'Alarm aanwezig',
-            value: widget.sensor['aanwezig'] == true,
-            onChanged: (v) {
-              widget.sensor['aanwezig'] = v;
-              widget.onChanged();
-              setState(() {});
-            },
-          ),
-          LuxeSwitchRow(
-            title: 'Alarm afwezig',
-            value: widget.sensor['afwezig'] == true,
-            onChanged: (v) {
-              widget.sensor['afwezig'] = v;
-              widget.onChanged();
-              setState(() {});
-            },
-          ),
-          LuxeSwitchRow(
-            title: 'Hier mag worden ingelopen',
-            subtitle:
-                'Openen start de inlooptijd. Andere sensoren zetten meteen de sirene aan.',
-            value: widget.sensor['inloop'] == true,
-            onChanged: (v) {
-              widget.sensor['inloop'] = v;
-              widget.onChanged();
-              setState(() {});
-            },
-          ),
-          const LuxeFieldLabel('Contact'),
-          DropdownButtonFormField<String>(
-            initialValue: widget.sensor['alarmOn'] == '0' ? '0' : '1',
-            decoration: luxeFilledDecoration(
-              helper:
-                  'NO: alarm als de ingang aan gaat. NC: alarm als de ingang uit gaat.',
-            ),
-            items: const [
-              DropdownMenuItem(value: '1', child: Text('NO — normaal open')),
-              DropdownMenuItem(value: '0', child: Text('NC — normaal gesloten')),
-            ],
-            onChanged: (v) {
-              if (v == null) return;
-              widget.sensor['alarmOn'] = v;
-              widget.onChanged();
-              setState(() {});
-            },
-          ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: widget.onDelete,
-              child: const Text('Verwijderen'),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

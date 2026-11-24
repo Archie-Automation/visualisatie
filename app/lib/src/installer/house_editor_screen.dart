@@ -5353,16 +5353,32 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
     );
   }
 
+  bool _knxAlarmEnabled() {
+    final alarm = _house?['knxAlarm'];
+    return alarm is Map && alarm['enabled'] == true;
+  }
+
+  bool _userHasAlarmCode(Map<String, dynamic> user) {
+    if (user['alarmPinSet'] == true) return true;
+    final pin = user['alarmPin'];
+    return pin is String && pin.isNotEmpty;
+  }
+
   Widget _usersPanel(BuildContext context) {
     final list = _users();
+    final knxAlarm = _knxAlarmEnabled();
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
           child: Text(
-            'Nieuwe gebruikers: vul een code in en kies Opslaan. '
-            'Bestaande: laat code leeg om hem te houden.',
+            knxAlarm
+                ? 'Nieuwe gebruikers: vul een code in en kies Opslaan. '
+                    'Bestaande: laat code leeg om hem te houden. '
+                    'Een KNX-alarmcode zet je op de gebruiker.'
+                : 'Nieuwe gebruikers: vul een code in en kies Opslaan. '
+                    'Bestaande: laat code leeg om hem te houden.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: LuxeColors.inkSoft,
                 ),
@@ -5398,6 +5414,7 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
                     if ((list[i]['username'] as String?)?.isNotEmpty == true)
                       list[i]['username'],
                     roleLabel(list[i]['role'] as String?),
+                    if (knxAlarm && _userHasAlarmCode(list[i])) 'Alarmcode',
                   ].join(' · '),
                   selected: _sel.kind == _FocusKind.user && _sel.fi == i,
                   trailing: LuxeOnOffSwitch(

@@ -1697,8 +1697,9 @@ export interface HouseConfig {
     partitions?: Array<{ number: number; name: string }>;
   };
   /**
-   * Alarm op KNX-sensoren, naast Satel. Code staat alleen als hash.
-   * `pin` is een eenmalig veld van de installateur en wordt niet bewaard.
+   * Alarm op KNX-sensoren, naast Satel.
+   * Nieuwe codes staan op de gebruiker (`alarmPinHash`).
+   * `pinHash` is een oude huiscode en blijft geldig tot de installateur hem wist.
    */
   knxAlarm?: {
     enabled?: boolean;
