@@ -16,6 +16,7 @@ class AlarmDelayRinger(private val context: Context) {
         val res = when (which) {
             "fast" -> R.raw.alarm_delay_fast
             "double" -> R.raw.alarm_ack_double
+            "triple" -> R.raw.alarm_ack_triple
             "armed" -> R.raw.alarm_armed_tone
             else -> R.raw.alarm_delay_slow
         }

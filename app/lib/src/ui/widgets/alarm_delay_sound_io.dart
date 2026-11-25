@@ -10,6 +10,8 @@ Future<void> alarmDelayFast() => _play('fast', loop: true);
 
 Future<void> alarmDelayDouble() => _play('double', loop: false);
 
+Future<void> alarmDelayTriple() => _play('triple', loop: false);
+
 Future<void> alarmDelayArmed() => _play('armed', loop: false);
 
 void alarmDelayStop() {

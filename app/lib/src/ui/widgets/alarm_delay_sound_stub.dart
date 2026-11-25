@@ -6,6 +6,8 @@ Future<void> alarmDelayFast() async {}
 
 Future<void> alarmDelayDouble() async {}
 
+Future<void> alarmDelayTriple() async {}
+
 Future<void> alarmDelayArmed() async {}
 
 void alarmDelayStop() {}

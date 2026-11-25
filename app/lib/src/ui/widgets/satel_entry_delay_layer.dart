@@ -101,6 +101,11 @@ class _SatelEntryDelayLayerState extends ConsumerState<SatelEntryDelayLayer> {
       } else if (worst == SatelPartitionState.exitDelay) {
         alarmDelaySlow();
         _armFast(satel.exitDeadline);
+      } else if (prev != null &&
+          key == 'knx:off' &&
+          prev.startsWith('knx:') &&
+          prev != 'knx:off') {
+        alarmDelayTriple();
       } else if (prev != null && _turnedOff(prev, key)) {
         alarmDelayDouble();
       } else if (prev != null && _armedAfterExit(prev, key)) {
@@ -120,9 +125,6 @@ class _SatelEntryDelayLayerState extends ConsumerState<SatelEntryDelayLayer> {
       ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
 
   bool _turnedOff(String prev, String key) {
-    if (key == 'knx:off' && prev.startsWith('knx:') && prev != 'knx:off') {
-      return true;
-    }
     return key == 'satel:disarmed' &&
         prev.startsWith('satel:') &&
         prev != 'satel:disarmed';

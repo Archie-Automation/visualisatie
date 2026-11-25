@@ -3226,14 +3226,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               onTap: () => _selectFocus(const _Focus.knx()),
             ),
             LuxeNavRow(
-              icon: Icons.electric_bolt_outlined,
-              title: 'Energie',
-              selected: _sel.kind == _FocusKind.energy,
-              trailing: _IntegrationBadge(
-                  enabled: (_house?['energy']?['enabled'] as bool?) == true),
-              onTap: () => _selectFocus(const _Focus.energy()),
-            ),
-            LuxeNavRow(
               icon: Icons.tune_outlined,
               title: 'Lutron QSX/QS',
               selected: _sel.kind == _FocusKind.lutron,
@@ -3347,6 +3339,12 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
         title: 'Kamergebonden devices',
         selected: _isBuildingFocus,
         onTap: () => _selectFocus(const _Focus.floors()),
+      ),
+      LuxeNavRow(
+        icon: Icons.electric_bolt_outlined,
+        title: 'Energie',
+        selected: _sel.kind == _FocusKind.energy,
+        onTap: () => _selectFocus(const _Focus.energy()),
       ),
     ];
   }

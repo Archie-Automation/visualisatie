@@ -1,7 +1,8 @@
 """Alarmpiepen op 4100 Hz.
 
 Langzaam: één piep per seconde. Snel: vier piepen per seconde.
-Uitschakelen: twee piepen. Ingeschakeld na uitloop: twee seconden aan één stuk.
+Satel uitschakelen: twee piepen. KNX uitschakelen: drie piepen.
+Ingeschakeld na uitloop: twee seconden aan één stuk.
 """
 
 from __future__ import annotations
@@ -49,6 +50,12 @@ def _double() -> np.ndarray:
     return np.concatenate([beep, gap, beep])
 
 
+def _triple() -> np.ndarray:
+    beep = _tone(0.18)
+    gap = np.zeros(int(round(0.14 * SR)), dtype=np.float32)
+    return np.concatenate([beep, gap, beep, gap, beep])
+
+
 def _write_wav(path: str, clip: np.ndarray) -> None:
     pcm = np.clip(clip, -1.0, 1.0)
     pcm = (pcm * 32767.0).astype(np.int16)
@@ -85,6 +92,7 @@ def main() -> None:
         "alarm_delay_slow.mp3": _loop(0.22, 1.0),
         "alarm_delay_fast.mp3": _loop(0.16, 0.25),
         "alarm_ack_double.mp3": _double(),
+        "alarm_ack_triple.mp3": _triple(),
         "alarm_armed_tone.mp3": _tone(2.0),
     }
     tmp = os.path.join(ASSET_DIR, "_tmp.wav")

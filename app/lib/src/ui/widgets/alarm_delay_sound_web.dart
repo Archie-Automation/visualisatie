@@ -8,11 +8,13 @@ import 'package:flutter/services.dart';
 const _slowAsset = 'assets/sounds/alarm_delay_slow.mp3';
 const _fastAsset = 'assets/sounds/alarm_delay_fast.mp3';
 const _doubleAsset = 'assets/sounds/alarm_ack_double.mp3';
+const _tripleAsset = 'assets/sounds/alarm_ack_triple.mp3';
 const _armedAsset = 'assets/sounds/alarm_armed_tone.mp3';
 
 String? _slowUrl;
 String? _fastUrl;
 String? _doubleUrl;
+String? _tripleUrl;
 String? _armedUrl;
 Future<void>? _loading;
 
@@ -37,6 +39,13 @@ Future<void> alarmDelayFast() async {
 Future<void> alarmDelayDouble() async {
   await alarmDelayPrepare();
   final url = _doubleUrl;
+  if (url == null) return;
+  _play(url, loop: false);
+}
+
+Future<void> alarmDelayTriple() async {
+  await alarmDelayPrepare();
+  final url = _tripleUrl;
   if (url == null) return;
   _play(url, loop: false);
 }
@@ -66,10 +75,12 @@ Future<void> _load() async {
   final slow = await rootBundle.load(_slowAsset);
   final fast = await rootBundle.load(_fastAsset);
   final doubleBeep = await rootBundle.load(_doubleAsset);
+  final tripleBeep = await rootBundle.load(_tripleAsset);
   final armed = await rootBundle.load(_armedAsset);
   _slowUrl = _blobUrl(slow);
   _fastUrl = _blobUrl(fast);
   _doubleUrl = _blobUrl(doubleBeep);
+  _tripleUrl = _blobUrl(tripleBeep);
   _armedUrl = _blobUrl(armed);
 }
 
