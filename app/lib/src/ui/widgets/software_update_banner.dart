@@ -173,14 +173,10 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
 
   @override
   Widget build(BuildContext context) {
+    // Een gewoon account kan de server niet bijwerken, maar wel de app
+    // installeren: de APK-download vraagt geen beheerdersrechten. Anders krijgt
+    // een kiosk-tablet die nooit als beheerder inlogt nooit meer een update.
     final admin = ref.watch(authProvider).isInstaller;
-    // Een gewoon account kan de server niet bijwerken en de app niet
-    // installeren. De melding heeft dan geen actie.
-    if (!admin) {
-      _setPoll(null);
-      return const SizedBox.shrink();
-    }
-
     final outdated = ref.watch(softwareUpdateAvailableProvider);
     final status = ref.watch(softwareVersionStatusProvider).asData?.value;
     final apkOffered = supportsAndroidApkUpdate &&
@@ -238,6 +234,8 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
       );
     }
 
+    if (!admin) return const SizedBox.shrink();
+
     if (apkWaiting && !apkReady) {
       final fileVer = status.latest?.androidApk?.version;
       // Bestand staat er al, maar is niet nieuwer dan deze tablet.
@@ -259,7 +257,7 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
       final latest = status.latest;
       final ver = latest?.version ?? latest?.tag ?? '';
       final agentReady = status.serverUpdate?.agentReady == true;
-      if (admin && agentReady) {
+      if (agentReady) {
         return _Banner(
           message: _error ??
               (ver.isEmpty
