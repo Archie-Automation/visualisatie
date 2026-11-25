@@ -48,7 +48,9 @@ class SoftwareUpdateState {
     return SoftwareUpdateState(
       installing: installing ?? this.installing,
       serverUpdating: serverUpdating ?? this.serverUpdating,
-      progress: identical(progress, _keep) ? this.progress : progress as double?,
+      progress: identical(progress, _keep)
+          ? this.progress
+          : (progress as num?)?.toDouble(),
       received: received ?? this.received,
       error: identical(error, _keep) ? this.error : error as String?,
       serverProgress: identical(serverProgress, _keep)
@@ -87,7 +89,7 @@ class SoftwareUpdateController extends Notifier<SoftwareUpdateState> {
     if (state.installing) return false;
     state = state.copyWith(
       installing: true,
-      progress: 0,
+      progress: 0.0,
       received: 0,
       error: null,
     );
