@@ -153,8 +153,6 @@ class _KnxAlarmInstallerState extends State<KnxAlarmInstaller> {
               ),
               LuxeSwitchRow(
                 title: 'KNX-alarm',
-                subtitle:
-                    'Zet Satel uit. Deur met inloop start de tijd; die loopt door tot de code.',
                 value: _alarm['enabled'] == true,
                 onChanged: (v) {
                   _alarm['enabled'] = v;
@@ -344,6 +342,21 @@ class _SensorFormState extends State<_SensorForm> {
     widget.onChanged();
   }
 
+  /// Ontbrekend contact is NO.
+  String get _contact => widget.sensor['alarmOn'] == '0' ? '0' : '1';
+
+  set _contact(String v) {
+    widget.sensor['alarmOn'] = v == '0' ? '0' : '1';
+    widget.onChanged();
+    setState(() {});
+  }
+
+  void _flag(String key, bool v) {
+    widget.sensor[key] = v;
+    widget.onChanged();
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -380,52 +393,43 @@ class _SensorFormState extends State<_SensorForm> {
             setState(() {});
           },
         ),
-        LuxeSwitchRow(
-          title: 'Alarm aanwezig',
+        _SensorCheck(
+          label: 'Aanwezig',
           value: widget.sensor['aanwezig'] == true,
-          onChanged: (v) {
-            widget.sensor['aanwezig'] = v;
-            widget.onChanged();
-            setState(() {});
-          },
+          onChanged: (v) => _flag('aanwezig', v),
         ),
-        LuxeSwitchRow(
-          title: 'Alarm afwezig',
+        _SensorCheck(
+          label: 'Afwezig',
           value: widget.sensor['afwezig'] == true,
-          onChanged: (v) {
-            widget.sensor['afwezig'] = v;
-            widget.onChanged();
-            setState(() {});
-          },
+          onChanged: (v) => _flag('afwezig', v),
         ),
-        LuxeSwitchRow(
-          title: 'Hier mag worden ingelopen',
-          subtitle:
-              'Openen start de inlooptijd. Andere sensoren zetten meteen de sirene aan.',
+        _SensorCheck(
+          label: 'Inloop activeren',
           value: widget.sensor['inloop'] == true,
-          onChanged: (v) {
-            widget.sensor['inloop'] = v;
-            widget.onChanged();
-            setState(() {});
-          },
+          onChanged: (v) => _flag('inloop', v),
         ),
-        const LuxeFieldLabel('Contact'),
-        DropdownButtonFormField<String>(
-          initialValue: widget.sensor['alarmOn'] == '0' ? '0' : '1',
-          decoration: luxeFilledDecoration(
-            helper:
-                'NO: alarm als de ingang aan gaat. NC: alarm als de ingang uit gaat.',
-          ),
-          items: const [
-            DropdownMenuItem(value: '1', child: Text('NO — normaal open')),
-            DropdownMenuItem(value: '0', child: Text('NC — normaal gesloten')),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Expanded(
+              child: _SensorCheck(
+                label: 'NO',
+                value: _contact == '1',
+                onChanged: (v) {
+                  if (v) _contact = '1';
+                },
+              ),
+            ),
+            Expanded(
+              child: _SensorCheck(
+                label: 'NC',
+                value: _contact == '0',
+                onChanged: (v) {
+                  if (v) _contact = '0';
+                },
+              ),
+            ),
           ],
-          onChanged: (v) {
-            if (v == null) return;
-            widget.sensor['alarmOn'] = v;
-            widget.onChanged();
-            setState(() {});
-          },
         ),
         Align(
           alignment: Alignment.centerLeft,
@@ -435,6 +439,31 @@ class _SensorFormState extends State<_SensorForm> {
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SensorCheck extends StatelessWidget {
+  const _SensorCheck({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final String label;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return CheckboxListTile(
+      contentPadding: EdgeInsets.zero,
+      dense: true,
+      visualDensity: VisualDensity.compact,
+      controlAffinity: ListTileControlAffinity.leading,
+      value: value,
+      onChanged: (v) => onChanged(v ?? false),
+      title: Text(label),
     );
   }
 }
