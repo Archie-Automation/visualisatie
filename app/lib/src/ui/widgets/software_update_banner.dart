@@ -7,13 +7,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../android_apk_updater.dart';
 import '../../api.dart';
-import '../../full_app_restart.dart';
-import '../../server_update.dart';
+import '../../software_update_controller.dart';
 import '../../software_version.dart';
 import 'reload_app_stub.dart'
     if (dart.library.html) 'reload_app_web.dart' as reload;
 
-/// Banner: stale PWA (reload), Android APK install, or newer GitHub release.
+/// Web: balk voor serverupdate (installer) of een verouderde PWA.
+/// Android toont geen balk maar het update-icoon in de kopregel; deze widget
+/// blijft daar wel de versie pollen, ook buiten het dashboard.
 class SoftwareUpdateBanner extends ConsumerStatefulWidget {
   const SoftwareUpdateBanner({super.key});
 
@@ -23,18 +24,8 @@ class SoftwareUpdateBanner extends ConsumerStatefulWidget {
 }
 
 class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
-  bool _installing = false;
-  bool _serverUpdating = false;
-  double? _progress;
-  int _received = 0;
-  String? _error;
-  String? _serverProgress;
   Timer? _poll;
   int? _pollSeconds;
-  /// GitHub-APK die Android weigerde (`apk_not_newer`). Niet opnieuw aanbieden
-  /// tot naam/grootte/versie verandert — anders blijft Installeren dezelfde
-  /// oude binary downloaden terwijl de server al verder is.
-  String? _rejectedApkKey;
 
   @override
   void dispose() {
@@ -54,223 +45,65 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
     _pollSeconds = seconds;
     _poll = Timer.periodic(Duration(seconds: seconds), (_) async {
       if (!mounted) return;
-      final prev = _apkIdentity(
+      final prev = apkIdentity(
         ref.read(softwareVersionStatusProvider).asData?.value?.latest?.androidApk,
       );
       ref.invalidate(softwareVersionStatusProvider);
       final next = await ref.read(softwareVersionStatusProvider.future);
       if (!mounted) return;
-      final now = _apkIdentity(next?.latest?.androidApk);
-      if (now != prev && now != _rejectedApkKey) {
-        setState(() => _error = null);
-      }
+      ref
+          .read(softwareUpdateControllerProvider.notifier)
+          .apkChanged(prev, apkIdentity(next?.latest?.androidApk));
     });
-  }
-
-  Future<void> _installApk(GithubAndroidApkInfo? apk) async {
-    if (_installing) return;
-    setState(() {
-      _installing = true;
-      _progress = 0;
-      _received = 0;
-      _error = null;
-    });
-    final result = await downloadAndInstallAndroidApk(
-      token: ref.read(authProvider).token,
-      fileName: apk?.name,
-      onProgress: (p) {
-        if (mounted) setState(() => _progress = p);
-      },
-      onBytes: (got, _) {
-        if (mounted) setState(() => _received = got);
-      },
-    );
-    if (!mounted) return;
-    if (result.error == 'apk_not_newer') {
-      setState(() {
-        _installing = false;
-        _progress = null;
-        _rejectedApkKey = _apkIdentity(apk);
-        _error = _apkInstallErrorMessage(result.error);
-      });
-      ref.invalidate(softwareVersionStatusProvider);
-      return;
-    }
-    setState(() {
-      _installing = false;
-      _progress = result.ok ? 1 : null;
-      _error = result.ok ? null : _apkInstallErrorMessage(result.error);
-    });
-    if (result.ok) {
-      ref.invalidate(softwareVersionStatusProvider);
-    } else if (result.error == 'install_aborted' || result.error == 'busy') {
-      ref.invalidate(softwareVersionStatusProvider);
-    }
-  }
-
-  Future<SoftwareVersionStatus?> _refreshStatus() async {
-    ref.invalidate(softwareVersionStatusProvider);
-    return ref.read(softwareVersionStatusProvider.future);
-  }
-
-  Future<void> _updateServerThenApp() async {
-    if (_serverUpdating || _installing) return;
-    final token = ref.read(authProvider).token;
-    if (token == null) return;
-    setState(() {
-      _serverUpdating = true;
-      _serverProgress = 'Update starten…';
-      _error = null;
-    });
-    try {
-      await postServerUpdate(token);
-      final result = await waitForServerUpdate(
-        token: token,
-        onMessage: (m) {
-          if (mounted) setState(() => _serverProgress = m);
-        },
-      );
-      if (result.isError) {
-        throw StateError(
-          result.message.isEmpty ? 'Update mislukt.' : result.message,
-        );
-      }
-      await waitForBackendOnline(timeout: const Duration(minutes: 3));
-      if (!mounted) return;
-      setState(() => _serverProgress = 'Server klaar. App-update controleren…');
-      var status = await _refreshStatus();
-      if (supportsAndroidApkUpdate) {
-        for (var i = 0; i < 45 && mounted; i++) {
-          status = await _refreshStatus();
-          if (status?.androidApkUpdateAvailable == true) break;
-          if (status != null &&
-              !status.clientStale &&
-              !status.androidApkPending) {
-            break;
-          }
-          setState(() => _serverProgress = 'App-update wordt klaargezet…');
-          await Future<void>.delayed(const Duration(seconds: 8));
-        }
-      }
-      if (!mounted) return;
-      setState(() => _serverUpdating = false);
-      if (supportsAndroidApkUpdate &&
-          status?.androidApkUpdateAvailable == true) {
-        await _installApk(status!.latest?.androidApk);
-        return;
-      }
-      if (kIsWeb) {
-        await fullAppRemountOrReload();
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _serverUpdating = false;
-        _error = e.toString().replaceFirst('Bad state: ', '');
-      });
-    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Een gewoon account kan de server niet bijwerken, maar wel de app
-    // installeren: de APK-download vraagt geen beheerdersrechten. Anders krijgt
-    // een kiosk-tablet die nooit als beheerder inlogt nooit meer een update.
     final admin = ref.watch(authProvider).isInstaller;
-    final outdated = ref.watch(softwareUpdateAvailableProvider);
     final status = ref.watch(softwareVersionStatusProvider).asData?.value;
-    final apkOffered = supportsAndroidApkUpdate &&
-        status?.androidApkUpdateAvailable == true &&
-        _apkIdentity(status?.latest?.androidApk) != _rejectedApkKey;
-    final apkWaiting = supportsAndroidApkUpdate &&
-        (status?.androidApkPending == true ||
-            (status?.androidApkUpdateAvailable == true && !apkOffered) ||
-            status?.clientStale == true);
-    // Android vraagt ook als er nog geen banner is. Anders blijft een tablet
-    // op de eerste controle staan tot de app even weg is (swipe naar de balk).
-    // Met een banner vaker, tot de APK er is.
-    final pollSeconds = !supportsAndroidApkUpdate ||
-            _serverUpdating ||
-            _installing
-        ? null
-        : (apkOffered || apkWaiting)
-            ? 8
-            : 45;
-    _setPoll(pollSeconds);
+    final update = ref.watch(softwareUpdateControllerProvider);
+    final offer = ref.watch(softwareUpdateOfferProvider);
 
-    if (_serverUpdating) {
+    if (supportsAndroidApkUpdate) {
+      final apkWaiting = status?.androidApkPending == true ||
+          status?.clientStale == true ||
+          (status?.androidApkUpdateAvailable == true && !offer.app);
+      // Ook zonder melding pollen. Anders blijft een tablet op de eerste
+      // controle staan tot de app even weg is. Vaker zolang de APK nog komt.
+      _setPoll(update.busy ? null : (offer.app || apkWaiting) ? 8 : 45);
+      return const SizedBox.shrink();
+    }
+    _setPoll(null);
+
+    if (update.serverUpdating) {
       return _Banner(
-        message: _serverProgress ?? 'Server bijwerken…',
+        message: update.serverProgress ?? 'Server bijwerken…',
         progress: 0,
       );
     }
-
-    if (!outdated && !apkOffered && !apkWaiting) {
+    if (status == null || !status.autoUpdateEnabled) {
       return const SizedBox.shrink();
     }
-    if (status == null) return const SizedBox.shrink();
 
-    // Beheerder heeft automatische updates uitgeschakeld.
-    if (!status.autoUpdateEnabled) return const SizedBox.shrink();
-
-    final apkReady = apkOffered;
-    if (apkReady) {
-      final latest = status.latest;
-      final ver = latest?.androidApk?.version ?? '';
-      final message = _error ??
-          (_installing
-              ? (_received > 0
-                  ? 'App-update downloaden… ${(_received / (1024 * 1024)).toStringAsFixed(1)} MB. '
-                      'Bevestig daarna Installeren op het tablet.'
-                  : 'De server haalt de app op. De balk loopt zodra de bytes binnenkomen.')
-              : (ver.isEmpty
-                  ? 'Nieuwe app klaar. Tik om te installeren.'
-                  : 'Nieuwe app ($ver) klaar. Tik om te installeren.'));
-      return _Banner(
-        message: message,
-        actionLabel: _installing ? null : 'Installeren',
-        onAction: _installing ? null : () => _installApk(latest?.androidApk),
-        progress: _installing ? (_progress ?? 0) : null,
-      );
-    }
-
-    if (!admin) return const SizedBox.shrink();
-
-    if (apkWaiting && !apkReady) {
-      final fileVer = status.latest?.androidApk?.version;
-      // Bestand staat er al, maar is niet nieuwer dan deze tablet.
-      // Geen balk: er valt niets te installeren.
-      if (fileVer == null || fileVer.isEmpty) {
-        return _Banner(
-          message: _error ??
-              'De server is nieuwer dan deze tablet. '
-                  'Het installatiebestand wordt nog opgehaald.',
-          actionLabel: 'Opnieuw controleren',
-          onAction: () {
-            ref.invalidate(softwareVersionStatusProvider);
-          },
-        );
-      }
-    }
-
-    if (status.updateAvailable) {
+    if (admin && status.updateAvailable) {
       final latest = status.latest;
       final ver = latest?.version ?? latest?.tag ?? '';
-      final agentReady = status.serverUpdate?.agentReady == true;
-      if (agentReady) {
+      if (status.serverUpdate?.agentReady == true) {
         return _Banner(
-          message: _error ??
+          message: update.error ??
               (ver.isEmpty
-                  ? 'Nieuwe software. Eén tik werkt de server bij; de app volgt daarna.'
-                  : 'Nieuwe software ($ver). Eén tik werkt de server bij; de app volgt daarna.'),
+                  ? 'Nieuwe software. Eén tik werkt de server bij.'
+                  : 'Nieuwe software ($ver). Eén tik werkt de server bij.'),
           actionLabel: 'Bijwerken',
-          onAction: _updateServerThenApp,
+          onAction: () => ref
+              .read(softwareUpdateControllerProvider.notifier)
+              .updateServerThenApp(),
         );
       }
       return _Banner(
         message: ver.isEmpty
-            ? 'Nieuwe versie. Eenmalig op de NUC: sudo bash docker/install.sh. Daarna vanaf de tablet.'
-            : 'Nieuwe versie ($ver). Eenmalig op de NUC: sudo bash docker/install.sh. Daarna vanaf de tablet.',
+            ? 'Nieuwe versie. Eenmalig op de NUC: sudo bash docker/install.sh. Daarna vanaf de app.'
+            : 'Nieuwe versie ($ver). Eenmalig op de NUC: sudo bash docker/install.sh. Daarna vanaf de app.',
         actionLabel: latest?.htmlUrl != null ? 'Bekijken' : null,
         onAction: latest?.htmlUrl != null
             ? () => openReleasePage(latest!.htmlUrl)
@@ -278,76 +111,17 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
       );
     }
 
-    if (status.clientStale && kIsWeb) {
+    if (admin && status.clientStale && kIsWeb) {
       return _Banner(
         message: status.running.version.isEmpty
             ? 'Nieuwe softwarestand beschikbaar. Vernieuw de app.'
             : 'Nieuwe softwarestand beschikbaar (${status.running.version}). Vernieuw de app.',
-        actionLabel: kIsWeb ? 'Vernieuwen' : null,
-        onAction: kIsWeb ? reload.reloadApp : null,
+        actionLabel: 'Vernieuwen',
+        onAction: reload.reloadApp,
       );
     }
 
     return const SizedBox.shrink();
-  }
-}
-
-String _apkIdentity(GithubAndroidApkInfo? apk) {
-  if (apk == null) return '';
-  return '${apk.version ?? ''}|${apk.sizeBytes}|${apk.name}';
-}
-
-String _apkInstallErrorMessage(String? code) {
-  switch (code) {
-    case 'install_permission_denied':
-      return 'Sta “apps uit onbekende bronnen” toe voor Archie OS en tik opnieuw op Installeren.';
-    case 'apk_too_small':
-    case 'apk_missing':
-      return 'De gedownloade app is ongeldig. Probeer het later opnieuw.';
-    case 'download_stalled':
-      return 'De download bleef stil. Tik Server bijwerken, wacht tot die klaar is, en tik dan opnieuw op Installeren.';
-    case 'apk_invalid':
-      return 'Het gedownloade bestand is geen geldige app. Probeer het later opnieuw.';
-    case 'apk_not_newer':
-      return 'Het installatiebestand is niet nieuwer dan deze app. '
-          'Installeren heeft niets veranderd. Wacht tot er een nieuwere APK klaarstaat.';
-    case 'install_aborted':
-      return 'Installatie afgebroken. Tik opnieuw op Installeren en bevestig op het tablet.';
-    case 'install_blocked':
-      return 'Android blokkeert de installatie. Controleer ouderlijk toezicht of zakelijke beperkingen.';
-    case 'install_conflict':
-      return 'Android weigert de update (andere handtekening). Verwijder Archie OS eenmalig en installeer opnieuw.';
-    case 'install_incompatible':
-      return 'Deze app-versie past niet op dit tablet.';
-    case 'install_storage':
-      return 'Te weinig opslagruimte om de app te installeren.';
-    case 'install_intent_failed':
-    case 'install_failed':
-    case 'busy':
-      return 'Installatie mislukt. Tik opnieuw op Installeren.';
-    default:
-      if (code != null && code.startsWith('download_http_401')) {
-        return 'Niet ingelogd of sessie verlopen. Log opnieuw in en probeer de update opnieuw.';
-      }
-      if (code != null && code.startsWith('download_http_403')) {
-        return 'Download geweigerd. Controleer de serverinstellingen op de NUC.';
-      }
-      if (code != null && code.startsWith('download_http_404')) {
-        return 'De app-update is nog niet beschikbaar. Probeer het later opnieuw.';
-      }
-      if (code != null && code.startsWith('download_http_504')) {
-        return 'De NUC kreeg de app-update niet op tijd. Controleer het netwerk en probeer opnieuw.';
-      }
-      if (code != null && code.startsWith('download_http_')) {
-        return 'Download mislukt ($code). Probeer het later opnieuw.';
-      }
-      if (code != null &&
-          (code.contains('Connection closed before full header') ||
-              code.contains('ClientException'))) {
-        return 'Verbinding met de NUC viel weg tijdens de download. '
-            'Update eerst de server, daarna opnieuw Installeren.';
-      }
-      return 'Update mislukt${code == null || code.isEmpty ? '.' : ': $code'}';
   }
 }
 

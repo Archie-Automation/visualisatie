@@ -34,6 +34,7 @@ import 'widgets/room_category_strip.dart';
 import 'scope_icons.dart';
 import 'widgets/luxe_backdrop.dart';
 import 'widgets/scene_strip.dart';
+import 'widgets/software_update_indicator.dart';
 import '../floor_order.dart';
 import '../building_order.dart';
 import '../room_order.dart';
@@ -1696,6 +1697,7 @@ Widget _header(
         RepaintBoundary(
           child: _HouseActivityHeaderButtons(cfg: cfg, buildingId: buildingId),
         ),
+        const SoftwareUpdateIndicator(),
         // On narrow phones collapse installer icon into a single menu
         if (auth.isInstaller) ...[
           _GlassIconButton(
