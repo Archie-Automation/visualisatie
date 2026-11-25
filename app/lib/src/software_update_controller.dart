@@ -164,9 +164,12 @@ class SoftwareUpdateController extends Notifier<SoftwareUpdateState> {
         }
       }
       state = state.copyWith(serverUpdating: false, serverProgress: null);
+      final apkVer = status?.latest?.androidApk?.asVersion;
       if (supportsAndroidApkUpdate &&
-          status?.androidApkUpdateAvailable == true) {
-        return installApk(status!.latest?.androidApk);
+          status?.androidApkUpdateAvailable == true &&
+          apkVer != null &&
+          status!.running.compareTo(apkVer) >= 0) {
+        return installApk(status.latest?.androidApk);
       }
       if (kIsWeb) {
         await fullAppRemountOrReload();
@@ -192,6 +195,7 @@ final softwareUpdateControllerProvider =
 class SoftwareUpdateOffer {
   const SoftwareUpdateOffer({
     this.app = false,
+    this.appWaitsForServer = false,
     this.server = false,
     this.apk,
     this.appVersion = '',
@@ -200,6 +204,9 @@ class SoftwareUpdateOffer {
 
   /// APK nieuwer dan deze tablet. Elk account mag installeren.
   final bool app;
+
+  /// APK is nieuwer dan deze tablet, maar de server loopt nog achter.
+  final bool appWaitsForServer;
 
   /// Nieuwere serversoftware. Alleen voor een installer-account.
   final bool server;
@@ -221,14 +228,19 @@ final softwareUpdateOfferProvider =
     return const SoftwareUpdateOffer();
   }
   final apk = status.latest?.androidApk;
-  final app = supportsAndroidApkUpdate &&
+  final apkNewer = supportsAndroidApkUpdate &&
       status.androidApkUpdateAvailable &&
       apkIdentity(apk) != rejected;
+  // Eerst de server, dan de app: een app nieuwer dan de backend kan een API
+  // verwachten die de server nog niet heeft.
+  final apkVer = apk?.asVersion;
+  final serverReady = apkVer != null && status.running.compareTo(apkVer) >= 0;
   final server = admin &&
       status.updateAvailable &&
       status.serverUpdate?.agentReady == true;
   return SoftwareUpdateOffer(
-    app: app,
+    app: apkNewer && serverReady,
+    appWaitsForServer: apkNewer && !serverReady,
     server: server,
     apk: apk,
     appVersion: apk?.version ?? '',

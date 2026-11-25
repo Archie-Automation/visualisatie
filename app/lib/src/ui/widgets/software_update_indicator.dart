@@ -114,10 +114,9 @@ class _SoftwareUpdateDialog extends ConsumerWidget {
               : 'Er is een nieuwe versie van de app (${offer.appVersion}). '
                   'Wil je de app nu bijwerken?',
         if (s.error == null && offer.server)
-          offer.serverVersion.isEmpty
-              ? 'Er is nieuwe serversoftware. Bijwerken duurt meestal 1–3 minuten.'
-              : 'Er is nieuwe serversoftware (${offer.serverVersion}). '
-                  'Bijwerken duurt meestal 1–3 minuten.',
+          '${offer.serverVersion.isEmpty ? 'Er is nieuwe serversoftware.' : 'Er is nieuwe serversoftware (${offer.serverVersion}).'} '
+              'Bijwerken duurt meestal 1–3 minuten.'
+              '${offer.appWaitsForServer ? ' De app volgt daarna.' : ''}',
         if (s.error == null && !offer.any) 'Alles is bijgewerkt.',
       ];
       body = Text(lines.join('\n\n'));

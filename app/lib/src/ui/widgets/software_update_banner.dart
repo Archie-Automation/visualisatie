@@ -67,7 +67,9 @@ class _SoftwareUpdateBannerState extends ConsumerState<SoftwareUpdateBanner> {
     if (supportsAndroidApkUpdate) {
       final apkWaiting = status?.androidApkPending == true ||
           status?.clientStale == true ||
-          (status?.androidApkUpdateAvailable == true && !offer.app);
+          (status?.androidApkUpdateAvailable == true &&
+              !offer.app &&
+              !offer.appWaitsForServer);
       // Ook zonder melding pollen. Anders blijft een tablet op de eerste
       // controle staan tot de app even weg is. Vaker zolang de APK nog komt.
       _setPoll(update.busy ? null : (offer.app || apkWaiting) ? 8 : 45);
