@@ -38,6 +38,7 @@ class _KnxAlarmInstallerState extends State<KnxAlarmInstaller> {
             : <String, dynamic>{};
     widget.house['knxAlarm'] = _alarm;
     _alarm['sensors'] ??= <dynamic>[];
+    if (_alarm['pinSet'] == true) _alarm['clearPin'] = true;
     _exit = TextEditingController(text: '${_num(_alarm['exitSeconds'], 30)}');
     _entry = TextEditingController(text: '${_num(_alarm['entrySeconds'], 30)}');
     _siren = TextEditingController(text: '${_alarm['sirenGa'] ?? ''}');
@@ -132,7 +133,6 @@ class _KnxAlarmInstallerState extends State<KnxAlarmInstaller> {
   Widget build(BuildContext context) {
     final sensors = _sensors;
     final open = _open(sensors);
-    final legacyPin = _alarm['pinSet'] == true && _alarm['clearPin'] != true;
     return ListView(
       padding: const EdgeInsets.only(bottom: 36),
       children: [
@@ -188,28 +188,6 @@ class _KnxAlarmInstallerState extends State<KnxAlarmInstaller> {
                 ),
                 onChanged: (_) => _commit(),
               ),
-              if (legacyPin) ...[
-                const SizedBox(height: 12),
-                Text(
-                  'Er staat nog een oude huiscode. Nieuwe codes zet je bij Gebruikers. '
-                  'De oude code blijft geldig tot je hem wist.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: LuxeColors.inkSoft,
-                      ),
-                ),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton(
-                    onPressed: () {
-                      _alarm['clearPin'] = true;
-                      _alarm.remove('pin');
-                      _commit();
-                      setState(() {});
-                    },
-                    child: const Text('Oude huiscode wissen'),
-                  ),
-                ),
-              ],
             ],
           ),
         ),

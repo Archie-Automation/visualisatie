@@ -19,7 +19,6 @@ class SoftwareUpdateIndicator extends ConsumerWidget {
     if (!offer.any && !busy) return const SizedBox.shrink();
 
     final phone = context.isPhone;
-    final size = phone ? 48.0 : 52.0;
     final accent = LuxeColors.brassOnCanvas;
     return Padding(
       padding: EdgeInsets.only(right: phone ? 8 : 10),
@@ -30,24 +29,24 @@ class SoftwareUpdateIndicator extends ConsumerWidget {
           behavior: HitTestBehavior.opaque,
           onTap: () => showSoftwareUpdateDialog(context),
           child: LuxeRimBox(
-            width: size,
-            height: size,
-            radius: phone ? 14 : 15,
-            rimWidth: 1.4,
-            rimColor: accent,
+            width: 48,
+            height: 48,
+            radius: 14,
+            rimWidth: 1,
+            rimColor: LuxeColors.glassRim,
             fillColor: LuxeChipChrome.tileFill(context, pressed: false),
             shadows: LuxeShadows.soft,
             child: Center(
               child: busy
                   ? SizedBox(
-                      width: 22,
-                      height: 22,
+                      width: 20,
+                      height: 20,
                       child: CircularProgressIndicator(
-                        strokeWidth: 2.2,
+                        strokeWidth: 2,
                         color: accent,
                       ),
                     )
-                  : Icon(Icons.priority_high_rounded, color: accent, size: 28),
+                  : Icon(Icons.priority_high_rounded, color: accent, size: 20),
             ),
           ),
         ),

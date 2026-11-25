@@ -46,7 +46,9 @@ class LuxeInfoIconButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final iconSize = context.isPhone ? 20.0 : 22.0;
     const size = HeaderIconButton.size;
-    return Semantics(
+    return Padding(
+      padding: const EdgeInsets.only(left: 10),
+      child: Semantics(
       button: true,
       label: tooltip,
       child: GestureDetector(
@@ -66,6 +68,7 @@ class LuxeInfoIconButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
       ),
     );
   }

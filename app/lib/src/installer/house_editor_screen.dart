@@ -3245,19 +3245,6 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               onTap: () => _selectFocus(const _Focus.lutron()),
             ),
             LuxeNavRow(
-              icon: Icons.videocam_outlined,
-              title: "Camera's",
-              selected: _sel.kind == _FocusKind.cameras ||
-                  _sel.kind == _FocusKind.cameraDetail,
-              onTap: () => _selectFocus(const _Focus.cameras()),
-            ),
-            LuxeNavRow(
-              icon: Icons.speaker_group_outlined,
-              title: 'Audio',
-              selected: _sel.kind == _FocusKind.audio,
-              onTap: () => _selectFocus(const _Focus.audio()),
-            ),
-            LuxeNavRow(
               icon: Icons.notifications_outlined,
               title: 'Intercom',
               selected: _sel.kind == _FocusKind.intercoms ||
@@ -3267,15 +3254,35 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
               onTap: () => _selectFocus(const _Focus.intercoms()),
             ),
             LuxeNavRow(
+              icon: Icons.videocam_outlined,
+              title: "Camera's",
+              selected: _sel.kind == _FocusKind.cameras ||
+                  _sel.kind == _FocusKind.cameraDetail,
+              trailing: _IntegrationBadge(enabled: _cameras().isNotEmpty),
+              onTap: () => _selectFocus(const _Focus.cameras()),
+            ),
+            LuxeNavRow(
+              icon: Icons.speaker_group_outlined,
+              title: 'Audio',
+              selected: _sel.kind == _FocusKind.audio,
+              trailing: _IntegrationBadge(
+                  enabled: _audioDevicesInRooms().isNotEmpty),
+              onTap: () => _selectFocus(const _Focus.audio()),
+            ),
+            LuxeNavRow(
               icon: Icons.security_outlined,
               title: 'Satel alarm',
               selected: _sel.kind == _FocusKind.satel,
+              trailing: _IntegrationBadge(
+                  enabled: (_house?['satel']?['enabled'] as bool?) == true),
               onTap: () => _selectFocus(const _Focus.satel()),
             ),
             LuxeNavRow(
               icon: Icons.sensors_outlined,
               title: 'KNX-alarm',
               selected: _sel.kind == _FocusKind.knxAlarm,
+              trailing: _IntegrationBadge(
+                  enabled: (_house?['knxAlarm']?['enabled'] as bool?) == true),
               onTap: () => _selectFocus(const _Focus.knxAlarm()),
             ),
           ],
