@@ -63,6 +63,22 @@ const DEVICE_LINE =
 /** Alleen dubbel ontvangen berichten. Langer slikt een snelle tweede druk of loslaten in. */
 const DEBOUNCE_MS = 150;
 
+const MONITOR_MAX = 200;
+
+/**
+ * Eén regel in de knopmonitor. `processor` is wat de QSX stuurde, `app` hoe
+ * de server het las (incl. zelf gemaakt vasthouden/dubbel) en wat er afging.
+ */
+export type LutronMonitorEvent = {
+  seq: number;
+  at: number;
+  button: number;
+  source: "processor" | "app";
+  action: number;
+  fired?: string[];
+  error?: string;
+};
+
 export type LutronLeapStatus = {
   paired: boolean;
   connected: boolean;
@@ -201,9 +217,27 @@ export class LutronIntegrationManager {
 
   private leapDebounce = new Map<string, number>();
   private readonly buttonGesture = new LeapHoldDetector();
+  private readonly monitor: LutronMonitorEvent[] = [];
+  private monitorSeq = 0;
+
+  /** Knopmonitor van de installateur: alles na [since], eventueel voor één knop. */
+  monitorEvents(since: number, button?: number): { seq: number; events: LutronMonitorEvent[] } {
+    const events = this.monitor.filter(
+      (e) => e.seq > since && (button == null || e.button === button)
+    );
+    return { seq: this.monitorSeq, events };
+  }
+
+  private recordMonitor(entry: Omit<LutronMonitorEvent, "seq" | "at">): LutronMonitorEvent {
+    const event: LutronMonitorEvent = { ...entry, seq: ++this.monitorSeq, at: Date.now() };
+    this.monitor.push(event);
+    if (this.monitor.length > MONITOR_MAX) this.monitor.splice(0, this.monitor.length - MONITOR_MAX);
+    return event;
+  }
 
   /** Keypad-druk van LEAP. integrationId in de mapping is het knop-id. */
   private onLeapButton(press: LeapButtonPress): void {
+    this.recordMonitor({ button: press.id, source: "processor", action: press.action });
     if (this.buttonMappings().some(({ map }) => map.integrationId === press.id)) {
       logger.info({ button: press.id, action: press.action }, "QSX-knop van processor");
     }
@@ -231,6 +265,12 @@ export class LutronIntegrationManager {
     if (watched) {
       logger.info({ button: press.id, action: press.action }, "QSX-knop");
     }
+    const event = this.recordMonitor({
+      button: press.id,
+      source: "app",
+      action: press.action,
+      fired: []
+    });
     for (const { source, map } of maps) {
       if (map.integrationId !== press.id) continue;
       if (!lutronMappingHandles(map, press.action)) continue;
@@ -239,7 +279,10 @@ export class LutronIntegrationManager {
       const prev = this.leapDebounce.get(key) ?? 0;
       if (now - prev < DEBOUNCE_MS) continue;
       this.leapDebounce.set(key, now);
+      const label = `${map.label?.trim() || "Koppeling"} → ${map.knx.ga}`;
+      event.fired?.push(label);
       void this.fireButtonMapping(source, map, press.action === 4 ? "release" : "press").catch((err) => {
+        event.error = `${label}: ${err instanceof Error ? err.message : String(err)}`;
         logger.warn({ err, button: press.id, map: map.id }, "QSX-knop → KNX mislukt");
       });
     }

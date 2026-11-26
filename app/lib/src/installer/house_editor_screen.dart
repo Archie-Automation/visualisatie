@@ -12,6 +12,7 @@ import '../ac_mode_config.dart';
 import 'device_reorder.dart';
 import 'energy_installer_section.dart';
 import 'knx_alarm_installer.dart';
+import 'lutron_button_monitor.dart';
 import 'ga_offset.dart';
 import 'lutron_zone_import.dart';
 import '../api.dart';
@@ -6224,6 +6225,7 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
             zonesErr: _zonesErr,
             onImportZones: _importZones,
             onChanged: widget.onChanged,
+            getToken: widget.getToken,
           ),
         ),
       ],
@@ -6242,10 +6244,12 @@ class _LutronForm extends StatelessWidget {
     required this.zonesErr,
     required this.onImportZones,
     required this.onChanged,
+    required this.getToken,
   });
 
   final Map<String, dynamic> lutron;
   final List<LutronButtonInfo> buttons;
+  final Future<String?> Function() getToken;
   final bool paired;
   final bool canImportZones;
   final bool zonesLoaded;
@@ -6308,13 +6312,15 @@ class _LutronForm extends StatelessWidget {
             ],
           ),
         ),
-        if (paired)
+        if (paired) ...[
           LutronButtonToKnxListEditor(
             parent: lutron,
             buttons: buttons,
             framed: true,
             onChanged: onChanged,
           ),
+          LutronButtonMonitorCard(buttons: buttons, getToken: getToken),
+        ],
       ],
     );
   }

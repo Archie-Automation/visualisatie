@@ -1624,6 +1624,17 @@ export function buildRouter(
     }
   });
 
+  r.get("/installer/lutron-monitor", requireAuth, requireInstaller, (req, res) => {
+    const since = Number(req.query.since);
+    const button = Number(req.query.button);
+    res.json(
+      lutron.monitorEvents(
+        Number.isFinite(since) ? since : 0,
+        Number.isFinite(button) && button >= 1 ? button : undefined
+      )
+    );
+  });
+
   r.get("/installer/lutron-zones", requireAuth, requireInstaller, async (_req, res) => {
     try {
       const zones = await lutron.listZones();

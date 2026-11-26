@@ -336,6 +336,73 @@ Future<List<LutronButtonInfo>> fetchInstallerLutronButtons(String token) async {
   ];
 }
 
+/// Eén regel in de knopmonitor. [fromProcessor] = ruw van de QSX, anders hoe
+/// de server het las en welke koppelingen afgingen.
+class LutronMonitorEvent {
+  const LutronMonitorEvent({
+    required this.seq,
+    required this.at,
+    required this.button,
+    required this.fromProcessor,
+    required this.action,
+    required this.fired,
+    this.error,
+  });
+
+  final int seq;
+  final DateTime at;
+  final int button;
+  final bool fromProcessor;
+  final int action;
+  final List<String> fired;
+  final String? error;
+
+  factory LutronMonitorEvent.fromJson(Map<String, dynamic> j) {
+    final fired = j['fired'];
+    return LutronMonitorEvent(
+      seq: (j['seq'] as num?)?.toInt() ?? 0,
+      at: DateTime.fromMillisecondsSinceEpoch((j['at'] as num?)?.toInt() ?? 0),
+      button: (j['button'] as num?)?.toInt() ?? 0,
+      fromProcessor: j['source'] == 'processor',
+      action: (j['action'] as num?)?.toInt() ?? 0,
+      fired: fired is List ? [for (final f in fired) '$f'] : const [],
+      error: j['error'] as String?,
+    );
+  }
+}
+
+Future<({int seq, List<LutronMonitorEvent> events})> fetchInstallerLutronMonitor(
+  String token, {
+  required int since,
+  int? button,
+}) async {
+  final query = {
+    'since': '$since',
+    if (button != null) 'button': '$button',
+  };
+  final res = await http
+      .get(
+        Uri.parse('$apiBase/api/installer/lutron-monitor')
+            .replace(queryParameters: query),
+        headers: {'authorization': 'Bearer $token'},
+      )
+      .timeout(const Duration(seconds: 8));
+  if (res.statusCode != 200) {
+    throw StateError('Knopmonitor ophalen mislukt (${res.statusCode})');
+  }
+  final body = jsonDecode(res.body) as Map<String, dynamic>;
+  final list = body['events'];
+  return (
+    seq: (body['seq'] as num?)?.toInt() ?? since,
+    events: [
+      if (list is List)
+        for (final item in list)
+          if (item is Map)
+            LutronMonitorEvent.fromJson(Map<String, dynamic>.from(item)),
+    ],
+  );
+}
+
 Future<List<LutronZoneInfo>> fetchInstallerLutronZones(String token) async {
   final res = await http
       .get(
