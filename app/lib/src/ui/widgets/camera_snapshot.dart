@@ -57,7 +57,7 @@ class _CameraSnapshotState extends ConsumerState<CameraSnapshot> {
   bool _fetching = false;  // guard against overlapping requests
   int _failStreak = 0;     // consecutive failures (used to slow retries)
   int _frameGen = 0;       // unique key so equal-sized JPEGs still swap
-  double? _intrinsic;      // decoded frame ratio, so the box hugs the picture
+  double? _intrinsic;      // decoded frame ratio, reported via onIntrinsicAspect
   bool _reportedFallback = false;
 
   @override
@@ -181,7 +181,7 @@ class _CameraSnapshotState extends ConsumerState<CameraSnapshot> {
     final frame = widget.expand
         ? stack
         : AspectRatio(
-            aspectRatio: _intrinsic ?? widget.aspectRatio,
+            aspectRatio: widget.aspectRatio,
             child: stack,
           );
     if (widget.radius <= 0) return frame;

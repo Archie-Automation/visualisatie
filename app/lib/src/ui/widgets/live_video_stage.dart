@@ -97,8 +97,9 @@ void clearCameraFrameAspectCache() => _cameraFrameAspect.clear();
 bool _plausibleFrameAspect(double aspect) =>
     aspect.isFinite && aspect >= 0.2 && aspect <= 5;
 
-/// One stable frame for snapshot and live. The first real ratio (cache, else
-/// the first measurement) is kept; later reports do not resize the picture.
+/// One fixed frame for snapshot and live. The size is decided before anything
+/// loads (last measured ratio of this camera, else [fallbackAspect]) and never
+/// changes while the view is open. Measurements only feed the next opening.
 class LiveVideoHuggingStage extends StatefulWidget {
   const LiveVideoHuggingStage({
     super.key,
@@ -120,65 +121,44 @@ class LiveVideoHuggingStage extends StatefulWidget {
 }
 
 class _LiveVideoHuggingStageState extends State<LiveVideoHuggingStage> {
-  /// Null until a real ratio is committed. The fallback box stays invisible
-  /// so the first thing on screen is already the final size.
-  double? _locked;
+  late double _aspect;
 
   @override
   void initState() {
     super.initState();
-    _locked = _cached();
+    _aspect = _initialAspect();
   }
 
   @override
   void didUpdateWidget(covariant LiveVideoHuggingStage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.identity != widget.identity) {
-      _locked = _cached();
+      _aspect = _initialAspect();
     }
   }
 
-  double? _cached() {
+  double _initialAspect() {
     final id = widget.identity;
-    if (id == null) return null;
-    return cachedCameraFrameAspect(id);
+    final cached = id == null ? null : cachedCameraFrameAspect(id);
+    return cached ?? widget.fallbackAspect;
   }
 
   void _onIntrinsic(double aspect) {
     if (!_plausibleFrameAspect(aspect)) return;
-    if (_locked != null) return;
     final id = widget.identity;
     if (id != null) rememberCameraFrameAspect(id, aspect);
-    setState(() => _locked = aspect);
   }
 
   @override
   Widget build(BuildContext context) {
-    final known = _locked != null;
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        Opacity(
-          opacity: known ? 1 : 0,
-          child: LiveVideoFittedStage(
-            aspectRatio: _locked ?? widget.fallbackAspect,
-            heroTag: widget.heroTag,
-            factor: widget.factor,
-            child: widget.builder(_onIntrinsic),
-          ),
-        ),
-        if (!known)
-          Center(
-            child: SizedBox(
-              width: 28,
-              height: 28,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: LuxeColors.brass,
-              ),
-            ),
-          ),
-      ],
+    return LiveVideoFittedStage(
+      aspectRatio: _aspect,
+      heroTag: widget.heroTag,
+      factor: widget.factor,
+      child: ColoredBox(
+        color: Colors.black,
+        child: widget.builder(_onIntrinsic),
+      ),
     );
   }
 }
