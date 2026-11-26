@@ -79,9 +79,12 @@ class _KnxAlarmPageState extends ConsumerState<_KnxAlarmPage> {
   bool _busy = false;
   String? _feedback;
   Timer? _tick;
+  String? _greeting;
+  Timer? _greetTimer;
 
   static const _minPin = 4;
   static const _maxPin = 8;
+  static const _greetFor = Duration(seconds: 6);
 
   @override
   void initState() {
@@ -94,7 +97,18 @@ class _KnxAlarmPageState extends ConsumerState<_KnxAlarmPage> {
   @override
   void dispose() {
     _tick?.cancel();
+    _greetTimer?.cancel();
     super.dispose();
+  }
+
+  void _greet(String? name) {
+    _greetTimer?.cancel();
+    final hello = alarmGreeting(DateTime.now());
+    final who = name?.trim() ?? '';
+    setState(() => _greeting = who.isEmpty ? hello : '$hello, $who');
+    _greetTimer = Timer(_greetFor, () {
+      if (mounted) setState(() => _greeting = null);
+    });
   }
 
   int? _secondsLeft(int? deadlineMs) {
@@ -104,7 +118,7 @@ class _KnxAlarmPageState extends ConsumerState<_KnxAlarmPage> {
     return left < 0 ? 0 : left;
   }
 
-  Future<void> _run(
+  Future<({bool ok, String? message, Map<String, dynamic>? status})?> _run(
     Future<({bool ok, String? message, Map<String, dynamic>? status})> call,
   ) async {
     setState(() {
@@ -112,7 +126,7 @@ class _KnxAlarmPageState extends ConsumerState<_KnxAlarmPage> {
       _feedback = null;
     });
     final result = await call;
-    if (!mounted) return;
+    if (!mounted) return null;
     if (result.status != null) {
       ref.read(knxAlarmStatusProvider.notifier).apply(result.status!);
     }
@@ -122,6 +136,7 @@ class _KnxAlarmPageState extends ConsumerState<_KnxAlarmPage> {
       _feedback = result.ok ? null : result.message;
     });
     if (result.ok) HapticFeedback.lightImpact();
+    return result;
   }
 
   Future<String?> _pickMode() {
@@ -171,7 +186,10 @@ class _KnxAlarmPageState extends ConsumerState<_KnxAlarmPage> {
       await _run(knxAlarmArm(mode, _pin, token));
       return;
     }
-    await _run(knxAlarmDisarm(_pin, token));
+    final result = await _run(knxAlarmDisarm(_pin, token));
+    if (result != null && result.ok && mounted) {
+      _greet(result.status?['by'] as String?);
+    }
   }
 
   Future<void> _bypass(SatelZone zone) async {
@@ -284,7 +302,10 @@ class _KnxAlarmPageState extends ConsumerState<_KnxAlarmPage> {
               child: Column(
                 children: [
                   const SizedBox(height: 20),
-                  _PartitionCard(partition: partition),
+                  _PartitionCard(
+                    partition: partition,
+                    greeting: status.phase == 'off' ? _greeting : null,
+                  ),
                   const SizedBox(height: 28),
                   AlarmPinSection(
                     pin: _pin,
@@ -639,9 +660,20 @@ class _PartitionTabBar extends StatelessWidget {
 // Partition status card
 // ---------------------------------------------------------------------------
 
+/// Begroeting op het display na uitschakelen.
+String alarmGreeting(DateTime now) {
+  final h = now.hour;
+  if (h < 6) return 'Goedenacht';
+  if (h < 12) return 'Goedemorgen';
+  if (h < 18) return 'Goedemiddag';
+  return 'Goedenavond';
+}
+
 class _PartitionCard extends StatelessWidget {
-  const _PartitionCard({required this.partition});
+  const _PartitionCard({required this.partition, this.greeting});
   final SatelPartitionInfo partition;
+  /// Even na uitschakelen: "Goedemorgen, naam" in plaats van de status.
+  final String? greeting;
 
   @override
   Widget build(BuildContext context) {
@@ -687,29 +719,41 @@ class _PartitionCard extends StatelessWidget {
                     ),
                     const SizedBox(width: 16),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            cfg.label,
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                              color: LuxeColors.ink,
-                              height: 1.2,
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        layoutBuilder: (current, previous) => Stack(
+                          alignment: Alignment.centerLeft,
+                          children: [...previous, if (current != null) current],
+                        ),
+                        child: Column(
+                          key: ValueKey(greeting ?? cfg.label),
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              greeting ?? cfg.label,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                color: LuxeColors.ink,
+                                height: 1.2,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            partition.name.trim().isNotEmpty
-                                ? partition.name
-                                : 'Partitie ${partition.number}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: LuxeColors.inkSoft,
+                            const SizedBox(height: 3),
+                            Text(
+                              greeting != null
+                                  ? 'Alarm uitgeschakeld'
+                                  : partition.name.trim().isNotEmpty
+                                      ? partition.name
+                                      : 'Partitie ${partition.number}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: LuxeColors.inkSoft,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ],

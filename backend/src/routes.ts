@@ -785,6 +785,12 @@ export function buildRouter(
     );
   }
 
+  /** Naam van het ingelogde account, voor de begroeting na uitschakelen met de huiscode. */
+  function accountName(req: AuthedRequest): string | undefined {
+    const u = currentUser(req);
+    return u?.displayName?.trim() || u?.username || req.user?.username || undefined;
+  }
+
   r.get("/knx-alarm", requireAuth, (req: AuthedRequest, res) => {
     if (!alarmAllowed(req)) {
       res.json({ ...knxAlarmStatus(), enabled: false, sensors: [] });
@@ -831,7 +837,7 @@ export function buildRouter(
       res.status(result.statusCode).json({ error: result.error, message: result.message });
       return;
     }
-    res.json(result.status);
+    res.json({ ...result.status, by: result.by ?? accountName(req) });
   });
 
   r.post("/knx-alarm/bypass", requireAuth, async (req: AuthedRequest, res) => {

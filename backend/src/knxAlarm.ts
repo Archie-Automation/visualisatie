@@ -113,12 +113,15 @@ export async function knxAlarmArm(
   return { ok: true, status: snapshot() };
 }
 
-export async function knxAlarmDisarm(pin: string): Promise<KnxAlarmResult> {
+/** `by` = gebruiker van de ingetikte code; ontbreekt bij de huiscode. */
+export async function knxAlarmDisarm(
+  pin: string
+): Promise<KnxAlarmResult & { by?: string }> {
   ensureFresh();
   const cfg = readCfg();
   if (!cfg.enabled) return fail(409, "disabled", "KNX-alarm staat uit.");
-  const pinErr = await checkPin(pin);
-  if (pinErr) return pinErr;
+  const { error, name: by } = await matchPin(pin);
+  if (error) return error;
   phase = "off";
   mode = null;
   deadlineMs = null;
@@ -126,7 +129,7 @@ export async function knxAlarmDisarm(pin: string): Promise<KnxAlarmResult> {
   sabotageHoldingSiren = false;
   await setSiren(false);
   emit();
-  return { ok: true, status: snapshot() };
+  return { ok: true, status: snapshot(), ...(by ? { by } : {}) };
 }
 
 export async function knxAlarmBypass(
@@ -159,32 +162,41 @@ function fail(
   return { ok: false, statusCode, error, message };
 }
 
-function alarmPinHashes(): string[] {
+/** `name` = gebruiker van die code; leeg bij de huiscode. */
+function alarmPinHashes(): { hash: string; name?: string }[] {
   const cfg = getConfig();
-  const hashes: string[] = [];
-  const house = cfg.knxAlarm?.pinHash?.trim();
-  if (house) hashes.push(house);
+  const hashes: { hash: string; name?: string }[] = [];
   for (const user of cfg.users ?? []) {
     if (user.enabled === false) continue;
     const pin = user.alarmPinHash?.trim();
-    if (pin) hashes.push(pin);
+    const name = user.displayName?.trim() || user.username;
+    if (pin) hashes.push({ hash: pin, name });
   }
+  const house = cfg.knxAlarm?.pinHash?.trim();
+  if (house) hashes.push({ hash: house });
   return hashes;
 }
 
 async function checkPin(pin: string): Promise<KnxAlarmResult | null> {
+  return (await matchPin(pin)).error;
+}
+
+/** Controleert de code en geeft de gebruiker ervan (leeg bij de huiscode). */
+async function matchPin(pin: string): Promise<{ error: KnxAlarmResult | null; name?: string }> {
   if (Date.now() < lockedUntil) {
-    return fail(429, "locked", "Te vaak een verkeerde code. Wacht een minuut.");
+    return { error: fail(429, "locked", "Te vaak een verkeerde code. Wacht een minuut.") };
   }
   const hashes = alarmPinHashes();
   if (hashes.length === 0) {
-    return fail(409, "no_pin", "Er is nog geen alarmcode ingesteld.");
+    return { error: fail(409, "no_pin", "Er is nog geen alarmcode ingesteld.") };
   }
   const typed = pin.trim();
   let ok = false;
-  for (const hash of hashes) {
+  let matched: string | undefined;
+  for (const { hash, name } of hashes) {
     if (await bcrypt.compare(typed, hash).catch(() => false)) {
       ok = true;
+      matched = name;
       break;
     }
   }
@@ -194,10 +206,10 @@ async function checkPin(pin: string): Promise<KnxAlarmResult | null> {
       fails = 0;
       lockedUntil = Date.now() + 60_000;
     }
-    return fail(401, "bad_pin", "Code onjuist.");
+    return { error: fail(401, "bad_pin", "Code onjuist.") };
   }
   fails = 0;
-  return null;
+  return { error: null, name: matched };
 }
 
 function readCfg(): {
