@@ -81,8 +81,8 @@ class _KnxSceneLearnSectionState extends ConsumerState<KnxSceneLearnSection> {
       return Padding(
         padding: const EdgeInsets.fromLTRB(22, 4, 22, 12),
         child: Text(
-          'Geen scene-adressen in de technische configuratie. '
-          'Vul ze in bij KNX: ruimte, schakelaar, knop en fysiek adres.',
+          'Er zijn nog geen scene-knoppen om zelf in te leren. '
+          'De installateur maakt ze aan in de technische configuratie.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
       );
@@ -91,7 +91,8 @@ class _KnxSceneLearnSectionState extends ConsumerState<KnxSceneLearnSection> {
       return Padding(
         padding: const EdgeInsets.fromLTRB(22, 4, 22, 12),
         child: Text(
-          'Koppel elk scene-adres aan een ruimte in de technische configuratie (KNX).',
+          'De scene-knoppen hebben nog geen ruimte. '
+          'De installateur stelt dat in in de technische configuratie.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
       );
@@ -155,14 +156,6 @@ class _RoomOverviewCard extends StatelessWidget {
               block.switches[s].title,
               style: Theme.of(context).textTheme.labelLarge,
             ),
-            if (block.switches[s].physicalAddress != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 2, bottom: 2),
-                child: Text(
-                  block.switches[s].physicalAddress!,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
             for (final btn in block.switches[s].buttons)
               ListTile(
                 contentPadding: EdgeInsets.zero,
@@ -205,10 +198,8 @@ class _SwitchBlock {
   const _SwitchBlock({
     required this.title,
     required this.buttons,
-    this.physicalAddress,
   });
   final String title;
-  final String? physicalAddress;
   final List<_ButtonRow> buttons;
 }
 
@@ -277,7 +268,6 @@ List<_SwitchBlock> _switchesForRoom(
     final first = rows.first;
     out.add(_SwitchBlock(
       title: _switchTitle(first),
-      physicalAddress: first.physicalAddress,
       buttons: [
         for (final a in rows)
           _buttonFromAddress(a, _sceneForAddress(a, scenes, usedScenes)),
@@ -310,10 +300,7 @@ String _switchKey(KnxSceneLearnAddress a) {
 
 String _switchTitle(KnxSceneLearnAddress a) {
   final name = (a.switchName ?? '').trim();
-  if (name.isNotEmpty) return name;
-  final phys = (a.physicalAddress ?? '').trim();
-  if (phys.isNotEmpty) return phys;
-  return 'Schakelaar';
+  return name.isNotEmpty ? name : 'Schakelaar';
 }
 
 Scene? _sceneForAddress(
@@ -332,24 +319,17 @@ Scene? _sceneForAddress(
 _ButtonRow _buttonFromAddress(KnxSceneLearnAddress a, Scene? learned) {
   final button = (a.buttonName ?? '').trim();
   final scene = (a.name ?? '').trim();
-  final phys = (a.physicalAddress ?? '').trim();
   final learnedName = (learned?.name ?? '').trim();
   final titleParts = <String>[
-    if (phys.isNotEmpty) phys,
     if (button.isNotEmpty) button,
     if (scene.isNotEmpty) scene,
     if (learnedName.isNotEmpty && learnedName.toLowerCase() != scene.toLowerCase())
       learnedName,
   ];
   if (titleParts.isEmpty) titleParts.add('Knop');
-  final sub = <String>[
-    a.ga,
-    if (learned?.knxNumber != null) 'scene ${learned!.knxNumber}',
-    if (learned == null) 'nog niet ingelezen',
-  ];
   return _ButtonRow(
     title: titleParts.join(' · '),
-    subtitle: sub.join('  ·  '),
+    subtitle: learned == null ? 'Nog niet ingelezen' : 'Ingelezen',
     address: a,
     learned: learned,
   );
@@ -357,15 +337,13 @@ _ButtonRow _buttonFromAddress(KnxSceneLearnAddress a, Scene? learned) {
 
 _ButtonRow _buttonFromScene(Scene s) {
   final button = (s.knxButtonName ?? '').trim();
-  final phys = (s.knxSrc ?? '').trim();
   final titleParts = <String>[
-    if (phys.isNotEmpty) phys,
     if (button.isNotEmpty) button,
     s.name,
   ];
   return _ButtonRow(
     title: titleParts.join(' · '),
-    subtitle: '${s.knxGa}  ·  scene ${s.knxNumber}',
+    subtitle: 'Ingelezen',
     learned: s,
   );
 }

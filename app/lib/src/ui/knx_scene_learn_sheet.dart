@@ -158,16 +158,14 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
           'Als de KNX-verbinding wegviel, verbind opnieuw in de installer en probeer het nog eens.';
     }
     if (reason == 'wrong_switch') {
-      return 'Er is wel een knop gehoord, maar het fysieke adres hoort niet '
-          'bij de schakelaars van deze kamer. Druk de juiste schakelaar, '
-          'of vul het fysieke adres in bij KNX.';
+      return 'Er is wel een knop gehoord, maar die hoort niet bij de '
+          'schakelaars van deze kamer. Druk de juiste schakelaar.';
     }
     if (_watching.isEmpty) {
-      return 'Geen scene-adres voor deze kamer. Koppel een scene-GA aan deze ruimte in de installer (KNX).';
+      return 'Er zijn nog geen scene-knoppen voor deze kamer. '
+          'Vraag uw installateur ze aan te maken.';
     }
-    return 'Geen scene-knop gehoord. Druk de knop van deze schakelaar; '
-        'we controleren groepsadres én fysiek adres. '
-        'Luisteren op ${_watching.length} scene-adressen.';
+    return 'Geen scene-knop gehoord. Druk de knop van deze schakelaar.';
   }
 
   Future<void> _startListen() async {
@@ -321,7 +319,7 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
       setState(() {
         _phase = _LearnPhase.error;
         _error =
-            'Andere schakelaar: fysiek adres ${heard.src} in plaats van $expectPhys. '
+            'Dat was een andere schakelaar. '
             'Druk de knop van “${widget.target?.switchName ?? 'deze schakelaar'}”.';
       });
       return;
@@ -516,8 +514,7 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Scene-adres $_ga nummer $_number bestaat al als “$_duplicateName”. '
-                'Meerdere knoppen kunnen hetzelfde KNX-slot delen. '
+                'Deze knop deelt zijn scene met “$_duplicateName”. '
                 'Doorgaan overschrijft die scene.',
                 style: Theme.of(context).textTheme.bodyLarge,
               ),
@@ -554,7 +551,6 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
   String _listenPrompt() {
     final sw = _switchCtrl.text.trim();
     final btn = _buttonCtrl.text.trim();
-    final phys = widget.target?.physicalAddress?.trim();
     final who = [
       if (sw.isNotEmpty) sw,
       if (btn.isNotEmpty) btn,
@@ -562,19 +558,14 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
     final target = who.isEmpty
         ? 'de scene-knop in deze kamer'
         : who;
-    final physHint = (phys == null || phys.isEmpty)
-        ? ''
-        : '\nVerwacht fysiek adres $phys.';
-    return 'Verlichting is uit. Druk nu $target.$physHint\n'
+    return 'Verlichting is uit. Druk nu $target.\n'
         'Niet elders bedienen tot het overzicht er is.';
   }
 
   Widget _listenBody() {
-    final sample = _watching.take(24).join(', ');
-    final extra = _watching.length > 24 ? ' …' : '';
     final hint = _watching.isEmpty
-        ? 'Geen scene-adressen geconfigureerd.'
-        : 'Luisteren op ${_watching.length} scene-adressen:\n$sample$extra';
+        ? 'Er zijn nog geen scene-knoppen ingesteld.'
+        : 'Wachten op de knop…';
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -663,16 +654,6 @@ class _KnxSceneLearnSheetState extends ConsumerState<KnxSceneLearnSheet> {
                 textCapitalization: TextCapitalization.sentences,
               ),
             ],
-          ),
-        ),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-          child: Text(
-            [
-              if (_ga != null) '$_ga  ·  scene $_number',
-              if ((_src ?? '').trim().isNotEmpty) _src!.trim(),
-            ].where((s) => s.isNotEmpty).join('  ·  '),
-            style: Theme.of(context).textTheme.bodySmall,
           ),
         ),
         Padding(

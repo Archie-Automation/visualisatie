@@ -5679,11 +5679,10 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
                 reason: 'Instelbaar zodra deurbel-oproepen aan staan bij Intercom.',
                 child: LuxeSwitchRow(
                   title: 'Ontvangt deurbel-oproepen',
-                  subtitle:
-                      'Automatisch gekoppeld aan het toestel van deze gebruiker.',
                   beforeSwitch: const LuxeInfoIconButton(
                     title: 'Deurbel-oproepen',
                     body:
+                        'Automatisch gekoppeld aan het toestel van deze gebruiker. '
                         'Dit account gaat over als het in een belgroep staat. '
                         'Nummer en wachtwoord worden automatisch aangemaakt — '
                         'niet nodig op het toestel in te vullen.',
@@ -5704,9 +5703,13 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
               ),
               const SizedBox(height: 8),
               LuxeSwitchRow(
-                title: 'Mag deur openen',
-                subtitle:
-                    'Toont de knop Deur open op dit account. Uit = nooit, ook niet tijdens een gesprek via de server.',
+                title: 'Deur / poort openen toestaan',
+                beforeSwitch: const LuxeInfoIconButton(
+                  title: 'Deur / poort openen',
+                  body:
+                      'Toont de knop om de deur of poort te openen op dit account. '
+                      'Uit = nooit, ook niet tijdens een gesprek via de server.',
+                ),
                 value: () {
                   final a = u['access'];
                   if (a is! Map) return false;
@@ -6427,13 +6430,18 @@ class _KnxForm extends StatelessWidget {
               children: [
                 const LuxeSectionTitle(
                   icon: Icons.auto_awesome_outlined,
-                  title: "Scene's inleren",
+                  title: 'Zelf in te leren scene-knoppen',
+                  subtitle: 'Knoppen waarop de klant zelf een scene kan inleren.',
                   trailing: LuxeInfoIconButton(
-                    title: "KNX scene's inleren",
+                    title: 'Zelf in te leren scene-knoppen',
                     body:
-                        'Per knop: ruimte, schakelaar (positie in de kamer), knopnaam, '
-                        'optioneel scene (avond, dag, sfeer), het scene-groepsadres '
-                        '(DPT 18.001) en het fysieke adres van die schakelaar.\n\n'
+                        'Hier maak je de KNX-scene-knoppen aan die de klant in '
+                        'Instellingen zelf kan inleren.\n\n'
+                        'Per knop: ruimte, fysiek adres en positie van de schakelaar, '
+                        'knopnaam, optioneel de scenenaam (avond, dag, sfeer) en het '
+                        'scene-groepsadres (DPT 18.001).\n\n'
+                        'De klant ziet alleen positie, knop en scenenaam, geen '
+                        'adressen of scenenummers.\n\n'
                         'Meerdere schakelaars in één ruimte mogen hetzelfde groepsadres '
                         'delen. Bij inlezen wordt het fysieke adres van de drukker '
                         'gecontroleerd, zodat de juiste schakelaar wordt herkend.\n\n'
@@ -6533,7 +6541,7 @@ class _SceneAddressList extends StatelessWidget {
               onChanged();
             },
             icon: const Icon(Icons.add),
-            label: const Text('Knop / scene-adres toevoegen'),
+            label: const Text('Scene-knop toevoegen'),
           ),
         ),
       ],
@@ -6585,37 +6593,59 @@ class _SceneAddressList extends StatelessWidget {
           ),
           children: [
               _sceneRoomDropdown(row, knownIds),
-              _BoundStrField(
-                'switchName',
-                row,
-                onChanged,
-                labelOverride: 'Schakelaar (positie in de ruimte)',
-                hintText: 'bij de deur, naast het bed, …',
-                emptyMeansRemove: true,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: _BoundStrField(
+                      'physicalAddress',
+                      row,
+                      onChanged,
+                      labelOverride: 'Fysiek adres',
+                      hintText: '1.1.15',
+                      emptyMeansRemove: true,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 3,
+                    child: _BoundStrField(
+                      'switchName',
+                      row,
+                      onChanged,
+                      labelOverride: 'Positie in de ruimte',
+                      hintText: 'bij de deur, naast het bed, …',
+                      emptyMeansRemove: true,
+                    ),
+                  ),
+                ],
               ),
-              _BoundStrField(
-                'physicalAddress',
-                row,
-                onChanged,
-                labelOverride: 'Fysiek adres schakelaar',
-                hintText: '1.1.15',
-                emptyMeansRemove: true,
-              ),
-              _BoundStrField(
-                'buttonName',
-                row,
-                onChanged,
-                labelOverride: 'Knop',
-                hintText: 'boven, links, …',
-                emptyMeansRemove: true,
-              ),
-              _BoundStrField(
-                'name',
-                row,
-                onChanged,
-                labelOverride: 'Scene (optioneel)',
-                hintText: 'avond, dag, sfeer, …',
-                emptyMeansRemove: true,
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: _BoundStrField(
+                      'buttonName',
+                      row,
+                      onChanged,
+                      labelOverride: 'Knopnaam',
+                      hintText: 'boven, links, …',
+                      emptyMeansRemove: true,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _BoundStrField(
+                      'name',
+                      row,
+                      onChanged,
+                      labelOverride: 'Scenenaam (optioneel)',
+                      hintText: 'avond, dag, sfeer, …',
+                      emptyMeansRemove: true,
+                    ),
+                  ),
+                ],
               ),
               _BoundStrField(
                 'ga',
@@ -6632,17 +6662,17 @@ class _SceneAddressList extends StatelessWidget {
   }
 
   String _addressCardTitle(Map<String, dynamic> row) {
-    final phys = '${row['physicalAddress'] ?? ''}'.trim();
+    final sw = '${row['switchName'] ?? ''}'.trim();
     final btn = '${row['buttonName'] ?? ''}'.trim();
     final scene = '${row['name'] ?? ''}'.trim();
     final parts = <String>[
-      if (phys.isNotEmpty) phys,
+      if (sw.isNotEmpty) sw,
       if (btn.isNotEmpty) btn,
       if (scene.isNotEmpty) scene,
     ];
     if (parts.isNotEmpty) return parts.join(' · ');
-    final sw = '${row['switchName'] ?? ''}'.trim();
-    return sw.isEmpty ? 'Knop' : sw;
+    final phys = '${row['physicalAddress'] ?? ''}'.trim();
+    return phys.isEmpty ? 'Knop' : phys;
   }
 
   Widget _sceneRoomDropdown(
