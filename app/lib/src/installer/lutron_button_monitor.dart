@@ -138,6 +138,9 @@ class _LutronButtonMonitorCardState extends State<LutronButtonMonitorCard> {
                   'Server = hoe de app het leest: korte druk, loslaten, '
                   'vasthouden (na 0,6 s) of dubbele druk (binnen 0,45 s), met '
                   'de KNX-koppelingen die afgingen.\n\n'
+                  'Bij een snelle tik stuurt de QSX vaak alleen Loslaten. De '
+                  'server maakt daar zelf een korte druk van, of een dubbele '
+                  'druk bij twee snelle tikken.\n\n'
                   'De tijd achter een regel is het verschil met de vorige '
                   'regel van dezelfde knop. Na 15 minuten stopt de monitor.',
             ),

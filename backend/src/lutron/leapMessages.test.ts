@@ -236,6 +236,34 @@ describe("LEAP-berichten", () => {
     assert.deepEqual(seen, [3, 5, 4]);
   });
 
+  it("alleen Release van de processor is een korte druk", () => {
+    const seen: number[] = [];
+    const detector = new LeapHoldDetector(1000, 200);
+    detector.handle({ id: 7, action: 4 }, (press) => seen.push(press.action));
+    detector.stop();
+    assert.deepEqual(seen, [3, 4]);
+  });
+
+  it("twee snelle tikken met alleen Release zijn een dubbele druk", () => {
+    const seen: number[] = [];
+    const detector = new LeapHoldDetector(1000, 200);
+    const emit = (press: { action: number }) => seen.push(press.action);
+    detector.handle({ id: 7, action: 4 }, emit);
+    detector.handle({ id: 7, action: 4 }, emit);
+    detector.stop();
+    assert.deepEqual(seen, [3, 4, 6, 4]);
+  });
+
+  it("LongHold zonder Press geeft bij loslaten geen extra druk", () => {
+    const seen: number[] = [];
+    const detector = new LeapHoldDetector(1000, 200);
+    const emit = (press: { action: number }) => seen.push(press.action);
+    detector.handle({ id: 7, action: 5 }, emit);
+    detector.handle({ id: 7, action: 4 }, emit);
+    detector.stop();
+    assert.deepEqual(seen, [5, 4]);
+  });
+
   it("LongHold van de processor telt één keer", async () => {
     const seen: number[] = [];
     const detector = new LeapHoldDetector(80);
