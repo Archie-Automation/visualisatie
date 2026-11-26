@@ -667,6 +667,14 @@ class MainActivity : FlutterActivity(), SensorEventListener {
         }
     }
 
+    /** Installatie geannuleerd of mislukt: kiosk weer vastzetten. */
+    fun onInstallFinished() {
+        if (!installUiOpen) return
+        installUiOpen = false
+        leftForInstallUi = false
+        if (hasWindowFocus()) ensurePinned()
+    }
+
     private fun finishInstallUiIfReturned() {
         if (!installUiOpen || !leftForInstallUi) return
         if (apkInstaller?.hasPending() == true) return

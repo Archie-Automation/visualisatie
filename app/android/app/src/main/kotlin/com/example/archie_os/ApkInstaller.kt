@@ -2,6 +2,7 @@ package com.example.archie_os
 
 import android.app.Activity
 import android.app.PendingIntent
+import android.app.admin.DevicePolicyManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -101,8 +102,13 @@ class ApkInstaller(private val activity: Activity) {
         )
         params.setSize(file.length())
         if (Build.VERSION.SDK_INT >= 31) {
+            // Device-owner (stille kiosk) installeert zonder popup.
             params.setRequireUserAction(
-                PackageInstaller.SessionParams.USER_ACTION_REQUIRED,
+                if (isDeviceOwner()) {
+                    PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED
+                } else {
+                    PackageInstaller.SessionParams.USER_ACTION_REQUIRED
+                },
             )
         }
         val sessionId = installer.createSession(params)
@@ -180,8 +186,14 @@ class ApkInstaller(private val activity: Activity) {
                     activity.startActivity(confirm)
                 }
             }
-            PackageInstaller.STATUS_SUCCESS -> completeOk()
-            else -> completeError(statusCode(status), message ?: "status $status")
+            PackageInstaller.STATUS_SUCCESS -> {
+                completeOk()
+                (activity as? MainActivity)?.onInstallFinished()
+            }
+            else -> {
+                completeError(statusCode(status), message ?: "status $status")
+                (activity as? MainActivity)?.onInstallFinished()
+            }
         }
     }
 
@@ -197,6 +209,15 @@ class ApkInstaller(private val activity: Activity) {
         pendingResult = null
         unregisterReceiver()
         r?.error(code, message, null)
+    }
+
+    private fun isDeviceOwner(): Boolean {
+        return try {
+            val dpm = activity.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+            dpm.isDeviceOwnerApp(activity.packageName)
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun abandonOpenSessions() {
