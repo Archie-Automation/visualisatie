@@ -598,14 +598,27 @@ function validateLutronButtonMapping(
   if (m.knx.statusGa && !LUTRON_KNX_GA_RE.test(m.knx.statusGa)) {
     issues.push(`${ctx}, mapping "${m.id}": ongeldig statusadres "${m.knx.statusGa}".`);
   }
-  if (m.knx.send && !["value", "toggle", "pulse", "hold"].includes(m.knx.send)) {
-    issues.push(`${ctx}, mapping "${m.id}": onbekend versturen "${m.knx.send}".`);
-  }
-  if ((m.knx.role === "dim_control" || m.knx.role === "up_down") && m.knx.send && m.knx.send !== "hold") {
-    issues.push(`${ctx}, mapping "${m.id}": ${m.knx.role} hoort op indrukken en loslaten.`);
-  }
-  if (m.knx.role === "up_down" && !LUTRON_KNX_GA_RE.test(m.knx.stopGa ?? "")) {
-    issues.push(`${ctx}, mapping "${m.id}": zonwering vasthouden vereist een stop-groepsadres.`);
+  const fn = m.function ?? "moment";
+  if (!["moment", "dim_1", "dim_2", "shade_1", "shade_2"].includes(fn)) {
+    issues.push(`${ctx}, mapping "${m.id}": onbekende knopfunctie "${fn}".`);
+  } else if (fn === "dim_1" || fn === "dim_2") {
+    if (!LUTRON_KNX_GA_RE.test(m.knx.dimGa ?? "")) {
+      issues.push(`${ctx}, mapping "${m.id}": dimmen vereist een dim-groepsadres (DPT 3.007).`);
+    }
+  } else if (fn === "shade_1" || fn === "shade_2") {
+    if (!LUTRON_KNX_GA_RE.test(m.knx.stopGa ?? "")) {
+      issues.push(`${ctx}, mapping "${m.id}": zonwering vereist een stop/lamel-groepsadres (DPT 1.007).`);
+    }
+  } else {
+    if (m.knx.send && !["value", "toggle", "pulse", "hold"].includes(m.knx.send)) {
+      issues.push(`${ctx}, mapping "${m.id}": onbekend versturen "${m.knx.send}".`);
+    }
+    if ((m.knx.role === "dim_control" || m.knx.role === "up_down") && m.knx.send && m.knx.send !== "hold") {
+      issues.push(`${ctx}, mapping "${m.id}": ${m.knx.role} hoort op indrukken en loslaten.`);
+    }
+    if (m.knx.role === "up_down" && !LUTRON_KNX_GA_RE.test(m.knx.stopGa ?? "")) {
+      issues.push(`${ctx}, mapping "${m.id}": zonwering vasthouden vereist een stop-groepsadres.`);
+    }
   }
   if (!LUTRON_KNX_ROLES.has(m.knx.role)) {
     issues.push(`${ctx}, mapping "${m.id}": KNX-rol "${m.knx.role}" is hier niet toegestaan.`);

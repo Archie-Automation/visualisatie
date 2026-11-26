@@ -1,7 +1,7 @@
 import { logger } from "../logger";
 import type { KnxBus } from "../knxBus";
 import { encodeSceneByte } from "../knxScene";
-import type { LutronKnxBinding, Rgb232Triplet } from "../types";
+import type { LutronButtonFunction, LutronKnxBinding, Rgb232Triplet } from "../types";
 
 const ALLOWED_ROLES = new Set([
   "switch",
@@ -33,11 +33,22 @@ export function lutronKnxIsHold(knx: LutronKnxBinding): boolean {
   return knx.role === "dim_control" || knx.role === "up_down";
 }
 
+export type LutronGesture = Exclude<LutronButtonFunction, "moment">;
+
+const GESTURES = new Set<string>(["dim_1", "dim_2", "shade_1", "shade_2"]);
+
+/** Tastfunctie die korte druk, vasthouden en loslaten zelf afhandelt, of null bij één moment. */
+export function lutronGesture(map: { function?: string }): LutronGesture | null {
+  const fn = map.function;
+  return fn && GESTURES.has(fn) ? (fn as LutronGesture) : null;
+}
+
 /** Actienummers: 3 = indrukken, 4 = loslaten. */
 export function lutronMappingHandles(
-  map: { actionNumber?: number; knx: LutronKnxBinding },
+  map: { actionNumber?: number; function?: string; knx: LutronKnxBinding },
   action: number
 ): boolean {
+  if (lutronGesture(map)) return action === 3 || action === 4 || action === 5;
   if (lutronKnxIsHold(map.knx)) return action === 3 || action === 4;
   if (map.actionNumber != null && map.actionNumber !== action) return false;
   return true;
@@ -107,6 +118,101 @@ export function planLutronHold(knx: LutronKnxBinding): {
     };
   }
   throw new Error("vasthouden is alleen voor dimmen of zonwering");
+}
+
+/** Per koppeling: dimt of loopt er iets, en welke richting was de laatste. */
+export type LutronGestureState = { active?: boolean; lastUp?: boolean };
+
+export type LutronGestureWrite =
+  | { kind: "switch"; ga: string; value: boolean }
+  | { kind: "dim"; ga: string; increase: boolean; step: number }
+  | { kind: "move"; ga: string; down: boolean }
+  | { kind: "stop"; ga: string; down: boolean };
+
+/**
+ * Telegrammen voor een tastfunctie. 3 = korte druk (pas na loslaten, de
+ * detector wacht bij deze knoppen), 5 = vasthouden, 4 = loslaten.
+ * `switchedOn` is de status van de lamp; onbekend = undefined.
+ */
+export function planLutronGesture(
+  fn: LutronGesture,
+  knx: LutronKnxBinding,
+  action: number,
+  state: LutronGestureState,
+  switchedOn: boolean | undefined
+): LutronGestureWrite[] {
+  const ga = knx.ga?.trim() ?? "";
+  const fixedUp = fn === "shade_2" ? !(knx.value === true || knx.value === 1) : knx.value === true || knx.value === 1;
+
+  if (fn === "dim_1" || fn === "dim_2") {
+    const dimGa = knx.dimGa?.trim() ?? "";
+    if (action === 3) {
+      const on = fn === "dim_1" ? !(switchedOn ?? false) : fixedUp;
+      state.lastUp = on;
+      return ga ? [{ kind: "switch", ga, value: on }] : [];
+    }
+    if (action === 5) {
+      const up =
+        fn === "dim_2" ? fixedUp : switchedOn === false ? true : state.lastUp === undefined ? false : !state.lastUp;
+      state.lastUp = up;
+      state.active = true;
+      return dimGa ? [{ kind: "dim", ga: dimGa, increase: up, step: 1 }] : [];
+    }
+    if (action === 4 && state.active) {
+      state.active = false;
+      return dimGa ? [{ kind: "dim", ga: dimGa, increase: state.lastUp ?? false, step: 0 }] : [];
+    }
+    return [];
+  }
+
+  const stopGa = knx.stopGa?.trim() ?? "";
+  if (action === 5) {
+    const up = fn === "shade_2" ? fixedUp : state.lastUp === undefined ? false : !state.lastUp;
+    state.lastUp = up;
+    return ga ? [{ kind: "move", ga, down: !up }] : [];
+  }
+  if (action === 3) {
+    const down = fn === "shade_2" ? !fixedUp : !(state.lastUp ?? true);
+    return stopGa ? [{ kind: "stop", ga: stopGa, down }] : [];
+  }
+  return [];
+}
+
+export function describeLutronGestureWrite(w: LutronGestureWrite): string {
+  switch (w.kind) {
+    case "switch":
+      return `${w.ga} ${w.value ? "aan" : "uit"}`;
+    case "dim":
+      return w.step === 0 ? `${w.ga} dimmen stop` : `${w.ga} ${w.increase ? "helderder" : "donkerder"}`;
+    case "move":
+      return `${w.ga} ${w.down ? "neer" : "op"}`;
+    case "stop":
+      return `${w.ga} stop/lamel`;
+  }
+}
+
+export async function executeLutronGestureWrite(bus: KnxBus, w: LutronGestureWrite): Promise<void> {
+  switch (w.kind) {
+    case "switch":
+      await bus.write(w.ga, "switch", w.value);
+      return;
+    case "dim":
+      await bus.writeDimControl(w.ga, w.increase, w.step);
+      return;
+    case "move":
+      await bus.write(w.ga, "up_down", w.down);
+      return;
+    case "stop":
+      await bus.write(w.ga, "stop_step", w.down);
+      return;
+  }
+}
+
+/** Status van een lamp als aan/uit; onbekend = undefined. */
+export function knxSwitchedOn(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return value > 0;
+  return undefined;
 }
 
 function sameKnxValue(current: unknown, expected: number | boolean): boolean {

@@ -289,6 +289,8 @@ function pushLutronButtons(
     if (m.knx.statusGa && m.knx.statusGa !== m.knx.ga) {
       pushGA(index, m.knx.statusGa, m.knx.role, deviceId, "lutron");
     }
+    if (m.knx.dimGa) pushGA(index, m.knx.dimGa, "dim_control", deviceId, "lutron");
+    if (m.knx.stopGa) pushGA(index, m.knx.stopGa, "stop_step", deviceId, "lutron");
   }
 }
 

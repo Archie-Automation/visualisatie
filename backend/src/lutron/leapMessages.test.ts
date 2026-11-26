@@ -256,7 +256,7 @@ describe("LEAP-berichten", () => {
 
   it("met dubbele-druk-koppeling gaat bij een dubbele druk geen korte druk af", async () => {
     const seen: number[] = [];
-    const detector = new LeapHoldDetector(1000, 40, () => true);
+    const detector = new LeapHoldDetector(1000, 40, () => ({ hold: false, double: true }));
     const emit = (press: { action: number }) => seen.push(press.action);
     detector.handle({ id: 7, action: 4 }, emit);
     detector.handle({ id: 7, action: 4 }, emit);
@@ -267,7 +267,7 @@ describe("LEAP-berichten", () => {
 
   it("met dubbele-druk-koppeling volgt de korte druk na de wachttijd", async () => {
     const seen: number[] = [];
-    const detector = new LeapHoldDetector(1000, 30, () => true);
+    const detector = new LeapHoldDetector(1000, 30, () => ({ hold: false, double: true }));
     const emit = (press: { action: number }) => seen.push(press.action);
     detector.handle({ id: 7, action: 3 }, emit);
     detector.handle({ id: 7, action: 4 }, emit);
@@ -279,11 +279,83 @@ describe("LEAP-berichten", () => {
 
   it("met dubbele-druk-koppeling werkt vasthouden nog", async () => {
     const seen: number[] = [];
-    const detector = new LeapHoldDetector(60, 20, () => true);
+    const detector = new LeapHoldDetector(60, 20, () => ({ hold: false, double: true }));
     const emit = (press: { action: number }) => seen.push(press.action);
     detector.handle({ id: 7, action: 3 }, emit);
     await new Promise((resolve) => setTimeout(resolve, 80));
     detector.handle({ id: 7, action: 4 }, emit);
+    detector.stop();
+    assert.deepEqual(seen, [3, 5, 4]);
+  });
+
+  it("met vasthoud-functie komt de korte druk pas bij loslaten", () => {
+    const seen: number[] = [];
+    const detector = new LeapHoldDetector(1000, 200, () => ({ hold: true, double: false }));
+    const emit = (press: { action: number }) => seen.push(press.action);
+    detector.handle({ id: 7, action: 3 }, emit);
+    assert.deepEqual(seen, []);
+    detector.handle({ id: 7, action: 4 }, emit);
+    detector.stop();
+    assert.deepEqual(seen, [3, 4]);
+  });
+
+  it("met vasthoud-functie geeft vasthouden geen korte druk", async () => {
+    const seen: number[] = [];
+    const detector = new LeapHoldDetector(30, 200, () => ({ hold: true, double: false }));
+    const emit = (press: { action: number }) => seen.push(press.action);
+    detector.handle({ id: 7, action: 3 }, emit);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    detector.handle({ id: 7, action: 4 }, emit);
+    detector.stop();
+    assert.deepEqual(seen, [5, 4]);
+  });
+
+  it("met vasthoud- en dubbeldruk-functie wacht een tik op de dubbeldruktijd", async () => {
+    const seen: number[] = [];
+    const detector = new LeapHoldDetector(1000, 30, () => ({ hold: true, double: true }));
+    const emit = (press: { action: number }) => seen.push(press.action);
+    detector.handle({ id: 7, action: 4 }, emit);
+    assert.deepEqual(seen, []);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    detector.handle({ id: 7, action: 3 }, emit);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    detector.handle({ id: 7, action: 4 }, emit);
+    detector.stop();
+    assert.deepEqual(seen, [3, 4, 3, 4]);
+  });
+
+  it("Press zonder Release: de processor zegt los, dus een korte druk", async () => {
+    const seen: number[] = [];
+    const detector = new LeapHoldDetector(20, 200, undefined, async () => false);
+    detector.handle({ id: 7, action: 3 }, (press) => seen.push(press.action));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    detector.stop();
+    assert.deepEqual(seen, [3, 4]);
+  });
+
+  it("Press zonder Release met vasthoud-functie: korte druk, geen vasthouden", async () => {
+    const seen: number[] = [];
+    const detector = new LeapHoldDetector(
+      20,
+      200,
+      () => ({ hold: true, double: false }),
+      async () => false
+    );
+    detector.handle({ id: 7, action: 3 }, (press) => seen.push(press.action));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    detector.stop();
+    assert.deepEqual(seen, [3, 4]);
+  });
+
+  it("gemiste Release tijdens vasthouden stopt alsnog", async () => {
+    const seen: number[] = [];
+    let down = true;
+    const detector = new LeapHoldDetector(20, 200, undefined, async () => down, 15);
+    detector.handle({ id: 7, action: 3 }, (press) => seen.push(press.action));
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.deepEqual(seen, [3, 5]);
+    down = false;
+    await new Promise((resolve) => setTimeout(resolve, 50));
     detector.stop();
     assert.deepEqual(seen, [3, 5, 4]);
   });

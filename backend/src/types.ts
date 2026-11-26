@@ -1318,7 +1318,20 @@ export interface LutronKnxBinding {
   statusGa?: GA;
   /** Alleen bij puls: duur ms tot de tegenwaarde. */
   pulseMs?: number;
+  /** Alleen bij `function` dim_1 / dim_2: 4-bit dimadres (DPT 3.007). `ga` is dan schakelen. */
+  dimGa?: GA;
 }
+
+/**
+ * KNX-tastfunctie op één Lutron-knop. Weglaten = `moment`: één actie, één telegram.
+ * - `dim_1`: kort schakelen (op status), lang dimmen met wisselende richting.
+ * - `dim_2`: kort aan of uit, lang dimmen in één richting (`knx.value` true = aan/helderder).
+ * - `shade_1`: lang op/neer met wisselende richting, kort stop/lamel.
+ * - `shade_2`: lang op of neer (`knx.value` true = neer), kort stop/lamel.
+ * Bij dimmen is `knx.ga` schakelen en `knx.dimGa` dimmen; bij zonwering `knx.ga`
+ * op/neer en `knx.stopGa` stop/lamel.
+ */
+export type LutronButtonFunction = "moment" | "dim_1" | "dim_2" | "shade_1" | "shade_2";
 
 /** Lutron `~DEVICE,integration,component,action` → KNX. */
 export interface LutronButtonToKnxMapping {
@@ -1326,8 +1339,9 @@ export interface LutronButtonToKnxMapping {
   label: string;
   integrationId: number;
   componentNumber: number;
-  /** Bijv. 3 = press, 4 = release. Weglaten = elke actie op dit component. */
+  /** Bijv. 3 = press, 4 = release. Weglaten = elke actie op dit component. Alleen bij `moment`. */
   actionNumber?: number;
+  function?: LutronButtonFunction;
   knx: LutronKnxBinding;
 }
 

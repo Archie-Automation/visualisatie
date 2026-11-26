@@ -453,6 +453,14 @@ class _LutronButtonToKnxListEditorState
 
   String _subtitle(Map<String, dynamic> mapping) {
     final knx = _ensureMap(mapping, 'knx');
+    final fn = lutronFunctionOf(mapping);
+    if (fn != 'moment') {
+      final ga = (knx['ga'] as String? ?? '').trim();
+      return [
+        lutronFunctionLabels[fn]!,
+        if (ga.isNotEmpty) ga else 'Geen groepadres',
+      ].join(' · ');
+    }
     final role = canonicalLutronDptRole(knx['role'] as String? ?? 'bit');
     final hold = role == 'dim_control' || role == 'up_down';
     final ga = (knx['ga'] as String? ?? '').trim();
@@ -478,11 +486,15 @@ class _LutronButtonToKnxListEditorState
             title: 'Keypad-knoppen → KNX',
             trailing: LuxeInfoIconButton(
               title: 'Keypad-knoppen',
-              body: 'Elke regel is één moment op één knop: korte druk, '
-                  'loslaten, vasthouden of dubbele druk. In de lijst staat het '
-                  'adres /button/… en de naam uit Lutron Designer. '
-                  'Op een los HomeWorks-apparaat stel je de koppeling bij de '
-                  'processor in.',
+              body: 'Kies per koppeling een functie. Dimmen en zonwering '
+                  '(1 of 2 knoppen) werken zoals een KNX-tastsensor: kort en '
+                  'lang zitten in één koppeling.\n\n'
+                  '"Eén actie" is één moment op één knop: korte druk, '
+                  'loslaten, vasthouden of dubbele druk. Heeft een knop ook '
+                  'een functie op vasthouden, dan gaat de korte druk pas bij '
+                  'loslaten.\n\n'
+                  'In de lijst staat het adres /button/… en de naam uit '
+                  'Lutron Designer.',
             ),
           ),
         ),
@@ -570,6 +582,54 @@ String lutronActionLabel(Object? actionNumber) {
   return 'Actie $actionNumber';
 }
 
+const lutronFunctions = ['moment', 'dim_1', 'dim_2', 'shade_1', 'shade_2'];
+
+const lutronFunctionLabels = <String, String>{
+  'moment': 'Eén actie',
+  'dim_1': 'Dimmen, 1 knop',
+  'dim_2': 'Dimmen, 2 knoppen',
+  'shade_1': 'Zonwering, 1 knop',
+  'shade_2': 'Zonwering, 2 knoppen',
+};
+
+String lutronFunctionOf(Map<String, dynamic> mapping) {
+  final fn = mapping['function'];
+  return lutronFunctions.contains(fn) ? fn as String : 'moment';
+}
+
+void _setLutronFunction(Map<String, dynamic> mapping, String fn) {
+  final knx = _ensureMap(mapping, 'knx');
+  knx
+    ..remove('pulseMs')
+    ..remove('valueOff');
+  if (fn == 'moment') {
+    mapping.remove('function');
+    knx
+      ..remove('dimGa')
+      ..remove('stopGa')
+      ..remove('statusGa');
+    knx['role'] = 'bit';
+    knx['send'] = 'value';
+    knx['value'] = true;
+    return;
+  }
+  mapping['function'] = fn;
+  mapping.remove('actionNumber');
+  knx.remove('send');
+  if (fn == 'dim_1' || fn == 'dim_2') {
+    knx['role'] = 'switch';
+    knx['value'] = true;
+    knx.remove('stopGa');
+    if (fn == 'dim_2') knx.remove('statusGa');
+  } else {
+    knx['role'] = 'up_down';
+    knx['value'] = false;
+    knx
+      ..remove('dimGa')
+      ..remove('statusGa');
+  }
+}
+
 /// Vaste actienummers in het Lutron QSX/QS Integration Protocol.
 const _lutronActions = <String, int?>{
   'Korte druk': 3,
@@ -616,6 +676,7 @@ class _LutronMappingFormState extends State<_LutronMappingForm> {
     final knx = _ensureMap(mapping, 'knx');
     final dropKey = _dropdownKey();
     final isCustom = dropKey == 'Aangepast…';
+    final fn = lutronFunctionOf(mapping);
     final hold = canonicalLutronDptRole(knx['role'] as String? ?? 'bit') ==
             'dim_control' ||
         canonicalLutronDptRole(knx['role'] as String? ?? 'bit') == 'up_down';
@@ -639,7 +700,26 @@ class _LutronMappingFormState extends State<_LutronMappingForm> {
                 widget.onChanged();
               },
             ),
-            if (!hold)
+            _InstallerDropdown(
+              label: 'Functie',
+              value: fn,
+              options: lutronFunctions,
+              optionLabels: lutronFunctionLabels,
+              onChanged: (v) {
+                setState(() => _setLutronFunction(mapping, v));
+                widget.onChanged();
+              },
+            ),
+            if (fn != 'moment')
+              _LutronGestureFields(
+                fn: fn,
+                knx: knx,
+                onChanged: () {
+                  setState(() {});
+                  widget.onChanged();
+                },
+              ),
+            if (fn == 'moment' && !hold)
               _InstallerDropdown(
                 label: 'Knopactie',
                 value: dropKey,
@@ -658,14 +738,16 @@ class _LutronMappingFormState extends State<_LutronMappingForm> {
                   widget.onChanged();
                 },
               ),
-            Text(
-              hold
-                  ? 'Indrukken en loslaten zitten in deze ene koppeling.'
-                  : 'Eén regel is één moment. Koppel dezelfde knop opnieuw voor loslaten of vasthouden.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 16),
-            if (!hold && isCustom)
+            if (fn == 'moment') ...[
+              Text(
+                hold
+                    ? 'Indrukken en loslaten zitten in deze ene koppeling.'
+                    : 'Eén regel is één moment. Koppel dezelfde knop opnieuw voor loslaten of vasthouden.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 16),
+            ],
+            if (fn == 'moment' && !hold && isCustom)
               _InstallerStrField(
                 label: 'Actienummer (vrij invullen)',
                 value: mapping['actionNumber'] == null
@@ -683,14 +765,16 @@ class _LutronMappingFormState extends State<_LutronMappingForm> {
                   widget.onChanged();
                 },
               ),
-            const SizedBox(height: 12),
-            _LutronKnxCommand(
-              knx: knx,
-              onChanged: () {
-                setState(() {});
-                widget.onChanged();
-              },
-            ),
+            if (fn == 'moment') ...[
+              const SizedBox(height: 12),
+              _LutronKnxCommand(
+                knx: knx,
+                onChanged: () {
+                  setState(() {});
+                  widget.onChanged();
+                },
+              ),
+            ],
             Align(
               alignment: Alignment.centerLeft,
               child: TextButton(
@@ -699,6 +783,87 @@ class _LutronMappingFormState extends State<_LutronMappingForm> {
               ),
             ),
           ],
+    );
+  }
+}
+
+/// Groepsadressen van een tastfunctie (dimmen of zonwering, 1 of 2 knoppen).
+class _LutronGestureFields extends StatelessWidget {
+  const _LutronGestureFields({
+    required this.fn,
+    required this.knx,
+    required this.onChanged,
+  });
+
+  final String fn;
+  final Map<String, dynamic> knx;
+  final VoidCallback onChanged;
+
+  Widget _ga(String key, String label, String dpt, {String? hint}) {
+    return _InstallerStrField(
+      key: ValueKey('lutron-$key-${identityHashCode(knx)}'),
+      label: label,
+      hint: hint ?? dpt,
+      gaSearch: true,
+      gaDptHint: dpt,
+      value: knx[key] as String? ?? '',
+      onChanged: (v) {
+        final t = v.trim();
+        if (t.isEmpty && key != 'ga') {
+          knx.remove(key);
+        } else {
+          knx[key] = t;
+        }
+        onChanged();
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final dim = fn == 'dim_1' || fn == 'dim_2';
+    final two = fn == 'dim_2' || fn == 'shade_2';
+    final on = knx['value'] == true || knx['value'] == 1;
+    final hint = switch (fn) {
+      'dim_1' => 'Kort: aan/uit (op de status). Lang: dimmen, de richting '
+          'wisselt elke keer; is de lamp uit, dan helderder. Loslaten: stop.',
+      'dim_2' => 'Kort: aan of uit. Lang: helderder of donkerder. Loslaten: '
+          'stop. Koppel een tweede knop met de andere richting.',
+      'shade_1' => 'Lang: op of neer, de richting wisselt elke keer. Kort: '
+          'stop of lamellen verstellen.',
+      _ => 'Lang: op of neer. Kort: stop of lamellen verstellen. Koppel een '
+          'tweede knop met de andere richting.',
+    };
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (dim) ...[
+          _ga('ga', 'Schakelen', 'DPT 1.001'),
+          _ga('dimGa', 'Dimmen relatief', 'DPT 3.007'),
+          if (fn == 'dim_1')
+            _ga('statusGa', 'Status aan/uit', 'DPT 1.001',
+                hint: 'Leeg = het schakeladres'),
+        ] else ...[
+          _ga('ga', 'Op/neer', 'DPT 1.008'),
+          _ga('stopGa', 'Stop/lamellen', 'DPT 1.007'),
+        ],
+        if (two)
+          _InstallerDropdown(
+            label: 'Deze knop',
+            value: dim ? (on ? 'up' : 'down') : (on ? 'down' : 'up'),
+            options: const ['up', 'down'],
+            optionLabels: dim
+                ? const {'up': 'Aan / helderder', 'down': 'Uit / donkerder'}
+                : const {'up': 'Op', 'down': 'Neer'},
+            onChanged: (v) {
+              knx['value'] = v == (dim ? 'up' : 'down');
+              onChanged();
+            },
+          ),
+        Text(hint, style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 16),
+      ],
     );
   }
 }

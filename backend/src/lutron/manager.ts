@@ -9,7 +9,20 @@ import type {
   LutronLoadOutputBinding,
   LutronTelnetConfig
 } from "../types";
-import { executeLutronToKnx, logLutronKnx, lutronMappingHandles, type LutronButtonPhase } from "./knxBridge";
+import {
+  describeLutronGestureWrite,
+  executeLutronGestureWrite,
+  executeLutronToKnx,
+  knxSwitchedOn,
+  logLutronKnx,
+  lutronGesture,
+  lutronMappingHandles,
+  planLutronGesture,
+  type LutronButtonPhase,
+  type LutronGesture,
+  type LutronGestureState,
+  type LutronGestureWrite
+} from "./knxBridge";
 import {
   LEAP_HOLD_MS,
   LEAP_MULTI_TAP_MS,
@@ -221,9 +234,19 @@ export class LutronIntegrationManager {
   }
 
   private leapDebounce = new Map<string, number>();
-  private readonly buttonGesture = new LeapHoldDetector(LEAP_HOLD_MS, LEAP_MULTI_TAP_MS, (id) =>
-    this.buttonMappings().some(({ map }) => map.integrationId === id && map.actionNumber === 6)
+  private readonly buttonGesture = new LeapHoldDetector(
+    LEAP_HOLD_MS,
+    LEAP_MULTI_TAP_MS,
+    (id) => {
+      const own = this.buttonMappings().filter(({ map }) => map.integrationId === id);
+      return {
+        hold: own.some(({ map }) => lutronGesture(map) != null || map.actionNumber === 5),
+        double: own.some(({ map }) => map.actionNumber === 6 && !lutronGesture(map))
+      };
+    },
+    (id) => this.leap?.buttonIsDown(id) ?? Promise.resolve(undefined)
   );
+  private readonly gestureState = new Map<string, LutronGestureState>();
   private readonly monitor: LutronMonitorEvent[] = [];
   private monitorSeq = 0;
 
@@ -286,6 +309,11 @@ export class LutronIntegrationManager {
       const prev = this.leapDebounce.get(key) ?? 0;
       if (now - prev < DEBOUNCE_MS) continue;
       this.leapDebounce.set(key, now);
+      const gesture = lutronGesture(map);
+      if (gesture) {
+        this.runGesture(map, gesture, press.action, event);
+        continue;
+      }
       const label = `${map.label?.trim() || "Koppeling"} → ${map.knx.ga}`;
       event.fired?.push(label);
       void this.fireButtonMapping(source, map, press.action === 4 ? "release" : "press").catch((err) => {
@@ -293,6 +321,34 @@ export class LutronIntegrationManager {
         logger.warn({ err, button: press.id, map: map.id }, "QSX-knop → KNX mislukt");
       });
     }
+  }
+
+  private gestureWrites(map: LutronButtonToKnxMapping, gesture: LutronGesture, action: number): LutronGestureWrite[] {
+    let state = this.gestureState.get(map.id);
+    if (!state) {
+      state = {};
+      this.gestureState.set(map.id, state);
+    }
+    const statusGa = map.knx.statusGa?.trim() || map.knx.ga;
+    const on = knxSwitchedOn(this.bus.getState(statusGa)?.value);
+    return planLutronGesture(gesture, map.knx, action, state, on);
+  }
+
+  private runGesture(
+    map: LutronButtonToKnxMapping,
+    gesture: LutronGesture,
+    action: number,
+    event: LutronMonitorEvent
+  ): void {
+    const writes = this.gestureWrites(map, gesture, action);
+    const name = map.label?.trim() || "Koppeling";
+    for (const w of writes) event.fired?.push(`${name} → ${describeLutronGestureWrite(w)}`);
+    void (async () => {
+      for (const w of writes) await executeLutronGestureWrite(this.bus, w);
+    })().catch((err) => {
+      event.error = `${name}: ${err instanceof Error ? err.message : String(err)}`;
+      logger.warn({ err, button: map.integrationId, map: map.id }, "QSX-knop → KNX mislukt");
+    });
   }
 
   rebuild(cfg: HouseConfig): void {
@@ -353,6 +409,11 @@ export class LutronIntegrationManager {
     const m = (maps ?? []).find((x) => x.id === mappingId);
     if (!m) throw new Error("unknown lutron mapping");
     logLutronKnx(label, m.label, m.knx);
+    const gesture = lutronGesture(m);
+    if (gesture) {
+      for (const w of this.gestureWrites(m, gesture, 3)) await executeLutronGestureWrite(this.bus, w);
+      return;
+    }
     await executeLutronToKnx(this.bus, m.knx);
   }
 
@@ -505,6 +566,7 @@ export class LutronIntegrationManager {
 
     for (const map of s.buttonToKnx) {
       if (map.integrationId !== integrationId) continue;
+      if (lutronGesture(map)) continue;
       if (map.componentNumber !== component) continue;
       if (!lutronMappingHandles(map, action)) continue;
 

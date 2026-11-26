@@ -182,6 +182,29 @@ export const LEAP_HOLD_MS = 600;
 /** Tweede druk binnen deze tijd na de vorige druk telt als dubbele druk. */
 export const LEAP_MULTI_TAP_MS = 450;
 
+/** Tijdens vasthouden zo vaak vragen of de knop nog ligt. */
+export const LEAP_HOLD_WATCH_MS = 400;
+
+/** Daarna niet meer vragen; een knop ligt nooit zo lang. */
+export const LEAP_HOLD_WATCH_MAX_MS = 60_000;
+
+/** Waar de detector op wacht voordat een korte druk telt. */
+export type LeapButtonWaits = {
+  /** Knop heeft een functie op vasthouden: korte druk pas bij loslaten voor 0,6 s. */
+  hold: boolean;
+  /** Knop heeft een functie op dubbele druk: korte druk pas na 0,45 s zonder tweede druk. */
+  double: boolean;
+};
+
+const NO_WAIT: LeapButtonWaits = { hold: false, double: false };
+
+type PendingTap = {
+  timer?: ReturnType<typeof setTimeout>;
+  released: boolean;
+  windowOver: boolean;
+  hold: boolean;
+};
+
 /**
  * QSX stuurt LongHold en MultiTap alleen als die actie in Designer staat.
  * Daarom maken wij ze zelf: actie 5 als loslaten na 0,6 s uitblijft, actie 6
@@ -192,61 +215,68 @@ export const LEAP_MULTI_TAP_MS = 450;
  * terug voordat Press verstuurd is. Een Release zonder Press is dus een korte
  * druk (of de tweede helft van een dubbele druk).
  *
- * Heeft een knop een dubbele-druk-koppeling ([waitsForDouble]), dan wacht de
- * korte druk tot de dubbeldruktijd voorbij is. Anders gaat bij een dubbele
- * druk eerst ook de korte druk af.
+ * Zonder koppeling op vasthouden of dubbele druk gaat 3 direct bij indrukken.
+ * Met zo'n koppeling ([waitsFor]) wacht 3, anders gaat bij vasthouden of een
+ * dubbele druk eerst ook de korte druk af.
  */
 export class LeapHoldDetector {
   private readonly timers = new Map<number, ReturnType<typeof setTimeout>>();
-  private readonly waits = new Map<number, { timer: ReturnType<typeof setTimeout>; released: boolean }>();
+  private readonly pending = new Map<number, PendingTap>();
   private readonly held = new Set<number>();
   private readonly tapped = new Set<number>();
   private readonly down = new Set<number>();
   private readonly lastPressAt = new Map<number, number>();
+  private readonly watches = new Map<number, ReturnType<typeof setInterval>>();
+  private readonly gens = new Map<number, number>();
 
+  /**
+   * [isDown] vraagt de processor of de knop nog ligt. QSX laat soms Release
+   * weg: zonder die vraag wordt een korte tik dan vasthouden, en stopt
+   * dimmen nooit.
+   */
   constructor(
     private readonly holdMs = LEAP_HOLD_MS,
     private readonly multiTapMs = LEAP_MULTI_TAP_MS,
-    private readonly waitsForDouble: (id: number) => boolean = () => false
+    private readonly waitsFor: (id: number) => LeapButtonWaits = () => NO_WAIT,
+    private readonly isDown?: (id: number) => Promise<boolean | undefined>,
+    private readonly watchMs = LEAP_HOLD_WATCH_MS
   ) {}
 
   handle(press: LeapButtonPress, emit: (press: LeapButtonPress) => void): void {
     const id = press.id;
     if (press.action === 3) {
       this.down.add(id);
-      if (this.pressed(id, emit)) {
+      if (this.tap(id, emit)) {
         const timer = setTimeout(() => {
           this.timers.delete(id);
-          this.flush(id, emit);
-          this.held.add(id);
-          this.lastPressAt.delete(id);
-          emit({ id, action: 5 });
+          this.holdDue(id, emit);
         }, this.holdMs);
         this.timers.set(id, timer);
       }
       return;
     }
     if (press.action === 4) {
-      if (!this.down.has(id)) this.pressed(id, emit);
+      if (!this.down.has(id)) this.tap(id, emit);
+      this.bump(id);
+      this.unwatch(id);
       this.down.delete(id);
       this.cancel(id);
       this.held.delete(id);
-      const wait = this.waits.get(id);
-      if (wait) {
-        wait.released = true;
+      const pending = this.pending.get(id);
+      if (!pending) {
+        emit(press);
         return;
       }
-      emit(press);
+      pending.released = true;
+      if (!pending.windowOver) return;
+      this.flush(id, emit);
       return;
     }
     if (press.action === 5) {
       this.down.add(id);
       if (this.held.has(id)) return;
       this.cancel(id);
-      this.flush(id, emit);
-      this.held.add(id);
-      this.lastPressAt.delete(id);
-      emit(press);
+      this.hold(id, emit);
       return;
     }
     if (press.action === 6) {
@@ -262,9 +292,14 @@ export class LeapHoldDetector {
 
   stop(): void {
     for (const timer of this.timers.values()) clearTimeout(timer);
-    for (const wait of this.waits.values()) clearTimeout(wait.timer);
+    for (const pending of this.pending.values()) {
+      if (pending.timer) clearTimeout(pending.timer);
+    }
+    for (const watch of this.watches.values()) clearInterval(watch);
+    this.watches.clear();
+    this.gens.clear();
     this.timers.clear();
-    this.waits.clear();
+    this.pending.clear();
     this.held.clear();
     this.tapped.clear();
     this.down.clear();
@@ -272,9 +307,11 @@ export class LeapHoldDetector {
   }
 
   /** Stuurt 3 (of zet die klaar), of 6 bij een snelle tweede druk. True bij een gewone druk. */
-  private pressed(id: number, emit: (press: LeapButtonPress) => void): boolean {
+  private tap(id: number, emit: (press: LeapButtonPress) => void): boolean {
     const now = Date.now();
     const prev = this.lastPressAt.get(id);
+    this.bump(id);
+    this.unwatch(id);
     this.cancel(id);
     this.held.delete(id);
     if (prev != null && now - prev <= this.multiTapMs && !this.tapped.has(id)) {
@@ -286,31 +323,106 @@ export class LeapHoldDetector {
     }
     this.tapped.delete(id);
     this.lastPressAt.set(id, now);
-    if (this.waitsForDouble(id)) {
-      const timer = setTimeout(() => this.flush(id, emit), this.multiTapMs);
-      this.waits.set(id, { timer, released: false });
-    } else {
+    const waits = this.waitsFor(id);
+    if (!waits.hold && !waits.double) {
       emit({ id, action: 3 });
+      return true;
     }
+    const pending: PendingTap = { released: false, windowOver: !waits.double, hold: waits.hold };
+    if (waits.double) {
+      pending.timer = setTimeout(() => this.windowEnded(id, emit), this.multiTapMs);
+    }
+    this.pending.set(id, pending);
     return true;
+  }
+
+  private windowEnded(id: number, emit: (press: LeapButtonPress) => void): void {
+    const pending = this.pending.get(id);
+    if (!pending) return;
+    pending.timer = undefined;
+    pending.windowOver = true;
+    if (pending.released || !pending.hold) this.flush(id, emit);
+  }
+
+  /** Wachttijd om: eerst vragen of de knop echt nog ligt. */
+  private holdDue(id: number, emit: (press: LeapButtonPress) => void): void {
+    const isDown = this.isDown;
+    if (!isDown) {
+      this.hold(id, emit);
+      return;
+    }
+    const gen = this.gens.get(id);
+    void isDown(id)
+      .catch(() => undefined)
+      .then((down) => {
+        if (this.gens.get(id) !== gen || !this.down.has(id) || this.held.has(id)) return;
+        if (down === false) this.handle({ id, action: 4 }, emit);
+        else this.hold(id, emit);
+      });
+  }
+
+  private hold(id: number, emit: (press: LeapButtonPress) => void): void {
+    const pending = this.pending.get(id);
+    if (pending?.hold) this.drop(id);
+    else this.flush(id, emit);
+    this.held.add(id);
+    this.lastPressAt.delete(id);
+    emit({ id, action: 5 });
+    this.watch(id, emit);
+  }
+
+  /** Tijdens vasthouden blijven vragen, zodat een gemiste Release toch stopt. */
+  private watch(id: number, emit: (press: LeapButtonPress) => void): void {
+    const isDown = this.isDown;
+    if (!isDown || this.watches.has(id)) return;
+    const gen = this.gens.get(id);
+    const started = Date.now();
+    let busy = false;
+    const timer = setInterval(() => {
+      if (busy) return;
+      if (this.gens.get(id) !== gen || !this.held.has(id) || Date.now() - started > LEAP_HOLD_WATCH_MAX_MS) {
+        this.unwatch(id);
+        return;
+      }
+      busy = true;
+      void isDown(id)
+        .catch(() => undefined)
+        .then((down) => {
+          busy = false;
+          if (down !== false || this.gens.get(id) !== gen || !this.held.has(id)) return;
+          this.unwatch(id);
+          this.handle({ id, action: 4 }, emit);
+        });
+    }, this.watchMs);
+    this.watches.set(id, timer);
+  }
+
+  private unwatch(id: number): void {
+    const timer = this.watches.get(id);
+    if (timer) clearInterval(timer);
+    this.watches.delete(id);
+  }
+
+  private bump(id: number): void {
+    this.gens.set(id, (this.gens.get(id) ?? 0) + 1);
   }
 
   /** Uitgestelde korte druk alsnog sturen, met loslaten als dat al gebeurde. */
   private flush(id: number, emit: (press: LeapButtonPress) => void): void {
-    const wait = this.waits.get(id);
-    if (!wait) return;
-    clearTimeout(wait.timer);
-    this.waits.delete(id);
+    const pending = this.pending.get(id);
+    if (!pending) return;
+    if (pending.timer) clearTimeout(pending.timer);
+    this.pending.delete(id);
     emit({ id, action: 3 });
-    if (wait.released) emit({ id, action: 4 });
+    if (pending.released) emit({ id, action: 4 });
   }
 
-  /** Uitgestelde korte druk vervalt: het werd een dubbele druk. */
+  /** Uitgestelde korte druk vervalt: het werd vasthouden of een dubbele druk. */
   private drop(id: number): void {
-    const wait = this.waits.get(id);
-    if (!wait) return;
-    clearTimeout(wait.timer);
-    this.waits.delete(id);
+    const pending = this.pending.get(id);
+    if (!pending) return;
+    if (pending.timer) clearTimeout(pending.timer);
+    this.pending.delete(id);
   }
 
   private cancel(id: number): void {

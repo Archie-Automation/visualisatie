@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { lutronMappingHandles, planLutronHold, planLutronKnxWrite } from "./knxBridge";
+import {
+  lutronMappingHandles,
+  planLutronGesture,
+  planLutronHold,
+  planLutronKnxWrite,
+  type LutronGestureState
+} from "./knxBridge";
 import type { LutronKnxBinding } from "../types";
 
 function knx(partial: Partial<LutronKnxBinding> & Pick<LutronKnxBinding, "role" | "value">): LutronKnxBinding {
@@ -76,5 +82,71 @@ describe("Lutron-knop → KNX", () => {
     const pressOnly = { actionNumber: 3, knx: knx({ role: "bit", value: true, send: "value" }) };
     assert.equal(lutronMappingHandles(pressOnly, 3), true);
     assert.equal(lutronMappingHandles(pressOnly, 4), false);
+    const gesture = { function: "dim_1", knx: knx({ role: "bit", value: true }) };
+    assert.equal(lutronMappingHandles(gesture, 5), true);
+    assert.equal(lutronMappingHandles(gesture, 6), false);
+  });
+
+  it("dimmen met 1 knop: kort schakelt, lang dimt met wisselende richting", () => {
+    const binding = knx({ role: "bit", value: true, dimGa: "1/2/1" });
+    const state: LutronGestureState = {};
+    assert.deepEqual(planLutronGesture("dim_1", binding, 3, state, false), [
+      { kind: "switch", ga: "1/1/1", value: true }
+    ]);
+    assert.deepEqual(planLutronGesture("dim_1", binding, 3, state, true), [
+      { kind: "switch", ga: "1/1/1", value: false }
+    ]);
+    assert.deepEqual(planLutronGesture("dim_1", binding, 5, state, true), [
+      { kind: "dim", ga: "1/2/1", increase: true, step: 1 }
+    ]);
+    assert.deepEqual(planLutronGesture("dim_1", binding, 4, state, true), [
+      { kind: "dim", ga: "1/2/1", increase: true, step: 0 }
+    ]);
+    assert.deepEqual(planLutronGesture("dim_1", binding, 5, state, true), [
+      { kind: "dim", ga: "1/2/1", increase: false, step: 1 }
+    ]);
+    planLutronGesture("dim_1", binding, 4, state, true);
+    assert.deepEqual(planLutronGesture("dim_1", binding, 5, state, false), [
+      { kind: "dim", ga: "1/2/1", increase: true, step: 1 }
+    ]);
+  });
+
+  it("loslaten na een korte druk stuurt geen dimstop", () => {
+    const binding = knx({ role: "bit", value: true, dimGa: "1/2/1" });
+    const state: LutronGestureState = {};
+    planLutronGesture("dim_1", binding, 3, state, false);
+    assert.deepEqual(planLutronGesture("dim_1", binding, 4, state, true), []);
+  });
+
+  it("dimmen met 2 knoppen: vaste richting", () => {
+    const darker = knx({ role: "bit", value: false, dimGa: "1/2/1" });
+    assert.deepEqual(planLutronGesture("dim_2", darker, 3, {}, true), [
+      { kind: "switch", ga: "1/1/1", value: false }
+    ]);
+    assert.deepEqual(planLutronGesture("dim_2", darker, 5, {}, true), [
+      { kind: "dim", ga: "1/2/1", increase: false, step: 1 }
+    ]);
+  });
+
+  it("zonwering: lang loopt, kort stopt, 1 knop wisselt", () => {
+    const one = knx({ role: "up_down", value: false, stopGa: "2/1/2" });
+    const state: LutronGestureState = {};
+    assert.deepEqual(planLutronGesture("shade_1", one, 5, state, undefined), [
+      { kind: "move", ga: "1/1/1", down: true }
+    ]);
+    assert.deepEqual(planLutronGesture("shade_1", one, 3, state, undefined), [
+      { kind: "stop", ga: "2/1/2", down: true }
+    ]);
+    assert.deepEqual(planLutronGesture("shade_1", one, 5, state, undefined), [
+      { kind: "move", ga: "1/1/1", down: false }
+    ]);
+    assert.deepEqual(planLutronGesture("shade_1", one, 4, state, undefined), []);
+    const up = knx({ role: "up_down", value: false, stopGa: "2/1/2" });
+    assert.deepEqual(planLutronGesture("shade_2", up, 5, {}, undefined), [
+      { kind: "move", ga: "1/1/1", down: false }
+    ]);
+    assert.deepEqual(planLutronGesture("shade_2", up, 3, {}, undefined), [
+      { kind: "stop", ga: "2/1/2", down: false }
+    ]);
   });
 });

@@ -335,6 +335,7 @@
         "integrationId": { "type": "integer", "minimum": 0, "maximum": 999999 },
         "componentNumber": { "type": "integer", "minimum": 0, "maximum": 999999 },
         "actionNumber": { "type": "integer", "minimum": 0, "maximum": 255 },
+        "function": { "type": "string", "enum": ["moment", "dim_1", "dim_2", "shade_1", "shade_2"] },
         "knx": {
           "type": "object",
           "required": ["ga", "role", "value"],
@@ -557,6 +558,7 @@
                   "integrationId": { "type": "integer", "minimum": 0, "maximum": 999999 },
                   "componentNumber": { "type": "integer", "minimum": 0, "maximum": 999999 },
                   "actionNumber": { "type": "integer", "minimum": 0, "maximum": 255 },
+                  "function": { "type": "string", "enum": ["moment", "dim_1", "dim_2", "shade_1", "shade_2"] },
                   "knx": {
                     "type": "object",
                     "required": ["ga", "role", "value"],

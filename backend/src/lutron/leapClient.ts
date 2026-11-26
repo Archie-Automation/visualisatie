@@ -159,7 +159,11 @@ type Pending = {
   resolve: (msg: unknown) => void;
   reject: (err: Error) => void;
   timer: NodeJS.Timeout;
+  /** Antwoord is geen knopdruk, ook al heeft het dezelfde URL als de events. */
+  quiet?: boolean;
 };
+
+const BUTTON_CHECK_TIMEOUT_MS = 1_500;
 
 /** Blijvende LEAP-sessie naar poort 8081 met het gekoppelde certificaat. */
 export class LutronLeapSession {
@@ -196,6 +200,27 @@ export class LutronLeapSession {
     this.socket?.destroy();
     this.socket = undefined;
     this.connected = false;
+  }
+
+  /**
+   * Ligt de knop nu ingedrukt volgens de processor? Undefined als dat niet
+   * te lezen is. QSX laat soms Press of Release weg; dit vult dat aan.
+   */
+  async buttonIsDown(id: number): Promise<boolean | undefined> {
+    const url = `/button/${id}/status/event`;
+    if (!this.connected || this.pending.has(url)) return undefined;
+    try {
+      const msg = await this.request(buildReadRequest(url), url, {
+        quiet: true,
+        timeoutMs: BUTTON_CHECK_TIMEOUT_MS
+      });
+      const action = parseButtonEvents(msg).find((p) => p.id === id)?.action;
+      if (action === 3 || action === 5) return true;
+      if (action === 4) return false;
+      return undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   async setLevel(zoneId: number, percent: number, fadeSeconds?: number): Promise<void> {
@@ -567,11 +592,18 @@ export class LutronLeapSession {
       this.socket.write(encodeLeap(ping));
       return;
     }
+    const url = headerUrl(msg);
+    const quiet = this.pending.get(url);
+    if (quiet?.quiet) {
+      clearTimeout(quiet.timer);
+      this.pending.delete(url);
+      quiet.resolve(msg);
+      return;
+    }
     if (Date.now() >= this.buttonsReadyAt) {
       for (const press of parseButtonEvents(msg)) this.onButton?.(press);
     }
     for (const level of parseZoneLevels(msg)) this.onZoneLevel?.(level);
-    const url = headerUrl(msg);
     for (const [key, pending] of this.pending) {
       if (url === key || url.startsWith(`${key}?`) || url.startsWith(`${key}/`)) {
         clearTimeout(pending.timer);
@@ -584,7 +616,11 @@ export class LutronLeapSession {
     }
   }
 
-  private request(message: object, url: string): Promise<unknown> {
+  private request(
+    message: object,
+    url: string,
+    opts: { quiet?: boolean; timeoutMs?: number } = {}
+  ): Promise<unknown> {
     if (!this.socket || !this.connected) {
       return Promise.reject(new Error(this.lastError ?? "QSX is niet verbonden"));
     }
@@ -592,8 +628,8 @@ export class LutronLeapSession {
       const timer = setTimeout(() => {
         this.pending.delete(url);
         reject(new Error("QSX gaf geen antwoord"));
-      }, REQUEST_TIMEOUT_MS);
-      this.pending.set(url, { resolve, reject, timer });
+      }, opts.timeoutMs ?? REQUEST_TIMEOUT_MS);
+      this.pending.set(url, { resolve, reject, timer, quiet: opts.quiet });
       this.socket!.write(encodeLeap(message));
     });
   }
