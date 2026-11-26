@@ -10,7 +10,12 @@ import type {
   LutronTelnetConfig
 } from "../types";
 import { executeLutronToKnx, logLutronKnx, lutronMappingHandles, type LutronButtonPhase } from "./knxBridge";
-import { LeapHoldDetector, type LeapButtonPress } from "./leapMessages";
+import {
+  LEAP_HOLD_MS,
+  LEAP_MULTI_TAP_MS,
+  LeapHoldDetector,
+  type LeapButtonPress
+} from "./leapMessages";
 import {
   buildOutputLower,
   buildOutputRaise,
@@ -216,7 +221,9 @@ export class LutronIntegrationManager {
   }
 
   private leapDebounce = new Map<string, number>();
-  private readonly buttonGesture = new LeapHoldDetector();
+  private readonly buttonGesture = new LeapHoldDetector(LEAP_HOLD_MS, LEAP_MULTI_TAP_MS, (id) =>
+    this.buttonMappings().some(({ map }) => map.integrationId === id && map.actionNumber === 6)
+  );
   private readonly monitor: LutronMonitorEvent[] = [];
   private monitorSeq = 0;
 

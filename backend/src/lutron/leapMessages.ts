@@ -191,9 +191,14 @@ export const LEAP_MULTI_TAP_MS = 450;
  * Bij een snelle tik stuurt QSX vaak alleen Release: de knopstatus springt
  * terug voordat Press verstuurd is. Een Release zonder Press is dus een korte
  * druk (of de tweede helft van een dubbele druk).
+ *
+ * Heeft een knop een dubbele-druk-koppeling ([waitsForDouble]), dan wacht de
+ * korte druk tot de dubbeldruktijd voorbij is. Anders gaat bij een dubbele
+ * druk eerst ook de korte druk af.
  */
 export class LeapHoldDetector {
   private readonly timers = new Map<number, ReturnType<typeof setTimeout>>();
+  private readonly waits = new Map<number, { timer: ReturnType<typeof setTimeout>; released: boolean }>();
   private readonly held = new Set<number>();
   private readonly tapped = new Set<number>();
   private readonly down = new Set<number>();
@@ -201,44 +206,54 @@ export class LeapHoldDetector {
 
   constructor(
     private readonly holdMs = LEAP_HOLD_MS,
-    private readonly multiTapMs = LEAP_MULTI_TAP_MS
+    private readonly multiTapMs = LEAP_MULTI_TAP_MS,
+    private readonly waitsForDouble: (id: number) => boolean = () => false
   ) {}
 
   handle(press: LeapButtonPress, emit: (press: LeapButtonPress) => void): void {
+    const id = press.id;
     if (press.action === 3) {
-      this.down.add(press.id);
-      if (this.pressed(press.id, emit)) {
+      this.down.add(id);
+      if (this.pressed(id, emit)) {
         const timer = setTimeout(() => {
-          this.timers.delete(press.id);
-          this.held.add(press.id);
-          this.lastPressAt.delete(press.id);
-          emit({ id: press.id, action: 5 });
+          this.timers.delete(id);
+          this.flush(id, emit);
+          this.held.add(id);
+          this.lastPressAt.delete(id);
+          emit({ id, action: 5 });
         }, this.holdMs);
-        this.timers.set(press.id, timer);
+        this.timers.set(id, timer);
       }
       return;
     }
     if (press.action === 4) {
-      if (!this.down.has(press.id)) this.pressed(press.id, emit);
-      this.down.delete(press.id);
-      this.cancel(press.id);
-      this.held.delete(press.id);
+      if (!this.down.has(id)) this.pressed(id, emit);
+      this.down.delete(id);
+      this.cancel(id);
+      this.held.delete(id);
+      const wait = this.waits.get(id);
+      if (wait) {
+        wait.released = true;
+        return;
+      }
       emit(press);
       return;
     }
     if (press.action === 5) {
-      this.down.add(press.id);
-      if (this.held.has(press.id)) return;
-      this.cancel(press.id);
-      this.held.add(press.id);
-      this.lastPressAt.delete(press.id);
+      this.down.add(id);
+      if (this.held.has(id)) return;
+      this.cancel(id);
+      this.flush(id, emit);
+      this.held.add(id);
+      this.lastPressAt.delete(id);
       emit(press);
       return;
     }
     if (press.action === 6) {
-      if (this.tapped.has(press.id)) return;
-      this.tapped.add(press.id);
-      this.lastPressAt.delete(press.id);
+      if (this.tapped.has(id)) return;
+      this.drop(id);
+      this.tapped.add(id);
+      this.lastPressAt.delete(id);
       emit(press);
       return;
     }
@@ -247,20 +262,23 @@ export class LeapHoldDetector {
 
   stop(): void {
     for (const timer of this.timers.values()) clearTimeout(timer);
+    for (const wait of this.waits.values()) clearTimeout(wait.timer);
     this.timers.clear();
+    this.waits.clear();
     this.held.clear();
     this.tapped.clear();
     this.down.clear();
     this.lastPressAt.clear();
   }
 
-  /** Stuurt 3, of 6 bij een snelle tweede druk. Geeft true bij een gewone druk. */
+  /** Stuurt 3 (of zet die klaar), of 6 bij een snelle tweede druk. True bij een gewone druk. */
   private pressed(id: number, emit: (press: LeapButtonPress) => void): boolean {
     const now = Date.now();
     const prev = this.lastPressAt.get(id);
     this.cancel(id);
     this.held.delete(id);
     if (prev != null && now - prev <= this.multiTapMs && !this.tapped.has(id)) {
+      this.drop(id);
       this.lastPressAt.delete(id);
       this.tapped.add(id);
       emit({ id, action: 6 });
@@ -268,8 +286,31 @@ export class LeapHoldDetector {
     }
     this.tapped.delete(id);
     this.lastPressAt.set(id, now);
-    emit({ id, action: 3 });
+    if (this.waitsForDouble(id)) {
+      const timer = setTimeout(() => this.flush(id, emit), this.multiTapMs);
+      this.waits.set(id, { timer, released: false });
+    } else {
+      emit({ id, action: 3 });
+    }
     return true;
+  }
+
+  /** Uitgestelde korte druk alsnog sturen, met loslaten als dat al gebeurde. */
+  private flush(id: number, emit: (press: LeapButtonPress) => void): void {
+    const wait = this.waits.get(id);
+    if (!wait) return;
+    clearTimeout(wait.timer);
+    this.waits.delete(id);
+    emit({ id, action: 3 });
+    if (wait.released) emit({ id, action: 4 });
+  }
+
+  /** Uitgestelde korte druk vervalt: het werd een dubbele druk. */
+  private drop(id: number): void {
+    const wait = this.waits.get(id);
+    if (!wait) return;
+    clearTimeout(wait.timer);
+    this.waits.delete(id);
   }
 
   private cancel(id: number): void {

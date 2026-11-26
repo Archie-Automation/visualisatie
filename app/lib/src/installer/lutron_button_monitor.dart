@@ -141,6 +141,9 @@ class _LutronButtonMonitorCardState extends State<LutronButtonMonitorCard> {
                   'Bij een snelle tik stuurt de QSX vaak alleen Loslaten. De '
                   'server maakt daar zelf een korte druk van, of een dubbele '
                   'druk bij twee snelle tikken.\n\n'
+                  'Heeft de knop een koppeling op dubbele druk, dan komt de '
+                  'korte druk pas na 0,45 s. Zo gaat bij een dubbele druk niet '
+                  'eerst ook de korte druk af.\n\n'
                   'De tijd achter een regel is het verschil met de vorige '
                   'regel van dezelfde knop. Na 15 minuten stopt de monitor.',
             ),

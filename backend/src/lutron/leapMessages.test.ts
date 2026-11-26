@@ -254,6 +254,40 @@ describe("LEAP-berichten", () => {
     assert.deepEqual(seen, [3, 4, 6, 4]);
   });
 
+  it("met dubbele-druk-koppeling gaat bij een dubbele druk geen korte druk af", async () => {
+    const seen: number[] = [];
+    const detector = new LeapHoldDetector(1000, 40, () => true);
+    const emit = (press: { action: number }) => seen.push(press.action);
+    detector.handle({ id: 7, action: 4 }, emit);
+    detector.handle({ id: 7, action: 4 }, emit);
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    detector.stop();
+    assert.deepEqual(seen, [6, 4]);
+  });
+
+  it("met dubbele-druk-koppeling volgt de korte druk na de wachttijd", async () => {
+    const seen: number[] = [];
+    const detector = new LeapHoldDetector(1000, 30, () => true);
+    const emit = (press: { action: number }) => seen.push(press.action);
+    detector.handle({ id: 7, action: 3 }, emit);
+    detector.handle({ id: 7, action: 4 }, emit);
+    assert.deepEqual(seen, []);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    detector.stop();
+    assert.deepEqual(seen, [3, 4]);
+  });
+
+  it("met dubbele-druk-koppeling werkt vasthouden nog", async () => {
+    const seen: number[] = [];
+    const detector = new LeapHoldDetector(60, 20, () => true);
+    const emit = (press: { action: number }) => seen.push(press.action);
+    detector.handle({ id: 7, action: 3 }, emit);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    detector.handle({ id: 7, action: 4 }, emit);
+    detector.stop();
+    assert.deepEqual(seen, [3, 5, 4]);
+  });
+
   it("LongHold zonder Press geeft bij loslaten geen extra druk", () => {
     const seen: number[] = [];
     const detector = new LeapHoldDetector(1000, 200);
