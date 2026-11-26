@@ -199,6 +199,43 @@ describe("LEAP-berichten", () => {
     assert.deepEqual(seen, [3, 5, 4]);
   });
 
+  it("snelle tweede druk is een dubbele druk", () => {
+    const seen: number[] = [];
+    const detector = new LeapHoldDetector(1000, 200);
+    const emit = (press: { action: number }) => seen.push(press.action);
+    detector.handle({ id: 7, action: 3 }, emit);
+    detector.handle({ id: 7, action: 4 }, emit);
+    detector.handle({ id: 7, action: 3 }, emit);
+    detector.handle({ id: 7, action: 6 }, emit);
+    detector.handle({ id: 7, action: 4 }, emit);
+    detector.stop();
+    assert.deepEqual(seen, [3, 4, 6, 4]);
+  });
+
+  it("trage tweede druk blijft een korte druk", async () => {
+    const seen: number[] = [];
+    const detector = new LeapHoldDetector(1000, 20);
+    const emit = (press: { action: number }) => seen.push(press.action);
+    detector.handle({ id: 7, action: 3 }, emit);
+    detector.handle({ id: 7, action: 4 }, emit);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    detector.handle({ id: 7, action: 3 }, emit);
+    detector.handle({ id: 7, action: 4 }, emit);
+    detector.stop();
+    assert.deepEqual(seen, [3, 4, 3, 4]);
+  });
+
+  it("loslaten na vasthouden komt door", async () => {
+    const seen: number[] = [];
+    const detector = new LeapHoldDetector(20, 200);
+    const emit = (press: { action: number }) => seen.push(press.action);
+    detector.handle({ id: 7, action: 3 }, emit);
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    detector.handle({ id: 7, action: 4 }, emit);
+    detector.stop();
+    assert.deepEqual(seen, [3, 5, 4]);
+  });
+
   it("LongHold van de processor telt één keer", async () => {
     const seen: number[] = [];
     const detector = new LeapHoldDetector(80);

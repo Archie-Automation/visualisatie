@@ -179,25 +179,45 @@ export function leapButtonAction(eventType: string): number | null {
 /** Hoe lang een vinger moet blijven liggen voordat wij zelf vasthouden sturen. */
 export const LEAP_HOLD_MS = 600;
 
+/** Tweede druk binnen deze tijd na de vorige druk telt als dubbele druk. */
+export const LEAP_MULTI_TAP_MS = 450;
+
 /**
- * QSX stuurt LongHold alleen als die actie in Designer staat.
- * Zolang de druk open is en loslaten uitblijft, maken wij actie 5 zelf.
- * Een LongHold van de processor telt daarna niet nog een keer.
+ * QSX stuurt LongHold en MultiTap alleen als die actie in Designer staat.
+ * Daarom maken wij ze zelf: actie 5 als loslaten na 0,6 s uitblijft, actie 6
+ * als een tweede druk snel op de eerste volgt (in plaats van nog een 3).
+ * Dezelfde actie van de processor telt daarna niet nog een keer.
  */
 export class LeapHoldDetector {
   private readonly timers = new Map<number, ReturnType<typeof setTimeout>>();
   private readonly held = new Set<number>();
+  private readonly tapped = new Set<number>();
+  private readonly lastPressAt = new Map<number, number>();
 
-  constructor(private readonly holdMs = LEAP_HOLD_MS) {}
+  constructor(
+    private readonly holdMs = LEAP_HOLD_MS,
+    private readonly multiTapMs = LEAP_MULTI_TAP_MS
+  ) {}
 
   handle(press: LeapButtonPress, emit: (press: LeapButtonPress) => void): void {
     if (press.action === 3) {
+      const now = Date.now();
+      const prev = this.lastPressAt.get(press.id);
       this.cancel(press.id);
       this.held.delete(press.id);
+      if (prev != null && now - prev <= this.multiTapMs && !this.tapped.has(press.id)) {
+        this.lastPressAt.delete(press.id);
+        this.tapped.add(press.id);
+        emit({ id: press.id, action: 6 });
+        return;
+      }
+      this.tapped.delete(press.id);
+      this.lastPressAt.set(press.id, now);
       emit(press);
       const timer = setTimeout(() => {
         this.timers.delete(press.id);
         this.held.add(press.id);
+        this.lastPressAt.delete(press.id);
         emit({ id: press.id, action: 5 });
       }, this.holdMs);
       this.timers.set(press.id, timer);
@@ -213,6 +233,14 @@ export class LeapHoldDetector {
       if (this.held.has(press.id)) return;
       this.cancel(press.id);
       this.held.add(press.id);
+      this.lastPressAt.delete(press.id);
+      emit(press);
+      return;
+    }
+    if (press.action === 6) {
+      if (this.tapped.has(press.id)) return;
+      this.tapped.add(press.id);
+      this.lastPressAt.delete(press.id);
       emit(press);
       return;
     }
@@ -223,6 +251,8 @@ export class LeapHoldDetector {
     for (const timer of this.timers.values()) clearTimeout(timer);
     this.timers.clear();
     this.held.clear();
+    this.tapped.clear();
+    this.lastPressAt.clear();
   }
 
   private cancel(id: number): void {

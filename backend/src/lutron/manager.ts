@@ -60,7 +60,8 @@ type Slot = {
 const DEVICE_LINE =
   /^[~#]DEVICE,(\d+),(\d+),(\d+)(?:,([^,\r\n]*))?(?:,.*)?$/;
 
-const DEBOUNCE_MS = 450;
+/** Alleen dubbel ontvangen berichten. Langer slikt een snelle tweede druk of loslaten in. */
+const DEBOUNCE_MS = 150;
 
 export type LutronLeapStatus = {
   paired: boolean;
@@ -203,10 +204,13 @@ export class LutronIntegrationManager {
 
   /** Keypad-druk van LEAP. integrationId in de mapping is het knop-id. */
   private onLeapButton(press: LeapButtonPress): void {
+    if (this.buttonMappings().some(({ map }) => map.integrationId === press.id)) {
+      logger.info({ button: press.id, action: press.action }, "QSX-knop van processor");
+    }
     this.buttonGesture.handle(press, (next) => this.applyLeapButton(next));
   }
 
-  private applyLeapButton(press: LeapButtonPress): void {
+  private buttonMappings(): { source: string; map: LutronButtonToKnxMapping }[] {
     const cfg = getConfig();
     const maps: { source: string; map: LutronButtonToKnxMapping }[] = [];
     for (const map of cfg.lutron?.buttonToKnx ?? []) {
@@ -218,6 +222,11 @@ export class LutronIntegrationManager {
         maps.push({ source: d.name, map });
       }
     });
+    return maps;
+  }
+
+  private applyLeapButton(press: LeapButtonPress): void {
+    const maps = this.buttonMappings();
     const watched = maps.some(({ map }) => map.integrationId === press.id);
     if (watched) {
       logger.info({ button: press.id, action: press.action }, "QSX-knop");

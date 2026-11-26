@@ -393,89 +393,181 @@ String lutronMappingHeading(
   return stored.isEmpty ? 'Knop' : stored;
 }
 
-class LutronButtonToKnxListEditor extends StatelessWidget {
+/// Lijst van koppelingen; tikken opent het instelscherm, zoals bij de
+/// KNX-alarmsensoren.
+class LutronButtonToKnxListEditor extends StatefulWidget {
   const LutronButtonToKnxListEditor({
     super.key,
     required this.parent,
     this.listKey = 'buttonToKnx',
     this.buttons = const [],
+    this.framed = false,
     required this.onChanged,
   });
 
   final Map<String, dynamic> parent;
   final String listKey;
   final List<LutronButtonInfo> buttons;
+  /// Eigen kaart, zoals op de Lutron-pagina. Uit = binnen een bestaande kaart.
+  final bool framed;
   final VoidCallback onChanged;
 
   @override
-  Widget build(BuildContext context) {
-    final maps = _ensureList(parent, listKey);
-    final canAdd = buttons.isNotEmpty;
+  State<LutronButtonToKnxListEditor> createState() =>
+      _LutronButtonToKnxListEditorState();
+}
 
+class _LutronButtonToKnxListEditorState
+    extends State<LutronButtonToKnxListEditor> {
+  int? _open;
+
+  void _changed() {
+    widget.onChanged();
+    setState(() {});
+  }
+
+  void _add(List<Map<String, dynamic>> maps) {
+    final pick = widget.buttons.first;
+    maps.add({
+      'id': 'map-${_uuid.v4()}',
+      'label': lutronButtonChoiceLabel(pick),
+      'integrationId': pick.id,
+      'componentNumber': 1,
+      'actionNumber': 3,
+      'knx': {
+        'ga': '1/1/1',
+        'role': 'bit',
+        'send': 'value',
+        'value': true,
+      },
+    });
+    _open = maps.length - 1;
+    _changed();
+  }
+
+  void _delete(List<Map<String, dynamic>> maps, int i) {
+    maps.removeAt(i);
+    _open = null;
+    _changed();
+  }
+
+  String _subtitle(Map<String, dynamic> mapping) {
+    final knx = _ensureMap(mapping, 'knx');
+    final role = canonicalLutronDptRole(knx['role'] as String? ?? 'bit');
+    final hold = role == 'dim_control' || role == 'up_down';
+    final ga = (knx['ga'] as String? ?? '').trim();
+    return [
+      hold ? 'Indrukken en loslaten' : lutronActionLabel(mapping['actionNumber']),
+      if (ga.isNotEmpty) ga else 'Geen groepadres',
+      lutronKnxDptLabels[role] ?? role,
+    ].join(' · ');
+  }
+
+  Widget _list(BuildContext context, List<Map<String, dynamic>> maps) {
+    final canAdd = widget.buttons.isNotEmpty;
+    final hint = Theme.of(context).textTheme.bodySmall;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        LuxeInfoHeading(
-          title: 'Keypad-knoppen → KNX',
-          infoTitle: 'Keypad-knoppen',
-          infoBody:
-              'Elke regel is één moment op één knop. In de lijst staat het '
-              'knopnummer, het adres /button/… en de naam uit Lutron Designer. '
-              'Op een los HomeWorks-apparaat stel je de koppeling bij de processor in.',
-          style: Theme.of(context).textTheme.titleSmall,
-        ),
-        const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerLeft,
-          child: FilledButton.icon(
-            onPressed: canAdd
-                ? () {
-                    final pick = buttons.first;
-                    maps.add({
-                      'id': 'map-${_uuid.v4()}',
-                      'label': lutronButtonChoiceLabel(pick),
-                      'integrationId': pick.id,
-                      'componentNumber': 1,
-                      'actionNumber': 3,
-                      'knx': {
-                        'ga': '1/1/1',
-                        'role': 'bit',
-                        'send': 'value',
-                        'value': true,
-                      },
-                    });
-                    onChanged();
-                  }
-                : null,
-            icon: const Icon(Icons.add, size: 20),
-            label: const Text('Knop koppelen'),
+        Padding(
+          padding: widget.framed
+              ? const EdgeInsets.fromLTRB(16, 12, 8, 4)
+              : const EdgeInsets.only(top: 8),
+          child: const LuxeSectionTitle(
+            icon: Icons.keyboard_outlined,
+            title: 'Keypad-knoppen → KNX',
+            trailing: LuxeInfoIconButton(
+              title: 'Keypad-knoppen',
+              body: 'Elke regel is één moment op één knop: korte druk, '
+                  'loslaten, vasthouden of dubbele druk. In de lijst staat het '
+                  'adres /button/… en de naam uit Lutron Designer. '
+                  'Op een los HomeWorks-apparaat stel je de koppeling bij de '
+                  'processor in.',
+            ),
           ),
         ),
-        const SizedBox(height: 8),
-        if (!canAdd)
-          Text(
-            'Koppel de QSX. De uitgelezen knoppen kies je hier.',
-            style: Theme.of(context).textTheme.bodySmall,
-          )
-        else if (maps.isEmpty)
-          Text(
-            'Nog geen koppeling. Kies een Lutron-knop en hang er een KNX-actie aan.',
-            style: Theme.of(context).textTheme.bodySmall,
+        if (maps.isEmpty)
+          Padding(
+            padding: EdgeInsets.fromLTRB(widget.framed ? 16 : 0, 4, 16, 8),
+            child: Text(
+              canAdd
+                  ? 'Nog geen koppelingen'
+                  : 'Koppel de QSX. De uitgelezen knoppen kies je hier.',
+              style: canAdd ? Theme.of(context).textTheme.bodyMedium : hint,
+            ),
           ),
-        for (var i = 0; i < maps.length; i++)
-          _LutronMappingCard(
-            key: ValueKey(maps[i]['id'] ?? 'm$i'),
-            mapping: maps[i],
-            buttons: buttons,
-            onChanged: onChanged,
-            onDelete: () {
-              maps.removeAt(i);
-              onChanged();
-            },
+        for (var i = 0; i < maps.length; i++) ...[
+          if (i > 0) Divider(height: 1, color: LuxeColors.lineSoft),
+          LuxeNavRow(
+            icon: Icons.radio_button_checked_outlined,
+            title: lutronMappingHeading(maps[i], widget.buttons),
+            subtitle: _subtitle(maps[i]),
+            trailing: IconButton(
+              tooltip: 'Koppeling verwijderen',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () => _delete(maps, i),
+            ),
+            onTap: () => setState(() => _open = i),
           ),
+        ],
+        if (canAdd) ...[
+          if (maps.isNotEmpty) Divider(height: 1, color: LuxeColors.lineSoft),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: widget.framed ? 12 : 0),
+            child: LuxeAddRow(
+              label: 'Knop koppelen',
+              onTap: () => _add(maps),
+            ),
+          ),
+        ],
       ],
     );
   }
+
+  Widget _detail(List<Map<String, dynamic>> maps, int i) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => setState(() => _open = null),
+            icon: const Icon(Icons.arrow_back, size: 18),
+            label: const Text('Keypad-knoppen'),
+          ),
+        ),
+        _LutronMappingForm(
+          key: ValueKey(maps[i]['id'] ?? 'm$i'),
+          mapping: maps[i],
+          buttons: widget.buttons,
+          onChanged: _changed,
+          onDelete: () => _delete(maps, i),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final maps = _ensureList(widget.parent, widget.listKey);
+    final open = _open;
+    final detail = open != null && open >= 0 && open < maps.length;
+    final body = detail ? _detail(maps, open) : _list(context, maps);
+    if (!widget.framed) return body;
+    return LuxeListCard(
+      padding: detail ? null : EdgeInsets.zero,
+      child: body,
+    );
+  }
+}
+
+String lutronActionLabel(Object? actionNumber) {
+  if (actionNumber == null) return 'Elke druk';
+  final n = actionNumber is int ? actionNumber : int.tryParse('$actionNumber');
+  for (final e in _lutronActions.entries) {
+    if (e.value != null && e.value! > 0 && e.value == n) return e.key;
+  }
+  return 'Actie $actionNumber';
 }
 
 /// Vaste actienummers in het Lutron QSX/QS Integration Protocol.
@@ -488,8 +580,8 @@ const _lutronActions = <String, int?>{
   'Aangepast…': -1,
 };
 
-class _LutronMappingCard extends StatefulWidget {
-  const _LutronMappingCard({
+class _LutronMappingForm extends StatefulWidget {
+  const _LutronMappingForm({
     super.key,
     required this.mapping,
     required this.buttons,
@@ -503,10 +595,10 @@ class _LutronMappingCard extends StatefulWidget {
   final VoidCallback onDelete;
 
   @override
-  State<_LutronMappingCard> createState() => _LutronMappingCardState();
+  State<_LutronMappingForm> createState() => _LutronMappingFormState();
 }
 
-class _LutronMappingCardState extends State<_LutronMappingCard> {
+class _LutronMappingFormState extends State<_LutronMappingForm> {
   /// Geeft de huidige dropdown-sleutel terug op basis van `mapping['actionNumber']`.
   String _dropdownKey() {
     final cur = widget.mapping['actionNumber'];
@@ -528,30 +620,8 @@ class _LutronMappingCardState extends State<_LutronMappingCard> {
             'dim_control' ||
         canonicalLutronDptRole(knx['role'] as String? ?? 'bit') == 'up_down';
 
-    final label = lutronMappingHeading(mapping, widget.buttons);
-    return LuxeInsetCard(
-      child: Theme(
-        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-        child: ExpansionTile(
-          tilePadding: EdgeInsets.zero,
-          childrenPadding: const EdgeInsets.only(top: 4),
-          title: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  style: Theme.of(context).textTheme.titleSmall,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.red),
-                tooltip: 'Verwijderen',
-                visualDensity: VisualDensity.compact,
-                onPressed: widget.onDelete,
-              ),
-            ],
-          ),
+    return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _InstallerStrField(
               label: 'Label (in app)',
@@ -570,27 +640,16 @@ class _LutronMappingCardState extends State<_LutronMappingCard> {
               },
             ),
             if (!hold)
-              Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: DropdownButtonFormField<String>(
-                key: ValueKey('action-$dropKey'),
-                decoration: const InputDecoration(
-                  labelText: 'Knopactie',
-                  border: OutlineInputBorder(),
-                ),
+              _InstallerDropdown(
+                label: 'Knopactie',
                 value: dropKey,
-                items: [
-                  for (final label in _lutronActions.keys)
-                    DropdownMenuItem(value: label, child: Text(label)),
-                ],
+                options: _lutronActions.keys.toList(),
                 onChanged: (v) {
-                  if (v == null) return;
                   final val = _lutronActions[v];
                   setState(() {
                     if (val == null) {
                       mapping.remove('actionNumber');
                     } else if (val == -1) {
-                      // Aangepast — bewaar huidige waarde of zet 3
                       mapping['actionNumber'] ??= 3;
                     } else {
                       mapping['actionNumber'] = val;
@@ -599,13 +658,13 @@ class _LutronMappingCardState extends State<_LutronMappingCard> {
                   widget.onChanged();
                 },
               ),
-            ),
             Text(
               hold
                   ? 'Indrukken en loslaten zitten in deze ene koppeling.'
                   : 'Eén regel is één moment. Koppel dezelfde knop opnieuw voor loslaten of vasthouden.',
               style: Theme.of(context).textTheme.bodySmall,
             ),
+            const SizedBox(height: 16),
             if (!hold && isCustom)
               _InstallerStrField(
                 label: 'Actienummer (vrij invullen)',
@@ -632,9 +691,14 @@ class _LutronMappingCardState extends State<_LutronMappingCard> {
                 widget.onChanged();
               },
             ),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: widget.onDelete,
+                child: const Text('Verwijderen'),
+              ),
+            ),
           ],
-        ),
-      ),
     );
   }
 }
@@ -923,14 +987,15 @@ class _LutronButtonPicker extends StatelessWidget {
     final value = items.any((item) => item.value == current) ? current : items.first.value;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: DropdownButtonFormField<int>(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const LuxeFieldLabel('Lutron-knop'),
+          DropdownButtonFormField<int>(
         key: ValueKey('$value-${buttons.length}'),
         initialValue: value,
         isExpanded: true,
-        decoration: const InputDecoration(
-          labelText: 'Lutron-knop',
-          border: OutlineInputBorder(),
-        ),
+        decoration: luxeFilledDecoration(),
         items: items,
         onChanged: (id) {
           if (id == null) return;
@@ -943,6 +1008,8 @@ class _LutronButtonPicker extends StatelessWidget {
           }
           onChanged();
         },
+          ),
+        ],
       ),
     );
   }

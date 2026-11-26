@@ -6167,8 +6167,8 @@ class _LutronInstallerSectionState extends State<_LutronInstallerSection> {
                   title: 'HomeWorks QSX',
                   body:
                       'Vul het IP-adres in en tik op Koppelen. Druk daarna de knop op de processor in tot het lampje knippert. Houd hem vast tot het lampje stopt.\n\n'
-                      'Een knop zonder actie in Lutron Designer stuurt vaak niets. Dual action geeft druk en loslaten. Vasthouden en dubbel tikken komen alleen binnen als die actie in Designer staat, bijvoorbeeld Conditional met een loze actie.\n\n'
-                      'Koppel dezelfde knop per moment: korte druk, loslaten, vasthouden. Blijft de vinger 0,6 s liggen en komt loslaten wél binnen, dan telt dat ook als vasthouden. Sla daarna op.',
+                      'Een knop zonder actie in Lutron Designer stuurt vaak niets. Geef de knop in Designer Dual action, dan komen druk en loslaten apart binnen.\n\n'
+                      'Koppel dezelfde knop per moment: korte druk, loslaten, vasthouden, dubbele druk. Blijft de vinger 0,6 s liggen, dan telt dat als vasthouden. Een tweede druk binnen 0,45 s is een dubbele druk. Sla daarna op.',
                 ),
               ),
               Row(
@@ -6296,30 +6296,25 @@ class _LutronForm extends StatelessWidget {
                   icon: Icons.playlist_add_outlined,
                   onPressed: canImportZones ? onImportZones : null,
                 ),
+              if (paired && (zonesLoaded && !canImportZones || awaitingZones)) ...[
+                const SizedBox(height: 8),
+                Text(
+                  zonesLoaded && !canImportZones
+                      ? zonesErr ?? 'Geen zones op de processor.'
+                      : 'Zones worden uitgelezen…',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
             ],
           ),
         ),
-        if (paired) ...[
-          if (zonesLoaded && !canImportZones) ...[
-            const SizedBox(height: 8),
-            Text(
-              zonesErr ?? 'Geen zones op de processor.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ] else if (awaitingZones) ...[
-            const SizedBox(height: 8),
-            Text(
-              'Zones worden uitgelezen…',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-          const SizedBox(height: 24),
+        if (paired)
           LutronButtonToKnxListEditor(
             parent: lutron,
             buttons: buttons,
+            framed: true,
             onChanged: onChanged,
           ),
-        ],
       ],
     );
   }
