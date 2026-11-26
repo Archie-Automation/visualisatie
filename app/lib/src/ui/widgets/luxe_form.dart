@@ -1,3 +1,5 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
@@ -104,6 +106,57 @@ class LuxeFieldLabel extends StatelessWidget {
   }
 }
 
+/// Vervaagt en blokkeert [child] zolang [locked]; [reason] blijft leesbaar
+/// eronder staan.
+class LuxeLockedBlur extends StatelessWidget {
+  const LuxeLockedBlur({
+    super.key,
+    required this.locked,
+    required this.reason,
+    required this.child,
+  });
+
+  final bool locked;
+  final String reason;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!locked) return child;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ExcludeSemantics(
+          child: IgnorePointer(
+            child: Opacity(
+              opacity: 0.55,
+              child: ImageFiltered(
+                imageFilter: ImageFilter.blur(sigmaX: 2.5, sigmaY: 2.5),
+                child: child,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Row(
+          children: [
+            Icon(Icons.lock_outline, size: 14, color: LuxeColors.inkSoft),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                reason,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: LuxeColors.inkSoft,
+                    ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 /// Compact brass switch on the right — same as tijdschema / account.
 class LuxeSwitchRow extends StatelessWidget {
   const LuxeSwitchRow({
@@ -146,6 +199,7 @@ class LuxeSwitchRow extends StatelessWidget {
           if (beforeSwitch != null) ...[
             const SizedBox(width: 8),
             beforeSwitch!,
+            const SizedBox(width: 12),
           ],
           LuxeOnOffSwitch(
             value: value,

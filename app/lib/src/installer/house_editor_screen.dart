@@ -5377,16 +5377,26 @@ class _HouseEditorScreenState extends ConsumerState<HouseEditorScreen> {
       children: [
         Padding(
           padding: const EdgeInsets.fromLTRB(28, 8, 28, 8),
-          child: Text(
-            knxAlarm
-                ? 'Nieuwe gebruikers: vul een code in en kies Opslaan. '
-                    'Bestaande: laat code leeg om hem te houden. '
-                    'Een KNX-alarmcode zet je op de gebruiker.'
-                : 'Nieuwe gebruikers: vul een code in en kies Opslaan. '
-                    'Bestaande: laat code leeg om hem te houden.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: LuxeColors.inkSoft,
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Nieuwe gebruikers: vul een inlogcode in en kies Opslaan. '
+                  'Bestaande: laat de inlogcode leeg om hem te houden.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: LuxeColors.inkSoft,
+                      ),
                 ),
+              ),
+              LuxeInfoIconButton(
+                title: 'KNX-alarmcode',
+                body: knxAlarm
+                    ? 'KNX-alarm is vrijgegeven. De alarmcode stel je per '
+                        'gebruiker in.'
+                    : 'Een KNX-alarmcode instellen is mogelijk zodra '
+                        'KNX-alarm is vrijgegeven.',
+              ),
+            ],
           ),
         ),
         LuxeListCard(
@@ -5540,6 +5550,9 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
       AppRole.superuser => 'superuser',
       AppRole.user => 'user',
     };
+    final alarm = widget.house['knxAlarm'];
+    final knxAlarm = alarm is Map && alarm['enabled'] == true;
+    final voipOn = ensureVoipMap(widget.house)['enabled'] == true;
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -5592,8 +5605,8 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
             children: [
               LuxeFieldLabel(
                 u['_new'] == true
-                    ? 'Code'
-                    : 'Nieuwe code (leeg = ongewijzigd)',
+                    ? 'Inlogcode'
+                    : 'Nieuwe inlogcode (leeg = ongewijzigd)',
               ),
               TextField(
                 controller: _password,
@@ -5616,10 +5629,11 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
             ],
           ),
         ),
-        if (widget.house['knxAlarm'] is Map &&
-            (widget.house['knxAlarm'] as Map)['enabled'] == true)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 16),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: LuxeLockedBlur(
+            locked: !knxAlarm,
+            reason: 'Instelbaar zodra KNX-alarm is vrijgegeven.',
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -5653,37 +5667,39 @@ class _InstallerUserFormState extends State<_InstallerUserForm> {
               ],
             ),
           ),
+        ),
         Padding(
           padding: const EdgeInsets.only(bottom: 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              LuxeSwitchRow(
-                title: 'Ontvangt deurbel-oproepen',
-                subtitle: ensureVoipMap(widget.house)['enabled'] == true
-                    ? 'Automatisch gekoppeld aan het toestel van deze gebruiker.'
-                    : 'Zet deurbel-oproepen aan bij Intercom.',
-                beforeSwitch: ensureVoipMap(widget.house)['enabled'] == true
-                    ? const LuxeInfoIconButton(
-                        title: 'Deurbel-oproepen',
-                        body:
-                            'Dit account gaat over als het in een belgroep staat. '
-                            'Nummer en wachtwoord worden automatisch aangemaakt — '
-                            'niet nodig op het toestel in te vullen.',
-                      )
-                    : null,
-                value: sipEndpointForUser(widget.house, u) != null,
-                onChanged: ensureVoipMap(widget.house)['enabled'] == true
-                    ? (v) {
-                        if (v) {
-                          bindSipToUser(widget.house, u);
-                        } else {
-                          unbindSipFromUser(widget.house, u);
+              LuxeLockedBlur(
+                locked: !voipOn,
+                reason: 'Instelbaar zodra deurbel-oproepen aan staan bij Intercom.',
+                child: LuxeSwitchRow(
+                  title: 'Ontvangt deurbel-oproepen',
+                  subtitle:
+                      'Automatisch gekoppeld aan het toestel van deze gebruiker.',
+                  beforeSwitch: const LuxeInfoIconButton(
+                    title: 'Deurbel-oproepen',
+                    body:
+                        'Dit account gaat over als het in een belgroep staat. '
+                        'Nummer en wachtwoord worden automatisch aangemaakt — '
+                        'niet nodig op het toestel in te vullen.',
+                  ),
+                  value: sipEndpointForUser(widget.house, u) != null,
+                  onChanged: voipOn
+                      ? (v) {
+                          if (v) {
+                            bindSipToUser(widget.house, u);
+                          } else {
+                            unbindSipFromUser(widget.house, u);
+                          }
+                          widget.onChanged();
+                          setState(() {});
                         }
-                        widget.onChanged();
-                        setState(() {});
-                      }
-                    : null,
+                      : null,
+                ),
               ),
               const SizedBox(height: 8),
               LuxeSwitchRow(

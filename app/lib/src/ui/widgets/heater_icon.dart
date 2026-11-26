@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'campfire_icon.dart';
+import 'pool_icons.dart';
 
 /// Sentinel — render via [iconWidgetForData] / [universalIconGlyph], niet [Icon].
 const IconData heaterIconData = IconData(0xF001);
@@ -111,6 +112,8 @@ Widget? iconWidgetForData(
   if (icon == campfireIconData) {
     return CampfireIcon(size: size, color: color, animate: false);
   }
+  if (icon == poolCoverIconData) return PoolCoverIcon(size: size, color: color);
+  if (icon == jetstreamIconData) return JetstreamIcon(size: size, color: color);
   return null;
 }
 

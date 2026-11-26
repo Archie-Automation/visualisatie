@@ -32,8 +32,8 @@ class SoftwareUpdateIndicator extends ConsumerWidget {
             width: 48,
             height: 48,
             radius: 14,
-            rimWidth: 1,
-            rimColor: LuxeColors.glassRim,
+            rimWidth: 1.5,
+            rimColor: accent,
             fillColor: LuxeChipChrome.tileFill(context, pressed: false),
             shadows: LuxeShadows.soft,
             child: Center(

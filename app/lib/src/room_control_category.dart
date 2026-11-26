@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'models.dart';
 import 'ui/widgets/campfire_icon.dart';
 import 'ui/widgets/heater_icon.dart';
+import 'ui/widgets/pool_icons.dart';
 
 /// Curated icon set for universal device groups.
 /// Key = stored string in `universal.icon`, value = Flutter IconData.
@@ -154,6 +155,10 @@ const Map<String, IconData> kUniversalIconMap = {
   'pump': Icons.water,
   'tank': Icons.propane_tank_outlined,
   'pool': Icons.pool_outlined,
+  /// Zwembad roldek (oprolas met lamellen over het bad)
+  'pool_cover': poolCoverIconData,
+  /// Tegenstroominstallatie (wandunit met waterstralen)
+  'jetstream': jetstreamIconData,
   'irrigation': Icons.grass_outlined,
   'garden': Icons.yard_outlined,
   'hot_water': Icons.hot_tub_outlined,
